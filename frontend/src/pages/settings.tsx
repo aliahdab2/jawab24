@@ -94,7 +94,7 @@ export default function SettingsPage() {
               <select
                 className="input"
                 value={settings.dashboardLanguage}
-                onChange={(e) => setSettings({ ...settings, dashboardLanguage: e.target.value })}
+                onChange={(e) => setSettings({ ...settings, dashboardLanguage: e.target.value as 'ar' | 'en' })}
               >
                 <option value="ar">العربية (Arabic)</option>
                 <option value="en">English</option>
