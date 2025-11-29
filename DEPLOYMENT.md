@@ -1,302 +1,175 @@
-# 🚀 Jawab24 Deployment Guide
+# Deployment Guide
 
-This guide covers deploying Jawab24 to production.
+## CI/CD Pipeline
 
----
+Jawab24 uses GitHub Actions for continuous integration and deployment.
 
-## 📋 Prerequisites
+### Workflow Overview
 
-- Docker & Docker Compose installed
-- Domain name (for production)
-- SSL certificate (Let's Encrypt recommended)
-- Facebook Developer Account (for OAuth)
-- OpenAI API key (for AI replies)
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Push to   │ ──► │  CI Tests   │ ──► │   Docker    │ ──► │   Deploy    │
+│    main     │     │  & Linting  │     │   Build     │     │   to Prod   │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                           │                   │                   │
+                           ▼                   ▼                   ▼
+                    ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+                    │  Backend    │     │  All Images │     │  Health     │
+                    │  Frontend   │     │  Build OK   │     │  Checks     │
+                    │  AI Worker  │     │             │     │             │
+                    └─────────────┘     └─────────────┘     └─────────────┘
+```
 
----
+### CI Pipeline (`ci.yml`)
 
-## 🏃 Quick Start (Development)
+Runs on every push to `main` or `develop`, and on all PRs to `main`.
+
+**Jobs:**
+1. **Backend** - TypeScript check, linting, tests, build
+2. **AI Worker** - TypeScript check, linting, build
+3. **Frontend** - TypeScript check, linting, Next.js build
+4. **Docker** - Build all Docker images (only if above jobs pass)
+
+### Deploy Pipeline (`deploy.yml`)
+
+Runs automatically after CI passes on `main` branch.
+
+**Steps:**
+1. SSH into production server
+2. Pull latest code
+3. Build and restart containers
+4. Run health checks
+5. Report success/failure
+
+## Required GitHub Secrets
+
+Set these in your repository settings (Settings → Secrets → Actions):
+
+| Secret | Description |
+|--------|-------------|
+| `SERVER_SSH_KEY` | Private SSH key for server access |
+| `FACEBOOK_APP_ID` | Facebook App ID for frontend build |
+
+### Setting Up SSH Key
+
+1. Generate a deploy key (if you haven't already):
+   ```bash
+   ssh-keygen -t ed25519 -C "github-actions-deploy" -f deploy_key
+   ```
+
+2. Add the public key to your server:
+   ```bash
+   cat deploy_key.pub >> ~/.ssh/authorized_keys
+   ```
+
+3. Add the private key to GitHub Secrets as `SERVER_SSH_KEY`
+
+## Local Development
+
+### Pre-commit Checks
+
+Always run before pushing:
 
 ```bash
-# 1. Clone the repository
-git clone <repo-url>
-cd jawab24
-
-# 2. Start database services
-./scripts/deploy.sh dev
-
-# 3. Run backend (in new terminal)
-cd backend && npm install && npm run dev
-
-# 4. Run frontend (in new terminal)
-cd frontend && npm install && npm run dev
-
-# 5. Open http://localhost:3001
+./scripts/pre-deploy.sh
 ```
 
----
+This runs:
+- TypeScript checks for all projects
+- Backend tests
+- Build verification
+- Docker build test
 
-## 🌐 Production Deployment
+### Manual Deployment
 
-### Step 1: Prepare Environment Files
+If you need to deploy manually (not recommended):
 
 ```bash
-# Copy example files
-cp env/backend.env.example env/backend.env
-cp env/frontend.env.example env/frontend.env
-cp env/ai.env.example env/ai.env
-cp env/db.env.example env/db.env
-
-# Edit with your values
-nano env/backend.env
+ssh root@91.99.95.196 "cd /var/www/jawab24 && git pull && docker-compose up -d --build"
 ```
 
-### Step 2: Configure Environment Variables
+## Branch Protection (Recommended)
 
-**`env/backend.env`** - Required settings:
-```env
-# Generate a strong secret: openssl rand -base64 32
-JWT_SECRET=your_strong_secret_here
+Set up branch protection for `main`:
 
-# Facebook (get from developers.facebook.com)
-FACEBOOK_APP_ID=123456789
-FACEBOOK_APP_SECRET=abc123...
-FACEBOOK_WEBHOOK_VERIFY_TOKEN=random_string_here
+1. Go to Settings → Branches → Add rule
+2. Branch name pattern: `main`
+3. Enable:
+   - ✅ Require a pull request before merging
+   - ✅ Require status checks to pass before merging
+   - ✅ Require branches to be up to date before merging
+   - ✅ Select required checks: `backend`, `frontend`, `ai-worker`, `docker`
 
-# Database password (change this!)
-DB_PASSWORD=strong_password_here
-```
+## Rollback
 
-**`env/ai.env`** - OpenAI settings:
-```env
-OPENAI_API_KEY=sk-your-key-here
-```
-
-### Step 3: SSL Certificate (Production)
-
-Using Let's Encrypt:
-```bash
-# Install certbot
-sudo apt-get install certbot
-
-# Get certificate (stop nginx first if running)
-sudo certbot certonly --standalone -d yourdomain.com
-
-# Copy certificates
-sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem ./nginx/ssl/
-sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem ./nginx/ssl/
-```
-
-### Step 4: Update Nginx Configuration
-
-Edit `nginx/nginx.conf`:
-1. Replace `yourdomain.com` with your actual domain
-2. Uncomment the HTTPS server block
-3. Update the HTTP server to redirect to HTTPS
-
-### Step 5: Deploy
+If deployment fails:
 
 ```bash
-# Build and start all services
-./scripts/deploy.sh prod
+# SSH into server
+ssh root@91.99.95.196
 
-# Check status
-./scripts/health-check.sh
+# Go to project
+cd /var/www/jawab24
 
-# View logs
-docker-compose logs -f
+# Rollback to previous commit
+git reset --hard HEAD~1
+
+# Rebuild
+docker-compose up -d --build
 ```
 
----
+## Monitoring
 
-## 🔧 Configuration
-
-### Services & Ports
-
-| Service | Internal Port | External Port | Description |
-|---------|---------------|---------------|-------------|
-| Nginx | 80, 443 | 80, 443 | Reverse proxy |
-| Backend | 3000 | - | API server |
-| Frontend | 3001 | - | Next.js app |
-| AI Worker | 3002 | - | OpenAI service |
-| PostgreSQL | 5432 | - | Database |
-| Redis | 6379 | - | Cache |
-
-### URL Routes
-
-| Route | Service | Description |
-|-------|---------|-------------|
-| `/` | Frontend | Web dashboard |
-| `/api/*` | Backend | REST API |
-| `/auth/*` | Backend | OAuth endpoints |
-| `/webhook` | Backend | Facebook webhooks |
-| `/ai/*` | AI Worker | AI generation |
-
----
-
-## 📊 Monitoring
-
-### Health Checks
-
+### Check Container Status
 ```bash
-# Run health check script
-./scripts/health-check.sh
-
-# Or manually
-curl http://localhost/health        # Backend
-curl http://localhost/ai/health     # AI Worker
-curl http://localhost/nginx-health  # Nginx
+docker-compose ps
 ```
 
 ### View Logs
-
 ```bash
 # All services
 docker-compose logs -f
 
 # Specific service
 docker-compose logs -f backend
-docker-compose logs -f ai-worker
 ```
 
-### Resource Usage
+### Health Endpoints
+- Backend: `https://jawab24.com/api/health`
+- Frontend: `https://jawab24.com`
 
-```bash
-docker stats
-```
+## Troubleshooting
 
----
+### CI Fails
 
-## 💾 Database Management
+1. Check the GitHub Actions logs
+2. Run `./scripts/pre-deploy.sh` locally to reproduce
+3. Fix the issue and push again
 
-### Backup
+### Deploy Fails
 
-```bash
-# Create backup
-./scripts/backup.sh
+1. Check the deploy workflow logs
+2. SSH into server and check:
+   ```bash
+   docker-compose logs --tail=100
+   ```
+3. Check if disk space is full:
+   ```bash
+   df -h
+   ```
 
-# Backups are stored in ./backups/
-```
+### Container Won't Start
 
-### Restore
-
-```bash
-# List backups
-ls -la ./backups/
-
-# Restore from backup
-./scripts/restore.sh ./backups/autoreply_backup_20240101_120000.sql.gz
-```
-
-### Run Migrations
-
-```bash
-# Using Docker
-docker-compose exec backend node dist/db/migrate.js
-
-# Or directly with psql
-docker-compose exec -T postgres psql -U postgres -d autoreply < backend/migrations/001_initial_schema.sql
-```
-
----
-
-## 🔄 Updates
-
-### Update Application
-
-```bash
-# Pull latest code
-git pull
-
-# Rebuild and restart
-docker-compose up -d --build
-
-# Or use the deploy script
-./scripts/deploy.sh prod
-```
-
-### Update Single Service
-
-```bash
-# Rebuild specific service
-docker-compose build backend
-docker-compose up -d backend
-```
-
----
-
-## 🛡️ Security Checklist
-
-- [ ] Strong JWT secret (32+ characters)
-- [ ] Strong database password
-- [ ] SSL certificate configured
-- [ ] Facebook App in production mode
-- [ ] Firewall configured (only 80, 443 open)
-- [ ] Environment files not in git
-- [ ] Regular backups scheduled
-
----
-
-## 🐛 Troubleshooting
-
-### Services won't start
-
-```bash
-# Check logs
-docker-compose logs
-
-# Check if ports are in use
-lsof -i :80
-lsof -i :443
-```
-
-### Database connection issues
-
-```bash
-# Check if postgres is running
-docker-compose exec postgres pg_isready
-
-# Check connection from backend
-docker-compose exec backend node -e "console.log(process.env.DATABASE_URL)"
-```
-
-### Facebook webhook not working
-
-1. Verify webhook URL is accessible: `curl https://yourdomain.com/webhook`
-2. Check verify token matches in Facebook App settings
-3. Ensure SSL certificate is valid
-
-### AI replies not working
-
-1. Check OpenAI API key is set in `env/ai.env`
-2. Verify AI Worker is running: `curl http://localhost:3002/health`
-3. Check AI Worker logs: `docker-compose logs ai-worker`
-
----
-
-## 📞 Support
-
-For issues, check:
-1. Service logs: `docker-compose logs -f`
-2. Health status: `./scripts/health-check.sh`
-3. Documentation in this repository
-
----
-
-## 📁 File Structure
-
-```
-AutoReply/
-├── backend/           # Fastify API
-├── frontend/          # Next.js dashboard
-├── ai-worker/         # OpenAI service
-├── nginx/             # Reverse proxy config
-├── env/               # Environment files
-├── scripts/           # Deployment scripts
-│   ├── deploy.sh      # Main deployment
-│   ├── backup.sh      # Database backup
-│   ├── restore.sh     # Database restore
-│   └── health-check.sh # Health monitoring
-├── docker-compose.yml      # Production
-└── docker-compose.dev.yml  # Development
-```
-
+1. Check logs:
+   ```bash
+   docker-compose logs backend
+   ```
+2. Check if ports are in use:
+   ```bash
+   netstat -tlnp | grep 3000
+   ```
+3. Restart with fresh build:
+   ```bash
+   docker-compose down
+   docker-compose up -d --build --force-recreate
+   ```

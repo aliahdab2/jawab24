@@ -1,0 +1,223 @@
+name: CI - Test & Build
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # ==========================================
+  # Backend Tests & Build
+  # ==========================================
+  backend:
+    name: Backend - Test & Build
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: autoreply_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run linter
+        run: npm run lint --if-present
+
+      - name: Run tests
+        run: npm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/autoreply_test
+          JWT_SECRET: test-jwt-secret
+          FACEBOOK_APP_ID: test-app-id
+          FACEBOOK_APP_SECRET: test-app-secret
+          WEBHOOK_VERIFY_TOKEN: test-webhook-token
+          AI_SERVICE_URL: http://localhost:3002
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: backend/dist
+          retention-days: 1
+
+  # ==========================================
+  # AI Worker Tests & Build
+  # ==========================================
+  ai-worker:
+    name: AI Worker - Test & Build
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ai-worker
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ai-worker/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run linter
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-worker-build
+          path: ai-worker/dist
+          retention-days: 1
+
+  # ==========================================
+  # Frontend Tests & Build
+  # ==========================================
+  frontend:
+    name: Frontend - Test & Build
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run linter
+        run: npm run lint --if-present
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://jawab24.com/api
+          NEXT_PUBLIC_FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/.next
+          retention-days: 1
+
+  # ==========================================
+  # Docker Build Test
+  # ==========================================
+  docker:
+    name: Docker - Build Images
+    runs-on: ubuntu-latest
+    needs: [backend, ai-worker, frontend]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          tags: jawab24-backend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build AI Worker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ai-worker
+          push: false
+          tags: jawab24-ai-worker:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          tags: jawab24-frontend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ==========================================
+  # Summary
+  # ==========================================
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [backend, ai-worker, frontend, docker]
+    if: success()
+    
+    steps:
+      - name: CI Passed
+        run: |
+          echo "✅ All CI checks passed!"
+          echo "Backend: ✅"
+          echo "AI Worker: ✅"
+          echo "Frontend: ✅"
+          echo "Docker: ✅"
+

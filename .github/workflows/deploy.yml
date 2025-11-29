@@ -1,0 +1,108 @@
+name: Deploy to Production
+
+on:
+  workflow_run:
+    workflows: ["CI - Test & Build"]
+    types:
+      - completed
+    branches: [main]
+
+env:
+  SERVER_HOST: 91.99.95.196
+  SERVER_USER: root
+  DEPLOY_PATH: /var/www/jawab24
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    # Only deploy if CI passed
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+            
+            echo "📥 Pulling latest code..."
+            git pull origin main
+            
+            echo "🐳 Building and deploying containers..."
+            docker-compose pull
+            docker-compose up -d --build
+            
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
+            
+            echo "✅ Deployment complete!"
+            docker-compose ps
+
+      - name: Health Check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            echo "🏥 Running health checks..."
+            sleep 10
+            
+            # Check if containers are running
+            if docker-compose ps | grep -q "Up"; then
+              echo "✅ Containers are running"
+            else
+              echo "❌ Some containers are not running!"
+              docker-compose ps
+              exit 1
+            fi
+            
+            # Check backend health
+            if curl -sf http://localhost:3000/health > /dev/null; then
+              echo "✅ Backend is healthy"
+            else
+              echo "❌ Backend health check failed!"
+              exit 1
+            fi
+            
+            # Check frontend
+            if curl -sf http://localhost:3001 > /dev/null; then
+              echo "✅ Frontend is healthy"
+            else
+              echo "❌ Frontend health check failed!"
+              exit 1
+            fi
+            
+            echo "🎉 All health checks passed!"
+
+      - name: Notify Success
+        if: success()
+        run: |
+          echo "🚀 Deployment to production successful!"
+          echo "URL: https://jawab24.com"
+
+      - name: Notify Failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs above for details."
+
+  deploy-failed:
+    name: CI Failed - Skip Deploy
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    
+    steps:
+      - name: Skip deployment
+        run: |
+          echo "❌ CI failed - skipping deployment"
+          echo "Please fix the failing tests before deploying."
+          exit 1
+
