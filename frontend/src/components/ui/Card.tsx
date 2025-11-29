@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, CSSProperties } from 'react';
 import clsx from 'clsx';
 
 interface CardProps {
@@ -6,9 +6,10 @@ interface CardProps {
   className?: string;
   hover?: boolean;
   padding?: 'none' | 'sm' | 'md' | 'lg';
+  style?: CSSProperties;
 }
 
-export function Card({ children, className, hover = false, padding = 'md' }: CardProps) {
+export function Card({ children, className, hover = false, padding = 'md', style }: CardProps) {
   const paddingClasses = {
     none: '',
     sm: 'p-4',
@@ -23,6 +24,7 @@ export function Card({ children, className, hover = false, padding = 'md' }: Car
         paddingClasses[padding],
         className
       )}
+      style={style}
     >
       {children}
     </div>
