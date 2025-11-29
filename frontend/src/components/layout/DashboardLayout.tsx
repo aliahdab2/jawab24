@@ -1,7 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import clsx from 'clsx';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
@@ -66,10 +65,8 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
       <div className="min-h-screen bg-surface-50" dir={isRTL ? 'rtl' : 'ltr'}>
         <Sidebar />
         <main 
-          className={clsx(
-            'transition-all duration-300 min-h-screen',
-            sidebarOpen ? 'ms-64' : 'ms-20' // ms = margin-inline-start (works with RTL)
-          )}
+          className="transition-all duration-300 min-h-screen"
+          style={{ marginInlineStart: sidebarOpen ? '16rem' : '5rem' }}
         >
           <div className="p-6 lg:p-8">
             {children}
