@@ -64,7 +64,8 @@ export default function LoginPage() {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
       
-      <div className="min-h-screen bg-gradient-to-br from-surface-50 via-white to-brand-50" dir={isRTL ? 'rtl' : 'ltr'}>
+      {/* Always RTL for login page since content is Arabic */}
+      <div className="min-h-screen bg-gradient-to-br from-surface-50 via-white to-brand-50" dir="rtl">
         {/* Desktop Layout */}
         <div className="hidden lg:flex min-h-screen">
           {/* Left Panel - Branding */}
