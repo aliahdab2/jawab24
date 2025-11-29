@@ -6,6 +6,7 @@ import { commentsService } from '../../src/services/comments';
 import { rulesService } from '../../src/services/rules';
 import { templatesService } from '../../src/services/templates';
 import { aiService } from '../../src/services/ai';
+import { settingsService } from '../../src/services/settings';
 
 // Mock all services
 vi.mock('../../src/services/pages');
@@ -14,6 +15,9 @@ vi.mock('../../src/services/comments');
 vi.mock('../../src/services/rules');
 vi.mock('../../src/services/templates');
 vi.mock('../../src/services/ai');
+vi.mock('../../src/services/settings');
+vi.mock('../../src/services/messages');
+vi.mock('../../src/services/facebook');
 vi.mock('axios');
 vi.mock('../../src/config', () => ({
     config: {
@@ -29,6 +33,21 @@ vi.mock('../../src/config', () => ({
 describe('Reply Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        
+        // Default mock implementations for settingsService
+        vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings_uuid',
+            userId: 'user_uuid',
+            aiEnabled: true,
+            defaultReplyLanguage: 'en',
+            commentsAutoReply: true,
+            messagesAutoReply: true,
+            businessHoursOnly: false,
+            replyDelay: 0,
+        } as any);
     });
 
     describe('processComment', () => {
@@ -150,6 +169,7 @@ describe('Reply Service', () => {
 
         it('should skip if auto-reply is disabled for post', async () => {
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue({
                 ...mockPost,
                 autoReplyEnabled: false,
@@ -168,6 +188,7 @@ describe('Reply Service', () => {
 
         it('should skip if comment already replied', async () => {
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
                 comment: { ...mockComment, replied: true } as any,
