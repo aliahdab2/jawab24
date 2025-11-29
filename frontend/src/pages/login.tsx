@@ -76,7 +76,7 @@ export default function LoginPage() {
               <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-500 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
             </div>
             
-            <div className="relative z-10 px-12 xl:px-16 w-full">
+            <div className="relative z-10 px-12 xl:px-16 py-8 w-full">
               {/* Logo */}
               <div className="flex items-center gap-3 mb-12">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-400 to-accent-500 flex items-center justify-center shadow-2xl shadow-brand-500/30">
@@ -86,7 +86,7 @@ export default function LoginPage() {
               </div>
               
               {/* Tagline */}
-              <h1 className="text-4xl xl:text-5xl font-display font-bold text-white mb-6 leading-tight">
+              <h1 className="text-4xl xl:text-5xl font-display font-bold text-white mb-6 leading-relaxed">
                 ردود ذكية
                 <span className="block gradient-text">على مدار الساعة</span>
               </h1>
@@ -176,7 +176,7 @@ export default function LoginPage() {
               </div>
               
               {/* Tagline */}
-              <h1 className="text-2xl sm:text-3xl font-display font-bold text-white text-center mb-3 leading-tight">
+              <h1 className="text-2xl sm:text-3xl font-display font-bold text-white text-center mb-3 leading-relaxed">
                 ردود ذكية على مدار الساعة
               </h1>
               <p className="text-surface-300 text-center text-sm sm:text-base max-w-xs mx-auto">
