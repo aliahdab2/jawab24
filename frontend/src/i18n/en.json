@@ -185,6 +185,7 @@
     "maxTokens": "Max Tokens",
     "temperature": "Temperature",
     "defaultLanguage": "Default Language",
+    "defaultReplyLanguage": "Default Reply Language",
     "replyDelay": "Reply Delay",
     "seconds": "seconds",
     "saveSettings": "Save Settings",
