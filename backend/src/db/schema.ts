@@ -112,17 +112,51 @@ export const rules = pgTable('rules', {
 export const settings = pgTable('settings', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).unique(),
-    dashboardLanguage: varchar('dashboard_language', { length: 10 }).default('en'),
+    dashboardLanguage: varchar('dashboard_language', { length: 10 }).default('ar'),
     defaultReplyLanguage: varchar('default_reply_language', { length: 10 }).default('ar'),
     supportedLanguages: text('supported_languages').array().default(sql`ARRAY['en', 'ar']`),
     autoDetectLanguage: boolean('auto_detect_language').default(true),
     aiEnabled: boolean('ai_enabled').default(true),
-    aiModel: varchar('ai_model', { length: 100 }).default('gpt-4-mini'),
+    aiModel: varchar('ai_model', { length: 100 }).default('gpt-4o-mini'),
+    // Auto-reply settings
+    commentsAutoReply: boolean('comments_auto_reply').default(true),
+    messagesAutoReply: boolean('messages_auto_reply').default(true),
+    businessHoursOnly: boolean('business_hours_only').default(false),
+    businessHoursStart: varchar('business_hours_start', { length: 5 }).default('09:00'),
+    businessHoursEnd: varchar('business_hours_end', { length: 5 }).default('18:00'),
+    awayMessage: text('away_message'),
+    greetingMessage: text('greeting_message'),
+    replyDelay: integer('reply_delay').default(0), // seconds
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
     return {
         userIdIdx: index('idx_settings_user_id').on(table.userId),
+    };
+});
+
+// 10. Messages Table (for storing DMs)
+export const messages = pgTable('messages', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }),
+    facebookMessageId: varchar('facebook_message_id', { length: 255 }).unique().notNull(),
+    senderId: varchar('sender_id', { length: 255 }).notNull(),
+    senderName: varchar('sender_name', { length: 255 }),
+    message: text('message').notNull(),
+    direction: varchar('direction', { length: 10 }).default('incoming'), // 'incoming' or 'outgoing'
+    replied: boolean('replied').default(false),
+    replyText: text('reply_text'),
+    replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
+    createdTime: timestamp('created_time'),
+    repliedAt: timestamp('replied_at'),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        pageIdIdx: index('idx_messages_page_id').on(table.pageId),
+        senderIdIdx: index('idx_messages_sender_id').on(table.senderId),
+        facebookMessageIdIdx: index('idx_messages_facebook_message_id').on(table.facebookMessageId),
+        directionIdx: index('idx_messages_direction').on(table.direction),
     };
 });
 

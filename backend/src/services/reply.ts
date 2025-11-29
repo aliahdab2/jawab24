@@ -6,6 +6,8 @@ import { rulesService } from './rules';
 import { templatesService } from './templates';
 import { aiService } from './ai';
 import { facebookService } from './facebook';
+import { settingsService } from './settings';
+import { messagesService } from './messages';
 import { config } from '../config';
 
 const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v18.0';
@@ -47,13 +49,49 @@ export class ReplyService {
                 return { success: false, messageId, error: 'Auto-reply disabled for this page' };
             }
 
-            // 2. Try to find a matching rule
+            // 2. Check user settings for messages auto-reply
+            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(page.userId!);
+            
+            // Store the incoming message regardless of auto-reply status
+            const { message: storedMessage, isNew } = await messagesService.findOrCreateFromWebhook(
+                page.id,
+                messageId,
+                senderId,
+                messageText
+            );
+
+            if (!isMessagesEnabled) {
+                // Send away message if configured
+                const awayMessage = await settingsService.getAwayMessage(page.userId!);
+                if (awayMessage && isNew) {
+                    await facebookService.sendPrivateMessage(
+                        page.accessToken,
+                        senderId,
+                        awayMessage
+                    );
+                    await messagesService.storeOutgoingMessage(page.id, senderId, awayMessage, 'template');
+                }
+                return { success: false, messageId, error: 'Messages auto-reply disabled' };
+            }
+
+            // Skip if already replied
+            if (!isNew && storedMessage.replied) {
+                return { success: false, messageId, error: 'Message already replied' };
+            }
+
+            // 3. Get reply delay
+            const replyDelay = await settingsService.getReplyDelay(page.userId!);
+            if (replyDelay > 0) {
+                await this.delay(replyDelay * 1000);
+            }
+
+            // 4. Try to find a matching rule
             const matchingRule = await rulesService.findMatchingRule(page.userId!, messageText);
 
             let replyText: string | null = null;
             let replyMethod: 'template' | 'ai' = 'ai';
 
-            // 3. If rule found with template, use template
+            // 5. If rule found with template, use template
             if (matchingRule && matchingRule.templateId) {
                 const template = await templatesService.getTemplate(page.userId!, matchingRule.templateId);
                 
@@ -65,8 +103,9 @@ export class ReplyService {
                 }
             }
 
-            // 4. If no template reply, use AI
-            if (!replyText && config.ai.enabled) {
+            // 6. If no template reply, use AI
+            const userSettings = await settingsService.getSettings(page.userId!);
+            if (!replyText && userSettings.aiEnabled) {
                 const aiResponse = await aiService.generateReply({
                     comment: messageText, // Using comment parameter for message text
                     context: {
@@ -78,17 +117,21 @@ export class ReplyService {
                 replyMethod = 'ai';
             }
 
-            // 5. If still no reply, ignore (don't spam empty messages)
+            // 7. If still no reply, ignore (don't spam empty messages)
             if (!replyText) {
                 return { success: false, messageId, error: 'No reply generated' };
             }
 
-            // 6. Send private message reply
+            // 8. Send private message reply
             await facebookService.sendPrivateMessage(
                 page.accessToken,
                 senderId,
                 replyText
             );
+
+            // 9. Mark message as replied and store outgoing message
+            await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod);
+            await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
 
             return {
                 success: true,
@@ -105,6 +148,13 @@ export class ReplyService {
                 error: error instanceof Error ? error.message : 'Unknown error',
             };
         }
+    }
+
+    /**
+     * Helper to add delay
+     */
+    private delay(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     /**
@@ -130,14 +180,17 @@ export class ReplyService {
                 return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this page' };
             }
 
-            // 2. Find or create the post
+            // 2. Check user settings for comments auto-reply
+            const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(page.userId!);
+            
+            // 3. Find or create the post
             const post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined);
             
             if (!post.autoReplyEnabled) {
                 return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this post' };
             }
 
-            // 3. Find or create the comment
+            // 4. Find or create the comment (store it regardless of auto-reply status)
             const { comment, isNew } = await commentsService.findOrCreateFromWebhook(
                 post.id,
                 facebookCommentId,
@@ -146,19 +199,30 @@ export class ReplyService {
                 fromName
             );
 
+            // If comments auto-reply is disabled, just store the comment
+            if (!isCommentsEnabled) {
+                return { success: false, commentId: comment.id, error: 'Comments auto-reply disabled' };
+            }
+
             // If comment already exists and was replied to, skip
             if (!isNew && comment.replied) {
                 return { success: false, commentId: comment.id, error: 'Comment already replied' };
             }
 
-            // 4. Try to find a matching rule
+            // 5. Get reply delay
+            const replyDelay = await settingsService.getReplyDelay(page.userId!);
+            if (replyDelay > 0) {
+                await this.delay(replyDelay * 1000);
+            }
+
+            // 6. Try to find a matching rule
             const matchingRule = await rulesService.findMatchingRule(page.userId!, commentMessage);
 
             let replyText: string | null = null;
             let replyMethod: 'template' | 'ai' = 'ai';
             let templateId: string | undefined;
 
-            // 5. If rule found with template, use template
+            // 7. If rule found with template, use template
             if (matchingRule && matchingRule.templateId) {
                 const template = await templatesService.getTemplate(page.userId!, matchingRule.templateId);
                 
@@ -171,8 +235,9 @@ export class ReplyService {
                 }
             }
 
-            // 6. If no template reply, use AI
-            if (!replyText && config.ai.enabled) {
+            // 8. If no template reply, use AI (check user settings)
+            const userSettings = await settingsService.getSettings(page.userId!);
+            if (!replyText && userSettings.aiEnabled) {
                 const aiResponse = await aiService.generateReply({
                     comment: commentMessage,
                     context: {
@@ -184,13 +249,13 @@ export class ReplyService {
                 replyMethod = 'ai';
             }
 
-            // 7. If still no reply (AI disabled and no template), use fallback
+            // 9. If still no reply (AI disabled and no template), use fallback
             if (!replyText) {
                 replyText = 'Thank you for your comment!';
                 replyMethod = 'template';
             }
 
-            // 8. Post reply to Facebook
+            // 10. Post reply to Facebook
             const facebookSuccess = await this.postReplyToFacebook(
                 facebookCommentId,
                 replyText,
@@ -205,7 +270,7 @@ export class ReplyService {
                 };
             }
 
-            // 9. Mark comment as replied in our database
+            // 11. Mark comment as replied in our database
             await commentsService.markAsReplied(
                 comment.id,
                 replyText,

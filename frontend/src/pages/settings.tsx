@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardHeader, Button, Input, Toggle, PageHeader } from '@/components/ui';
+import { Card, CardHeader, Button, Input, Toggle, PageHeader, PageSpinner } from '@/components/ui';
+import { useAuthStore } from '@/lib/store';
+import axios from 'axios';
 import { 
   Globe,
   Bot,
@@ -10,7 +12,8 @@ import {
   RefreshCw,
   MessageSquare,
   MessageCircle,
-  Clock
+  Clock,
+  Check
 } from 'lucide-react';
 import { useTranslation, useLanguage } from '@/i18n';
 
@@ -45,6 +48,7 @@ function SettingsToggleRow({
 export default function SettingsPage() {
   const { t, language } = useTranslation();
   const { setLanguage } = useLanguage();
+  const { token } = useAuthStore();
   const isRTL = language === 'ar';
   
   const [settings, setSettings] = useState({
@@ -67,6 +71,46 @@ export default function SettingsPage() {
     greetingMessage: '',
   });
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saved, setSaved] = useState(false);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+  // Fetch settings from backend
+  const fetchSettings = useCallback(async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      const response = await axios.get(`${apiUrl}/settings`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = response.data;
+      setSettings(prev => ({
+        ...prev,
+        dashboardLanguage: data.dashboardLanguage || prev.dashboardLanguage,
+        defaultReplyLanguage: data.defaultReplyLanguage || prev.defaultReplyLanguage,
+        autoDetectLanguage: data.autoDetectLanguage ?? prev.autoDetectLanguage,
+        aiEnabled: data.aiEnabled ?? prev.aiEnabled,
+        aiModel: data.aiModel || prev.aiModel,
+        commentsAutoReply: data.commentsAutoReply ?? prev.commentsAutoReply,
+        messagesAutoReply: data.messagesAutoReply ?? prev.messagesAutoReply,
+        businessHoursOnly: data.businessHoursOnly ?? prev.businessHoursOnly,
+        businessHoursStart: data.businessHoursStart || prev.businessHoursStart,
+        businessHoursEnd: data.businessHoursEnd || prev.businessHoursEnd,
+        awayMessage: data.awayMessage || '',
+        replyDelay: data.replyDelay ?? prev.replyDelay,
+        greetingMessage: data.greetingMessage || '',
+      }));
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, apiUrl]);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   // Update dashboard language when setting changes
   useEffect(() => {
@@ -75,10 +119,46 @@ export default function SettingsPage() {
     }
   }, [settings.dashboardLanguage, language, setLanguage]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!token) return;
     setSaving(true);
-    setTimeout(() => setSaving(false), 1500);
+    setSaved(false);
+    try {
+      await axios.put(`${apiUrl}/settings`, {
+        dashboardLanguage: settings.dashboardLanguage,
+        defaultReplyLanguage: settings.defaultReplyLanguage,
+        autoDetectLanguage: settings.autoDetectLanguage,
+        aiEnabled: settings.aiEnabled,
+        aiModel: settings.aiModel,
+        commentsAutoReply: settings.commentsAutoReply,
+        messagesAutoReply: settings.messagesAutoReply,
+        businessHoursOnly: settings.businessHoursOnly,
+        businessHoursStart: settings.businessHoursStart,
+        businessHoursEnd: settings.businessHoursEnd,
+        awayMessage: settings.awayMessage || null,
+        replyDelay: settings.replyDelay,
+        greetingMessage: settings.greetingMessage || null,
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <DashboardLayout title={t('settings.title')}>
+        <div className="flex items-center justify-center h-64">
+          <PageSpinner />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title={t('settings.title')}>
@@ -87,8 +167,13 @@ export default function SettingsPage() {
         title={t('settings.title')} 
         description={t('settings.description')}
         action={
-          <Button onClick={handleSave} loading={saving} icon={<Save className="w-4 h-4" />}>
-            {t('settings.saveSettings')}
+          <Button 
+            onClick={handleSave} 
+            loading={saving} 
+            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            variant={saved ? 'secondary' : 'primary'}
+          >
+            {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
           </Button>
         }
       />

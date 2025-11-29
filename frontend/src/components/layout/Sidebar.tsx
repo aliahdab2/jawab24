@@ -20,6 +20,7 @@ const navigationKeys = [
   { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'nav.pages', href: '/pages', icon: FileText },
   { key: 'nav.comments', href: '/comments', icon: MessageSquare },
+  { key: 'nav.messages', href: '/messages', icon: MessageCircle },
   { key: 'nav.templates', href: '/templates', icon: BookTemplate },
   { key: 'nav.rules', href: '/rules', icon: Zap },
   { key: 'nav.settings', href: '/settings', icon: Settings },
