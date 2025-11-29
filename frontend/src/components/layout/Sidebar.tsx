@@ -41,9 +41,9 @@ export function Sidebar() {
     <aside 
       className={clsx(
         'fixed top-0 h-full bg-surface-900 text-white transition-all duration-300 z-40',
-        sidebarOpen ? 'w-64' : 'w-20'
+        sidebarOpen ? 'w-64' : 'w-20',
+        isRTL ? 'right-0' : 'left-0'
       )}
-      style={{ insetInlineStart: 0 }}
     >
       {/* Logo */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-surface-800">

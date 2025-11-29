@@ -57,6 +57,12 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
     return null;
   }
 
+  // Calculate margin based on sidebar state and RTL
+  const sidebarWidth = sidebarOpen ? '16rem' : '5rem';
+  const mainStyle = isRTL 
+    ? { marginRight: sidebarWidth, marginLeft: 0 }
+    : { marginLeft: sidebarWidth, marginRight: 0 };
+
   return (
     <>
       <Head>
@@ -66,9 +72,7 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
         <Sidebar />
         <main 
           className="transition-all duration-300 min-h-screen"
-          style={{ 
-            marginInlineStart: sidebarOpen ? '16rem' : '5rem' 
-          }}
+          style={mainStyle}
         >
           <div className="p-6 lg:p-8">
             {children}
