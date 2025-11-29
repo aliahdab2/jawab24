@@ -46,15 +46,15 @@ export default function LoginPage() {
   };
 
   const features = [
-    { icon: MessageSquare, title: 'جواب تلقائي', description: 'ردود فورية على التعليقات' },
-    { icon: Zap, title: 'ذكاء اصطناعي', description: 'ردود ذكية ومناسبة للسياق' },
-    { icon: Globe, title: 'متعدد اللغات', description: 'عربي، إنجليزي والمزيد' },
+    { icon: MessageSquare, titleKey: 'auth.feature1Title', descKey: 'auth.feature1Desc' },
+    { icon: Zap, titleKey: 'auth.feature2Title', descKey: 'auth.feature2Desc' },
+    { icon: Globe, titleKey: 'auth.feature3Title', descKey: 'auth.feature3Desc' },
   ];
 
   const stats = [
-    { value: '24/7', label: 'متاح دائماً' },
-    { value: '<1s', label: 'سرعة الرد' },
-    { value: '99%', label: 'دقة الردود' },
+    { value: '24/7', labelKey: 'auth.stat1Label' },
+    { value: '<1s', labelKey: 'auth.stat2Label' },
+    { value: '99%', labelKey: 'auth.stat3Label' },
   ];
 
   return (
@@ -64,8 +64,8 @@ export default function LoginPage() {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
       
-      {/* Always RTL for login page since content is Arabic */}
-      <div className="min-h-screen bg-gradient-to-br from-surface-50 via-white to-brand-50" dir="rtl">
+      {/* Dynamic RTL based on language */}
+      <div className="min-h-screen bg-gradient-to-br from-surface-50 via-white to-brand-50" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Desktop Layout */}
         <div className="hidden lg:flex min-h-screen">
           {/* Left Panel - Branding */}
@@ -87,18 +87,18 @@ export default function LoginPage() {
               
               {/* Tagline */}
               <h1 className="text-4xl xl:text-5xl font-display font-bold text-white mb-6 leading-loose">
-                ردود ذكية
-                <span className="block gradient-text pb-2">على مدار الساعة</span>
+                {t('auth.tagline1')}
+                <span className="block gradient-text pb-2">{t('auth.tagline2')}</span>
               </h1>
               <p className="text-lg text-surface-300 mb-12 max-w-md">
-                وفّر ساعات يومياً مع الردود التلقائية الذكية على تعليقات صفحتك على فيسبوك
+                {t('auth.taglineDesc')}
               </p>
               
               {/* Features */}
               <div className="space-y-6">
                 {features.map((feature, i) => (
                   <div 
-                    key={feature.title}
+                    key={feature.titleKey}
                     className="flex items-center gap-4 animate-slide-up"
                     style={{ animationDelay: `${i * 0.1}s` }}
                   >
@@ -106,8 +106,8 @@ export default function LoginPage() {
                       <feature.icon className="w-6 h-6 text-brand-400" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-white">{feature.title}</h3>
-                      <p className="text-sm text-surface-400">{feature.description}</p>
+                      <h3 className="font-semibold text-white">{t(feature.titleKey)}</h3>
+                      <p className="text-sm text-surface-400">{t(feature.descKey)}</p>
                     </div>
                   </div>
                 ))}
@@ -177,18 +177,18 @@ export default function LoginPage() {
               
               {/* Tagline */}
               <h1 className="text-2xl sm:text-3xl font-display font-bold text-white text-center mb-3 leading-relaxed">
-                ردود ذكية على مدار الساعة
+                {t('auth.tagline1')} {t('auth.tagline2')}
               </h1>
               <p className="text-surface-300 text-center text-sm sm:text-base max-w-xs mx-auto">
-                وفّر وقتك مع الردود التلقائية الذكية
+                {t('auth.taglineDesc')}
               </p>
               
               {/* Stats Row */}
               <div className="flex justify-center gap-6 mt-8">
                 {stats.map((stat) => (
-                  <div key={stat.label} className="text-center">
+                  <div key={stat.labelKey} className="text-center">
                     <div className="text-xl font-bold text-brand-400">{stat.value}</div>
-                    <div className="text-xs text-surface-400">{stat.label}</div>
+                    <div className="text-xs text-surface-400">{t(stat.labelKey)}</div>
                   </div>
                 ))}
               </div>
@@ -222,11 +222,11 @@ export default function LoginPage() {
               <div className="mt-6 pt-6 border-t border-surface-100">
                 <div className="grid grid-cols-3 gap-2 text-center">
                   {features.map((feature) => (
-                    <div key={feature.title} className="p-2">
+                    <div key={feature.titleKey} className="p-2">
                       <div className="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mx-auto mb-2">
                         <feature.icon className="w-5 h-5 text-brand-600" />
                       </div>
-                      <p className="text-xs text-surface-600 font-medium">{feature.title}</p>
+                      <p className="text-xs text-surface-600 font-medium">{t(feature.titleKey)}</p>
                     </div>
                   ))}
                 </div>

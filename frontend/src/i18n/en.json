@@ -48,7 +48,19 @@
     "privacyPolicy": "Privacy Policy",
     "and": "and",
     "demoMode": "Demo Mode:",
-    "demoDescription": "Click the button to explore the app with demo data"
+    "demoDescription": "Click the button to explore the app with demo data",
+    "tagline1": "Smart Replies",
+    "tagline2": "Around the Clock",
+    "taglineDesc": "Save hours daily with smart auto-replies to your Facebook page comments",
+    "feature1Title": "Auto Reply",
+    "feature1Desc": "Instant replies to comments",
+    "feature2Title": "AI Powered",
+    "feature2Desc": "Smart context-aware replies",
+    "feature3Title": "Multi-language",
+    "feature3Desc": "Arabic, English and more",
+    "stat1Label": "Always Available",
+    "stat2Label": "Response Speed",
+    "stat3Label": "Accuracy"
   },
   "dashboard": {
     "title": "Dashboard",
