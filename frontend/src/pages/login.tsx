@@ -29,7 +29,8 @@ export default function LoginPage() {
       setTimeout(() => {
         setAuth(
           { id: 'demo-user', name: 'مستخدم تجريبي', email: 'demo@jawab24.com', facebookId: 'demo123' },
-          'demo-token-123'
+          'demo-token-123',
+          'demo-fb-token-123'
         );
         router.push('/dashboard');
       }, 1500);

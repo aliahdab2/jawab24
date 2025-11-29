@@ -33,7 +33,7 @@ export class AuthController {
             const token = authService.generateToken(user);
 
             // 5. Return response
-            const response = authService.createAuthResponse(user, token);
+            const response = authService.createAuthResponse(user, token, accessToken);
             return reply.send(response);
 
         } catch (error) {

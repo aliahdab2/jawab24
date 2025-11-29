@@ -41,8 +41,8 @@ export default function AuthCallback() {
 
         const data = await response.json();
         
-        // Store auth data
-        setAuth(data.user, data.token);
+        // Store auth data including FB token
+        setAuth(data.user, data.token, data.fbAccessToken);
         
         // Redirect to dashboard
         router.push('/dashboard');

@@ -81,9 +81,10 @@ export class AuthService {
     /**
      * Create auth response
      */
-    createAuthResponse(user: User, token: string): AuthResponse {
+    createAuthResponse(user: User, token: string, fbAccessToken: string): AuthResponse {
         return {
             token,
+            fbAccessToken,
             user: {
                 id: user.id,
                 name: user.name || '',

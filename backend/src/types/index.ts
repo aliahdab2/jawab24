@@ -54,6 +54,7 @@ export interface AuthRequest {
 
 export interface AuthResponse {
     token: string;
+    fbAccessToken: string;
     user: {
         id: string;
         name: string;

@@ -13,9 +13,10 @@ interface User {
 interface AuthState {
   user: User | null;
   token: string | null;
+  fbToken: string | null;
   isAuthenticated: boolean;
   _hasHydrated: boolean;
-  setAuth: (user: User, token: string) => void;
+  setAuth: (user: User, token: string, fbToken: string) => void;
   logout: () => void;
   setHasHydrated: (state: boolean) => void;
 }
@@ -25,19 +26,20 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       token: null,
+      fbToken: null,
       isAuthenticated: false,
       _hasHydrated: false,
-      setAuth: (user, token) => {
+      setAuth: (user, token, fbToken) => {
         if (typeof window !== 'undefined') {
           localStorage.setItem('token', token);
         }
-        set({ user, token, isAuthenticated: true });
+        set({ user, token, fbToken, isAuthenticated: true });
       },
       logout: () => {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
         }
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, token: null, fbToken: null, isAuthenticated: false });
       },
       setHasHydrated: (state) => {
         set({ _hasHydrated: state });

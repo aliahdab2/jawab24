@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Toggle, Badge, EmptyState, PageHeader } from '@/components/ui';
+import { Card, Button, Toggle, Badge, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
+import { useAuthStore } from '@/lib/store';
 import { 
   FileText, 
   RefreshCw, 
@@ -10,73 +11,112 @@ import {
   TrendingUp,
   Settings
 } from 'lucide-react';
+import axios from 'axios';
 
-// Demo data
-const demoPages = [
-  {
-    id: '1',
-    name: 'متجر التقنية',
-    facebookPageId: '123456789',
-    autoReplyEnabled: true,
-    commentsCount: 1234,
-    repliesCount: 1198,
-    replyRate: 97,
-    lastActivity: 2,
-  },
-  {
-    id: '2',
-    name: 'الموضة',
-    facebookPageId: '987654321',
-    autoReplyEnabled: true,
-    commentsCount: 856,
-    repliesCount: 823,
-    replyRate: 96,
-    lastActivity: 5,
-  },
-  {
-    id: '3',
-    name: 'توصيل الطعام',
-    facebookPageId: '456789123',
-    autoReplyEnabled: false,
-    commentsCount: 445,
-    repliesCount: 420,
-    replyRate: 94,
-    lastActivity: 60,
-  },
-  {
-    id: '4',
-    name: 'وكالة السفر',
-    facebookPageId: '789123456',
-    autoReplyEnabled: true,
-    commentsCount: 312,
-    repliesCount: 250,
-    replyRate: 80,
-    lastActivity: 180,
-  },
-];
+// Define Page interface matching backend
+interface Page {
+  id: string;
+  name: string;
+  facebookPageId: string;
+  autoReplyEnabled: boolean;
+  commentsCount?: number;
+  repliesCount?: number;
+  replyRate?: number;
+  lastActivity?: number;
+  createdAt: string;
+}
 
 export default function PagesPage() {
   const { t } = useTranslation();
-  const [pages, setPages] = useState(demoPages);
+  const { token, fbToken } = useAuthStore();
+  const [pages, setPages] = useState<Page[]>([]);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  const handleToggle = (pageId: string, enabled: boolean) => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+  // Fetch pages on load
+  useEffect(() => {
+    fetchPages();
+  }, [token]);
+
+  const fetchPages = async () => {
+    if (!token) return;
+    
+    try {
+      setLoading(true);
+      const response = await axios.get(`${apiUrl}/pages`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPages(response.data);
+    } catch (error) {
+      console.error('Failed to fetch pages:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggle = async (pageId: string, enabled: boolean) => {
+    // Optimistic update
     setPages(pages.map(page => 
       page.id === pageId ? { ...page, autoReplyEnabled: enabled } : page
     ));
+
+    try {
+      await axios.patch(`${apiUrl}/pages/${pageId}/auto-reply`, 
+        { enabled },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error('Failed to toggle auto-reply:', error);
+      // Revert on error
+      setPages(pages.map(page => 
+        page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
+      ));
+    }
   };
 
-  const handleSync = () => {
-    setSyncing(true);
-    setTimeout(() => setSyncing(false), 2000);
+  const handleSync = async () => {
+    if (!token || !fbToken) {
+      console.error('No tokens available for sync');
+      return;
+    }
+    
+    try {
+      setSyncing(true);
+      // Call sync endpoint with user's FB token
+      await axios.post(`${apiUrl}/pages/sync`, 
+        { accessToken: fbToken },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Refresh list
+      await fetchPages();
+      
+    } catch (error) {
+      console.error('Sync failed:', error);
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const formatTime = (minutes: number) => {
+    if (!minutes) return t('common.noData');
     if (minutes < 60) {
       return t('time.minutesAgo').replace('{count}', String(minutes));
     }
     return t('time.hoursAgo').replace('{count}', String(Math.floor(minutes / 60)));
   };
+
+  if (loading && pages.length === 0) {
+    return (
+      <DashboardLayout title={t('pages.title')}>
+        <div className="flex items-center justify-center h-64">
+          <PageSpinner />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title={t('pages.title')}>
@@ -124,20 +164,20 @@ export default function PagesPage() {
                     <MessageSquare className="w-4 h-4" />
                     <span className="text-xs">{t('comments.title')}</span>
                   </div>
-                  <p className="text-lg font-semibold text-surface-900">{page.commentsCount.toLocaleString()}</p>
+                  <p className="text-lg font-semibold text-surface-900">{(page.commentsCount || 0).toLocaleString()}</p>
                 </div>
                 <div className="text-center border-x border-surface-100">
                   <div className="flex items-center justify-center gap-1 text-surface-500 mb-1">
                     <TrendingUp className="w-4 h-4" />
                     <span className="text-xs">{t('dashboard.autoReplies')}</span>
                   </div>
-                  <p className="text-lg font-semibold text-surface-900">{page.repliesCount.toLocaleString()}</p>
+                  <p className="text-lg font-semibold text-surface-900">{(page.repliesCount || 0).toLocaleString()}</p>
                 </div>
                 <div className="text-center">
                   <div className="flex items-center justify-center gap-1 text-surface-500 mb-1">
                     <span className="text-xs">{t('dashboard.replyRate')}</span>
                   </div>
-                  <p className="text-lg font-semibold text-emerald-600">{page.replyRate}%</p>
+                  <p className="text-lg font-semibold text-emerald-600">{page.replyRate || 0}%</p>
                 </div>
               </div>
 
@@ -148,16 +188,21 @@ export default function PagesPage() {
                     {page.autoReplyEnabled ? t('common.active') : t('common.inactive')}
                   </Badge>
                   <span className="text-xs text-surface-400">
-                    {t('pages.lastActivity')}: {formatTime(page.lastActivity)}
+                    {page.lastActivity ? formatTime(page.lastActivity) : t('common.noData')}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="ghost" size="sm">
                     <Settings className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <a 
+                    href={`https://facebook.com/${page.facebookPageId}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center p-2 rounded-xl hover:bg-surface-100 text-surface-600 transition-colors"
+                  >
                     <ExternalLink className="w-4 h-4" />
-                  </Button>
+                  </a>
                 </div>
               </div>
             </Card>
