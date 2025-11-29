@@ -22,15 +22,26 @@ export default function LoginPage() {
   const handleFacebookLogin = () => {
     setLoading(true);
     
-    // Demo mode - simulate successful login
-    // In production, this would redirect to Facebook OAuth
-    setTimeout(() => {
-      setAuth(
-        { id: 'demo-user', name: 'مستخدم تجريبي', email: 'demo@jawab24.com', facebookId: 'demo123' },
-        'demo-token-123'
-      );
-      router.push('/dashboard');
-    }, 1500);
+    const FB_APP_ID = process.env.NEXT_PUBLIC_FB_APP_ID;
+    
+    // If no App ID configured, use demo mode
+    if (!FB_APP_ID) {
+      setTimeout(() => {
+        setAuth(
+          { id: 'demo-user', name: 'مستخدم تجريبي', email: 'demo@jawab24.com', facebookId: 'demo123' },
+          'demo-token-123'
+        );
+        router.push('/dashboard');
+      }, 1500);
+      return;
+    }
+    
+    // Real Facebook OAuth
+    const redirectUri = `${window.location.origin}/auth/callback`;
+    const scope = 'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging';
+    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FB_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&response_type=code`;
+    
+    window.location.href = authUrl;
   };
 
   const features = [
