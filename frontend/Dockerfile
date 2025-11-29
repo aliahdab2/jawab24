@@ -3,6 +3,14 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+# Build arguments for Next.js public env vars
+ARG NEXT_PUBLIC_FB_APP_ID
+ARG NEXT_PUBLIC_API_URL
+
+# Set them as environment variables for the build
+ENV NEXT_PUBLIC_FB_APP_ID=$NEXT_PUBLIC_FB_APP_ID
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Copy package files
 COPY package*.json ./
 
@@ -12,7 +20,7 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build Next.js
+# Build Next.js (will bake in the NEXT_PUBLIC_* vars)
 RUN npm run build
 
 # Production stage

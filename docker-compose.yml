@@ -98,13 +98,15 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_FB_APP_ID=774211662298446
+        - NEXT_PUBLIC_API_URL=https://jawab24.com/api
     container_name: jawab24-frontend
     restart: unless-stopped
     env_file:
       - ./env/frontend.env
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://localhost/api
     depends_on:
       - backend
     networks:
