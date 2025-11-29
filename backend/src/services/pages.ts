@@ -122,9 +122,6 @@ export class PagesService {
                     .where(eq(pages.id, existingPage.id))
                     .returning();
                 syncedPages.push(updated[0]);
-                
-                // Ensure subscription is active
-                await facebookService.subscribeApp(fbPage.id, fbPage.access_token);
             } else {
                 // Create new page
                 const created = await this.createPage(userId, {
@@ -133,9 +130,6 @@ export class PagesService {
                     accessToken: fbPage.access_token,
                 });
                 syncedPages.push(created);
-
-                // Subscribe app to page webhooks
-                await facebookService.subscribeApp(fbPage.id, fbPage.access_token);
             }
         }
 
