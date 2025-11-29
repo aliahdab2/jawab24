@@ -122,7 +122,7 @@ export class AiService {
                 reply: aiReply,
                 language: detectedLanguage,
                 cached: false,
-                model: config.ai.defaultModel,
+                model: config.ai.model,
             };
         } catch (error) {
             console.error('AI Service error:', error);
