@@ -35,7 +35,7 @@ RUN npm ci --only=production && npm cache clean --force
 
 # Copy built files from builder
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
+COPY --from=builder /app/public ./public/
 COPY --from=builder /app/next.config.js ./
 
 # Change ownership
