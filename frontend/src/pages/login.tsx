@@ -38,7 +38,8 @@ export default function LoginPage() {
     
     // Real Facebook OAuth
     const redirectUri = `${window.location.origin}/auth/callback`;
-    const scope = 'public_profile,email,pages_show_list,pages_read_engagement,pages_manage_posts,pages_messaging';
+    // Only request permissions that are approved/ready for testing in the Facebook App
+    const scope = 'public_profile,pages_show_list,pages_read_engagement,pages_messaging,pages_manage_metadata';
     const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FB_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&response_type=code`;
     
     window.location.href = authUrl;
