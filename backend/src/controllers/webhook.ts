@@ -90,12 +90,53 @@ export class WebhookController {
                 }
             }
 
-            // Handle messaging events (if needed in future)
+            // Handle messaging events
             if (entry.messaging) {
-                for (const message of entry.messaging) {
-                    console.log('Messaging event (not processed):', message);
+                for (const messageEvent of entry.messaging) {
+                    // Only handle text messages
+                    if (messageEvent.message && messageEvent.message.text) {
+                        await this.processMessage(pageId, messageEvent);
+                    }
                 }
             }
+        }
+    }
+
+    /**
+     * Process a messaging event
+     */
+    private async processMessage(pageId: string, event: any) {
+        const senderId = event.sender?.id;
+        const messageText = event.message?.text;
+        const messageId = event.message?.mid;
+
+        if (!senderId || !messageText) {
+            return;
+        }
+
+        // Ignore messages from the page itself (if any echo)
+        // Note: standard messaging events usually don't include echoes unless explicitly subscribed, 
+        // but good to be safe if logic allows checking. 
+        // Since we don't have the page's own ID easily available here without lookup, 
+        // we assume the event is from a user.
+
+        console.log(`Processing message from ${senderId}: ${messageText}`);
+
+        try {
+            const result = await replyService.processMessage(
+                pageId,
+                senderId,
+                messageText,
+                messageId
+            );
+
+            if (result.success) {
+                console.log(`Successfully replied to message ${messageId}`);
+            } else {
+                console.log(`Failed to reply to message ${messageId}: ${result.error}`);
+            }
+        } catch (error) {
+            console.error(`Error processing message ${messageId}:`, error);
         }
     }
 

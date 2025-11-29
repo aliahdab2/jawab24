@@ -5,6 +5,7 @@ import { commentsService } from './comments';
 import { rulesService } from './rules';
 import { templatesService } from './templates';
 import { aiService } from './ai';
+import { facebookService } from './facebook';
 import { config } from '../config';
 
 const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v18.0';
@@ -17,7 +18,95 @@ export interface ReplyResult {
     error?: string;
 }
 
+export interface MessageResult {
+    success: boolean;
+    messageId: string; // Facebook Message ID (mid)
+    replyText?: string;
+    replyMethod?: 'template' | 'ai' | 'manual';
+    error?: string;
+}
+
 export class ReplyService {
+    /**
+     * Process an incoming private message
+     */
+    async processMessage(
+        pageId: string,
+        senderId: string,
+        messageText: string,
+        messageId: string
+    ): Promise<MessageResult> {
+        try {
+            // 1. Get page to check if auto-reply is enabled
+            const page = await pagesService.getPageByFacebookId(pageId);
+            if (!page) {
+                return { success: false, messageId, error: 'Page not found' };
+            }
+
+            if (!page.autoReplyEnabled) {
+                return { success: false, messageId, error: 'Auto-reply disabled for this page' };
+            }
+
+            // 2. Try to find a matching rule
+            const matchingRule = await rulesService.findMatchingRule(page.userId!, messageText);
+
+            let replyText: string | null = null;
+            let replyMethod: 'template' | 'ai' = 'ai';
+
+            // 3. If rule found with template, use template
+            if (matchingRule && matchingRule.templateId) {
+                const template = await templatesService.getTemplate(page.userId!, matchingRule.templateId);
+                
+                if (template && template.translations) {
+                    const translations = template.translations as Record<string, string>;
+                    // Simple language fallback for now
+                    replyText = translations['en'] || translations['ar'] || Object.values(translations)[0];
+                    replyMethod = 'template';
+                }
+            }
+
+            // 4. If no template reply, use AI
+            if (!replyText && config.ai.enabled) {
+                const aiResponse = await aiService.generateReply({
+                    comment: messageText, // Using comment parameter for message text
+                    context: {
+                        pageName: page.name || undefined,
+                        postMessage: "Private Message Conversation", // Context for AI
+                    }
+                });
+                replyText = aiResponse.reply;
+                replyMethod = 'ai';
+            }
+
+            // 5. If still no reply, ignore (don't spam empty messages)
+            if (!replyText) {
+                return { success: false, messageId, error: 'No reply generated' };
+            }
+
+            // 6. Send private message reply
+            await facebookService.sendPrivateMessage(
+                page.accessToken,
+                senderId,
+                replyText
+            );
+
+            return {
+                success: true,
+                messageId,
+                replyText,
+                replyMethod,
+            };
+
+        } catch (error) {
+            console.error('Error processing message:', error);
+            return {
+                success: false,
+                messageId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            };
+        }
+    }
+
     /**
      * Process an incoming comment and generate a reply
      * This is the main orchestration function

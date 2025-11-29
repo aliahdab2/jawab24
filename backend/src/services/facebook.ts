@@ -91,6 +91,26 @@ export class FacebookService {
             throw error;
         }
     }
+    /**
+     * Send a private message to a user
+     */
+    async sendPrivateMessage(pageAccessToken: string, recipientId: string, text: string): Promise<void> {
+        try {
+            await axios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
+                recipient: { id: recipientId },
+                message: { text },
+            }, {
+                params: {
+                    access_token: pageAccessToken,
+                },
+            });
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
+            }
+            throw error;
+        }
+    }
 }
 
 export const facebookService = new FacebookService();
