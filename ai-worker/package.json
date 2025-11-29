@@ -7,21 +7,24 @@
         "build": "tsc",
         "start": "node dist/index.js",
         "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-        "test": "vitest"
+        "test": "vitest",
+        "lint": "eslint src/**/*.ts"
     },
     "dependencies": {
-        "fastify": "^4.25.2",
         "@fastify/cors": "^8.5.0",
-        "openai": "^4.24.1",
+        "dotenv": "^16.3.1",
+        "fastify": "^4.25.2",
         "ioredis": "^5.3.2",
-        "dotenv": "^16.3.1"
+        "openai": "^4.24.1"
     },
     "devDependencies": {
         "@types/node": "^20.10.6",
-        "typescript": "^5.3.3",
+        "@typescript-eslint/parser": "^6.21.0",
+        "eslint": "^8.57.1",
         "ts-node": "^10.9.2",
         "ts-node-dev": "^2.0.0",
-        "vitest": "^0.34.6",
-        "vite": "^4.5.0"
+        "typescript": "^5.3.3",
+        "vite": "^4.5.0",
+        "vitest": "^0.34.6"
     }
 }
