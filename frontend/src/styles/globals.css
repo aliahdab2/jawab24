@@ -106,6 +106,8 @@
 
   .gradient-text {
     @apply bg-gradient-to-r from-brand-600 to-accent-500 bg-clip-text text-transparent;
+    padding-bottom: 0.1em; /* Prevent Arabic text cutoff */
+    line-height: 1.4;
   }
 
   .glass {

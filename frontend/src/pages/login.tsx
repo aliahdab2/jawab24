@@ -86,9 +86,9 @@ export default function LoginPage() {
               </div>
               
               {/* Tagline */}
-              <h1 className="text-4xl xl:text-5xl font-display font-bold text-white mb-6 leading-relaxed">
+              <h1 className="text-4xl xl:text-5xl font-display font-bold text-white mb-6 leading-loose">
                 ردود ذكية
-                <span className="block gradient-text">على مدار الساعة</span>
+                <span className="block gradient-text pb-2">على مدار الساعة</span>
               </h1>
               <p className="text-lg text-surface-300 mb-12 max-w-md">
                 وفّر ساعات يومياً مع الردود التلقائية الذكية على تعليقات صفحتك على فيسبوك
