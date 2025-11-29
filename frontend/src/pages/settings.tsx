@@ -118,7 +118,7 @@ export default function SettingsPage() {
 
             <SettingsToggleRow
               icon={<Globe className="w-5 h-5 text-brand-600" />}
-              title={t('settings.language')}
+              title={t('settings.autoDetect')}
               description={t('settings.description')}
               enabled={settings.autoDetectLanguage}
               onChange={(enabled) => setSettings({ ...settings, autoDetectLanguage: enabled })}
@@ -136,7 +136,7 @@ export default function SettingsPage() {
             <SettingsToggleRow
               icon={<Bot className="w-5 h-5 text-brand-600" />}
               title={t('settings.enableAI')}
-              description={isRTL ? 'تفعيل الردود الذكية بالذكاء الاصطناعي' : 'Enable smart AI-powered replies'}
+              description={t('settings.aiDescription')}
               enabled={settings.aiEnabled}
               onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
             />
@@ -160,7 +160,7 @@ export default function SettingsPage() {
 
             <SettingsToggleRow
               icon={<Bell className="w-5 h-5 text-brand-600" />}
-              title={t('settings.notifications')}
+              title={t('settings.emailNotifications')}
               description={t('settings.description')}
               enabled={settings.emailNotifications}
               onChange={(enabled) => setSettings({ ...settings, emailNotifications: enabled })}
