@@ -111,6 +111,25 @@ export class FacebookService {
             throw error;
         }
     }
+    /**
+     * Subscribe app to page webhooks
+     */
+    async subscribeApp(pageId: string, pageAccessToken: string): Promise<void> {
+        try {
+            await axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, {
+                subscribed_fields: ['feed', 'messages']
+            }, {
+                params: {
+                    access_token: pageAccessToken,
+                },
+            });
+        } catch (error) {
+             if (axios.isAxiosError(error)) {
+                // Log warning but don't fail the whole sync
+                console.warn(`Failed to subscribe app to page ${pageId}: ${error.response?.data?.error?.message || error.message}`);
+            }
+        }
+    }
 }
 
 export const facebookService = new FacebookService();
