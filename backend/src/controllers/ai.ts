@@ -1,0 +1,57 @@
+import { FastifyReply, FastifyRequest } from 'fastify';
+import { aiService } from '../services/ai';
+import { AiGenerateRequest } from '../types';
+import { AuthenticatedRequest } from '../middleware/auth';
+
+export class AiController {
+    /**
+     * Generate AI reply for a comment
+     * POST /ai/generate
+     */
+    async generate(request: FastifyRequest<{ Body: AiGenerateRequest }>, reply: FastifyReply) {
+        const { comment, language, context } = request.body;
+
+        if (!comment || comment.trim().length === 0) {
+            return reply.status(400).send({ error: 'Comment is required' });
+        }
+
+        try {
+            const result = await aiService.generateReply({ comment, language, context });
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to generate AI reply' });
+        }
+    }
+
+    /**
+     * Get cache statistics
+     * GET /ai/cache/stats
+     */
+    async getCacheStats(request: FastifyRequest, reply: FastifyReply) {
+        try {
+            const stats = await aiService.getCacheStats();
+            return reply.send(stats);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to get cache stats' });
+        }
+    }
+
+    /**
+     * Clear cache (admin only)
+     * DELETE /ai/cache
+     */
+    async clearCache(request: FastifyRequest, reply: FastifyReply) {
+        try {
+            await aiService.clearCache();
+            return reply.send({ message: 'Cache cleared successfully' });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to clear cache' });
+        }
+    }
+}
+
+export const aiController = new AiController();
+

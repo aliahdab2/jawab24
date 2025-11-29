@@ -1,0 +1,59 @@
+import clsx from 'clsx';
+import { useTranslation } from '@/i18n';
+
+interface ToggleProps {
+  enabled: boolean;
+  onChange: (enabled: boolean) => void;
+  disabled?: boolean;
+  size?: 'sm' | 'md';
+}
+
+export function Toggle({ enabled, onChange, disabled = false, size = 'md' }: ToggleProps) {
+  const { language } = useTranslation();
+  const isRTL = language === 'ar';
+  
+  const sizeClasses = {
+    sm: {
+      track: 'w-8 h-4',
+      thumb: 'w-3 h-3',
+      translateDistance: 16, // 1rem in pixels
+    },
+    md: {
+      track: 'w-11 h-6',
+      thumb: 'w-5 h-5',
+      translateDistance: 20, // 1.25rem in pixels
+    },
+  };
+
+  // In RTL, when enabled, the thumb should move to the LEFT (negative X)
+  // In LTR, when enabled, the thumb should move to the RIGHT (positive X)
+  const getTransform = () => {
+    if (!enabled) return 'translateX(0)';
+    const distance = sizeClasses[size].translateDistance;
+    return isRTL ? `translateX(-${distance}px)` : `translateX(${distance}px)`;
+  };
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      disabled={disabled}
+      onClick={() => onChange(!enabled)}
+      className={clsx(
+        'relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2',
+        sizeClasses[size].track,
+        enabled ? 'bg-brand-600' : 'bg-surface-300',
+        disabled && 'opacity-50 cursor-not-allowed'
+      )}
+    >
+      <span
+        className={clsx(
+          'pointer-events-none inline-block rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+          sizeClasses[size].thumb
+        )}
+        style={{ transform: getTransform() }}
+      />
+    </button>
+  );
+}

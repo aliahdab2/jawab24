@@ -1,0 +1,167 @@
+import { FastifyReply, FastifyRequest } from 'fastify';
+import { config } from '../config';
+import { replyService } from '../services/reply';
+
+interface WebhookEntry {
+    id: string;
+    time: number;
+    messaging?: any[];
+    changes?: WebhookChange[];
+}
+
+interface WebhookChange {
+    field: string;
+    value: {
+        item: string;
+        verb: string;
+        comment_id?: string;
+        post_id?: string;
+        parent_id?: string;
+        message?: string;
+        from?: {
+            id: string;
+            name: string;
+        };
+        created_time?: number;
+    };
+}
+
+interface WebhookBody {
+    object: string;
+    entry: WebhookEntry[];
+}
+
+export class WebhookController {
+    /**
+     * Verify webhook token (Facebook challenge)
+     * GET /webhook
+     */
+    async verifyWebhook(request: FastifyRequest<{ Querystring: { 'hub.mode': string; 'hub.verify_token': string; 'hub.challenge': string } }>, reply: FastifyReply) {
+        const mode = request.query['hub.mode'];
+        const token = request.query['hub.verify_token'];
+        const challenge = request.query['hub.challenge'];
+
+        if (mode && token) {
+            if (mode === 'subscribe' && token === config.facebook.webhookVerifyToken) {
+                console.log('WEBHOOK_VERIFIED');
+                return reply.status(200).send(challenge);
+            } else {
+                return reply.status(403).send('Verification token mismatch');
+            }
+        }
+        return reply.status(400).send('Missing parameters');
+    }
+
+    /**
+     * Handle webhook events
+     * POST /webhook
+     */
+    async handleWebhook(request: FastifyRequest, reply: FastifyReply) {
+        const body = request.body as WebhookBody;
+
+        // Log the webhook for debugging
+        console.log('Received webhook:', JSON.stringify(body, null, 2));
+
+        if (body.object === 'page') {
+            // Process asynchronously - respond immediately to Facebook
+            this.processWebhookAsync(body.entry).catch(err => {
+                console.error('Error processing webhook:', err);
+            });
+
+            // Return a '200 OK' response immediately
+            return reply.status(200).send('EVENT_RECEIVED');
+        } else {
+            // Return a '404 Not Found' if event is not from a page subscription
+            return reply.status(404).send();
+        }
+    }
+
+    /**
+     * Process webhook entries asynchronously
+     */
+    private async processWebhookAsync(entries: WebhookEntry[]) {
+        for (const entry of entries) {
+            const pageId = entry.id;
+
+            // Handle feed changes (comments, posts)
+            if (entry.changes) {
+                for (const change of entry.changes) {
+                    await this.processChange(pageId, change);
+                }
+            }
+
+            // Handle messaging events (if needed in future)
+            if (entry.messaging) {
+                for (const message of entry.messaging) {
+                    console.log('Messaging event (not processed):', message);
+                }
+            }
+        }
+    }
+
+    /**
+     * Process a single change event
+     */
+    private async processChange(pageId: string, change: WebhookChange) {
+        console.log(`Processing change: ${change.field} - ${change.value.item} - ${change.value.verb}`);
+
+        // Only process feed changes
+        if (change.field !== 'feed') {
+            return;
+        }
+
+        const { value } = change;
+
+        // Only process new comments (not edits or deletes)
+        if (value.item === 'comment' && value.verb === 'add') {
+            await this.processNewComment(pageId, value);
+        }
+
+        // Could also handle new posts here if needed
+        if (value.item === 'post' && value.verb === 'add') {
+            console.log('New post detected:', value.post_id);
+            // Posts are handled when comments come in
+        }
+    }
+
+    /**
+     * Process a new comment
+     */
+    private async processNewComment(pageId: string, value: WebhookChange['value']) {
+        const { comment_id, post_id, message, from } = value;
+
+        if (!comment_id || !post_id || !message) {
+            console.log('Missing required fields for comment processing');
+            return;
+        }
+
+        // Don't reply to our own comments (page's comments)
+        if (from?.id === pageId) {
+            console.log('Skipping own comment');
+            return;
+        }
+
+        console.log(`Processing new comment: ${comment_id} on post ${post_id}`);
+
+        try {
+            const result = await replyService.processComment(
+                pageId,
+                post_id,
+                comment_id,
+                message,
+                from?.id,
+                from?.name
+            );
+
+            if (result.success) {
+                console.log(`Successfully replied to comment ${comment_id} with method: ${result.replyMethod}`);
+            } else {
+                console.log(`Failed to reply to comment ${comment_id}: ${result.error}`);
+            }
+        } catch (error) {
+            console.error(`Error processing comment ${comment_id}:`, error);
+        }
+    }
+}
+
+export const webhookController = new WebhookController();

@@ -1,0 +1,51 @@
+# Folder Structure
+
+```
+/autoreply-ai
+  /backend
+    Dockerfile
+    /src
+      routes/
+      controllers/
+      services/
+      ai/
+      rules/
+      utils/
+  /frontend
+    Dockerfile
+    /src
+      pages/
+      components/
+  /mobile-app
+    /src
+      screens/
+      components/
+      services/
+      navigation/
+      i18n/
+    App.js
+    app.json
+    package.json
+  /ai-worker
+    Dockerfile
+    worker.js
+  /nginx
+    nginx.conf
+  /env
+    backend.env
+    frontend.env
+    mobile.env
+    ai.env
+    db.env
+  docker-compose.yml
+  README.md
+  DEVELOPMENT_PLAN.md
+  FACEBOOK_SETUP.md
+  API_SPEC.md
+  DATABASE_SCHEMA.md
+  ARCHITECTURE.md
+  FOLDER_STRUCTURE.md
+  DOCKER_PLAN.md
+  ENV_EXAMPLE.md
+  MOBILE_FIRST_ARCHITECTURE.md
+```
