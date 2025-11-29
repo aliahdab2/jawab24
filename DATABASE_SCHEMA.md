@@ -27,6 +27,7 @@ CREATE TABLE pages (
   name VARCHAR(255),
   access_token TEXT NOT NULL,
   auto_reply_enabled BOOLEAN DEFAULT true,
+  knowledge_base TEXT, -- Business info for AI context
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -69,7 +70,7 @@ CREATE TABLE comments (
   reply_text TEXT,
   reply_method VARCHAR(50), -- 'template', 'ai', 'manual'
   template_id UUID REFERENCES templates(id),
-  detected_language VARCHAR(10), -- Auto-detected language: 'en', 'ar', 'ar-sy', 'sv', etc.
+  detected_language VARCHAR(10), -- Auto-detected language
   reply_language VARCHAR(10), -- Language used in reply
   created_time TIMESTAMP,
   replied_at TIMESTAMP,
@@ -92,8 +93,8 @@ CREATE TABLE templates (
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   translations JSONB NOT NULL DEFAULT '{}',
-  -- Example: {"en": "Thank you!", "ar": "شكراً!", "ar-sy": "شكراً إلك!", "sv": "Tack!"}
-  keywords TEXT[], -- Array of keywords in all languages
+  -- Example: {"en": "Thank you!", "ar": "شكراً!"}
+  keywords TEXT[], -- Array of keywords
   active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
@@ -102,10 +103,6 @@ CREATE TABLE templates (
 CREATE INDEX idx_templates_user_id ON templates(user_id);
 CREATE INDEX idx_templates_translations ON templates USING GIN(translations);
 CREATE INDEX idx_templates_keywords ON templates USING GIN(keywords);
-
--- Constraint: Ensure at least one translation exists
-ALTER TABLE templates ADD CONSTRAINT templates_has_translation 
-  CHECK (jsonb_typeof(translations) = 'object' AND translations != '{}');
 ```
 
 ---
@@ -136,12 +133,23 @@ CREATE INDEX idx_rules_priority ON rules(priority DESC);
 CREATE TABLE settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
-  dashboard_language VARCHAR(10) DEFAULT 'en', -- UI language: 'en', 'ar', 'sv', etc.
-  default_reply_language VARCHAR(10) DEFAULT 'ar', -- Default language for replies
-  supported_languages TEXT[] DEFAULT ARRAY['en', 'ar'], -- Languages this user supports
-  auto_detect_language BOOLEAN DEFAULT true, -- Auto-detect comment language
+  dashboard_language VARCHAR(10) DEFAULT 'ar',
+  default_reply_language VARCHAR(10) DEFAULT 'ar',
+  supported_languages TEXT[] DEFAULT ARRAY['en', 'ar'],
+  auto_detect_language BOOLEAN DEFAULT true,
   ai_enabled BOOLEAN DEFAULT true,
-  ai_model VARCHAR(100) DEFAULT 'gpt-4-mini',
+  ai_model VARCHAR(100) DEFAULT 'gpt-4o-mini',
+  
+  -- Auto-reply Config
+  comments_auto_reply BOOLEAN DEFAULT true,
+  messages_auto_reply BOOLEAN DEFAULT true,
+  business_hours_only BOOLEAN DEFAULT false,
+  business_hours_start VARCHAR(5) DEFAULT '09:00',
+  business_hours_end VARCHAR(5) DEFAULT '18:00',
+  away_message TEXT,
+  greeting_message TEXT,
+  reply_delay INTEGER DEFAULT 0, -- seconds
+
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -151,11 +159,38 @@ CREATE INDEX idx_settings_user_id ON settings(user_id);
 
 ---
 
-### 8. ai_cache
+### 8. messages (New)
+```sql
+CREATE TABLE messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
+  facebook_message_id VARCHAR(255) UNIQUE NOT NULL,
+  sender_id VARCHAR(255) NOT NULL,
+  sender_name VARCHAR(255),
+  message TEXT NOT NULL,
+  direction VARCHAR(10) DEFAULT 'incoming', -- 'incoming', 'outgoing'
+  replied BOOLEAN DEFAULT false,
+  reply_text TEXT,
+  reply_method VARCHAR(50), -- 'template', 'ai', 'manual'
+  created_time TIMESTAMP,
+  replied_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_messages_page_id ON messages(page_id);
+CREATE INDEX idx_messages_sender_id ON messages(sender_id);
+CREATE INDEX idx_messages_facebook_message_id ON messages(facebook_message_id);
+CREATE INDEX idx_messages_direction ON messages(direction);
+```
+
+---
+
+### 9. ai_cache
 ```sql
 CREATE TABLE ai_cache (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  comment_hash VARCHAR(64) UNIQUE NOT NULL, -- MD5 or SHA256 of normalized comment
+  comment_hash VARCHAR(64) UNIQUE NOT NULL,
   reply_text TEXT NOT NULL,
   language VARCHAR(10),
   hit_count INTEGER DEFAULT 1,
@@ -169,14 +204,14 @@ CREATE INDEX idx_ai_cache_last_used ON ai_cache(last_used_at);
 
 ---
 
-### 9. logs
+### 10. logs
 ```sql
 CREATE TABLE logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
   comment_id UUID REFERENCES comments(id) ON DELETE CASCADE,
-  action VARCHAR(100), -- 'webhook_received', 'reply_sent', 'ai_called', etc.
+  action VARCHAR(100),
   status VARCHAR(50), -- 'success', 'error', 'pending'
   message TEXT,
   metadata JSONB,
@@ -187,134 +222,3 @@ CREATE INDEX idx_logs_user_id ON logs(user_id);
 CREATE INDEX idx_logs_created_at ON logs(created_at DESC);
 CREATE INDEX idx_logs_action ON logs(action);
 ```
-
----
-
-## Redis Keys
-
-### Cache Keys
-```
-comment:hash:<hash>:<language> -> cached AI reply (language-specific)
-user:token:<user_id> -> JWT token data
-page:token:<page_id> -> encrypted page access token
-```
-
-### Queue Keys
-```
-queue:ai:pending -> List of pending AI jobs
-queue:ai:processing -> Set of processing jobs
-queue:ai:failed -> List of failed jobs
-```
-
-### Job Format
-```json
-{
-  "id": "job_id",
-  "comment_id": "comment_id",
-  "post_id": "post_id",
-  "page_id": "page_id",
-  "message": "Comment text",
-  "detected_language": "ar-sy",
-  "reply_language": "ar-sy",
-  "created_at": "timestamp"
-}
-```
-
----
-
-## Multi-Language Query Examples
-
-### Get Template in Specific Language (with fallback)
-
-```sql
--- Get template in Syrian Arabic, fallback to MSA, then English
-SELECT 
-  name,
-  COALESCE(
-    translations->>'ar-sy',
-    translations->>'ar',
-    translations->>'en'
-  ) as content
-FROM templates
-WHERE id = 'template_id';
-```
-
-### Get All Languages for a Template
-
-```sql
-SELECT 
-  id,
-  name,
-  jsonb_object_keys(translations) as available_languages
-FROM templates
-WHERE id = 'template_id';
-```
-
-### Find Templates with Specific Language
-
-```sql
--- Find all templates that have Swedish translation
-SELECT id, name, translations->>'sv' as swedish_content
-FROM templates
-WHERE user_id = 'user_id'
-  AND translations ? 'sv'
-  AND active = true;
-```
-
-### Language Usage Analytics
-
-```sql
--- Most common languages in comments
-SELECT 
-  detected_language,
-  COUNT(*) as count,
-  ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage
-FROM comments
-WHERE created_at > NOW() - INTERVAL '30 days'
-GROUP BY detected_language
-ORDER BY count DESC;
-```
-
-### Add Translation to Existing Template
-
-```sql
--- Add Swedish translation
-UPDATE templates
-SET translations = translations || '{"sv": "Tack för din kommentar!"}'::jsonb,
-    updated_at = NOW()
-WHERE id = 'template_id';
-```
-
----
-
-## Indexes Summary
-
-- All foreign keys are indexed
-- GIN indexes for array fields (keywords, supported_languages)
-- GIN index for JSONB translations (enables fast language lookups)
-- Timestamp indexes for sorting
-- Unique indexes for Facebook IDs
-- Hash index for AI cache lookups
-- Language indexes for analytics (detected_language, reply_language)
-
----
-
-## Supported Languages
-
-The system supports unlimited languages using ISO 639-1 codes with optional region codes:
-
-### Common Languages
-- `en` - English
-- `ar` - Arabic (Modern Standard)
-- `ar-sy` - Syrian Arabic
-- `ar-jo` - Jordanian Arabic
-- `ar-lb` - Lebanese Arabic
-- `ar-eg` - Egyptian Arabic
-- `sv` - Swedish
-- `fr` - French
-- `de` - German
-- `es` - Spanish
-- `tr` - Turkish
-
-### Adding New Languages
-Simply add new key-value pairs to the `translations` JSONB field. No schema changes required.

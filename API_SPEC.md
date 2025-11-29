@@ -2,7 +2,7 @@
 
 ## Base URL
 ```
-https://api.autoreply.ai/v1
+https://jawab24.com/api
 ```
 
 ---
@@ -24,16 +24,17 @@ Login with Facebook OAuth
 ```json
 Request:
 {
-  "code": "facebook_oauth_code"
+  "accessToken": "fb_user_access_token"
 }
 
 Response:
 {
   "token": "jwt_token",
+  "fbAccessToken": "fb_user_access_token",
   "user": {
     "id": "user_id",
     "name": "User Name",
-    "facebook_id": "fb_id"
+    "facebookId": "fb_id"
   }
 }
 ```
@@ -46,88 +47,69 @@ Response:
 Get user's Facebook pages
 ```json
 Response:
-{
-  "pages": [
-    {
-      "id": "page_id",
-      "name": "Page Name",
-      "access_token": "encrypted_token",
-      "auto_reply_enabled": true
-    }
-  ]
-}
+[
+  {
+    "id": "page_id",
+    "facebookPageId": "fb_page_id",
+    "name": "Page Name",
+    "autoReplyEnabled": true,
+    "knowledgeBase": "Business info..."
+  }
+]
 ```
 
-#### POST /pages/:id/toggle
-Enable/disable auto-reply for a page
+#### POST /pages/sync
+Sync pages from Facebook
 ```json
 Request:
 {
-  "enabled": true
+  "accessToken": "fb_user_access_token"
 }
 
 Response:
 {
   "success": true,
-  "enabled": true
+  "syncedCount": 5
 }
 ```
 
----
-
-### 3. Posts
-
-#### GET /pages/:pageId/posts
-Get posts from a page
-```json
-Response:
-{
-  "posts": [
-    {
-      "id": "post_id",
-      "message": "Post content",
-      "created_time": "2024-01-01T00:00:00Z",
-      "auto_reply_enabled": true,
-      "comments_count": 10
-    }
-  ]
-}
-```
-
-#### POST /posts/:id/toggle
-Enable/disable auto-reply for a post
+#### PUT /pages/:id
+Update page settings
 ```json
 Request:
 {
-  "enabled": true
+  "autoReplyEnabled": true,
+  "knowledgeBase": "Business info for AI..."
 }
 
 Response:
 {
-  "success": true
+  "id": "page_id",
+  "autoReplyEnabled": true,
+  "knowledgeBase": "..."
 }
 ```
 
 ---
 
-### 4. Templates
+### 3. Templates
 
 #### GET /templates
 Get all reply templates
 ```json
 Response:
-{
-  "templates": [
-    {
-      "id": "template_id",
-      "name": "Welcome Message",
-      "content_en": "Thank you for your comment!",
-      "content_ar": "شكراً لتعليقك!",
-      "keywords": ["hello", "hi", "مرحبا"],
-      "active": true
-    }
-  ]
-}
+[
+  {
+    "id": "template_id",
+    "name": "Welcome Message",
+    "translations": {
+      "en": "Thank you!",
+      "ar": "شكراً!"
+    },
+    "keywords": ["hello", "hi"],
+    "active": true
+  }
+]
 ```
 
 #### POST /templates
@@ -136,8 +118,10 @@ Create new template
 Request:
 {
   "name": "Template Name",
-  "content_en": "English content",
-  "content_ar": "Arabic content",
+  "translations": {
+    "en": "English content",
+    "ar": "Arabic content"
+  },
   "keywords": ["keyword1", "keyword2"]
 }
 
@@ -156,24 +140,22 @@ Delete template
 
 ---
 
-### 5. Rules
+### 4. Rules
 
 #### GET /rules
 Get all rules
 ```json
 Response:
-{
-  "rules": [
-    {
-      "id": "rule_id",
-      "name": "Price Inquiry",
-      "keywords": ["price", "cost", "سعر"],
-      "template_id": "template_id",
-      "priority": 1,
-      "active": true
-    }
-  ]
-}
+[
+  {
+    "id": "rule_id",
+    "name": "Price Inquiry",
+    "keywords": ["price", "cost"],
+    "templateId": "template_id",
+    "priority": 1,
+    "active": true
+  }
+]
 ```
 
 #### POST /rules
@@ -185,126 +167,106 @@ Update rule
 #### DELETE /rules/:id
 Delete rule
 
+#### PUT /rules/:id/reorder
+Update rule priority
+```json
+Request:
+{
+  "priority": 2
+}
+```
+
 ---
 
-### 6. Comments
+### 5. Comments
 
 #### GET /comments
 Get recent comments
 ```json
 Response:
-{
-  "comments": [
-    {
-      "id": "comment_id",
-      "post_id": "post_id",
-      "message": "Comment text",
-      "from": {
-        "name": "User Name",
-        "id": "user_id"
-      },
-      "created_time": "2024-01-01T00:00:00Z",
-      "replied": true,
-      "reply_text": "Reply content",
-      "reply_method": "template|ai"
-    }
-  ]
-}
+[
+  {
+    "id": "comment_id",
+    "postId": "post_id",
+    "message": "Comment text",
+    "fromName": "User Name",
+    "fromId": "user_id",
+    "createdTime": "2024-01-01T00:00:00Z",
+    "replied": true,
+    "replyText": "Reply content",
+    "replyMethod": "template|ai|manual"
+  }
+]
 ```
 
 ---
 
-### 7. Webhooks
+### 6. Messages
 
-#### GET /webhook/facebook
-Webhook verification
-
-#### POST /webhook/facebook
-Receive Facebook webhook events
+#### GET /messages
+Get direct messages
 ```json
-Request:
-{
-  "object": "page",
-  "entry": [
-    {
-      "id": "page_id",
-      "time": 1234567890,
-      "changes": [
-        {
-          "value": {
-            "item": "comment",
-            "comment_id": "comment_id",
-            "post_id": "post_id",
-            "message": "Comment text",
-            "from": {
-              "id": "user_id",
-              "name": "User Name"
-            }
-          }
-        }
-      ]
-    }
-  ]
-}
+Response:
+[
+  {
+    "id": "message_id",
+    "pageId": "page_id",
+    "senderId": "user_id",
+    "messageText": "Message content",
+    "direction": "incoming|outgoing",
+    "replied": true,
+    "replyText": "Reply content",
+    "replyMethod": "ai|template",
+    "createdAt": "timestamp"
+  }
+]
 ```
 
 ---
 
-### 8. Settings
+### 7. Settings
 
 #### GET /settings
 Get user settings
 ```json
 Response:
 {
-  "language": "en|ar",
-  "ai_enabled": true,
-  "ai_model": "gpt-4-mini",
-  "default_language": "ar"
+  "id": "settings_id",
+  "dashboardLanguage": "en|ar",
+  "defaultReplyLanguage": "ar",
+  "autoDetectLanguage": true,
+  "aiEnabled": true,
+  "aiModel": "gpt-4-mini",
+  "commentsAutoReply": true,
+  "messagesAutoReply": true,
+  "businessHoursOnly": false,
+  "businessHoursStart": "09:00",
+  "businessHoursEnd": "18:00",
+  "awayMessage": "We are currently away...",
+  "replyDelay": 0,
+  "greetingMessage": "Hi there!..."
 }
 ```
 
 #### PUT /settings
 Update settings
-
----
-
-### 9. Stats
-
-#### GET /stats
-Get usage statistics
 ```json
-Response:
+Request:
 {
-  "total_comments": 1000,
-  "total_replies": 950,
-  "template_replies": 600,
-  "ai_replies": 350,
-  "today": {
-    "comments": 50,
-    "replies": 48
-  }
+  "aiEnabled": true,
+  "commentsAutoReply": true,
+  "messagesAutoReply": true,
+  "replyDelay": 5,
+  ...
 }
 ```
 
 ---
 
-## Error Responses
+### 8. Webhooks
 
-```json
-{
-  "error": true,
-  "message": "Error description",
-  "code": "ERROR_CODE"
-}
-```
+#### GET /webhook
+Webhook verification
 
-### Error Codes
-- `AUTH_FAILED` - Authentication failed
-- `INVALID_TOKEN` - Invalid or expired token
-- `PERMISSION_DENIED` - Insufficient permissions
-- `NOT_FOUND` - Resource not found
-- `VALIDATION_ERROR` - Invalid input data
-- `RATE_LIMIT` - Rate limit exceeded
-- `FACEBOOK_API_ERROR` - Facebook API error
-- `AI_SERVICE_ERROR` - AI service error
+#### POST /webhook
+Receive Facebook webhook events (feed, messages)
