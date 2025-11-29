@@ -7,7 +7,10 @@ import {
   Bell,
   Shield,
   Save,
-  RefreshCw
+  RefreshCw,
+  MessageSquare,
+  MessageCircle,
+  Clock
 } from 'lucide-react';
 import { useTranslation, useLanguage } from '@/i18n';
 
@@ -53,6 +56,15 @@ export default function SettingsPage() {
     notificationsEnabled: true,
     emailNotifications: true,
     webhookRetries: 3,
+    // Auto-reply settings
+    commentsAutoReply: true,
+    messagesAutoReply: true,
+    businessHoursOnly: false,
+    businessHoursStart: '09:00',
+    businessHoursEnd: '18:00',
+    awayMessage: '',
+    replyDelay: 0,
+    greetingMessage: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -82,6 +94,116 @@ export default function SettingsPage() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Auto-Reply Settings - Most Important */}
+        <Card className="lg:col-span-2">
+          <CardHeader 
+            title={t('settings.autoReplySettings')} 
+            description={t('settings.autoReplyDescription')}
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Comments Auto-Reply */}
+            <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
+              <SettingsToggleRow
+                icon={<MessageSquare className="w-5 h-5 text-brand-600" />}
+                title={t('settings.commentsAutoReply')}
+                description={t('settings.commentsAutoReplyDesc')}
+                enabled={settings.commentsAutoReply}
+                onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
+              />
+            </div>
+
+            {/* Messages Auto-Reply */}
+            <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
+              <SettingsToggleRow
+                icon={<MessageCircle className="w-5 h-5 text-brand-600" />}
+                title={t('settings.messagesAutoReply')}
+                description={t('settings.messagesAutoReplyDesc')}
+                enabled={settings.messagesAutoReply}
+                onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
+              />
+            </div>
+
+            {/* Business Hours */}
+            <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
+              <SettingsToggleRow
+                icon={<Clock className="w-5 h-5 text-brand-600" />}
+                title={t('settings.businessHours')}
+                description={t('settings.businessHoursDesc')}
+                enabled={settings.businessHoursOnly}
+                onChange={(enabled) => setSettings({ ...settings, businessHoursOnly: enabled })}
+              />
+              {settings.businessHoursOnly && (
+                <div className="mt-4 flex items-center gap-4">
+                  <div>
+                    <label className="label text-xs">{t('settings.businessHoursStart')}</label>
+                    <Input
+                      type="time"
+                      value={settings.businessHoursStart}
+                      onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
+                      className="w-32"
+                    />
+                  </div>
+                  <div>
+                    <label className="label text-xs">{t('settings.businessHoursEnd')}</label>
+                    <Input
+                      type="time"
+                      value={settings.businessHoursEnd}
+                      onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
+                      className="w-32"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Reply Delay */}
+            <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
+              <div className="flex items-center gap-3 mb-3">
+                <Clock className="w-5 h-5 text-brand-600" />
+                <div className="text-start">
+                  <p className="font-medium text-surface-900">{t('settings.responseTime')}</p>
+                  <p className="text-sm text-surface-500">{t('settings.replyDelay')}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={settings.replyDelay}
+                  onChange={(e) => setSettings({ ...settings, replyDelay: parseInt(e.target.value) || 0 })}
+                  className="w-24"
+                />
+                <span className="text-sm text-surface-500">{t('settings.seconds')}</span>
+              </div>
+            </div>
+
+            {/* Away Message */}
+            <div className="md:col-span-2">
+              <label className="label">{t('settings.awayMessage')}</label>
+              <p className="text-xs text-surface-500 mb-2">{t('settings.awayMessageDesc')}</p>
+              <textarea
+                className="input min-h-[80px]"
+                placeholder={t('settings.awayMessagePlaceholder')}
+                value={settings.awayMessage}
+                onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
+              />
+            </div>
+
+            {/* Greeting Message */}
+            <div className="md:col-span-2">
+              <label className="label">{t('settings.greetingMessage')}</label>
+              <p className="text-xs text-surface-500 mb-2">{t('settings.greetingMessageDesc')}</p>
+              <textarea
+                className="input min-h-[80px]"
+                placeholder={t('settings.greetingMessagePlaceholder')}
+                value={settings.greetingMessage}
+                onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
+              />
+            </div>
+          </div>
+        </Card>
+
         {/* Language Settings */}
         <Card>
           <CardHeader 
@@ -175,21 +297,6 @@ export default function SettingsPage() {
             description={t('settings.description')}
           />
           <div className="space-y-6">
-            <div>
-              <label className="label">{t('settings.replyDelay')}</label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  max={60}
-                  value={settings.webhookRetries}
-                  onChange={(e) => setSettings({ ...settings, webhookRetries: parseInt(e.target.value) || 0 })}
-                  className="w-24"
-                />
-                <span className="text-sm text-surface-500">{t('settings.seconds')}</span>
-              </div>
-            </div>
-
             <div className="p-4 rounded-xl bg-surface-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
