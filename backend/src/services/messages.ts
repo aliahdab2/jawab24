@@ -1,6 +1,7 @@
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, asc } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages } from '../db/schema';
+import { ConversationMessage } from '../types';
 
 export interface Message {
     id: string;
@@ -202,6 +203,34 @@ export class MessagesService {
         });
 
         return result.map(this.mapToMessage);
+    }
+
+    /**
+     * Get conversation history for AI context
+     * Returns last N messages between page and sender, formatted for AI
+     */
+    async getConversationHistory(
+        pageId: string, 
+        senderId: string, 
+        limit: number = 10
+    ): Promise<ConversationMessage[]> {
+        const result = await db.query.messages.findMany({
+            where: and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId)
+            ),
+            orderBy: [desc(messages.createdAt)],
+            limit,
+        });
+
+        // Reverse to get chronological order (oldest first)
+        const chronological = result.reverse();
+
+        return chronological.map(msg => ({
+            role: msg.direction === 'incoming' ? 'user' as const : 'assistant' as const,
+            content: msg.message,
+            timestamp: msg.createdAt || undefined,
+        }));
     }
 
     /**

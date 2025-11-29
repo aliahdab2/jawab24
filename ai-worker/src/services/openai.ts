@@ -1,6 +1,12 @@
 import OpenAI from 'openai';
 import { config } from '../config';
 
+export interface ConversationMessage {
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp?: Date;
+}
+
 export interface GenerateRequest {
     comment: string;
     language?: string;
@@ -8,6 +14,8 @@ export interface GenerateRequest {
         postMessage?: string;
         pageName?: string;
         previousReplies?: string[];
+        knowledgeBase?: string;
+        conversationHistory?: ConversationMessage[];
     };
 }
 
@@ -36,7 +44,7 @@ export class OpenAIService {
     }
 
     /**
-     * Generate a reply for a comment
+     * Generate a reply for a comment or message
      */
     async generateReply(request: GenerateRequest): Promise<GenerateResponse> {
         if (!this.client) {
@@ -45,14 +53,11 @@ export class OpenAIService {
 
         try {
             const systemPrompt = this.buildSystemPrompt(request);
-            const userPrompt = this.buildUserPrompt(request);
+            const messages = this.buildMessages(request, systemPrompt);
 
             const completion = await this.client.chat.completions.create({
                 model: config.openai.model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt },
-                ],
+                messages,
                 max_tokens: config.openai.maxTokens,
                 temperature: config.openai.temperature,
             });
@@ -72,26 +77,69 @@ export class OpenAIService {
     }
 
     /**
+     * Build messages array including conversation history
+     */
+    private buildMessages(request: GenerateRequest, systemPrompt: string): OpenAI.ChatCompletionMessageParam[] {
+        const messages: OpenAI.ChatCompletionMessageParam[] = [
+            { role: 'system', content: systemPrompt },
+        ];
+
+        // Add conversation history if available (for DMs)
+        if (request.context?.conversationHistory && request.context.conversationHistory.length > 0) {
+            for (const msg of request.context.conversationHistory) {
+                messages.push({
+                    role: msg.role === 'user' ? 'user' : 'assistant',
+                    content: msg.content,
+                });
+            }
+        }
+
+        // Add the current message/comment
+        const userPrompt = this.buildUserPrompt(request);
+        messages.push({ role: 'user', content: userPrompt });
+
+        return messages;
+    }
+
+    /**
      * Build system prompt for the AI
      */
     private buildSystemPrompt(request: GenerateRequest): string {
         const pageName = request.context?.pageName || 'our page';
-        const language = request.language || 'the same language as the comment';
+        const language = request.language || 'the same language as the message';
+        const knowledgeBase = request.context?.knowledgeBase;
+        const isConversation = request.context?.conversationHistory && request.context.conversationHistory.length > 0;
 
-        return `You are a friendly and professional social media manager for ${pageName}. 
-Your task is to respond to customer comments on Facebook posts.
+        let prompt = `You are a friendly and professional customer service assistant for "${pageName}".
+${isConversation ? 'You are having a conversation with a customer via Facebook Messenger.' : 'Your task is to respond to customer comments on Facebook posts.'}
 
 Guidelines:
 - Be polite, helpful, and professional
-- Keep responses concise (1-2 sentences)
+- Keep responses concise (1-3 sentences)
 - Respond in ${language}
-- If the comment is positive, thank them warmly
-- If the comment is a question, provide a helpful answer or offer to help via DM
-- If the comment is negative, apologize and offer to resolve the issue
+- If the message is positive, thank them warmly
+- If the message is a question, provide a helpful answer based on the business information below
+- If the message is negative, apologize and offer to resolve the issue
 - Never be defensive or argumentative
 - Use appropriate emojis sparingly (1-2 max)
+- If you don't know something specific, offer to connect them with a human agent`;
 
-Important: Only output the reply text, nothing else.`;
+        // Add knowledge base if available
+        if (knowledgeBase && knowledgeBase.trim().length > 0) {
+            prompt += `
+
+=== BUSINESS INFORMATION ===
+${knowledgeBase}
+=== END BUSINESS INFORMATION ===
+
+Use the above business information to answer customer questions accurately. If a question is not covered, politely say you'll check and get back to them.`;
+        }
+
+        prompt += `
+
+Important: Only output the reply text, nothing else. Do not include any prefixes like "Reply:" or "Assistant:".`;
+
+        return prompt;
     }
 
     /**

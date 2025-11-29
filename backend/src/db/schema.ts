@@ -19,6 +19,8 @@ export const pages = pgTable('pages', {
     name: varchar('name', { length: 255 }),
     accessToken: text('access_token').notNull(),
     autoReplyEnabled: boolean('auto_reply_enabled').default(true),
+    // Knowledge base for AI context - business info, products, FAQ
+    knowledgeBase: text('knowledge_base'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {

@@ -9,7 +9,11 @@ import {
   ExternalLink,
   MessageSquare,
   TrendingUp,
-  Settings
+  Settings,
+  BookOpen,
+  X,
+  Save,
+  Check
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -19,6 +23,7 @@ interface Page {
   name: string;
   facebookPageId: string;
   autoReplyEnabled: boolean;
+  knowledgeBase?: string;
   commentsCount?: number;
   repliesCount?: number;
   replyRate?: number;
@@ -27,11 +32,15 @@ interface Page {
 }
 
 export default function PagesPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { token, fbToken } = useAuthStore();
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [editingPage, setEditingPage] = useState<Page | null>(null);
+  const [knowledgeBase, setKnowledgeBase] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -108,6 +117,43 @@ export default function PagesPage() {
     return t('time.hoursAgo').replace('{count}', String(Math.floor(minutes / 60)));
   };
 
+  const openKnowledgeBase = (page: Page) => {
+    setEditingPage(page);
+    setKnowledgeBase(page.knowledgeBase || '');
+    setSaved(false);
+  };
+
+  const closeKnowledgeBase = () => {
+    setEditingPage(null);
+    setKnowledgeBase('');
+    setSaved(false);
+  };
+
+  const saveKnowledgeBase = async () => {
+    if (!editingPage || !token) return;
+    
+    setSaving(true);
+    setSaved(false);
+    try {
+      await axios.put(`${apiUrl}/pages/${editingPage.id}`, 
+        { knowledgeBase },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Update local state
+      setPages(pages.map(p => 
+        p.id === editingPage.id ? { ...p, knowledgeBase } : p
+      ));
+      
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error('Failed to save knowledge base:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading && pages.length === 0) {
     return (
       <DashboardLayout title={t('pages.title')}>
@@ -181,6 +227,18 @@ export default function PagesPage() {
                 </div>
               </div>
 
+              {/* Knowledge Base Indicator */}
+              {page.knowledgeBase && (
+                <div className="mt-4 p-3 bg-brand-50 rounded-lg border border-brand-100">
+                  <div className="flex items-center gap-2 text-brand-700">
+                    <BookOpen className="w-4 h-4" />
+                    <span className="text-sm font-medium">
+                      {language === 'ar' ? 'قاعدة المعرفة مُفعّلة' : 'Knowledge Base Active'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Footer */}
               <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2">
@@ -192,8 +250,13 @@ export default function PagesPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm">
-                    <Settings className="w-4 h-4" />
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => openKnowledgeBase(page)}
+                    title={language === 'ar' ? 'قاعدة المعرفة' : 'Knowledge Base'}
+                  >
+                    <BookOpen className="w-4 h-4" />
                   </Button>
                   <a 
                     href={`https://facebook.com/${page.facebookPageId}`} 
@@ -221,6 +284,102 @@ export default function PagesPage() {
             }
           />
         </Card>
+      )}
+
+      {/* Knowledge Base Modal */}
+      {editingPage && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-surface-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 text-brand-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-surface-900">
+                    {language === 'ar' ? 'قاعدة المعرفة' : 'Knowledge Base'}
+                  </h2>
+                  <p className="text-sm text-surface-500">{editingPage.name}</p>
+                </div>
+              </div>
+              <button 
+                onClick={closeKnowledgeBase}
+                className="p-2 rounded-lg hover:bg-surface-100 text-surface-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              <p className="text-sm text-surface-600 mb-4">
+                {language === 'ar' 
+                  ? 'أضف معلومات عن عملك هنا. سيستخدمها الذكاء الاصطناعي للرد على أسئلة العملاء بدقة.'
+                  : 'Add information about your business here. The AI will use this to answer customer questions accurately.'
+                }
+              </p>
+              
+              <div className="bg-surface-50 rounded-xl p-4 mb-4">
+                <p className="text-sm font-medium text-surface-700 mb-2">
+                  {language === 'ar' ? 'مثال:' : 'Example:'}
+                </p>
+                <pre className="text-xs text-surface-500 whitespace-pre-wrap">
+{language === 'ar' 
+  ? `نحن متجر حقائب يدوية.
+
+المنتجات:
+- حقيبة كلاسيكية حمراء: 49$
+- حقيبة فاخرة زرقاء: 59$
+- محفظة صغيرة: 19$
+
+الشحن: مجاني للطلبات فوق 100$
+التوصيل: 3-5 أيام عمل
+الإرجاع: 14 يوم بدون أسئلة`
+  : `We sell handmade leather bags.
+
+Products:
+- Red Classic Bag: $49
+- Blue Premium Bag: $59
+- Mini Wallet: $19
+
+Shipping: Free for orders over $100
+Delivery: 3-5 business days
+Returns: 14 days, no questions asked`}
+                </pre>
+              </div>
+
+              <textarea
+                className="w-full h-64 p-4 border border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900"
+                placeholder={language === 'ar' 
+                  ? 'اكتب معلومات عملك هنا...'
+                  : 'Write your business information here...'
+                }
+                value={knowledgeBase}
+                onChange={(e) => setKnowledgeBase(e.target.value)}
+                dir={language === 'ar' ? 'rtl' : 'ltr'}
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-surface-100">
+              <Button variant="secondary" onClick={closeKnowledgeBase}>
+                {t('common.cancel')}
+              </Button>
+              <Button 
+                onClick={saveKnowledgeBase} 
+                loading={saving}
+                icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                variant={saved ? 'secondary' : 'primary'}
+              >
+                {saved 
+                  ? (language === 'ar' ? 'تم الحفظ!' : 'Saved!') 
+                  : t('common.save')
+                }
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </DashboardLayout>
   );

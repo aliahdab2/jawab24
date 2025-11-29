@@ -103,14 +103,22 @@ export class ReplyService {
                 }
             }
 
-            // 6. If no template reply, use AI
+            // 6. If no template reply, use AI with conversation context
             const userSettings = await settingsService.getSettings(page.userId!);
             if (!replyText && userSettings.aiEnabled) {
+                // Get conversation history for context
+                const conversationHistory = await messagesService.getConversationHistory(
+                    page.id,
+                    senderId,
+                    10 // Last 10 messages
+                );
+
                 const aiResponse = await aiService.generateReply({
-                    comment: messageText, // Using comment parameter for message text
+                    comment: messageText,
                     context: {
                         pageName: page.name || undefined,
-                        postMessage: "Private Message Conversation", // Context for AI
+                        knowledgeBase: page.knowledgeBase || undefined,
+                        conversationHistory,
                     }
                 });
                 replyText = aiResponse.reply;
@@ -235,7 +243,7 @@ export class ReplyService {
                 }
             }
 
-            // 8. If no template reply, use AI (check user settings)
+            // 8. If no template reply, use AI with knowledge base (check user settings)
             const userSettings = await settingsService.getSettings(page.userId!);
             if (!replyText && userSettings.aiEnabled) {
                 const aiResponse = await aiService.generateReply({
@@ -243,6 +251,7 @@ export class ReplyService {
                     context: {
                         pageName: page.name || undefined,
                         postMessage: post.message || undefined,
+                        knowledgeBase: page.knowledgeBase || undefined,
                     }
                 });
                 replyText = aiResponse.reply;

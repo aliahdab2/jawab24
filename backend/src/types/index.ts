@@ -106,6 +106,13 @@ export interface CreateTemplateDTO {
 
 export interface UpdateTemplateDTO extends Partial<CreateTemplateDTO> {}
 
+// Conversation Message for AI context
+export interface ConversationMessage {
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp?: Date;
+}
+
 // AI Types
 export interface AiGenerateRequest {
     comment: string;
@@ -114,6 +121,8 @@ export interface AiGenerateRequest {
         postMessage?: string;
         pageName?: string;
         previousReplies?: string[];
+        knowledgeBase?: string;
+        conversationHistory?: ConversationMessage[];
     };
 }
 
@@ -142,6 +151,7 @@ export interface Page {
     name: string | null;
     accessToken: string;
     autoReplyEnabled: boolean | null;
+    knowledgeBase: string | null;
     createdAt: Date | null;
     updatedAt: Date | null;
 }
@@ -151,12 +161,14 @@ export interface CreatePageDTO {
     name: string;
     accessToken: string;
     autoReplyEnabled?: boolean;
+    knowledgeBase?: string;
 }
 
 export interface UpdatePageDTO {
     name?: string;
     accessToken?: string;
     autoReplyEnabled?: boolean;
+    knowledgeBase?: string;
 }
 
 // Post Types
