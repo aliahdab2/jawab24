@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, Textarea, Modal, Toggle, EmptyState, PageHeader } from '@/components/ui';
+import { Card, Button, Badge, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { useTranslation } from '@/i18n';
+import { useAuthStore } from '@/lib/store';
+import axios from 'axios';
 import { 
   BookTemplate, 
   Plus,
@@ -10,72 +13,22 @@ import {
   Globe,
   Tag
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
 
 interface Template {
   id: string;
   name: string;
-  translations: {
-    en?: string;
-    ar?: string;
-  };
+  translations: Record<string, string>;
   keywords: string[];
   active: boolean;
-  usageCount: number;
+  usageCount?: number; // Optional as backend might not calculate this yet
 }
-
-// Demo data with Arabic names
-const demoTemplates: Template[] = [
-  {
-    id: '1',
-    name: 'استفسار السعر',
-    translations: {
-      en: 'Thank you for your interest! The price is {price}. Feel free to ask if you have any questions.',
-      ar: 'شكراً لاهتمامك! السعر هو {price}. لا تتردد في السؤال إذا كان لديك أي استفسار.',
-    },
-    keywords: ['price', 'cost', 'how much', 'سعر', 'كم'],
-    active: true,
-    usageCount: 234,
-  },
-  {
-    id: '2',
-    name: 'معلومات التوصيل',
-    translations: {
-      en: 'Yes, we deliver! Delivery takes 2-3 business days. Shipping is free for orders over $50.',
-      ar: 'نعم نوصل! التوصيل يستغرق 2-3 أيام عمل. الشحن مجاني للطلبات فوق 200 ريال.',
-    },
-    keywords: ['delivery', 'shipping', 'توصيل', 'شحن'],
-    active: true,
-    usageCount: 189,
-  },
-  {
-    id: '3',
-    name: 'شكراً لك',
-    translations: {
-      en: 'Thank you so much for your kind words! We appreciate your support 💙',
-      ar: 'شكراً جزيلاً على كلماتك الطيبة! نقدر دعمك 💙',
-    },
-    keywords: ['thanks', 'great', 'love', 'amazing', 'شكرا', 'رائع'],
-    active: true,
-    usageCount: 156,
-  },
-  {
-    id: '4',
-    name: 'معلومات الضمان',
-    translations: {
-      en: 'All our products come with a 1-year warranty. For any issues, please contact our support.',
-      ar: 'جميع منتجاتنا تأتي مع ضمان سنة كاملة. لأي مشاكل، يرجى التواصل مع الدعم.',
-    },
-    keywords: ['warranty', 'guarantee', 'ضمان', 'كفالة'],
-    active: false,
-    usageCount: 78,
-  },
-];
 
 export default function TemplatesPage() {
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
-  const [templates, setTemplates] = useState(demoTemplates);
+  const { token } = useAuthStore();
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [formData, setFormData] = useState({
@@ -85,6 +38,27 @@ export default function TemplatesPage() {
     keywords: '',
   });
 
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [token]);
+
+  const fetchTemplates = async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      const response = await axios.get(`${apiUrl}/templates`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setTemplates(response.data);
+    } catch (error) {
+      console.error('Failed to fetch templates:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenModal = (template?: Template) => {
     if (template) {
       setEditingTemplate(template);
@@ -92,7 +66,7 @@ export default function TemplatesPage() {
         name: template.name,
         en: template.translations.en || '',
         ar: template.translations.ar || '',
-        keywords: template.keywords.join(', '),
+        keywords: (template.keywords || []).join(', '),
       });
     } else {
       setEditingTemplate(null);
@@ -101,9 +75,10 @@ export default function TemplatesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
-    const newTemplate: Template = {
-      id: editingTemplate?.id || Date.now().toString(),
+  const handleSave = async () => {
+    if (!token) return;
+
+    const templateData = {
       name: formData.name,
       translations: {
         en: formData.en || undefined,
@@ -111,24 +86,66 @@ export default function TemplatesPage() {
       },
       keywords: formData.keywords.split(',').map(k => k.trim()).filter(Boolean),
       active: editingTemplate?.active ?? true,
-      usageCount: editingTemplate?.usageCount ?? 0,
     };
 
-    if (editingTemplate) {
-      setTemplates(templates.map(t => t.id === editingTemplate.id ? newTemplate : t));
-    } else {
-      setTemplates([newTemplate, ...templates]);
+    try {
+      if (editingTemplate) {
+        const response = await axios.put(`${apiUrl}/templates/${editingTemplate.id}`, 
+          templateData,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setTemplates(templates.map(t => t.id === editingTemplate.id ? response.data : t));
+      } else {
+        const response = await axios.post(`${apiUrl}/templates`, 
+          templateData,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setTemplates([response.data, ...templates]);
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Failed to save template:', error);
     }
-    setIsModalOpen(false);
   };
 
-  const handleToggle = (id: string, active: boolean) => {
+  const handleToggle = async (id: string, active: boolean) => {
+    // Optimistic update
     setTemplates(templates.map(t => t.id === id ? { ...t, active } : t));
+    
+    try {
+      await axios.patch(`${apiUrl}/templates/${id}/active`, 
+        { active },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error('Failed to toggle template:', error);
+      // Revert
+      setTemplates(templates.map(t => t.id === id ? { ...t, active: !active } : t));
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setTemplates(templates.filter(t => t.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm(t('common.confirmDelete'))) return;
+
+    try {
+      await axios.delete(`${apiUrl}/templates/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setTemplates(templates.filter(t => t.id !== id));
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+    }
   };
+
+  if (loading && templates.length === 0) {
+    return (
+      <DashboardLayout title={t('templates.title')}>
+        <div className="flex items-center justify-center h-64">
+          <PageSpinner />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title={t('templates.title')}>
@@ -161,9 +178,11 @@ export default function TemplatesPage() {
                   </div>
                   <div className="text-start">
                     <h3 className="font-semibold text-surface-900">{template.name}</h3>
-                    <p className="text-xs text-surface-500">
-                      {t('templates.usageCount')}: {template.usageCount}
-                    </p>
+                    {template.usageCount !== undefined && (
+                        <p className="text-xs text-surface-500">
+                        {t('templates.usageCount')}: {template.usageCount}
+                        </p>
+                    )}
                   </div>
                 </div>
                 <Toggle 
@@ -202,13 +221,13 @@ export default function TemplatesPage() {
               {/* Keywords */}
               <div className="flex items-center gap-2 flex-wrap mb-4">
                 <Tag className="w-4 h-4 text-surface-400" />
-                {template.keywords.slice(0, 4).map((keyword) => (
+                {(template.keywords || []).slice(0, 4).map((keyword) => (
                   <Badge key={keyword} size="sm" variant="default">
                     {keyword}
                   </Badge>
                 ))}
-                {template.keywords.length > 4 && (
-                  <Badge size="sm" variant="default">+{template.keywords.length - 4}</Badge>
+                {(template.keywords || []).length > 4 && (
+                  <Badge size="sm" variant="default">+{(template.keywords || []).length - 4}</Badge>
                 )}
               </div>
 

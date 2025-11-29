@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, Modal, Toggle, EmptyState, PageHeader } from '@/components/ui';
+import { Card, Button, Badge, Input, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { useTranslation } from '@/i18n';
+import { useAuthStore } from '@/lib/store';
+import axios from 'axios';
 import { 
   Zap, 
   Plus,
@@ -11,75 +14,29 @@ import {
   Tag,
   BookTemplate
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
 
 interface Rule {
   id: string;
   name: string;
   keywords: string[];
   templateId: string;
-  templateName: string;
   priority: number;
   active: boolean;
-  matchCount: number;
+  matchCount?: number;
 }
 
-// Demo data
-const demoRules: Rule[] = [
-  {
-    id: '1',
-    name: 'أسئلة الأسعار',
-    keywords: ['price', 'cost', 'how much', 'سعر', 'كم السعر'],
-    templateId: 't1',
-    templateName: 'استفسار السعر',
-    priority: 1,
-    active: true,
-    matchCount: 234,
-  },
-  {
-    id: '2',
-    name: 'أسئلة التوصيل',
-    keywords: ['delivery', 'shipping', 'توصيل', 'شحن', 'متى يوصل'],
-    templateId: 't2',
-    templateName: 'معلومات التوصيل',
-    priority: 2,
-    active: true,
-    matchCount: 189,
-  },
-  {
-    id: '3',
-    name: 'رسائل الشكر',
-    keywords: ['thanks', 'thank you', 'great', 'love it', 'شكرا', 'رائع'],
-    templateId: 't3',
-    templateName: 'شكراً لك',
-    priority: 3,
-    active: true,
-    matchCount: 156,
-  },
-  {
-    id: '4',
-    name: 'أسئلة الضمان',
-    keywords: ['warranty', 'guarantee', 'return', 'ضمان', 'استرجاع'],
-    templateId: 't4',
-    templateName: 'معلومات الضمان',
-    priority: 4,
-    active: false,
-    matchCount: 78,
-  },
-];
-
-const demoTemplates = [
-  { id: 't1', name: 'استفسار السعر' },
-  { id: 't2', name: 'معلومات التوصيل' },
-  { id: 't3', name: 'شكراً لك' },
-  { id: 't4', name: 'معلومات الضمان' },
-  { id: 't5', name: 'رد عام' },
-];
+interface Template {
+  id: string;
+  name: string;
+}
 
 export default function RulesPage() {
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
-  const [rules, setRules] = useState(demoRules);
+  const { token } = useAuthStore();
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
   const [formData, setFormData] = useState({
@@ -88,13 +45,39 @@ export default function RulesPage() {
     templateId: '',
   });
 
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+  useEffect(() => {
+    fetchData();
+  }, [token]);
+
+  const fetchData = async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      const [rulesRes, templatesRes] = await Promise.all([
+        axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${apiUrl}/templates`, { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      
+      // Sort rules by priority
+      const sortedRules = rulesRes.data.sort((a: Rule, b: Rule) => a.priority - b.priority);
+      setRules(sortedRules);
+      setTemplates(templatesRes.data);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenModal = (rule?: Rule) => {
     if (rule) {
       setEditingRule(rule);
       setFormData({
         name: rule.name,
-        keywords: rule.keywords.join(', '),
-        templateId: rule.templateId,
+        keywords: (rule.keywords || []).join(', '),
+        templateId: rule.templateId || '',
       });
     } else {
       setEditingRule(null);
@@ -103,36 +86,67 @@ export default function RulesPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
-    const template = demoTemplates.find(t => t.id === formData.templateId);
-    const newRule: Rule = {
-      id: editingRule?.id || Date.now().toString(),
+  const handleSave = async () => {
+    if (!token) return;
+
+    const ruleData = {
       name: formData.name,
       keywords: formData.keywords.split(',').map(k => k.trim()).filter(Boolean),
       templateId: formData.templateId,
-      templateName: template?.name || '',
       priority: editingRule?.priority ?? rules.length + 1,
       active: editingRule?.active ?? true,
-      matchCount: editingRule?.matchCount ?? 0,
     };
 
-    if (editingRule) {
-      setRules(rules.map(r => r.id === editingRule.id ? newRule : r));
-    } else {
-      setRules([...rules, newRule]);
+    try {
+      if (editingRule) {
+        const response = await axios.put(`${apiUrl}/rules/${editingRule.id}`, 
+          ruleData,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setRules(rules.map(r => r.id === editingRule.id ? response.data : r));
+      } else {
+        const response = await axios.post(`${apiUrl}/rules`, 
+          ruleData,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setRules([...rules, response.data].sort((a, b) => a.priority - b.priority));
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Failed to save rule:', error);
     }
-    setIsModalOpen(false);
   };
 
-  const handleToggle = (id: string, active: boolean) => {
+  const handleToggle = async (id: string, active: boolean) => {
+    // Optimistic update
     setRules(rules.map(r => r.id === id ? { ...r, active } : r));
+
+    try {
+      await axios.patch(`${apiUrl}/rules/${id}`, 
+        { active },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error('Failed to toggle rule:', error);
+      // Revert
+      setRules(rules.map(r => r.id === id ? { ...r, active: !active } : r));
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setRules(rules.filter(r => r.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm(t('common.confirmDelete'))) return;
+
+    try {
+      await axios.delete(`${apiUrl}/rules/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setRules(rules.filter(r => r.id !== id));
+    } catch (error) {
+      console.error('Failed to delete rule:', error);
+    }
   };
 
-  const handlePriorityChange = (id: string, direction: 'up' | 'down') => {
+  const handlePriorityChange = async (id: string, direction: 'up' | 'down') => {
     const index = rules.findIndex(r => r.id === id);
     if ((direction === 'up' && index === 0) || (direction === 'down' && index === rules.length - 1)) {
       return;
@@ -141,14 +155,43 @@ export default function RulesPage() {
     const newRules = [...rules];
     const swapIndex = direction === 'up' ? index - 1 : index + 1;
     
+    // Swap priorities locally
     const tempPriority = newRules[index].priority;
     newRules[index].priority = newRules[swapIndex].priority;
     newRules[swapIndex].priority = tempPriority;
     
+    // Swap elements
     [newRules[index], newRules[swapIndex]] = [newRules[swapIndex], newRules[index]];
     
     setRules(newRules);
+
+    // Update backend (ideally use a reorder endpoint, but loop updates for now)
+    try {
+       // This is race-condition prone but okay for MVP. Better to have a bulk update or reorder endpoint.
+       // I'll just update the two modified rules.
+       await Promise.all([
+           axios.put(`${apiUrl}/rules/${newRules[index].id}`, { priority: newRules[index].priority }, { headers: { Authorization: `Bearer ${token}` } }),
+           axios.put(`${apiUrl}/rules/${newRules[swapIndex].id}`, { priority: newRules[swapIndex].priority }, { headers: { Authorization: `Bearer ${token}` } })
+       ]);
+    } catch (error) {
+        console.error("Failed to update priority", error);
+        fetchData(); // Revert by re-fetching
+    }
   };
+
+  const getTemplateName = (id: string) => {
+      return templates.find(t => t.id === id)?.name || t('common.unknown');
+  };
+
+  if (loading && rules.length === 0) {
+      return (
+        <DashboardLayout title={t('rules.title')}>
+          <div className="flex items-center justify-center h-64">
+            <PageSpinner />
+          </div>
+        </DashboardLayout>
+      );
+  }
 
   return (
     <DashboardLayout title={t('rules.title')}>
@@ -224,13 +267,13 @@ export default function RulesPage() {
                   {/* Keywords */}
                   <div className="flex items-center gap-2 flex-wrap mb-3">
                     <Tag className="w-4 h-4 text-surface-400" />
-                    {rule.keywords.slice(0, 5).map((keyword) => (
+                    {(rule.keywords || []).slice(0, 5).map((keyword) => (
                       <Badge key={keyword} size="sm" variant="default">
                         {keyword}
                       </Badge>
                     ))}
-                    {rule.keywords.length > 5 && (
-                      <Badge size="sm" variant="default">+{rule.keywords.length - 5}</Badge>
+                    {(rule.keywords || []).length > 5 && (
+                      <Badge size="sm" variant="default">+{(rule.keywords || []).length - 5}</Badge>
                     )}
                   </div>
 
@@ -238,9 +281,9 @@ export default function RulesPage() {
                   <div className="flex items-center gap-2 text-sm text-surface-500">
                     <BookTemplate className="w-4 h-4" />
                     <span>{t('rules.actions.replyWithTemplate')}:</span>
-                    <span className="font-medium text-brand-600">{rule.templateName}</span>
+                    <span className="font-medium text-brand-600">{getTemplateName(rule.templateId)}</span>
                     <span className="text-surface-300">•</span>
-                    <span>{rule.matchCount} {isRTL ? 'تطابق' : 'matches'}</span>
+                    <span>{rule.matchCount || 0} {isRTL ? 'تطابق' : 'matches'}</span>
                   </div>
                 </div>
 
@@ -307,7 +350,7 @@ export default function RulesPage() {
               onChange={(e) => setFormData({ ...formData, templateId: e.target.value })}
             >
               <option value="">{t('rules.actions.replyWithTemplate')}...</option>
-              {demoTemplates.map((template) => (
+              {templates.map((template) => (
                 <option key={template.id} value={template.id}>
                   {template.name}
                 </option>

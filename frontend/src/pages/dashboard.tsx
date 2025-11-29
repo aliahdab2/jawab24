@@ -1,6 +1,9 @@
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardHeader, Badge, PageHeader } from '@/components/ui';
+import { Card, CardHeader, Badge, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
+import { useAuthStore } from '@/lib/store';
+import axios from 'axios';
 import { 
   MessageSquare, 
   TrendingUp, 
@@ -12,90 +15,150 @@ import {
   Bot,
   FileText
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { ar, enUS } from 'date-fns/locale';
 
-// Demo data
-const recentComments = [
-  { 
-    id: 1, 
-    author: 'أحمد علي', 
-    message: 'كم سعر هذا المنتج؟', 
-    page: 'متجر التقنية', 
-    time: 2,
-    replied: true,
-    method: 'template'
-  },
-  { 
-    id: 2, 
-    author: 'سارة محمد', 
-    message: 'هل يتوفر باللون الأزرق؟', 
-    page: 'الموضة', 
-    time: 5,
-    replied: true,
-    method: 'ai'
-  },
-  { 
-    id: 3, 
-    author: 'محمد خالد', 
-    message: 'هل يوجد توصيل؟', 
-    page: 'متجر التقنية', 
-    time: 8,
-    replied: true,
-    method: 'template'
-  },
-  { 
-    id: 4, 
-    author: 'فاطمة أحمد', 
-    message: 'منتج رائع! أحببته!', 
-    page: 'الموضة', 
-    time: 12,
-    replied: false,
-    method: null
-  },
-];
+interface Comment {
+  id: string;
+  message: string;
+  fromName: string | null;
+  replied: boolean;
+  replyMethod: 'template' | 'ai' | 'manual' | null;
+  createdAt: string;
+  pageId: string;
+}
 
-const topPages = [
-  { name: 'متجر التقنية', comments: 1234, rate: 97 },
-  { name: 'الموضة', comments: 856, rate: 96 },
-  { name: 'توصيل الطعام', comments: 445, rate: 94 },
-];
+interface Page {
+  id: string;
+  name: string;
+  commentsCount: number; // This might need to be calculated if backend doesn't return it
+  repliesCount: number;
+  autoReplyEnabled: boolean;
+}
 
 export default function DashboardPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const { token } = useAuthStore();
+  const [loading, setLoading] = useState(true);
+  const [recentComments, setRecentComments] = useState<Comment[]>([]);
+  const [pages, setPages] = useState<Page[]>([]);
+  const [statsData, setStatsData] = useState({
+    totalComments: 0,
+    autoReplies: 0,
+    aiReplies: 0,
+    avgResponseTime: '< 1s', // Placeholder
+    replyRate: 0,
+    activePages: 0,
+    templatesCount: 0,
+    activeRules: 0
+  });
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+  useEffect(() => {
+    if (token) {
+      fetchDashboardData();
+    }
+  }, [token]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const [commentsRes, pagesRes, templatesRes, rulesRes] = await Promise.all([
+        axios.get(`${apiUrl}/comments`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${apiUrl}/pages`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${apiUrl}/templates`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+
+      const comments: Comment[] = commentsRes.data;
+      const fetchedPages: Page[] = pagesRes.data;
+      const templates = templatesRes.data;
+      const rules = rulesRes.data;
+
+      setRecentComments(comments.slice(0, 5));
+      setPages(fetchedPages);
+
+      // Calculate stats
+      const totalComments = comments.length;
+      const repliedComments = comments.filter(c => c.replied);
+      const aiReplies = comments.filter(c => c.replyMethod === 'ai').length;
+      const autoReplies = repliedComments.length; // Assuming all replies are auto for now or tracked by method
+      const replyRate = totalComments > 0 ? Math.round((repliedComments.length / totalComments) * 100) : 0;
+
+      setStatsData({
+        totalComments,
+        autoReplies,
+        aiReplies,
+        avgResponseTime: '< 1s',
+        replyRate,
+        activePages: fetchedPages.filter(p => p.autoReplyEnabled).length,
+        templatesCount: templates.length,
+        activeRules: rules.filter((r: any) => r.active).length
+      });
+
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTime = (dateString: string) => {
+    try {
+      return formatDistanceToNow(new Date(dateString), { 
+        addSuffix: true,
+        locale: language === 'ar' ? ar : enUS 
+      });
+    } catch (e) {
+      return dateString;
+    }
+  };
 
   const stats = [
     { 
       nameKey: 'dashboard.totalComments', 
-      value: '2,847', 
-      change: '+12.5%', 
+      value: statsData.totalComments.toLocaleString(), 
+      change: '+0%', // Real trend requires historical data
       trend: 'up',
       icon: MessageSquare,
       color: 'brand'
     },
     { 
       nameKey: 'dashboard.autoReplies', 
-      value: '2,691', 
-      change: '+18.2%', 
+      value: statsData.autoReplies.toLocaleString(), 
+      change: '+0%', 
       trend: 'up',
       icon: Zap,
       color: 'accent'
     },
     { 
       nameKey: 'dashboard.aiReplies', 
-      value: '1,234', 
-      change: '+25.1%', 
+      value: statsData.aiReplies.toLocaleString(), 
+      change: '+0%', 
       trend: 'up',
       icon: Bot,
       color: 'emerald'
     },
     { 
       nameKey: 'dashboard.avgResponseTime', 
-      value: '< 1s', 
-      change: '-45%', 
+      value: statsData.avgResponseTime, 
+      change: '0%', 
       trend: 'up',
       icon: Clock,
       color: 'violet'
     },
   ];
+
+  if (loading) {
+      return (
+        <DashboardLayout title={t('dashboard.title')}>
+          <div className="flex items-center justify-center h-64">
+            <PageSpinner />
+          </div>
+        </DashboardLayout>
+      );
+  }
 
   return (
     <DashboardLayout title={t('dashboard.title')}>
@@ -135,18 +198,12 @@ export default function DashboardPage() {
                 }`} />
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-1">
-              {stat.trend === 'up' ? (
-                <ArrowUpRight className="w-4 h-4 text-emerald-500" />
-              ) : (
-                <ArrowDownRight className="w-4 h-4 text-red-500" />
-              )}
-              <span className={`text-sm font-medium ${
-                stat.trend === 'up' ? 'text-emerald-600' : 'text-red-600'
-              }`}>
-                {stat.change}
+            {/* Trend removed for now as we don't have historical data yet */}
+             <div className="mt-4 flex items-center gap-1 opacity-50">
+              <ArrowUpRight className="w-4 h-4 text-surface-400" />
+              <span className="text-sm text-surface-400">
+                {t('dashboard.vsLastWeek')}
               </span>
-              <span className="text-sm text-surface-400">{t('dashboard.vsLastWeek')}</span>
             </div>
           </Card>
         ))}
@@ -161,24 +218,24 @@ export default function DashboardPage() {
             description={t('dashboard.latestCommentsDesc')}
           />
           <div className="divide-y divide-surface-100">
-            {recentComments.map((comment) => (
+            {recentComments.length > 0 ? recentComments.map((comment) => (
               <div key={comment.id} className="px-6 py-4 hover:bg-surface-50 transition-colors">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0 text-start">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-medium text-surface-900">{comment.author}</span>
+                      <span className="font-medium text-surface-900">{comment.fromName || t('common.unknownUser')}</span>
                       <span className="text-surface-300">•</span>
-                      <span className="text-sm text-surface-400">{comment.page}</span>
+                      <span className="text-xs text-surface-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatTime(comment.createdAt)}
+                      </span>
                     </div>
                     <p className="text-surface-600 truncate">{comment.message}</p>
-                    <p className="text-xs text-surface-400 mt-1">
-                      {t('time.minutesAgo').replace('{count}', String(comment.time))}
-                    </p>
                   </div>
                   <div className="flex-shrink-0">
                     {comment.replied ? (
-                      <Badge variant={comment.method === 'ai' ? 'info' : 'success'}>
-                        {comment.method === 'ai' ? t('dashboard.aiReply') : t('dashboard.templateReply')}
+                      <Badge variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>
+                        {comment.replyMethod === 'ai' ? t('dashboard.aiReply') : t('dashboard.templateReply')}
                       </Badge>
                     ) : (
                       <Badge variant="warning">{t('dashboard.pending')}</Badge>
@@ -186,11 +243,15 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-            ))}
+            )) : (
+                <div className="p-6 text-center text-surface-500">
+                    {t('common.noData')}
+                </div>
+            )}
           </div>
           <div className="px-6 py-4 border-t border-surface-100 text-start">
             <a href="/comments" className="text-sm text-brand-600 hover:text-brand-700 font-medium">
-              {t('dashboard.viewAllComments')} ←
+              {t('dashboard.viewAllComments')} {language === 'ar' ? '←' : '→'}
             </a>
           </div>
         </Card>
@@ -202,26 +263,30 @@ export default function DashboardPage() {
             description={t('dashboard.topPagesDesc')}
           />
           <div className="space-y-4 px-6 pb-6">
-            {topPages.map((page, i) => (
-              <div key={page.name} className="flex items-center gap-4">
+            {pages.length > 0 ? pages.slice(0, 3).map((page, i) => (
+              <div key={page.id} className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-surface-100 flex items-center justify-center">
                   <FileText className="w-5 h-5 text-surface-600" />
                 </div>
                 <div className="flex-1 min-w-0 text-start">
                   <p className="font-medium text-surface-900 truncate">{page.name}</p>
                   <p className="text-sm text-surface-500">
-                    {page.comments} {t('dashboard.comments')} • {page.rate}% {t('dashboard.replied')}
+                    {page.commentsCount || 0} {t('dashboard.comments')}
                   </p>
                 </div>
                 <div className="text-end">
                   <span className="text-lg font-semibold text-surface-900">#{i + 1}</span>
                 </div>
               </div>
-            ))}
+            )) : (
+                <div className="text-center text-surface-500">
+                    {t('common.noData')}
+                </div>
+            )}
           </div>
           <div className="px-6 py-4 border-t border-surface-100 text-start">
             <a href="/pages" className="text-sm text-brand-600 hover:text-brand-700 font-medium">
-              {t('dashboard.managePages')} ←
+              {t('dashboard.managePages')} {language === 'ar' ? '←' : '→'}
             </a>
           </div>
         </Card>
@@ -236,7 +301,7 @@ export default function DashboardPage() {
             </div>
             <div className="text-start">
               <p className="text-sm text-surface-500">{t('dashboard.replyRate')}</p>
-              <p className="text-xl font-bold text-surface-900">94.5%</p>
+              <p className="text-xl font-bold text-surface-900">{statsData.replyRate}%</p>
             </div>
           </div>
           <div className="h-12 w-px bg-surface-200 hidden md:block" />
@@ -246,7 +311,7 @@ export default function DashboardPage() {
             </div>
             <div className="text-start">
               <p className="text-sm text-surface-500">{t('dashboard.activePages')}</p>
-              <p className="text-xl font-bold text-surface-900">8</p>
+              <p className="text-xl font-bold text-surface-900">{statsData.activePages}</p>
             </div>
           </div>
           <div className="h-12 w-px bg-surface-200 hidden md:block" />
@@ -256,7 +321,7 @@ export default function DashboardPage() {
             </div>
             <div className="text-start">
               <p className="text-sm text-surface-500">{t('dashboard.templates')}</p>
-              <p className="text-xl font-bold text-surface-900">12</p>
+              <p className="text-xl font-bold text-surface-900">{statsData.templatesCount}</p>
             </div>
           </div>
           <div className="h-12 w-px bg-surface-200 hidden md:block" />
@@ -266,7 +331,7 @@ export default function DashboardPage() {
             </div>
             <div className="text-start">
               <p className="text-sm text-surface-500">{t('dashboard.activeRules')}</p>
-              <p className="text-xl font-bold text-surface-900">5</p>
+              <p className="text-xl font-bold text-surface-900">{statsData.activeRules}</p>
             </div>
           </div>
         </div>

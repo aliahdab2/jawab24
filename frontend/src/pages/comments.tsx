@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, EmptyState, PageHeader } from '@/components/ui';
+import { Card, Button, Badge, Input, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { useAuthStore } from '@/lib/store';
+import axios from 'axios';
 import { 
   MessageSquare, 
   Search,
@@ -11,87 +13,55 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
+import { formatDistanceToNow } from 'date-fns';
+import { ar, enUS } from 'date-fns/locale';
 
-// Demo data
-const demoComments = [
-  {
-    id: '1',
-    author: 'Ahmed Ali',
-    authorId: 'user_1',
-    message: 'كم سعر هذا المنتج؟ وهل يوجد توصيل للرياض؟',
-    page: 'Tech Store',
-    post: 'New iPhone 15 Pro Max Available!',
-    time: '2 min ago',
-    replied: true,
-    replyText: 'مرحباً أحمد! السعر 4999 ريال ونعم نوصل للرياض مجاناً 🚚',
-    replyMethod: 'template',
-    detectedLanguage: 'ar',
-  },
-  {
-    id: '2',
-    author: 'Sarah Johnson',
-    authorId: 'user_2',
-    message: 'Is this available in blue color? I love the design!',
-    page: 'Fashion Hub',
-    post: 'Summer Collection 2024',
-    time: '5 min ago',
-    replied: true,
-    replyText: 'Hi Sarah! Yes, we have it in blue, navy, and sky blue. Would you like me to send you photos?',
-    replyMethod: 'ai',
-    detectedLanguage: 'en',
-  },
-  {
-    id: '3',
-    author: 'محمد خالد',
-    authorId: 'user_3',
-    message: 'هل يوجد ضمان على المنتج؟',
-    page: 'Tech Store',
-    post: 'New iPhone 15 Pro Max Available!',
-    time: '8 min ago',
-    replied: true,
-    replyText: 'نعم محمد، جميع منتجاتنا تأتي مع ضمان سنة كاملة ✅',
-    replyMethod: 'template',
-    detectedLanguage: 'ar',
-  },
-  {
-    id: '4',
-    author: 'Emma Wilson',
-    authorId: 'user_4',
-    message: 'Great product! Love it! 😍',
-    page: 'Fashion Hub',
-    post: 'Summer Collection 2024',
-    time: '12 min ago',
-    replied: false,
-    replyText: null,
-    replyMethod: null,
-    detectedLanguage: 'en',
-  },
-  {
-    id: '5',
-    author: 'عبدالله سعيد',
-    authorId: 'user_5',
-    message: 'متى يكون التخفيض؟',
-    page: 'Tech Store',
-    post: 'New iPhone 15 Pro Max Available!',
-    time: '15 min ago',
-    replied: true,
-    replyText: 'أهلاً عبدالله! التخفيضات تبدأ نهاية الشهر، تابعنا للمزيد 🔥',
-    replyMethod: 'ai',
-    detectedLanguage: 'ar',
-  },
-];
+interface Comment {
+  id: string;
+  message: string;
+  fromName: string | null;
+  replied: boolean;
+  replyText: string | null;
+  replyMethod: 'template' | 'ai' | 'manual' | null;
+  detectedLanguage: string | null;
+  createdAt: string;
+  postId: string;
+}
 
 type FilterType = 'all' | 'replied' | 'pending';
 
 export default function CommentsPage() {
-  const { t } = useTranslation();
-  const [comments] = useState(demoComments);
+  const { t, language } = useTranslation();
+  const { token } = useAuthStore();
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
 
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+  useEffect(() => {
+    fetchComments();
+  }, [token]);
+
+  const fetchComments = async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      const response = await axios.get(`${apiUrl}/comments`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setComments(response.data);
+    } catch (error) {
+      console.error('Failed to fetch comments:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredComments = comments.filter(comment => {
     const matchesSearch = comment.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         comment.author.toLowerCase().includes(searchQuery.toLowerCase());
+                         (comment.fromName || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filter === 'all' || 
                          (filter === 'replied' && comment.replied) ||
                          (filter === 'pending' && !comment.replied);
@@ -112,6 +82,27 @@ export default function CommentsPage() {
       case 'pending': return t('comments.pending');
     }
   };
+
+  const formatTime = (dateString: string) => {
+    try {
+      return formatDistanceToNow(new Date(dateString), { 
+        addSuffix: true,
+        locale: language === 'ar' ? ar : enUS 
+      });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  if (loading && comments.length === 0) {
+     return (
+       <DashboardLayout title={t('comments.title')}>
+         <div className="flex items-center justify-center h-64">
+           <PageSpinner />
+         </div>
+       </DashboardLayout>
+     );
+   }
 
   return (
     <DashboardLayout title={t('comments.title')}>
@@ -185,13 +176,11 @@ export default function CommentsPage() {
                 {/* Comment Content */}
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className="font-semibold text-surface-900">{comment.author}</span>
-                    <span className="text-surface-300">•</span>
-                    <span className="text-sm text-surface-500">{comment.page}</span>
+                    <span className="font-semibold text-surface-900">{comment.fromName || t('common.unknownUser')}</span>
                     <span className="text-surface-300">•</span>
                     <span className="text-xs text-surface-400 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {comment.time}
+                      {formatTime(comment.createdAt)}
                     </span>
                   </div>
                   
@@ -199,10 +188,13 @@ export default function CommentsPage() {
                   
                   <div className="flex items-center gap-2 text-xs text-surface-400">
                     <FileText className="w-3 h-3" />
-                    <span className="truncate">{comment.post}</span>
-                    <Badge size="sm" variant="default">
-                      {comment.detectedLanguage === 'ar' ? t('templates.arabic') : t('templates.english')}
-                    </Badge>
+                    <span className="truncate">Post ID: {comment.postId}</span>
+                    {comment.detectedLanguage && (
+                        <Badge size="sm" variant="default">
+                        {comment.detectedLanguage === 'ar' ? t('templates.arabic') : 
+                         comment.detectedLanguage === 'en' ? t('templates.english') : comment.detectedLanguage}
+                        </Badge>
+                    )}
                   </div>
 
                   {/* Reply */}
