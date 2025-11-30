@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -40,11 +40,7 @@ export default function CommentsPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
-  useEffect(() => {
-    fetchComments();
-  }, [token]);
-
-  const fetchComments = async () => {
+  const fetchComments = useCallback(async () => {
     if (!token) return;
     try {
       setLoading(true);
@@ -57,7 +53,11 @@ export default function CommentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, apiUrl]);
+
+  useEffect(() => {
+    fetchComments();
+  }, [fetchComments]);
 
   const filteredComments = comments.filter(comment => {
     const matchesSearch = comment.message.toLowerCase().includes(searchQuery.toLowerCase()) ||

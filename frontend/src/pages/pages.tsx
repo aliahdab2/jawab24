@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, Badge, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
@@ -9,7 +9,6 @@ import {
   ExternalLink,
   MessageSquare,
   TrendingUp,
-  Settings,
   BookOpen,
   X,
   Save,
@@ -44,12 +43,7 @@ export default function PagesPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
-  // Fetch pages on load
-  useEffect(() => {
-    fetchPages();
-  }, [token]);
-
-  const fetchPages = async () => {
+  const fetchPages = useCallback(async () => {
     if (!token) return;
     
     try {
@@ -63,7 +57,12 @@ export default function PagesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, apiUrl]);
+
+  // Fetch pages on load
+  useEffect(() => {
+    fetchPages();
+  }, [fetchPages]);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
     // Optimistic update

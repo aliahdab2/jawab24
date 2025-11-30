@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, Badge, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
@@ -55,13 +56,7 @@ export default function DashboardPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
-  useEffect(() => {
-    if (token) {
-      fetchDashboardData();
-    }
-  }, [token]);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       const [commentsRes, pagesRes, templatesRes, rulesRes] = await Promise.all([
@@ -102,7 +97,13 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, apiUrl]);
+
+  useEffect(() => {
+    if (token) {
+      fetchDashboardData();
+    }
+  }, [token, fetchDashboardData]);
 
   const formatTime = (dateString: string) => {
     try {
@@ -250,9 +251,9 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="px-6 py-4 border-t border-surface-100 text-start">
-            <a href="/comments" className="text-sm text-brand-600 hover:text-brand-700 font-medium">
+            <Link href="/comments" className="text-sm text-brand-600 hover:text-brand-700 font-medium">
               {t('dashboard.viewAllComments')} {language === 'ar' ? '←' : '→'}
-            </a>
+            </Link>
           </div>
         </Card>
 
@@ -285,9 +286,9 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="px-6 py-4 border-t border-surface-100 text-start">
-            <a href="/pages" className="text-sm text-brand-600 hover:text-brand-700 font-medium">
+            <Link href="/pages" className="text-sm text-brand-600 hover:text-brand-700 font-medium">
               {t('dashboard.managePages')} {language === 'ar' ? '←' : '→'}
-            </a>
+            </Link>
           </div>
         </Card>
       </div>

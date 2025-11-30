@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -45,12 +45,7 @@ export default function MessagesPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
-  useEffect(() => {
-    fetchMessages();
-    fetchStats();
-  }, [token]);
-
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     if (!token) return;
     try {
       setLoading(true);
@@ -63,9 +58,9 @@ export default function MessagesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, apiUrl]);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     if (!token) return;
     try {
       const response = await axios.get(`${apiUrl}/messages/stats`, {
@@ -75,7 +70,12 @@ export default function MessagesPage() {
     } catch (error) {
       console.error('Failed to fetch message stats:', error);
     }
-  };
+  }, [token, apiUrl]);
+
+  useEffect(() => {
+    fetchMessages();
+    fetchStats();
+  }, [fetchMessages, fetchStats]);
 
   const filteredMessages = messages.filter(message => {
     const matchesSearch = message.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -300,4 +300,5 @@ export default function MessagesPage() {
     </DashboardLayout>
   );
 }
+
 

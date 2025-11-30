@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
@@ -40,11 +40,7 @@ export default function TemplatesPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
-  useEffect(() => {
-    fetchTemplates();
-  }, [token]);
-
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     if (!token) return;
     try {
       setLoading(true);
@@ -57,7 +53,11 @@ export default function TemplatesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, apiUrl]);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
 
   const handleOpenModal = (template?: Template) => {
     if (template) {

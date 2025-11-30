@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
@@ -47,11 +47,7 @@ export default function RulesPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
-  useEffect(() => {
-    fetchData();
-  }, [token]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!token) return;
     try {
       setLoading(true);
@@ -69,7 +65,11 @@ export default function RulesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, apiUrl]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleOpenModal = (rule?: Rule) => {
     if (rule) {
