@@ -138,15 +138,18 @@ jobs:
               FAILED=1
             fi
             
-            # Check 2: Backend health (10 attempts, 5s apart = 50s max)
+            # Check 2: Backend health via Nginx (10 attempts, 5s apart = 50s max)
             echo ""
             echo "🔍 Check 2: Backend API"
             for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+              # Use -L to follow redirects, check via Nginx proxy
+              if curl -sfL http://localhost/api/health -o /dev/null 2>&1; then
                 echo "   ✅ Backend is healthy (attempt $i)"
                 break
               elif [ $i -eq 10 ]; then
                 echo "   ❌ Backend health check failed after 10 attempts"
+                echo "   📋 Backend logs:"
+                docker-compose logs backend --tail 10
                 FAILED=1
               else
                 echo "   ⏳ Attempt $i/10 - waiting..."
@@ -154,15 +157,18 @@ jobs:
               fi
             done
             
-            # Check 3: Frontend (10 attempts, 5s apart = 50s max)
+            # Check 3: Frontend via Nginx (10 attempts, 5s apart = 50s max)
             echo ""
             echo "🔍 Check 3: Frontend"
             for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -sf http://localhost:3001 > /dev/null 2>&1; then
+              # Use -L to follow redirects, check via Nginx proxy
+              if curl -sfL http://localhost/ -o /dev/null 2>&1; then
                 echo "   ✅ Frontend is healthy (attempt $i)"
                 break
               elif [ $i -eq 10 ]; then
                 echo "   ❌ Frontend health check failed after 10 attempts"
+                echo "   📋 Frontend logs:"
+                docker-compose logs frontend --tail 10
                 FAILED=1
               else
                 echo "   ⏳ Attempt $i/10 - waiting..."
