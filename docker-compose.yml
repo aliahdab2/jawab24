@@ -47,8 +47,8 @@ services:
   # Backend API
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: jawab24-backend
     restart: unless-stopped
     env_file:
@@ -73,8 +73,8 @@ services:
   # AI Worker
   ai-worker:
     build:
-      context: ./ai-worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ai-worker/Dockerfile
     container_name: jawab24-ai-worker
     restart: unless-stopped
     env_file:
@@ -96,8 +96,8 @@ services:
   # Frontend (Next.js)
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
         - NEXT_PUBLIC_FB_APP_ID=774211662298446
         - NEXT_PUBLIC_API_URL=https://jawab24.com/api

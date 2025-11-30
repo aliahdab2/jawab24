@@ -1,68 +1,51 @@
-# Build stage
 FROM node:18-alpine AS builder
-
 WORKDIR /app
 
-# Build arguments for Next.js public env vars
+# Copy root config and workspaces
+COPY package.json package-lock.json ./
+COPY packages/shared ./packages/shared
+COPY frontend ./frontend
+
+# Install
+RUN npm ci
+
+# Build arguments
 ARG NEXT_PUBLIC_FB_APP_ID
 ARG NEXT_PUBLIC_API_URL
-
-# Set them as environment variables for the build
 ENV NEXT_PUBLIC_FB_APP_ID=$NEXT_PUBLIC_FB_APP_ID
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
-# Copy package files
-COPY package*.json ./
+# Build
+RUN npm run build --workspace=@jawab24/shared
+RUN npm run build --workspace=jawab24-frontend
 
-# Install dependencies
-RUN npm ci
+RUN npm prune --omit=dev
 
-# Copy source code
-COPY . .
-
-# Build Next.js (will bake in the NEXT_PUBLIC_* vars)
-RUN npm run build
-
-# Production stage
+# Production
 FROM node:18-alpine AS production
-
 WORKDIR /app
-
-# Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Copy artifacts
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/shared ./packages/shared
+# Copy frontend specific build artifacts
+COPY --from=builder /app/frontend/next.config.js ./frontend/
+COPY --from=builder /app/frontend/public ./frontend/public
+COPY --from=builder /app/frontend/.next ./frontend/.next
+COPY --from=builder /app/frontend/package.json ./frontend/
 
-# Copy package files
-COPY package*.json ./
-
-# Install production dependencies only
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy built files from builder
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public/
-COPY --from=builder /app/next.config.js ./
-
-# Change ownership
+WORKDIR /app/frontend
 RUN chown -R nodejs:nodejs /app
-
-# Switch to non-root user
 USER nodejs
-
-# Expose port
 EXPOSE 3001
-
-# Set environment
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Health check (use 127.0.0.1 to avoid IPv6 issues in Alpine)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3001 || exit 1
 
-# Start with dumb-init
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["npm", "start"]

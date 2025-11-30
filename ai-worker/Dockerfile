@@ -1,58 +1,39 @@
-# Build stage
 FROM node:18-alpine AS builder
-
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy root config and workspaces
+COPY package.json package-lock.json ./
+COPY packages/shared ./packages/shared
+COPY ai-worker ./ai-worker
 
-# Install all dependencies (including dev for TypeScript build)
+# Install & Build
 RUN npm ci
+RUN npm run build --workspace=@jawab24/shared
+RUN npm run build --workspace=jawab24-ai-worker
 
-# Copy source code
-COPY . .
+RUN npm prune --omit=dev
 
-# Build TypeScript
-RUN npm run build
-
-# Production stage
+# Production
 FROM node:18-alpine AS production
-
 WORKDIR /app
-
-# Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Copy artifacts
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/shared ./packages/shared
+COPY --from=builder /app/ai-worker ./ai-worker
 
-# Copy package files
-COPY package*.json ./
-
-# Install production dependencies only
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy built files from builder
-COPY --from=builder /app/dist ./dist
-
-# Change ownership
+WORKDIR /app/ai-worker
 RUN chown -R nodejs:nodejs /app
-
-# Switch to non-root user
 USER nodejs
-
-# Expose port
 EXPOSE 3002
-
-# Set environment
 ENV NODE_ENV=production
 ENV PORT=3002
 
-# Health check (use 127.0.0.1 to avoid IPv6 issues in Alpine)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3002/health || exit 1
 
-# Start with dumb-init
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "dist/index.js"]

@@ -1,0 +1,15 @@
+{
+  "name": "jawab24-root",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "ai-worker",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces"
+  }
+}
