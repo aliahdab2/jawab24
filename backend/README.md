@@ -1,6 +1,6 @@
-# AutoReply.AI Backend
+# Jawab24 Backend
 
-Backend API service for AutoReply.AI
+Backend API service for Jawab24
 
 ## Structure
 

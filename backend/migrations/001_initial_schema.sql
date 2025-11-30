@@ -1,4 +1,4 @@
--- AutoReply.AI Initial Schema Migration
+-- Jawab24 Initial Schema Migration
 -- Run with: psql -h localhost -p 5433 -U postgres -d autoreply -f migrations/001_initial_schema.sql
 
 -- Enable UUID extension

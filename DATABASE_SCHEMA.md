@@ -1,4 +1,4 @@
-# Database Schema — AutoReply.AI
+# Database Schema — Jawab24
 
 ## PostgreSQL Tables
 

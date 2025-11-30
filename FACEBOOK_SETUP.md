@@ -1,6 +1,6 @@
 # Facebook Developer / Meta Setup
 
-This document provides full instructions for configuring Meta for AutoReply.AI.
+This document provides full instructions for configuring Meta for Jawab24.
 
 ---
 
@@ -11,7 +11,7 @@ https://developers.facebook.com
 
 ## 2. Create App
 - App type: **Business**
-- Name: AutoReply.AI  
+- Name: Jawab24  
 - Create Business Account  
 
 ---

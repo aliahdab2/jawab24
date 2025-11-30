@@ -1,4 +1,4 @@
-# AutoReply.AI AI Worker
+# Jawab24 AI Worker
 
 AI worker service for generating automated replies
 

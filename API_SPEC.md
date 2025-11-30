@@ -1,4 +1,4 @@
-# API Specification — AutoReply.AI
+# API Specification — Jawab24
 
 ## Base URL
 ```

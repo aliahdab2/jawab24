@@ -1,7 +1,7 @@
-# Language Support — AutoReply.AI
+# Language Support — Jawab24
 
 ## Overview
-AutoReply.AI supports **full bilingual operation** in Arabic and English, with special support for **Syrian dialect**.
+Jawab24 supports **full bilingual operation** in Arabic and English, with special support for **Syrian dialect**.
 
 ---
 

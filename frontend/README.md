@@ -1,6 +1,6 @@
-# AutoReply.AI Frontend
+# Jawab24 Frontend
 
-Web dashboard for AutoReply.AI
+Web dashboard for Jawab24
 
 ## Structure
 

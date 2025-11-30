@@ -1,7 +1,7 @@
 {
     "name": "jawab24-ai-worker",
     "version": "1.0.0",
-    "description": "AutoReply.AI AI Worker Service",
+    "description": "Jawab24 AI Worker Service",
     "main": "dist/index.js",
     "scripts": {
         "build": "tsc",
