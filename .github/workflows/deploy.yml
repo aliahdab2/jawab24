@@ -138,40 +138,40 @@ jobs:
               FAILED=1
             fi
             
-            # Check 2: Backend health via Nginx (10 attempts, 5s apart = 50s max)
+            # Check 2: Backend health via Docker health status (10 attempts, 5s apart)
             echo ""
             echo "🔍 Check 2: Backend API"
             for i in 1 2 3 4 5 6 7 8 9 10; do
-              # Use -L to follow redirects, check via Nginx proxy
-              if curl -sfL http://localhost/api/health -o /dev/null 2>&1; then
+              HEALTH=$(docker inspect jawab24-backend --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+              if [ "$HEALTH" = "healthy" ]; then
                 echo "   ✅ Backend is healthy (attempt $i)"
                 break
               elif [ $i -eq 10 ]; then
-                echo "   ❌ Backend health check failed after 10 attempts"
+                echo "   ❌ Backend health check failed after 10 attempts (status: $HEALTH)"
                 echo "   📋 Backend logs:"
                 docker-compose logs backend --tail 10
                 FAILED=1
               else
-                echo "   ⏳ Attempt $i/10 - waiting..."
+                echo "   ⏳ Attempt $i/10 - status: $HEALTH, waiting..."
                 sleep 5
               fi
             done
             
-            # Check 3: Frontend via Nginx (10 attempts, 5s apart = 50s max)
+            # Check 3: Frontend health via Docker health status (10 attempts, 5s apart)
             echo ""
             echo "🔍 Check 3: Frontend"
             for i in 1 2 3 4 5 6 7 8 9 10; do
-              # Use -L to follow redirects, check via Nginx proxy
-              if curl -sfL http://localhost/ -o /dev/null 2>&1; then
+              HEALTH=$(docker inspect jawab24-frontend --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+              if [ "$HEALTH" = "healthy" ]; then
                 echo "   ✅ Frontend is healthy (attempt $i)"
                 break
               elif [ $i -eq 10 ]; then
-                echo "   ❌ Frontend health check failed after 10 attempts"
+                echo "   ❌ Frontend health check failed after 10 attempts (status: $HEALTH)"
                 echo "   📋 Frontend logs:"
                 docker-compose logs frontend --tail 10
                 FAILED=1
               else
-                echo "   ⏳ Attempt $i/10 - waiting..."
+                echo "   ⏳ Attempt $i/10 - status: $HEALTH, waiting..."
                 sleep 5
               fi
             done
