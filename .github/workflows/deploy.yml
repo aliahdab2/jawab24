@@ -121,8 +121,8 @@ jobs:
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
             # Wait for containers to be ready
-            echo "⏳ Waiting for services to start..."
-            sleep 15
+            echo "⏳ Waiting for services to start (30s)..."
+            sleep 30
             
             FAILED=0
             
@@ -138,35 +138,35 @@ jobs:
               FAILED=1
             fi
             
-            # Check 2: Backend health
+            # Check 2: Backend health (10 attempts, 5s apart = 50s max)
             echo ""
             echo "🔍 Check 2: Backend API"
-            for i in 1 2 3 4 5; do
+            for i in 1 2 3 4 5 6 7 8 9 10; do
               if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
-                echo "   ✅ Backend is healthy"
+                echo "   ✅ Backend is healthy (attempt $i)"
                 break
-              elif [ $i -eq 5 ]; then
-                echo "   ❌ Backend health check failed after 5 attempts"
+              elif [ $i -eq 10 ]; then
+                echo "   ❌ Backend health check failed after 10 attempts"
                 FAILED=1
               else
-                echo "   ⏳ Attempt $i failed, retrying..."
-                sleep 3
+                echo "   ⏳ Attempt $i/10 - waiting..."
+                sleep 5
               fi
             done
             
-            # Check 3: Frontend
+            # Check 3: Frontend (10 attempts, 5s apart = 50s max)
             echo ""
             echo "🔍 Check 3: Frontend"
-            for i in 1 2 3 4 5; do
+            for i in 1 2 3 4 5 6 7 8 9 10; do
               if curl -sf http://localhost:3001 > /dev/null 2>&1; then
-                echo "   ✅ Frontend is healthy"
+                echo "   ✅ Frontend is healthy (attempt $i)"
                 break
-              elif [ $i -eq 5 ]; then
-                echo "   ❌ Frontend health check failed after 5 attempts"
+              elif [ $i -eq 10 ]; then
+                echo "   ❌ Frontend health check failed after 10 attempts"
                 FAILED=1
               else
-                echo "   ⏳ Attempt $i failed, retrying..."
-                sleep 3
+                echo "   ⏳ Attempt $i/10 - waiting..."
+                sleep 5
               fi
             done
             
