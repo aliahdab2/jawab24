@@ -52,6 +52,8 @@ jobs:
           username: ${{ env.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
+            cd ${{ env.DEPLOY_PATH }}
+            
             echo "🏥 Running health checks..."
             sleep 10
             
@@ -105,4 +107,5 @@ jobs:
           echo "❌ CI failed - skipping deployment"
           echo "Please fix the failing tests before deploying."
           exit 1
+
 
