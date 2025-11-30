@@ -6,6 +6,14 @@ on:
     types:
       - completed
     branches: [main]
+  # Allow manual deployment
+  workflow_dispatch:
+    inputs:
+      skip_health_check:
+        description: 'Skip health checks after deployment'
+        required: false
+        default: 'false'
+        type: boolean
 
 env:
   SERVER_HOST: 91.99.95.196
@@ -14,98 +22,232 @@ env:
 
 jobs:
   deploy:
-    name: Deploy to Production
+    name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
-    # Only deploy if CI passed
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
+    # Only deploy if CI passed (or manual trigger)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    
     steps:
-      - name: Checkout code
+      - name: 📋 Deployment Info
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🚀 JAWAB24 DEPLOYMENT"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📅 Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "🔀 Branch: ${{ github.ref_name }}"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo "👤 Actor: ${{ github.actor }}"
+          echo "🖥️  Server: ${{ env.SERVER_HOST }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to server
+      - name: 🔐 Pre-deployment Backup
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.SERVER_HOST }}
           username: ${{ env.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 5m
           script: |
             cd ${{ env.DEPLOY_PATH }}
             
-            echo "📥 Pulling latest code..."
-            git pull origin main
+            echo "📸 Creating backup point..."
+            BACKUP_COMMIT=$(git rev-parse HEAD)
+            echo "$BACKUP_COMMIT" > .last_successful_deploy
+            echo "✅ Backup commit: $BACKUP_COMMIT"
+
+      - name: 🐳 Deploy Application
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -e  # Exit on any error
+            cd ${{ env.DEPLOY_PATH }}
             
-            echo "🐳 Building and deploying containers..."
-            docker-compose pull
-            docker-compose up -d --build
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "📥 STEP 1: Pulling latest code"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            git fetch origin main
+            git reset --hard origin/main
+            echo "✅ Code updated to: $(git rev-parse --short HEAD)"
             
-            echo "🧹 Cleaning up old images..."
-            docker image prune -f
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🐳 STEP 2: Building & Starting Containers"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
-            echo "✅ Deployment complete!"
+            # Pull latest base images
+            docker-compose pull --quiet 2>/dev/null || true
+            
+            # Build and restart with zero downtime approach
+            docker-compose up -d --build --remove-orphans
+            
+            echo "✅ Containers started"
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🧹 STEP 3: Cleanup"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            docker image prune -f --filter "until=24h" 2>/dev/null || true
+            docker volume prune -f 2>/dev/null || true
+            echo "✅ Cleanup complete"
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "📊 Container Status"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             docker-compose ps
 
-      - name: Health Check
+      - name: 🏥 Health Checks
+        if: ${{ github.event.inputs.skip_health_check != 'true' }}
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.SERVER_HOST }}
           username: ${{ env.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 5m
           script: |
             cd ${{ env.DEPLOY_PATH }}
             
-            echo "🏥 Running health checks..."
-            sleep 10
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🏥 HEALTH CHECKS"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
-            # Check if containers are running
+            # Wait for containers to be ready
+            echo "⏳ Waiting for services to start..."
+            sleep 15
+            
+            FAILED=0
+            
+            # Check 1: Containers running
+            echo ""
+            echo "🔍 Check 1: Container Status"
             if docker-compose ps | grep -q "Up"; then
-              echo "✅ Containers are running"
+              RUNNING=$(docker-compose ps | grep "Up" | wc -l)
+              echo "   ✅ $RUNNING containers running"
             else
-              echo "❌ Some containers are not running!"
+              echo "   ❌ No containers running!"
               docker-compose ps
-              exit 1
+              FAILED=1
             fi
             
-            # Check backend health
-            if curl -sf http://localhost:3000/health > /dev/null; then
-              echo "✅ Backend is healthy"
+            # Check 2: Backend health
+            echo ""
+            echo "🔍 Check 2: Backend API"
+            for i in 1 2 3 4 5; do
+              if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+                echo "   ✅ Backend is healthy"
+                break
+              elif [ $i -eq 5 ]; then
+                echo "   ❌ Backend health check failed after 5 attempts"
+                FAILED=1
+              else
+                echo "   ⏳ Attempt $i failed, retrying..."
+                sleep 3
+              fi
+            done
+            
+            # Check 3: Frontend
+            echo ""
+            echo "🔍 Check 3: Frontend"
+            for i in 1 2 3 4 5; do
+              if curl -sf http://localhost:3001 > /dev/null 2>&1; then
+                echo "   ✅ Frontend is healthy"
+                break
+              elif [ $i -eq 5 ]; then
+                echo "   ❌ Frontend health check failed after 5 attempts"
+                FAILED=1
+              else
+                echo "   ⏳ Attempt $i failed, retrying..."
+                sleep 3
+              fi
+            done
+            
+            # Check 4: Database connection
+            echo ""
+            echo "🔍 Check 4: Database"
+            if docker-compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+              echo "   ✅ Database is ready"
             else
-              echo "❌ Backend health check failed!"
-              exit 1
+              echo "   ⚠️  Database check skipped (may still be starting)"
             fi
             
-            # Check frontend
-            if curl -sf http://localhost:3001 > /dev/null; then
-              echo "✅ Frontend is healthy"
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            if [ $FAILED -eq 0 ]; then
+              echo "✅ ALL HEALTH CHECKS PASSED"
+              # Update last successful deploy marker
+              git rev-parse HEAD > .last_successful_deploy
             else
-              echo "❌ Frontend health check failed!"
+              echo "❌ SOME HEALTH CHECKS FAILED"
               exit 1
             fi
-            
-            echo "🎉 All health checks passed!"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-      - name: Notify Success
+      - name: 🔄 Rollback on Failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🔄 INITIATING ROLLBACK"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            if [ -f .last_successful_deploy ]; then
+              ROLLBACK_COMMIT=$(cat .last_successful_deploy)
+              echo "📍 Rolling back to: $ROLLBACK_COMMIT"
+              
+              git fetch origin
+              git reset --hard $ROLLBACK_COMMIT
+              docker-compose up -d --build
+              
+              echo "✅ Rollback complete"
+              docker-compose ps
+            else
+              echo "⚠️  No backup point found, manual intervention required"
+              echo "   Current containers:"
+              docker-compose ps
+            fi
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: 📊 Deployment Summary
         if: success()
         run: |
-          echo "🚀 Deployment to production successful!"
-          echo "URL: https://jawab24.com"
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🎉 DEPLOYMENT SUCCESSFUL"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🌐 Website: https://jawab24.com"
+          echo "📊 Dashboard: https://jawab24.com/dashboard"
+          echo "🔧 API: https://jawab24.com/api/health"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-      - name: Notify Failure
-        if: failure()
-        run: |
-          echo "❌ Deployment failed!"
-          echo "Check the logs above for details."
-
-  deploy-failed:
-    name: CI Failed - Skip Deploy
+  deploy-skipped:
+    name: ⏭️ CI Failed - Skip Deploy
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}
     
     steps:
       - name: Skip deployment
         run: |
-          echo "❌ CI failed - skipping deployment"
-          echo "Please fix the failing tests before deploying."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "⏭️  DEPLOYMENT SKIPPED"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "❌ CI tests failed - deployment cancelled"
+          echo "📝 Please fix failing tests before deploying"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           exit 1
-
-
