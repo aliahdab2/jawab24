@@ -22,7 +22,7 @@ env:
 
 jobs:
   deploy:
-    name: 🚀 Deploy to Production
+    name: 🚀 Deploy (Zero Downtime)
     runs-on: ubuntu-latest
     # Only deploy if CI passed (or manual trigger)
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
@@ -31,13 +31,14 @@ jobs:
       - name: 📋 Deployment Info
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🚀 JAWAB24 DEPLOYMENT"
+          echo "🚀 JAWAB24 BLUE-GREEN DEPLOYMENT"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "📅 Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "🔀 Branch: ${{ github.ref_name }}"
           echo "📝 Commit: ${{ github.sha }}"
           echo "👤 Actor: ${{ github.actor }}"
           echo "🖥️  Server: ${{ env.SERVER_HOST }}"
+          echo "🔄 Strategy: Blue-Green (Zero Downtime)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: 📥 Checkout code
@@ -56,9 +57,15 @@ jobs:
             echo "📸 Creating backup point..."
             BACKUP_COMMIT=$(git rev-parse HEAD)
             echo "$BACKUP_COMMIT" > .last_successful_deploy
-            echo "✅ Backup commit: $BACKUP_COMMIT"
+            
+            # Save current active environment
+            if [ -f .active-env ]; then
+              cp .active-env .last_active_env
+            fi
+            
+            echo "✅ Backup: $BACKUP_COMMIT"
 
-      - name: 🐳 Deploy Application
+      - name: 🐳 Blue-Green Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.SERVER_HOST }}
@@ -66,7 +73,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 20m
           script: |
-            set -e  # Exit on any error
+            set -e
             cd ${{ env.DEPLOY_PATH }}
             
             echo ""
@@ -79,45 +86,132 @@ jobs:
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🏗️  STEP 2: Building Docker Images"
+            echo "🔍 STEP 2: Determine deployment target"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            # Load frontend env vars for build args
+            
+            # Get current active environment
+            if [ -f .active-env ]; then
+              ACTIVE_ENV=$(cat .active-env)
+            else
+              ACTIVE_ENV="blue"
+              echo "blue" > .active-env
+            fi
+            
+            # Determine target environment
+            if [ "$ACTIVE_ENV" == "blue" ]; then
+              DEPLOY_ENV="green"
+            else
+              DEPLOY_ENV="blue"
+            fi
+            
+            echo "📍 Current active: $ACTIVE_ENV"
+            echo "🎯 Deploying to: $DEPLOY_ENV"
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🏗️  STEP 3: Building Docker images"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Load frontend env vars
             if [ -f ./env/frontend.env ]; then
               export $(grep -v '^#' ./env/frontend.env | xargs)
             fi
+            
             # Build images
-            docker-compose build --parallel
+            docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build --parallel
             echo "✅ Images built"
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🚀 STEP 3: Deploying Containers"
+            echo "🚀 STEP 4: Starting $DEPLOY_ENV environment"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            # Stop and restart containers
-            docker-compose down --remove-orphans
-            docker-compose up -d
-            echo "✅ Containers started"
+            
+            # Ensure shared services are running
+            docker-compose up -d postgres redis nginx
+            
+            # Start new environment
+            docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml up -d \
+              backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV
+            
+            echo "✅ $DEPLOY_ENV containers started"
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "⏳ STEP 4: Waiting for services to start"
+            echo "⏳ STEP 5: Waiting for health checks"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            sleep 15
+            
+            # Wait for containers to be healthy
+            MAX_WAIT=60
+            WAITED=0
+            while [ $WAITED -lt $MAX_WAIT ]; do
+              BACKEND_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-backend-$DEPLOY_ENV 2>/dev/null || echo "starting")
+              FRONTEND_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-frontend-$DEPLOY_ENV 2>/dev/null || echo "starting")
+              
+              echo "   Backend: $BACKEND_HEALTH, Frontend: $FRONTEND_HEALTH"
+              
+              if [ "$BACKEND_HEALTH" == "healthy" ] && [ "$FRONTEND_HEALTH" == "healthy" ]; then
+                echo "✅ All containers healthy!"
+                break
+              fi
+              
+              if [ $WAITED -ge $MAX_WAIT ]; then
+                echo "❌ Health check timeout!"
+                exit 1
+              fi
+              
+              sleep 5
+              WAITED=$((WAITED + 5))
+            done
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "📊 Container Status"
+            echo "🔄 STEP 6: Switching traffic to $DEPLOY_ENV"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            docker-compose ps
+            
+            # Update upstream config
+            cat > ./nginx/upstream.conf << EOF
+            # Active environment: $DEPLOY_ENV
+            # Switched at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            
+            upstream backend_active {
+                server jawab24-backend-$DEPLOY_ENV:3000;
+            }
+            
+            upstream frontend_active {
+                server jawab24-frontend-$DEPLOY_ENV:3001;
+            }
+            
+            upstream ai_worker_active {
+                server jawab24-ai-worker-$DEPLOY_ENV:3002;
+            }
+            EOF
+            
+            # Reload nginx
+            docker exec jawab24-nginx nginx -s reload
+            
+            # Save new active environment
+            echo "$DEPLOY_ENV" > .active-env
+            
+            echo "✅ Traffic switched to $DEPLOY_ENV"
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🧹 STEP 5: Cleanup old images"
+            echo "🧹 STEP 7: Cleanup"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Stop old environment (keep for quick rollback - uncomment to auto-stop)
+            # docker-compose -f docker-compose.yml -f docker-compose.$ACTIVE_ENV.yml stop \
+            #   backend-$ACTIVE_ENV frontend-$ACTIVE_ENV ai-worker-$ACTIVE_ENV
+            
+            # Cleanup old images
             docker image prune -f --filter "until=24h" 2>/dev/null || true
+            
             echo "✅ Cleanup complete"
+            echo ""
+            echo "📊 Container Status:"
+            docker-compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" | head -20
 
-      - name: 🏥 Health Checks
+      - name: 🏥 Verify Deployment
         if: ${{ github.event.inputs.skip_health_check != 'true' }}
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -130,67 +224,52 @@ jobs:
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🏥 HEALTH CHECKS"
+            echo "🏥 VERIFYING DEPLOYMENT"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
             FAILED=0
             
-            # Check 1: All containers running
+            # Verify via public endpoint
             echo ""
-            echo "🔍 Check 1: Container Status"
-            RUNNING=$(docker-compose ps --format json 2>/dev/null | grep -c '"running"' || docker-compose ps | grep -c "Up" || echo "0")
-            echo "   Running containers: $RUNNING"
-            if [ "$RUNNING" -lt 5 ]; then
-              echo "   ⚠️  Expected 5+ containers, found $RUNNING"
-              docker-compose ps
-            else
-              echo "   ✅ All containers running"
-            fi
+            echo "🔍 Testing public endpoints..."
             
-            # Check 2: Backend API
-            echo ""
-            echo "🔍 Check 2: Backend API"
-            for i in 1 2 3 4 5 6 7 8 9 10; do
+            for i in 1 2 3 4 5; do
               if curl -sf http://localhost/api/health > /dev/null 2>&1; then
-                echo "   ✅ Backend API is healthy"
+                echo "   ✅ API responding"
                 break
-              elif [ $i -eq 10 ]; then
-                echo "   ❌ Backend API health check failed"
-                docker-compose logs backend --tail 20
+              elif [ $i -eq 5 ]; then
+                echo "   ❌ API not responding"
                 FAILED=1
               else
-                echo "   ⏳ Attempt $i/10, waiting..."
-                sleep 5
+                sleep 2
               fi
             done
             
-            # Check 3: Frontend
-            echo ""
-            echo "🔍 Check 3: Frontend"
-            for i in 1 2 3 4 5 6 7 8 9 10; do
+            for i in 1 2 3 4 5; do
               if curl -sf http://localhost/ > /dev/null 2>&1; then
-                echo "   ✅ Frontend is healthy"
+                echo "   ✅ Frontend responding"
                 break
-              elif [ $i -eq 10 ]; then
-                echo "   ❌ Frontend health check failed"
-                docker-compose logs frontend --tail 20
+              elif [ $i -eq 5 ]; then
+                echo "   ❌ Frontend not responding"
                 FAILED=1
               else
-                echo "   ⏳ Attempt $i/10, waiting..."
-                sleep 5
+                sleep 2
               fi
             done
             
             echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             if [ $FAILED -eq 0 ]; then
-              echo "✅ ALL HEALTH CHECKS PASSED"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "✅ DEPLOYMENT VERIFIED"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "Active: $(cat .active-env)"
               git rev-parse HEAD > .last_successful_deploy
             else
-              echo "❌ SOME HEALTH CHECKS FAILED"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "❌ VERIFICATION FAILED"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
               exit 1
             fi
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: 🔄 Rollback on Failure
         if: failure()
@@ -199,33 +278,45 @@ jobs:
           host: ${{ env.SERVER_HOST }}
           username: ${{ env.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          command_timeout: 10m
+          command_timeout: 5m
           script: |
             cd ${{ env.DEPLOY_PATH }}
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🔄 INITIATING ROLLBACK"
+            echo "🔄 ROLLING BACK"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
-            if [ -f .last_successful_deploy ]; then
-              ROLLBACK_COMMIT=$(cat .last_successful_deploy)
-              echo "📍 Rolling back to: $ROLLBACK_COMMIT"
+            if [ -f .last_active_env ]; then
+              ROLLBACK_ENV=$(cat .last_active_env)
+              echo "Rolling back to: $ROLLBACK_ENV"
               
-              git fetch origin
-              git reset --hard $ROLLBACK_COMMIT
+              # Update upstream to rollback environment
+              cat > ./nginx/upstream.conf << EOF
+            # Rollback to: $ROLLBACK_ENV
+            # Rolled back at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            
+            upstream backend_active {
+                server jawab24-backend-$ROLLBACK_ENV:3000;
+            }
+            
+            upstream frontend_active {
+                server jawab24-frontend-$ROLLBACK_ENV:3001;
+            }
+            
+            upstream ai_worker_active {
+                server jawab24-ai-worker-$ROLLBACK_ENV:3002;
+            }
+            EOF
               
-              # Rebuild and redeploy
-              docker-compose build --parallel
-              docker-compose down --remove-orphans
-              docker-compose up -d
+              docker exec jawab24-nginx nginx -s reload
+              echo "$ROLLBACK_ENV" > .active-env
               
-              echo "✅ Rollback complete"
-              docker-compose ps
+              echo "✅ Rolled back to $ROLLBACK_ENV"
             else
-              echo "⚠️  No backup point found, manual intervention required"
-              docker-compose ps
+              echo "⚠️ No previous environment to rollback to"
             fi
+            
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: 📊 Deployment Summary
@@ -233,7 +324,7 @@ jobs:
         run: |
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🎉 DEPLOYMENT SUCCESSFUL"
+          echo "🎉 ZERO-DOWNTIME DEPLOYMENT SUCCESSFUL"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "🌐 Website: https://jawab24.com"
           echo "📊 Dashboard: https://jawab24.com/dashboard"

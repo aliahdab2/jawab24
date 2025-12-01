@@ -2,45 +2,76 @@
 
 ## CI/CD Pipeline
 
-Jawab24 uses GitHub Actions for continuous integration and **Zero-Downtime Deployment** with Docker Swarm.
+Jawab24 uses GitHub Actions for continuous integration and **Blue-Green Deployment** for zero downtime.
 
 ### Workflow Overview
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Push to   │ ──► │  CI Tests   │ ──► │   Docker    │ ──► │   Deploy    │
-│    main     │     │  & Linting  │     │   Build     │     │   (Swarm)   │
+│   Push to   │ ──► │  CI Tests   │ ──► │   Docker    │ ──► │ Blue-Green  │
+│    main     │     │  & Linting  │     │   Build     │     │   Deploy    │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
                            │                   │                   │
                            ▼                   ▼                   ▼
                     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
                     │  Backend    │     │  All Images │     │  Zero       │
                     │  Frontend   │     │  Build OK   │     │  Downtime   │
-                    │  AI Worker  │     │             │     │  (start-    │
-                    └─────────────┘     └─────────────┘     │   first)    │
+                    │  AI Worker  │     │             │     │  Instant    │
+                    └─────────────┘     └─────────────┘     │  Rollback   │
                                                             └─────────────┘
 ```
 
-## Zero-Downtime Deployment
+## Blue-Green Deployment
 
-We use **Docker Swarm** with `order: start-first` to ensure zero downtime:
+We use **Blue-Green Deployment** for zero-downtime updates:
 
-1. **New containers start first** - The new version starts before the old one stops
-2. **Health checks pass** - Swarm waits for the new container to be healthy
-3. **Old containers stop** - Only after new ones are ready, old ones are removed
-4. **Automatic rollback** - If new containers fail, Swarm automatically rolls back
+### How It Works
 
-### CI Pipeline (`ci.yml`)
+```
+                    ┌─────────────────────────────────────┐
+                    │              NGINX                   │
+                    │         (Load Balancer)              │
+                    └──────────────┬──────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │                             │
+           ┌────────▼────────┐          ┌────────▼────────┐
+           │  BLUE Environment│          │ GREEN Environment│
+           │   (Active)       │          │   (Standby)      │
+           │                  │          │                  │
+           │  - backend-blue  │          │  - backend-green │
+           │  - frontend-blue │          │  - frontend-green│
+           │  - ai-worker-blue│          │  - ai-worker-green│
+           └──────────────────┘          └──────────────────┘
+```
+
+### Deployment Steps
+
+1. **Deploy to inactive environment** - If Blue is active, deploy to Green
+2. **Health checks pass** - Wait for new containers to be healthy
+3. **Switch traffic** - Update Nginx to point to the new environment
+4. **Keep old environment** - For instant rollback if needed
+
+### Benefits
+
+| Feature | Benefit |
+|---------|---------|
+| **Zero Downtime** | Traffic switches instantly via Nginx |
+| **Instant Rollback** | Old environment stays running |
+| **Safe Testing** | New version is tested before switch |
+| **No User Impact** | Users never see errors during deploy |
+
+## CI Pipeline (`ci.yml`)
 
 Runs on every push to `main` or `develop`, and on all PRs to `main`.
 
 **Jobs:**
-1. **Backend** - TypeScript check, linting, tests, build
+1. **Backend** - TypeScript check, linting, tests (95 tests), build
 2. **AI Worker** - TypeScript check, linting, build
 3. **Frontend** - TypeScript check, linting, Next.js build
 4. **Docker** - Build all Docker images (only if above jobs pass)
 
-### Deploy Pipeline (`deploy.yml`)
+## Deploy Pipeline (`deploy.yml`)
 
 Runs automatically after CI passes on `main` branch.
 
@@ -48,190 +79,143 @@ Runs automatically after CI passes on `main` branch.
 1. SSH into production server
 2. Create backup of current deployment
 3. Pull latest code
-4. Initialize Docker Swarm (if not already)
-5. Build Docker images locally
-6. Deploy with `docker stack deploy` (zero downtime)
-7. Wait for services to converge
-8. Run health checks (with retry logic)
-9. Auto-rollback if health checks fail
-10. Report success/failure
+4. Build Docker images
+5. Start new environment (blue or green)
+6. Wait for health checks
+7. Switch Nginx traffic
+8. Verify deployment
+9. (Optional) Stop old environment
 
-### Database Migrations
+## Manual Deployment
 
-Migrations run automatically on container startup:
-- The backend Dockerfile runs `node dist/migrate.js` before starting the app
-- Uses Drizzle ORM migrations from `backend/drizzle/` folder
-- Migrations are generated during Docker build
-
-To run migrations manually:
-```bash
-# Generate new migration after schema changes
-npm run generate --workspace=jawab24-backend
-
-# Apply migrations
-npm run deploy:migrate --workspace=jawab24-backend
-```
-
-## Required GitHub Secrets
-
-Set these in your repository settings (Settings → Secrets → Actions):
-
-| Secret | Description |
-|--------|-------------|
-| `SERVER_SSH_KEY` | Private SSH key for server access |
-| `FACEBOOK_APP_ID` | Facebook App ID for frontend build |
-
-### Setting Up SSH Key
-
-1. Generate a deploy key (if you haven't already):
-   ```bash
-   ssh-keygen -t ed25519 -C "github-actions-deploy" -f deploy_key
-   ```
-
-2. Add the public key to your server:
-   ```bash
-   cat deploy_key.pub >> ~/.ssh/authorized_keys
-   ```
-
-3. Add the private key to GitHub Secrets as `SERVER_SSH_KEY`
-
-## Local Development
-
-### Pre-commit Checks
-
-Always run before pushing:
+### Using the deploy script:
 
 ```bash
-./scripts/pre-deploy.sh
-```
-
-This runs:
-- TypeScript checks for all projects
-- Backend tests
-- Build verification
-- Docker build test
-
-### Manual Deployment
-
-If you need to deploy manually (not recommended):
-
-```bash
-# SSH into server
 ssh root@91.99.95.196
-
-# Go to project
 cd /var/www/jawab24
 
-# Pull latest code
-git pull
+# Deploy (auto-detects blue/green)
+./scripts/deploy-blue-green.sh deploy
 
-# Build images
-docker-compose build --parallel
+# Check status
+./scripts/deploy-blue-green.sh status
 
-# Deploy with zero downtime
-docker stack deploy -c docker-compose.yml jawab24 --prune
+# Rollback to previous environment
+./scripts/deploy-blue-green.sh rollback
 ```
 
-### First-Time Server Setup
-
-On a fresh server, initialize Docker Swarm:
+### Using docker-compose directly:
 
 ```bash
-docker swarm init --advertise-addr 127.0.0.1
+cd /var/www/jawab24
+
+# Check current active environment
+cat .active-env  # shows "blue" or "green"
+
+# If blue is active, deploy to green:
+docker-compose -f docker-compose.yml -f docker-compose.green.yml up -d \
+  backend-green frontend-green ai-worker-green
+
+# Then update nginx/upstream.conf and reload nginx
+docker exec jawab24-nginx nginx -s reload
 ```
-
-## Branch Protection (Recommended)
-
-Set up branch protection for `main`:
-
-1. Go to Settings → Branches → Add rule
-2. Branch name pattern: `main`
-3. Enable:
-   - ✅ Require a pull request before merging
-   - ✅ Require status checks to pass before merging
-   - ✅ Require branches to be up to date before merging
-   - ✅ Select required checks: `backend`, `frontend`, `ai-worker`, `docker`
 
 ## Rollback
 
-The deployment pipeline includes **automatic rollback** if health checks fail. It restores from `.last_successful_deploy` backup.
+### Automatic Rollback
+If deployment fails, the GitHub Action automatically rolls back to the previous environment.
 
-For manual rollback:
-
+### Manual Rollback
 ```bash
-# SSH into server
-ssh root@91.99.95.196
-
-# Go to project
 cd /var/www/jawab24
 
-# Rollback to previous commit
-git reset --hard HEAD~1
+# Quick rollback (just switch traffic)
+./scripts/deploy-blue-green.sh rollback
 
-# Rebuild
-docker-compose up -d --build
+# Or manually:
+# If green is active and broken, switch back to blue:
+cat > ./nginx/upstream.conf << EOF
+upstream backend_active {
+    server jawab24-backend-blue:3000;
+}
+upstream frontend_active {
+    server jawab24-frontend-blue:3001;
+}
+upstream ai_worker_active {
+    server jawab24-ai-worker-blue:3002;
+}
+EOF
+
+docker exec jawab24-nginx nginx -s reload
+echo "blue" > .active-env
 ```
-
-**Note:** Database migrations are forward-only. If you need to rollback a migration, create a new migration that reverses the changes.
 
 ## Monitoring
 
-### Check Service Status
+### Check deployment status:
 ```bash
-# List all services
-docker stack services jawab24
+# Which environment is active?
+cat /var/www/jawab24/.active-env
 
-# Check specific service tasks
-docker service ps jawab24_backend
+# Container status
+docker-compose ps
+
+# Check specific environment
+docker ps | grep blue
+docker ps | grep green
+
+# View logs
+docker-compose logs -f backend-blue
+docker-compose logs -f frontend-green
 ```
 
-### View Logs
-```bash
-# All services (Swarm mode)
-docker service logs jawab24_backend
-docker service logs jawab24_frontend
+### Health check endpoints:
+- **Website:** https://jawab24.com
+- **API Health:** https://jawab24.com/api/health
+- **Nginx Health:** https://jawab24.com/nginx-health
 
-# Follow logs
-docker service logs -f jawab24_backend
-```
+## Server Requirements
 
-### Health Endpoints
-- Backend: `https://jawab24.com/api/health`
-- Frontend: `https://jawab24.com`
+- **OS:** Ubuntu 22.04+ or Debian 11+
+- **Docker:** 24.0+
+- **Docker Compose:** v2.20+
+- **RAM:** 4GB minimum
+- **Disk:** 20GB minimum
+- **SSL:** Let's Encrypt certificates in `/etc/letsencrypt`
 
 ## Troubleshooting
 
-### CI Fails
+### Deployment stuck
+```bash
+# Check which containers are running
+docker ps
 
-1. Check the GitHub Actions logs
-2. Run `./scripts/pre-deploy.sh` locally to reproduce
-3. Fix the issue and push again
+# Check container logs
+docker-compose logs --tail 50 backend-blue
+docker-compose logs --tail 50 frontend-green
 
-### Deploy Fails
+# Restart specific service
+docker-compose restart backend-blue
+```
 
-1. Check the deploy workflow logs
-2. SSH into server and check:
-   ```bash
-   docker-compose logs --tail=100
-   ```
-3. Check if disk space is full:
-   ```bash
-   df -h
-   ```
+### Health checks failing
+```bash
+# Test health endpoint directly
+docker exec jawab24-backend-blue wget -qO- http://127.0.0.1:3000/health
+docker exec jawab24-frontend-blue wget -qO- http://127.0.0.1:3001
 
-### Container Won't Start
+# Check if ports are listening
+docker exec jawab24-backend-blue netstat -tlnp
+```
 
-1. Check logs:
-   ```bash
-   docker-compose logs backend
-   ```
-2. Check if ports are in use:
-   ```bash
-   netstat -tlnp | grep 3000
-   ```
-3. Restart with fresh build:
-   ```bash
-   docker-compose down
-   docker-compose up -d --build --force-recreate
-   ```
-# Deployment triggered at Sat Nov 29 22:02:17 CET 2025
+### Nginx not switching
+```bash
+# Check nginx config
+docker exec jawab24-nginx cat /etc/nginx/upstream.conf
+
+# Test nginx config
+docker exec jawab24-nginx nginx -t
+
+# Reload nginx
+docker exec jawab24-nginx nginx -s reload
+```
