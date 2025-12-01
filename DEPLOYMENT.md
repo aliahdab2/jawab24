@@ -2,23 +2,33 @@
 
 ## CI/CD Pipeline
 
-Jawab24 uses GitHub Actions for continuous integration and deployment.
+Jawab24 uses GitHub Actions for continuous integration and **Zero-Downtime Deployment** with Docker Swarm.
 
 ### Workflow Overview
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │   Push to   │ ──► │  CI Tests   │ ──► │   Docker    │ ──► │   Deploy    │
-│    main     │     │  & Linting  │     │   Build     │     │   to Prod   │
+│    main     │     │  & Linting  │     │   Build     │     │   (Swarm)   │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
                            │                   │                   │
                            ▼                   ▼                   ▼
                     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-                    │  Backend    │     │  All Images │     │  Health     │
-                    │  Frontend   │     │  Build OK   │     │  Checks     │
-                    │  AI Worker  │     │             │     │             │
-                    └─────────────┘     └─────────────┘     └─────────────┘
+                    │  Backend    │     │  All Images │     │  Zero       │
+                    │  Frontend   │     │  Build OK   │     │  Downtime   │
+                    │  AI Worker  │     │             │     │  (start-    │
+                    └─────────────┘     └─────────────┘     │   first)    │
+                                                            └─────────────┘
 ```
+
+## Zero-Downtime Deployment
+
+We use **Docker Swarm** with `order: start-first` to ensure zero downtime:
+
+1. **New containers start first** - The new version starts before the old one stops
+2. **Health checks pass** - Swarm waits for the new container to be healthy
+3. **Old containers stop** - Only after new ones are ready, old ones are removed
+4. **Automatic rollback** - If new containers fail, Swarm automatically rolls back
 
 ### CI Pipeline (`ci.yml`)
 
@@ -38,11 +48,13 @@ Runs automatically after CI passes on `main` branch.
 1. SSH into production server
 2. Create backup of current deployment
 3. Pull latest code
-4. Build and restart containers
-5. **Run database migrations automatically**
-6. Run health checks (with retry logic)
-7. Auto-rollback if health checks fail
-8. Report success/failure
+4. Initialize Docker Swarm (if not already)
+5. Build Docker images locally
+6. Deploy with `docker stack deploy` (zero downtime)
+7. Wait for services to converge
+8. Run health checks (with retry logic)
+9. Auto-rollback if health checks fail
+10. Report success/failure
 
 ### Database Migrations
 
@@ -104,7 +116,28 @@ This runs:
 If you need to deploy manually (not recommended):
 
 ```bash
-ssh root@91.99.95.196 "cd /var/www/jawab24 && git pull && docker-compose up -d --build"
+# SSH into server
+ssh root@91.99.95.196
+
+# Go to project
+cd /var/www/jawab24
+
+# Pull latest code
+git pull
+
+# Build images
+docker-compose build --parallel
+
+# Deploy with zero downtime
+docker stack deploy -c docker-compose.yml jawab24 --prune
+```
+
+### First-Time Server Setup
+
+On a fresh server, initialize Docker Swarm:
+
+```bash
+docker swarm init --advertise-addr 127.0.0.1
 ```
 
 ## Branch Protection (Recommended)
@@ -143,18 +176,23 @@ docker-compose up -d --build
 
 ## Monitoring
 
-### Check Container Status
+### Check Service Status
 ```bash
-docker-compose ps
+# List all services
+docker stack services jawab24
+
+# Check specific service tasks
+docker service ps jawab24_backend
 ```
 
 ### View Logs
 ```bash
-# All services
-docker-compose logs -f
+# All services (Swarm mode)
+docker service logs jawab24_backend
+docker service logs jawab24_frontend
 
-# Specific service
-docker-compose logs -f backend
+# Follow logs
+docker service logs -f jawab24_backend
 ```
 
 ### Health Endpoints
