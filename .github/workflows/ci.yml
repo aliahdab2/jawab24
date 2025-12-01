@@ -76,9 +76,8 @@ jobs:
       - name: Run linter
         run: npm run lint --workspace=jawab24-backend
 
-      # Tests are skipped for now as they need DB setup which might be tricky in workspaces without specific config
-      # - name: Run tests
-      #   run: npm test --workspace=jawab24-backend
+      - name: Run tests
+        run: npm test --workspace=jawab24-backend -- --run
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
