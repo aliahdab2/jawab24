@@ -231,29 +231,62 @@ export default function RulesPage() {
               className="animate-slide-up"
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
-              <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                {/* Priority Controls */}
-                <div className="flex lg:flex-col items-center gap-1">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handlePriorityChange(rule.id, 'up')}
-                    disabled={i === 0}
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </Button>
-                  <div className="w-8 h-8 rounded-lg bg-surface-100 flex items-center justify-center">
-                    <span className="text-sm font-bold text-surface-600">{rule.priority}</span>
+              <div className="flex flex-col gap-4">
+                {/* Mobile: Header with priority and toggle */}
+                <div className="flex items-center justify-between lg:hidden">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-surface-100 flex items-center justify-center">
+                      <span className="text-sm font-bold text-surface-600">#{rule.priority}</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handlePriorityChange(rule.id, 'up')}
+                        disabled={i === 0}
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handlePriorityChange(rule.id, 'down')}
+                        disabled={i === rules.length - 1}
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handlePriorityChange(rule.id, 'down')}
-                    disabled={i === rules.length - 1}
-                  >
-                    <ArrowDown className="w-4 h-4" />
-                  </Button>
+                  <Toggle 
+                    enabled={rule.active} 
+                    onChange={(active) => handleToggle(rule.id, active)}
+                    size="sm"
+                  />
                 </div>
+
+                <div className="flex lg:items-center gap-4">
+                  {/* Desktop: Priority Controls */}
+                  <div className="hidden lg:flex lg:flex-col items-center gap-1">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => handlePriorityChange(rule.id, 'up')}
+                      disabled={i === 0}
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </Button>
+                    <div className="w-8 h-8 rounded-lg bg-surface-100 flex items-center justify-center">
+                      <span className="text-sm font-bold text-surface-600">{rule.priority}</span>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => handlePriorityChange(rule.id, 'down')}
+                      disabled={i === rules.length - 1}
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </Button>
+                  </div>
 
                 {/* Rule Content */}
                 <div className="flex-1 text-start">
@@ -287,8 +320,8 @@ export default function RulesPage() {
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2">
+                {/* Actions - Desktop */}
+                <div className="hidden lg:flex items-center gap-2">
                   <Toggle 
                     enabled={rule.active} 
                     onChange={(active) => handleToggle(rule.id, active)}
@@ -299,6 +332,19 @@ export default function RulesPage() {
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => handleDelete(rule.id)}>
                     <Trash2 className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
+                </div>
+
+                {/* Actions - Mobile */}
+                <div className="flex lg:hidden items-center justify-end gap-2 pt-3 border-t border-surface-100">
+                  <Button variant="ghost" size="sm" onClick={() => handleOpenModal(rule)}>
+                    <Edit className="w-4 h-4" />
+                    <span className="text-xs">{t('common.edit')}</span>
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(rule.id)}>
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                    <span className="text-xs text-red-500">{t('common.delete')}</span>
                   </Button>
                 </div>
               </div>

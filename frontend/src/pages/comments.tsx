@@ -113,29 +113,29 @@ export default function CommentsPage() {
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card className="text-center">
-          <p className="text-2xl font-bold text-surface-900">{stats.total}</p>
-          <p className="text-sm text-surface-500">{t('dashboard.totalComments')}</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+        <Card className="text-center p-4 md:p-6">
+          <p className="text-xl md:text-2xl font-bold text-surface-900">{stats.total}</p>
+          <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.totalComments')}</p>
         </Card>
-        <Card className="text-center">
-          <p className="text-2xl font-bold text-emerald-600">{stats.replied}</p>
-          <p className="text-sm text-surface-500">{t('comments.replied')}</p>
+        <Card className="text-center p-4 md:p-6">
+          <p className="text-xl md:text-2xl font-bold text-emerald-600">{stats.replied}</p>
+          <p className="text-xs md:text-sm text-surface-500 truncate">{t('comments.replied')}</p>
         </Card>
-        <Card className="text-center">
-          <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
-          <p className="text-sm text-surface-500">{t('comments.pending')}</p>
+        <Card className="text-center p-4 md:p-6">
+          <p className="text-xl md:text-2xl font-bold text-amber-600">{stats.pending}</p>
+          <p className="text-xs md:text-sm text-surface-500 truncate">{t('comments.pending')}</p>
         </Card>
-        <Card className="text-center">
-          <p className="text-2xl font-bold text-brand-600">{stats.aiReplies}</p>
-          <p className="text-sm text-surface-500">{t('dashboard.aiReplies')}</p>
+        <Card className="text-center p-4 md:p-6">
+          <p className="text-xl md:text-2xl font-bold text-brand-600">{stats.aiReplies}</p>
+          <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.aiReplies')}</p>
         </Card>
       </div>
 
       {/* Filters */}
-      <Card className="mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
+      <Card className="mb-6 p-4 md:p-6">
+        <div className="flex flex-col gap-3 md:gap-4">
+          <div className="relative">
             <Search 
               className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400"
               style={{ insetInlineStart: '0.75rem' }}
@@ -147,13 +147,14 @@ export default function CommentsPage() {
               style={{ paddingInlineStart: '2.5rem' }}
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
             {(['all', 'replied', 'pending'] as FilterType[]).map((f) => (
               <Button
                 key={f}
                 variant={filter === f ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => setFilter(f)}
+                className="whitespace-nowrap flex-shrink-0"
               >
                 {getFilterLabel(f)}
               </Button>

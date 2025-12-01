@@ -32,15 +32,17 @@ function SettingsToggleRow({
   onChange: (enabled: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between py-3">
-      <div className="flex items-center gap-3">
-        {icon}
-        <div className="text-start">
-          <p className="font-medium text-surface-900">{title}</p>
-          <p className="text-sm text-surface-500">{description}</p>
+    <div className="flex items-start justify-between gap-3 py-3">
+      <div className="flex items-start gap-3 min-w-0 flex-1">
+        <div className="flex-shrink-0 mt-0.5">{icon}</div>
+        <div className="text-start min-w-0">
+          <p className="font-medium text-surface-900 text-sm md:text-base">{title}</p>
+          <p className="text-xs md:text-sm text-surface-500 line-clamp-2">{description}</p>
         </div>
       </div>
-      <Toggle enabled={enabled} onChange={onChange} />
+      <div className="flex-shrink-0">
+        <Toggle enabled={enabled} onChange={onChange} />
+      </div>
     </div>
   );
 }
@@ -178,7 +180,7 @@ export default function SettingsPage() {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Auto-Reply Settings - Most Important */}
         <Card className="lg:col-span-2">
           <CardHeader 

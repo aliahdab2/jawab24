@@ -170,7 +170,7 @@ export default function DashboardPage() {
       />
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6 mb-6 md:mb-8">
         {stats.map((stat, i) => (
           <Card 
             key={stat.nameKey} 
@@ -179,19 +179,19 @@ export default function DashboardPage() {
             style={{ animationDelay: `${i * 0.1}s` } as React.CSSProperties}
           >
             <div className="flex items-start justify-between">
-              <div className="text-start">
-                <p className="text-sm text-surface-500 mb-1">{t(stat.nameKey)}</p>
-                <p className="text-2xl lg:text-3xl font-display font-bold text-surface-900">
+              <div className="text-start flex-1 min-w-0">
+                <p className="text-xs md:text-sm text-surface-500 mb-1 truncate">{t(stat.nameKey)}</p>
+                <p className="text-xl md:text-2xl lg:text-3xl font-display font-bold text-surface-900">
                   {stat.value}
                 </p>
               </div>
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                 stat.color === 'brand' ? 'bg-brand-100' :
                 stat.color === 'accent' ? 'bg-accent-100' :
                 stat.color === 'emerald' ? 'bg-emerald-100' :
                 'bg-violet-100'
               }`}>
-                <stat.icon className={`w-6 h-6 ${
+                <stat.icon className={`w-5 h-5 md:w-6 md:h-6 ${
                   stat.color === 'brand' ? 'text-brand-600' :
                   stat.color === 'accent' ? 'text-accent-600' :
                   stat.color === 'emerald' ? 'text-emerald-600' :
@@ -199,10 +199,10 @@ export default function DashboardPage() {
                 }`} />
               </div>
             </div>
-            {/* Trend removed for now as we don't have historical data yet */}
-             <div className="mt-4 flex items-center gap-1 opacity-50">
-              <ArrowUpRight className="w-4 h-4 text-surface-400" />
-              <span className="text-sm text-surface-400">
+            {/* Trend - hidden on small mobile */}
+            <div className="mt-2 md:mt-4 hidden sm:flex items-center gap-1 opacity-50">
+              <ArrowUpRight className="w-3 h-3 md:w-4 md:h-4 text-surface-400" />
+              <span className="text-xs md:text-sm text-surface-400">
                 {t('dashboard.vsLastWeek')}
               </span>
             </div>
@@ -295,44 +295,41 @@ export default function DashboardPage() {
 
       {/* Quick Stats Bar */}
       <Card className="mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
               <BarChart3 className="w-5 h-5 text-brand-600" />
             </div>
-            <div className="text-start">
-              <p className="text-sm text-surface-500">{t('dashboard.replyRate')}</p>
-              <p className="text-xl font-bold text-surface-900">{statsData.replyRate}%</p>
+            <div className="text-start min-w-0">
+              <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.replyRate')}</p>
+              <p className="text-lg md:text-xl font-bold text-surface-900">{statsData.replyRate}%</p>
             </div>
           </div>
-          <div className="h-12 w-px bg-surface-200 hidden md:block" />
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
               <TrendingUp className="w-5 h-5 text-emerald-600" />
             </div>
-            <div className="text-start">
-              <p className="text-sm text-surface-500">{t('dashboard.activePages')}</p>
-              <p className="text-xl font-bold text-surface-900">{statsData.activePages}</p>
+            <div className="text-start min-w-0">
+              <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.activePages')}</p>
+              <p className="text-lg md:text-xl font-bold text-surface-900">{statsData.activePages}</p>
             </div>
           </div>
-          <div className="h-12 w-px bg-surface-200 hidden md:block" />
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-accent-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-accent-100 flex items-center justify-center flex-shrink-0">
               <FileText className="w-5 h-5 text-accent-600" />
             </div>
-            <div className="text-start">
-              <p className="text-sm text-surface-500">{t('dashboard.templates')}</p>
-              <p className="text-xl font-bold text-surface-900">{statsData.templatesCount}</p>
+            <div className="text-start min-w-0">
+              <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.templates')}</p>
+              <p className="text-lg md:text-xl font-bold text-surface-900">{statsData.templatesCount}</p>
             </div>
           </div>
-          <div className="h-12 w-px bg-surface-200 hidden md:block" />
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
               <Zap className="w-5 h-5 text-violet-600" />
             </div>
-            <div className="text-start">
-              <p className="text-sm text-surface-500">{t('dashboard.activeRules')}</p>
-              <p className="text-xl font-bold text-surface-900">{statsData.activeRules}</p>
+            <div className="text-start min-w-0">
+              <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.activeRules')}</p>
+              <p className="text-lg md:text-xl font-bold text-surface-900">{statsData.activeRules}</p>
             </div>
           </div>
         </div>

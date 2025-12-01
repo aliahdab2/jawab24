@@ -186,14 +186,14 @@ export default function PagesPage() {
               className="animate-slide-up"
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-white" />
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 md:w-6 md:h-6 text-white" />
                   </div>
-                  <div className="text-start">
-                    <h3 className="font-semibold text-surface-900">{page.name}</h3>
-                    <p className="text-sm text-surface-500">ID: {page.facebookPageId}</p>
+                  <div className="text-start min-w-0">
+                    <h3 className="font-semibold text-surface-900 truncate">{page.name}</h3>
+                    <p className="text-xs md:text-sm text-surface-500 truncate">ID: {page.facebookPageId}</p>
                   </div>
                 </div>
                 <Toggle 
@@ -203,26 +203,26 @@ export default function PagesPage() {
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-4 py-4 border-y border-surface-100">
+              <div className="grid grid-cols-3 gap-2 md:gap-4 py-3 md:py-4 border-y border-surface-100">
                 <div className="text-center">
                   <div className="flex items-center justify-center gap-1 text-surface-500 mb-1">
-                    <MessageSquare className="w-4 h-4" />
-                    <span className="text-xs">{t('comments.title')}</span>
+                    <MessageSquare className="w-3 h-3 md:w-4 md:h-4" />
+                    <span className="text-[10px] md:text-xs">{t('comments.title')}</span>
                   </div>
-                  <p className="text-lg font-semibold text-surface-900">{(page.commentsCount || 0).toLocaleString()}</p>
+                  <p className="text-base md:text-lg font-semibold text-surface-900">{(page.commentsCount || 0).toLocaleString()}</p>
                 </div>
                 <div className="text-center border-x border-surface-100">
                   <div className="flex items-center justify-center gap-1 text-surface-500 mb-1">
-                    <TrendingUp className="w-4 h-4" />
-                    <span className="text-xs">{t('dashboard.autoReplies')}</span>
+                    <TrendingUp className="w-3 h-3 md:w-4 md:h-4" />
+                    <span className="text-[10px] md:text-xs">{t('dashboard.autoReplies')}</span>
                   </div>
-                  <p className="text-lg font-semibold text-surface-900">{(page.repliesCount || 0).toLocaleString()}</p>
+                  <p className="text-base md:text-lg font-semibold text-surface-900">{(page.repliesCount || 0).toLocaleString()}</p>
                 </div>
                 <div className="text-center">
                   <div className="flex items-center justify-center gap-1 text-surface-500 mb-1">
-                    <span className="text-xs">{t('dashboard.replyRate')}</span>
+                    <span className="text-[10px] md:text-xs">{t('dashboard.replyRate')}</span>
                   </div>
-                  <p className="text-lg font-semibold text-emerald-600">{page.replyRate || 0}%</p>
+                  <p className="text-base md:text-lg font-semibold text-emerald-600">{page.replyRate || 0}%</p>
                 </div>
               </div>
 

@@ -162,7 +162,7 @@ export default function TemplatesPage() {
 
       {/* Templates Grid */}
       {templates.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {templates.map((template, i) => (
             <Card 
               key={template.id}

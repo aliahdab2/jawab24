@@ -159,8 +159,8 @@ export default function LoginPage() {
 
         {/* Mobile Layout */}
         <div className="lg:hidden min-h-screen flex flex-col">
-          {/* Header with gradient background */}
-          <div className="bg-gradient-to-br from-surface-900 via-surface-800 to-surface-900 px-6 pt-12 pb-16 relative overflow-hidden">
+          {/* Header with gradient background - reduced size */}
+          <div className="bg-gradient-to-br from-surface-900 via-surface-800 to-surface-900 px-6 pt-8 pb-12 relative overflow-hidden">
             {/* Background Pattern */}
             <div className="absolute inset-0 opacity-20">
               <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500 rounded-full blur-3xl translate-x-1/2 -translate-y-1/2" />
@@ -196,8 +196,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Login Card - overlapping the header */}
-          <div className="flex-1 px-6 -mt-8 pb-8">
+          {/* Login Card - with spacing from header */}
+          <div className="flex-1 px-6 pt-6 pb-8">
             <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-sm mx-auto">
               <div className="text-center mb-6">
                 <h2 className="text-xl font-display font-bold text-surface-900 mb-2">
