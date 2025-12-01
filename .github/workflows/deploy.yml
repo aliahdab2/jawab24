@@ -91,6 +91,11 @@ jobs:
               echo "✅ Swarm already active"
             fi
             
+            # Clean up any conflicting networks from old docker-compose setup
+            echo "   Cleaning up old networks..."
+            docker network rm jawab24_jawab24-network 2>/dev/null || true
+            docker network rm autoreply_jawab24-network 2>/dev/null || true
+            
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🏗️  STEP 3: Building Docker Images"

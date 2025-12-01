@@ -13,15 +13,7 @@ import {
   Globe,
   Tag
 } from 'lucide-react';
-
-interface Template {
-  id: string;
-  name: string;
-  translations: Record<string, string>;
-  keywords: string[];
-  active: boolean;
-  usageCount?: number; // Optional as backend might not calculate this yet
-}
+import type { Template } from '@jawab24/shared';
 
 export default function TemplatesPage() {
   const { t, language } = useTranslation();
@@ -186,7 +178,7 @@ export default function TemplatesPage() {
                   </div>
                 </div>
                 <Toggle 
-                  enabled={template.active} 
+                  enabled={template.active ?? false} 
                   onChange={(active) => handleToggle(template.id, active)}
                   size="sm"
                 />

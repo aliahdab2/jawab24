@@ -18,24 +18,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-
-interface Comment {
-  id: string;
-  message: string;
-  fromName: string | null;
-  replied: boolean;
-  replyMethod: 'template' | 'ai' | 'manual' | null;
-  createdAt: string;
-  pageId: string;
-}
-
-interface Page {
-  id: string;
-  name: string;
-  commentsCount: number; // This might need to be calculated if backend doesn't return it
-  repliesCount: number;
-  autoReplyEnabled: boolean;
-}
+import type { Comment, Page } from '@jawab24/shared';
 
 export default function DashboardPage() {
   const { t, language } = useTranslation();
@@ -105,14 +88,15 @@ export default function DashboardPage() {
     }
   }, [token, fetchDashboardData]);
 
-  const formatTime = (dateString: string) => {
+  const formatTime = (dateValue: string | Date | null | undefined) => {
+    if (!dateValue) return '-';
     try {
-      return formatDistanceToNow(new Date(dateString), { 
+      return formatDistanceToNow(new Date(dateValue), { 
         addSuffix: true,
         locale: language === 'ar' ? ar : enUS 
       });
-    } catch (e) {
-      return dateString;
+    } catch {
+      return String(dateValue);
     }
   };
 

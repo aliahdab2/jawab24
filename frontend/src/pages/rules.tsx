@@ -14,21 +14,7 @@ import {
   Tag,
   BookTemplate
 } from 'lucide-react';
-
-interface Rule {
-  id: string;
-  name: string;
-  keywords: string[];
-  templateId: string;
-  priority: number;
-  active: boolean;
-  matchCount?: number;
-}
-
-interface Template {
-  id: string;
-  name: string;
-}
+import type { Rule, Template } from '@jawab24/shared';
 
 export default function RulesPage() {
   const { t, language } = useTranslation();
@@ -57,7 +43,7 @@ export default function RulesPage() {
       ]);
       
       // Sort rules by priority
-      const sortedRules = rulesRes.data.sort((a: Rule, b: Rule) => a.priority - b.priority);
+      const sortedRules = rulesRes.data.sort((a: Rule, b: Rule) => (a.priority ?? 0) - (b.priority ?? 0));
       setRules(sortedRules);
       setTemplates(templatesRes.data);
     } catch (error) {
@@ -179,7 +165,8 @@ export default function RulesPage() {
     }
   };
 
-  const getTemplateName = (id: string) => {
+  const getTemplateName = (id: string | null) => {
+      if (!id) return t('common.unknown');
       return templates.find(t => t.id === id)?.name || t('common.unknown');
   };
 
@@ -258,7 +245,7 @@ export default function RulesPage() {
                     </div>
                   </div>
                   <Toggle 
-                    enabled={rule.active} 
+                    enabled={rule.active ?? false} 
                     onChange={(active) => handleToggle(rule.id, active)}
                     size="sm"
                   />
@@ -323,7 +310,7 @@ export default function RulesPage() {
                 {/* Actions - Desktop */}
                 <div className="hidden lg:flex items-center gap-2">
                   <Toggle 
-                    enabled={rule.active} 
+                    enabled={rule.active ?? false} 
                     onChange={(active) => handleToggle(rule.id, active)}
                     size="sm"
                   />

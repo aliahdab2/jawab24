@@ -15,20 +15,7 @@ import {
   Check
 } from 'lucide-react';
 import axios from 'axios';
-
-// Define Page interface matching backend
-interface Page {
-  id: string;
-  name: string;
-  facebookPageId: string;
-  autoReplyEnabled: boolean;
-  knowledgeBase?: string;
-  commentsCount?: number;
-  repliesCount?: number;
-  replyRate?: number;
-  lastActivity?: number;
-  createdAt: string;
-}
+import type { Page } from '@jawab24/shared';
 
 export default function PagesPage() {
   const { t, language } = useTranslation();
@@ -197,7 +184,7 @@ export default function PagesPage() {
                   </div>
                 </div>
                 <Toggle 
-                  enabled={page.autoReplyEnabled} 
+                  enabled={page.autoReplyEnabled ?? false} 
                   onChange={(enabled) => handleToggle(page.id, enabled)} 
                 />
               </div>

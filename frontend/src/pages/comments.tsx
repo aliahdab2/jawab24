@@ -15,18 +15,7 @@ import {
 import { useTranslation } from '@/i18n';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-
-interface Comment {
-  id: string;
-  message: string;
-  fromName: string | null;
-  replied: boolean;
-  replyText: string | null;
-  replyMethod: 'template' | 'ai' | 'manual' | null;
-  detectedLanguage: string | null;
-  createdAt: string;
-  postId: string;
-}
+import type { Comment } from '@jawab24/shared';
 
 type FilterType = 'all' | 'replied' | 'pending';
 
@@ -83,14 +72,15 @@ export default function CommentsPage() {
     }
   };
 
-  const formatTime = (dateString: string) => {
+  const formatTime = (dateValue: string | Date | null | undefined) => {
+    if (!dateValue) return '-';
     try {
-      return formatDistanceToNow(new Date(dateString), { 
+      return formatDistanceToNow(new Date(dateValue), { 
         addSuffix: true,
         locale: language === 'ar' ? ar : enUS 
       });
-    } catch (e) {
-      return dateString;
+    } catch {
+      return String(dateValue);
     }
   };
 
