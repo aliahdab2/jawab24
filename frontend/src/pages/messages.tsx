@@ -81,9 +81,10 @@ export default function MessagesPage() {
     }
   };
 
-  const formatTime = (dateString: string) => {
+  const formatTime = (dateValue: string | Date | null | undefined) => {
+    if (!dateValue) return language === 'ar' ? 'غير معروف' : 'Unknown';
     try {
-      return formatDistanceToNow(new Date(dateString), { 
+      return formatDistanceToNow(new Date(dateValue), { 
         addSuffix: true,
         locale: language === 'ar' ? ar : enUS 
       });
@@ -104,15 +105,19 @@ export default function MessagesPage() {
       };
     }
     acc[key].messages.push(msg);
-    if (new Date(msg.createdAt) > new Date(acc[key].lastMessage.createdAt)) {
+    const msgDate = msg.createdAt ? new Date(msg.createdAt) : new Date(0);
+    const lastMsgDate = acc[key].lastMessage.createdAt ? new Date(acc[key].lastMessage.createdAt) : new Date(0);
+    if (msgDate > lastMsgDate) {
       acc[key].lastMessage = msg;
     }
     return acc;
   }, {} as Record<string, { senderId: string; senderName: string | null; messages: Message[]; lastMessage: Message }>);
 
-  const conversations = Object.values(groupedMessages).sort(
-    (a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
-  );
+  const conversations = Object.values(groupedMessages).sort((a, b) => {
+    const dateA = a.lastMessage.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
+    const dateB = b.lastMessage.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
   if (loading && messages.length === 0) {
     return (
