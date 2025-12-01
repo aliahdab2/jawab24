@@ -1,4 +1,4 @@
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, FileText, MessageSquare, BookTemplate, Zap, Settings, MoreHorizontal, X } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -20,6 +20,7 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
   const { isAuthenticated, _hasHydrated } = useAuthStore();
   const { sidebarOpen } = useUIStore();
   const [mounted, setMounted] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const pageTitle = title || t('dashboard.title');
 
@@ -90,44 +91,138 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
             sidebarOpen ? 'md:ms-64' : 'md:ms-20'
           )}
         >
-          <div className="p-4 md:p-6 lg:p-8">
+          <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
             {children}
           </div>
         </main>
         
         {/* Mobile bottom navigation */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-200 flex justify-around py-2 z-40">
-          <button onClick={() => router.push('/dashboard')} className="flex flex-col items-center p-2 text-surface-600 hover:text-brand-600">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-            <span className="text-[10px] mt-1">{t('nav.dashboard')}</span>
-          </button>
-          <button onClick={() => router.push('/pages')} className="flex flex-col items-center p-2 text-surface-600 hover:text-brand-600">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span className="text-[10px] mt-1">{t('nav.pages')}</span>
-          </button>
-          <button onClick={() => router.push('/comments')} className="flex flex-col items-center p-2 text-surface-600 hover:text-brand-600">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            <span className="text-[10px] mt-1">{t('nav.comments')}</span>
-          </button>
-          <button onClick={() => router.push('/messages')} className="flex flex-col items-center p-2 text-surface-600 hover:text-brand-600">
-            <MessageCircle className="w-5 h-5" />
-            <span className="text-[10px] mt-1">{t('nav.messages')}</span>
-          </button>
-          <button onClick={() => router.push('/settings')} className="flex flex-col items-center p-2 text-surface-600 hover:text-brand-600">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <span className="text-[10px] mt-1">{t('nav.settings')}</span>
-          </button>
+        <nav 
+          className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-200 flex justify-around items-start pt-2 z-40"
+          style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0.5rem))' }}
+        >
+          <MobileNavButton 
+            onClick={() => router.push('/dashboard')} 
+            icon={<LayoutDashboard className="w-5 h-5" />}
+            label={t('nav.dashboard')}
+            active={router.pathname === '/dashboard'}
+          />
+          <MobileNavButton 
+            onClick={() => router.push('/comments')} 
+            icon={<MessageSquare className="w-5 h-5" />}
+            label={t('nav.comments')}
+            active={router.pathname === '/comments'}
+          />
+          <MobileNavButton 
+            onClick={() => router.push('/messages')} 
+            icon={<MessageCircle className="w-5 h-5" />}
+            label={t('nav.messages')}
+            active={router.pathname === '/messages'}
+          />
+          <MobileNavButton 
+            onClick={() => setMobileMenuOpen(true)} 
+            icon={<MoreHorizontal className="w-5 h-5" />}
+            label={t('nav.more') || 'More'}
+            active={mobileMenuOpen}
+          />
         </nav>
+
+        {/* Mobile full menu overlay */}
+        {mobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 bg-black/50 z-50" onClick={() => setMobileMenuOpen(false)}>
+            <div 
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-4"
+              style={{ paddingBottom: 'max(1rem, calc(1rem + env(safe-area-inset-bottom, 0px)))' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-lg">{t('nav.menu') || 'Menu'}</h3>
+                <button 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-2 rounded-full hover:bg-surface-100"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <MobileMenuButton 
+                  onClick={() => { router.push('/dashboard'); setMobileMenuOpen(false); }}
+                  icon={<LayoutDashboard className="w-6 h-6" />}
+                  label={t('nav.dashboard')}
+                />
+                <MobileMenuButton 
+                  onClick={() => { router.push('/pages'); setMobileMenuOpen(false); }}
+                  icon={<FileText className="w-6 h-6" />}
+                  label={t('nav.pages')}
+                />
+                <MobileMenuButton 
+                  onClick={() => { router.push('/comments'); setMobileMenuOpen(false); }}
+                  icon={<MessageSquare className="w-6 h-6" />}
+                  label={t('nav.comments')}
+                />
+                <MobileMenuButton 
+                  onClick={() => { router.push('/messages'); setMobileMenuOpen(false); }}
+                  icon={<MessageCircle className="w-6 h-6" />}
+                  label={t('nav.messages')}
+                />
+                <MobileMenuButton 
+                  onClick={() => { router.push('/templates'); setMobileMenuOpen(false); }}
+                  icon={<BookTemplate className="w-6 h-6" />}
+                  label={t('nav.templates')}
+                />
+                <MobileMenuButton 
+                  onClick={() => { router.push('/rules'); setMobileMenuOpen(false); }}
+                  icon={<Zap className="w-6 h-6" />}
+                  label={t('nav.rules')}
+                />
+                <MobileMenuButton 
+                  onClick={() => { router.push('/settings'); setMobileMenuOpen(false); }}
+                  icon={<Settings className="w-6 h-6" />}
+                  label={t('nav.settings')}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
+  );
+}
+
+// Mobile nav button component
+function MobileNavButton({ onClick, icon, label, active }: { 
+  onClick: () => void; 
+  icon: React.ReactNode; 
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <button 
+      onClick={onClick} 
+      className={clsx(
+        "flex flex-col items-center p-2 transition-colors",
+        active ? "text-brand-600" : "text-surface-500 hover:text-brand-600"
+      )}
+    >
+      {icon}
+      <span className="text-[10px] mt-1 font-medium">{label}</span>
+    </button>
+  );
+}
+
+// Mobile menu button component
+function MobileMenuButton({ onClick, icon, label }: { 
+  onClick: () => void; 
+  icon: React.ReactNode; 
+  label: string;
+}) {
+  return (
+    <button 
+      onClick={onClick} 
+      className="flex flex-col items-center p-4 rounded-xl hover:bg-surface-100 transition-colors"
+    >
+      <div className="text-brand-600 mb-2">{icon}</div>
+      <span className="text-xs font-medium text-surface-700">{label}</span>
+    </button>
   );
 }
