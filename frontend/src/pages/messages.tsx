@@ -89,7 +89,7 @@ export default function MessagesPage() {
         locale: language === 'ar' ? ar : enUS 
       });
     } catch (e) {
-      return dateString;
+      return String(dateValue);
     }
   };
 
