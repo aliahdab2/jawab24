@@ -103,15 +103,31 @@ export class PagesService {
      * Sync pages from Facebook
      */
     async syncFromFacebook(userId: string, userAccessToken: string) {
+        console.log(`[Pages] Starting sync for user ${userId}`);
+        
         const fbPages = await facebookService.getUserPages(userAccessToken);
         const syncedPages = [];
 
+        if (!fbPages.data || fbPages.data.length === 0) {
+            console.log('[Pages] No pages returned from Facebook API');
+            console.log('[Pages] This could mean:');
+            console.log('  - User is not an admin of any Facebook pages');
+            console.log('  - pages_show_list permission not granted');
+            console.log('  - Facebook App is in development mode and user is not a tester');
+            return [];
+        }
+
+        console.log(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
+
         for (const fbPage of fbPages.data) {
+            console.log(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
+            
             // Check if page already exists
             const existingPage = await this.getPageByFacebookId(fbPage.id);
             
             if (existingPage) {
                 // Update existing page
+                console.log(`[Pages] Updating existing page: ${fbPage.name}`);
                 const updated = await db
                     .update(pages)
                     .set({
@@ -124,6 +140,7 @@ export class PagesService {
                 syncedPages.push(updated[0]);
             } else {
                 // Create new page
+                console.log(`[Pages] Creating new page: ${fbPage.name}`);
                 const created = await this.createPage(userId, {
                     facebookPageId: fbPage.id,
                     name: fbPage.name,
@@ -133,6 +150,7 @@ export class PagesService {
             }
         }
 
+        console.log(`[Pages] Sync complete. ${syncedPages.length} pages synced.`);
         return syncedPages;
     }
 }

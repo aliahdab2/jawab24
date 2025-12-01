@@ -123,15 +123,33 @@ export class PagesController {
         const { accessToken } = request.body;
         
         if (!accessToken) {
-            return reply.status(400).send({ error: 'Access token is required' });
+            return reply.status(400).send({ 
+                error: 'Access token is required',
+                hint: 'Please log out and log back in to refresh your Facebook token'
+            });
         }
 
         try {
+            request.log.info(`[Pages] Sync requested for user ${userId}`);
             const pages = await pagesService.syncFromFacebook(userId, accessToken);
+            
+            if (pages.length === 0) {
+                return reply.send({ 
+                    synced: 0, 
+                    pages: [],
+                    message: 'No pages found. Make sure you are an admin of at least one Facebook page and have granted the required permissions.'
+                });
+            }
+            
             return reply.send({ synced: pages.length, pages });
         } catch (error) {
             request.log.error(error);
-            return reply.status(500).send({ error: 'Failed to sync pages from Facebook' });
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return reply.status(500).send({ 
+                error: 'Failed to sync pages from Facebook',
+                details: errorMessage,
+                hint: 'This could be due to an expired token. Try logging out and back in.'
+            });
         }
     }
 }

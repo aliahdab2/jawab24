@@ -54,15 +54,23 @@ export class FacebookService {
      */
     async getUserPages(accessToken: string): Promise<FacebookPagesResponse> {
         try {
+            console.log('[Facebook] Fetching user pages...');
             const response = await axios.get<FacebookPagesResponse>(`${FACEBOOK_GRAPH_API}/me/accounts`, {
                 params: {
                     access_token: accessToken,
+                    fields: 'id,name,access_token,category,tasks',
                 },
             });
+
+            console.log(`[Facebook] Found ${response.data.data?.length || 0} pages`);
+            if (response.data.data?.length) {
+                console.log('[Facebook] Pages:', response.data.data.map(p => p.name).join(', '));
+            }
 
             return response.data;
         } catch (error) {
             if (axios.isAxiosError(error)) {
+                console.error('[Facebook] API Error:', error.response?.data);
                 throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
             }
             throw error;
