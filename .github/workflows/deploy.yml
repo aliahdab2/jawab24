@@ -19,11 +19,10 @@ env:
   SERVER_HOST: 91.99.95.196
   SERVER_USER: root
   DEPLOY_PATH: /var/www/jawab24
-  STACK_NAME: jawab24
 
 jobs:
   deploy:
-    name: 🚀 Deploy to Production (Zero Downtime)
+    name: 🚀 Deploy to Production
     runs-on: ubuntu-latest
     # Only deploy if CI passed (or manual trigger)
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
@@ -32,14 +31,13 @@ jobs:
       - name: 📋 Deployment Info
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🚀 JAWAB24 ZERO-DOWNTIME DEPLOYMENT"
+          echo "🚀 JAWAB24 DEPLOYMENT"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "📅 Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "🔀 Branch: ${{ github.ref_name }}"
           echo "📝 Commit: ${{ github.sha }}"
           echo "👤 Actor: ${{ github.actor }}"
           echo "🖥️  Server: ${{ env.SERVER_HOST }}"
-          echo "🐳 Mode: Docker Swarm (start-first)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: 📥 Checkout code
@@ -60,7 +58,7 @@ jobs:
             echo "$BACKUP_COMMIT" > .last_successful_deploy
             echo "✅ Backup commit: $BACKUP_COMMIT"
 
-      - name: 🐳 Deploy with Zero Downtime
+      - name: 🐳 Deploy Application
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.SERVER_HOST }}
@@ -81,69 +79,40 @@ jobs:
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🔧 STEP 2: Initialize Docker Swarm (if needed)"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            if ! docker info 2>/dev/null | grep -q "Swarm: active"; then
-              echo "   Initializing Docker Swarm..."
-              docker swarm init --advertise-addr 127.0.0.1 || true
-              echo "✅ Swarm initialized"
-            else
-              echo "✅ Swarm already active"
-            fi
-            
-            # Clean up any conflicting networks from old docker-compose setup
-            echo "   Cleaning up old networks..."
-            docker network rm jawab24_jawab24-network 2>/dev/null || true
-            docker network rm autoreply_jawab24-network 2>/dev/null || true
-            
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🏗️  STEP 3: Building Docker Images"
+            echo "🏗️  STEP 2: Building Docker Images"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             # Load frontend env vars for build args
             if [ -f ./env/frontend.env ]; then
               export $(grep -v '^#' ./env/frontend.env | xargs)
             fi
-            # Build images locally (tagged as :latest)
+            # Build images
             docker-compose build --parallel
             echo "✅ Images built"
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🚀 STEP 4: Deploying Stack (Zero Downtime)"
+            echo "🚀 STEP 3: Deploying Containers"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            # Deploy using Docker Stack (Swarm mode)
-            # The 'order: start-first' in compose ensures new containers
-            # start BEFORE old ones are stopped = zero downtime
-            docker stack deploy -c docker-compose.yml ${{ env.STACK_NAME }} --with-registry-auth --prune
-            
-            echo "✅ Stack deployed"
+            # Stop and restart containers
+            docker-compose down --remove-orphans
+            docker-compose up -d
+            echo "✅ Containers started"
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "⏳ STEP 5: Waiting for services to converge"
+            echo "⏳ STEP 4: Waiting for services to start"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            # Wait for all services to reach desired state
-            sleep 10
-            for i in {1..30}; do
-              CONVERGED=$(docker stack services ${{ env.STACK_NAME }} --format '{{.Replicas}}' | grep -v "1/1" | wc -l)
-              if [ "$CONVERGED" -eq 0 ]; then
-                echo "✅ All services converged!"
-                break
-              fi
-              echo "   Waiting for services... (attempt $i/30)"
-              sleep 5
-            done
+            sleep 15
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "📊 Service Status"
+            echo "📊 Container Status"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            docker stack services ${{ env.STACK_NAME }}
+            docker-compose ps
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🧹 STEP 6: Cleanup old images"
+            echo "🧹 STEP 5: Cleanup old images"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             docker image prune -f --filter "until=24h" 2>/dev/null || true
             echo "✅ Cleanup complete"
@@ -166,44 +135,28 @@ jobs:
             
             FAILED=0
             
-            # Check 1: All services running
+            # Check 1: All containers running
             echo ""
-            echo "🔍 Check 1: Service Status"
-            SERVICES=$(docker stack services ${{ env.STACK_NAME }} --format '{{.Name}}: {{.Replicas}}')
-            echo "$SERVICES"
-            if echo "$SERVICES" | grep -q "0/1"; then
-              echo "   ❌ Some services are not running!"
-              FAILED=1
+            echo "🔍 Check 1: Container Status"
+            RUNNING=$(docker-compose ps --format json 2>/dev/null | grep -c '"running"' || docker-compose ps | grep -c "Up" || echo "0")
+            echo "   Running containers: $RUNNING"
+            if [ "$RUNNING" -lt 5 ]; then
+              echo "   ⚠️  Expected 5+ containers, found $RUNNING"
+              docker-compose ps
             else
-              echo "   ✅ All services running"
+              echo "   ✅ All containers running"
             fi
             
-            # Check 2: Nginx responding
+            # Check 2: Backend API
             echo ""
-            echo "🔍 Check 2: Nginx Health"
-            for i in 1 2 3 4 5; do
-              if curl -sf http://localhost/nginx-health > /dev/null 2>&1; then
-                echo "   ✅ Nginx is healthy"
-                break
-              elif [ $i -eq 5 ]; then
-                echo "   ❌ Nginx health check failed"
-                FAILED=1
-              else
-                echo "   ⏳ Attempt $i/5, waiting..."
-                sleep 5
-              fi
-            done
-            
-            # Check 3: Backend API via Nginx
-            echo ""
-            echo "🔍 Check 3: Backend API"
+            echo "🔍 Check 2: Backend API"
             for i in 1 2 3 4 5 6 7 8 9 10; do
               if curl -sf http://localhost/api/health > /dev/null 2>&1; then
                 echo "   ✅ Backend API is healthy"
                 break
               elif [ $i -eq 10 ]; then
                 echo "   ❌ Backend API health check failed"
-                docker service logs ${{ env.STACK_NAME }}_backend --tail 20 2>/dev/null || true
+                docker-compose logs backend --tail 20
                 FAILED=1
               else
                 echo "   ⏳ Attempt $i/10, waiting..."
@@ -211,16 +164,16 @@ jobs:
               fi
             done
             
-            # Check 4: Frontend via Nginx
+            # Check 3: Frontend
             echo ""
-            echo "🔍 Check 4: Frontend"
+            echo "🔍 Check 3: Frontend"
             for i in 1 2 3 4 5 6 7 8 9 10; do
               if curl -sf http://localhost/ > /dev/null 2>&1; then
                 echo "   ✅ Frontend is healthy"
                 break
               elif [ $i -eq 10 ]; then
                 echo "   ❌ Frontend health check failed"
-                docker service logs ${{ env.STACK_NAME }}_frontend --tail 20 2>/dev/null || true
+                docker-compose logs frontend --tail 20
                 FAILED=1
               else
                 echo "   ⏳ Attempt $i/10, waiting..."
@@ -264,13 +217,14 @@ jobs:
               
               # Rebuild and redeploy
               docker-compose build --parallel
-              docker stack deploy -c docker-compose.yml ${{ env.STACK_NAME }} --with-registry-auth --prune
+              docker-compose down --remove-orphans
+              docker-compose up -d
               
               echo "✅ Rollback complete"
-              docker stack services ${{ env.STACK_NAME }}
+              docker-compose ps
             else
               echo "⚠️  No backup point found, manual intervention required"
-              docker stack services ${{ env.STACK_NAME }}
+              docker-compose ps
             fi
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -279,7 +233,7 @@ jobs:
         run: |
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🎉 ZERO-DOWNTIME DEPLOYMENT SUCCESSFUL"
+          echo "🎉 DEPLOYMENT SUCCESSFUL"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "🌐 Website: https://jawab24.com"
           echo "📊 Dashboard: https://jawab24.com/dashboard"

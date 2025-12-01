@@ -1,11 +1,10 @@
-# Jawab24 Docker Compose - Swarm Compatible
-# Supports both `docker-compose up` (dev) and `docker stack deploy` (prod)
+# Jawab24 Docker Compose Configuration
 
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    hostname: postgres
+    container_name: jawab24-postgres
     restart: unless-stopped
     env_file:
       - ./env/db.env
@@ -20,12 +19,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
     logging:
       driver: "json-file"
       options:
@@ -35,7 +28,7 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    hostname: redis
+    container_name: jawab24-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
@@ -47,12 +40,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
     logging:
       driver: "json-file"
       options:
@@ -62,16 +49,20 @@ services:
   # Backend API
   backend:
     image: jawab24-backend:latest
+    container_name: jawab24-backend
     build:
       context: .
       dockerfile: backend/Dockerfile
-    hostname: backend
     restart: unless-stopped
     env_file:
       - ./env/backend.env
     environment:
       - NODE_ENV=production
-      # DATABASE_URL and REDIS_URL are set in env/backend.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - jawab24-network
     healthcheck:
@@ -80,20 +71,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    deploy:
-      replicas: 1
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: start-first
-        failure_action: rollback
-      rollback_config:
-        parallelism: 1
-        delay: 10s
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
     logging:
       driver: "json-file"
       options:
@@ -103,32 +80,20 @@ services:
   # AI Worker
   ai-worker:
     image: jawab24-ai-worker:latest
+    container_name: jawab24-ai-worker
     build:
       context: .
       dockerfile: ai-worker/Dockerfile
-    hostname: ai-worker
     restart: unless-stopped
     env_file:
       - ./env/ai.env
     environment:
       - NODE_ENV=production
-      # REDIS_URL is set in env/ai.env
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - jawab24-network
-    deploy:
-      replicas: 1
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: start-first
-        failure_action: rollback
-      rollback_config:
-        parallelism: 1
-        delay: 10s
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
     logging:
       driver: "json-file"
       options:
@@ -138,15 +103,13 @@ services:
   # Frontend (Next.js)
   frontend:
     image: jawab24-frontend:latest
+    container_name: jawab24-frontend
     build:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        # These are read from env/frontend.env at build time on the server
-        # For local builds, set these in your shell or use --build-arg
         - NEXT_PUBLIC_FB_APP_ID=${NEXT_PUBLIC_FB_APP_ID:-}
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://jawab24.com/api}
-    hostname: frontend
     restart: unless-stopped
     env_file:
       - ./env/frontend.env
@@ -160,20 +123,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    deploy:
-      replicas: 1
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: start-first
-        failure_action: rollback
-      rollback_config:
-        parallelism: 1
-        delay: 10s
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
     logging:
       driver: "json-file"
       options:
@@ -183,7 +132,7 @@ services:
   # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
-    hostname: nginx
+    container_name: jawab24-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -192,6 +141,9 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - frontend
     networks:
       - jawab24-network
     healthcheck:
@@ -199,16 +151,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    deploy:
-      replicas: 1
-      update_config:
-        parallelism: 1
-        delay: 5s
-        order: start-first
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
     logging:
       driver: "json-file"
       options:
@@ -217,8 +159,7 @@ services:
 
 networks:
   jawab24-network:
-    driver: overlay
-    attachable: true
+    driver: bridge
 
 volumes:
   postgres-data:
