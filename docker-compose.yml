@@ -71,8 +71,7 @@ services:
       - ./env/backend.env
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgres://postgres:jawab24_secure_password@postgres:5432/jawab24
-      - REDIS_URL=redis://redis:6379
+      # DATABASE_URL and REDIS_URL are set in env/backend.env
     networks:
       - jawab24-network
     healthcheck:
@@ -113,7 +112,7 @@ services:
       - ./env/ai.env
     environment:
       - NODE_ENV=production
-      - REDIS_URL=redis://redis:6379
+      # REDIS_URL is set in env/ai.env
     networks:
       - jawab24-network
     deploy:
@@ -143,8 +142,10 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        - NEXT_PUBLIC_FB_APP_ID=774211662298446
-        - NEXT_PUBLIC_API_URL=https://jawab24.com/api
+        # These are read from env/frontend.env at build time on the server
+        # For local builds, set these in your shell or use --build-arg
+        - NEXT_PUBLIC_FB_APP_ID=${NEXT_PUBLIC_FB_APP_ID:-}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://jawab24.com/api}
     hostname: frontend
     restart: unless-stopped
     env_file:

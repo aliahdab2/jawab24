@@ -117,9 +117,38 @@ import { Message, Comment } from '@jawab24/shared';
 
 ---
 
+## 🔒 Security: Environment Setup
+
+**Important:** Never commit actual credentials to the repository. The `env/*.env` files are gitignored.
+
+### Required Environment Files
+
+1. **Copy example files:**
+   ```bash
+   cp env/backend.env.example env/backend.env
+   cp env/frontend.env.example env/frontend.env
+   cp env/ai.env.example env/ai.env
+   cp env/db.env.example env/db.env
+   ```
+
+2. **Set secure values in each file:**
+   - `db.env`: Set a strong `POSTGRES_PASSWORD`
+   - `backend.env`: Match `DATABASE_URL` password, set `JWT_SECRET`, add Facebook credentials
+   - `ai.env`: Add your `OPENAI_API_KEY`
+   - `frontend.env`: Add your `NEXT_PUBLIC_FB_APP_ID`
+
+3. **For production servers:** Copy the same env files to the server's `env/` directory.
+
+### GitHub Actions Secrets
+
+For CI/CD deployment, set these secrets in your GitHub repository:
+- `SERVER_SSH_KEY`: Private SSH key for server access
+
+---
+
 ## 🔧 Deployment
 
-The project uses **GitHub Actions** for CI/CD:
+The project uses **GitHub Actions** for CI/CD with **Docker Swarm** for zero-downtime deployments:
 1. **CI**: Runs tests, linting, and builds on every push.
 2. **CD**: Deploys to the production server via SSH if CI passes.
 

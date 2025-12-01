@@ -95,6 +95,10 @@ jobs:
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🏗️  STEP 3: Building Docker Images"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            # Load frontend env vars for build args
+            if [ -f ./env/frontend.env ]; then
+              export $(grep -v '^#' ./env/frontend.env | xargs)
+            fi
             # Build images locally (tagged as :latest)
             docker-compose build --parallel
             echo "✅ Images built"
