@@ -12,7 +12,9 @@ export interface Message {
   replied: boolean;
   replyText: string | null;
   replyMethod: 'template' | 'ai' | 'manual' | null;
-  createdAt: string;
+  createdAt: string | Date | null;
+  createdTime?: string | Date | null;
+  repliedAt?: string | Date | null;
 }
 
 // --- Comment Types ---
@@ -20,12 +22,14 @@ export interface Comment {
   id: string;
   message: string;
   fromName: string | null;
-  replied: boolean;
+  fromId?: string | null;
+  replied: boolean | null;
   replyText: string | null;
-  replyMethod: 'template' | 'ai' | 'manual' | null;
+  replyMethod: 'template' | 'ai' | 'manual' | string | null;
   detectedLanguage: string | null;
-  createdAt: string;
-  postId: string;
+  createdAt: string | Date | null;
+  postId: string | null;
+  facebookCommentId?: string;
 }
 
 // --- Page Types ---
@@ -33,13 +37,13 @@ export interface Page {
   id: string;
   name: string;
   facebookPageId: string;
-  autoReplyEnabled: boolean;
-  knowledgeBase?: string;
+  autoReplyEnabled: boolean | null;
+  knowledgeBase?: string | null;
   commentsCount?: number;
   repliesCount?: number;
   replyRate?: number;
   lastActivity?: number;
-  createdAt: string;
+  createdAt: string | Date | null;
 }
 
 // --- Template Types ---
@@ -47,8 +51,8 @@ export interface Template {
   id: string;
   name: string;
   translations: Record<string, string>;
-  keywords: string[];
-  active: boolean;
+  keywords: string[] | null;
+  active: boolean | null;
   usageCount?: number;
 }
 
@@ -56,10 +60,10 @@ export interface Template {
 export interface Rule {
   id: string;
   name: string;
-  keywords: string[];
-  templateId: string;
-  priority: number;
-  active: boolean;
+  keywords: string[] | null;
+  templateId: string | null;
+  priority: number | null;
+  active: boolean | null;
   matchCount?: number;
 }
 
@@ -74,4 +78,3 @@ export interface DashboardStats {
   templatesCount: number;
   activeRules: number;
 }
-

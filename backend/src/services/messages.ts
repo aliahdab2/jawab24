@@ -2,22 +2,7 @@ import { eq, desc, and, sql, asc } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages } from '../db/schema';
 import { ConversationMessage } from '../types';
-
-export interface Message {
-    id: string;
-    pageId: string;
-    facebookMessageId: string;
-    senderId: string;
-    senderName: string | null;
-    message: string;
-    direction: 'incoming' | 'outgoing';
-    replied: boolean;
-    replyText: string | null;
-    replyMethod: 'template' | 'ai' | 'manual' | null;
-    createdTime: Date | null;
-    repliedAt: Date | null;
-    createdAt: Date | null;
-}
+import { Message } from '@jawab24/shared';
 
 export interface CreateMessageDTO {
     pageId: string;

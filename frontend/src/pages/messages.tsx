@@ -17,20 +17,7 @@ import {
 import { useTranslation } from '@/i18n';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-
-interface Message {
-  id: string;
-  pageId: string;
-  facebookMessageId: string;
-  senderId: string;
-  senderName: string | null;
-  message: string;
-  direction: 'incoming' | 'outgoing';
-  replied: boolean;
-  replyText: string | null;
-  replyMethod: 'template' | 'ai' | 'manual' | null;
-  createdAt: string;
-}
+import { Message } from '@jawab24/shared';
 
 type FilterType = 'all' | 'incoming' | 'outgoing';
 
