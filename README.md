@@ -36,17 +36,32 @@ Jawab24 is an intelligent auto-reply system for Facebook pages. It automates res
 git clone https://github.com/aliahdab2/jawab24.git
 cd jawab24
 
-# 2. Setup Environment Variables
+# 2. Install dependencies (monorepo - installs all workspaces)
+npm install
+
+# 3. Setup Environment Variables
 cp env/backend.env.example env/backend.env
 cp env/frontend.env.example env/frontend.env
 cp env/ai.env.example env/ai.env
 cp env/db.env.example env/db.env
 # Edit files with your credentials
 
-# 3. Run with Docker
+# 4. Run with Docker
 docker-compose up -d
 
 # App will be available at http://localhost:3001
+```
+
+### Development Without Docker
+
+```bash
+# Build shared types first (required by other packages)
+npm run build --workspace=@jawab24/shared
+
+# Run individual services
+npm run dev --workspace=jawab24-backend
+npm run dev --workspace=jawab24-frontend
+npm run dev --workspace=jawab24-ai-worker
 ```
 
 ---
@@ -73,15 +88,31 @@ The system is built with a microservices-ready architecture:
 
 ## 📁 Project Structure
 
+This project uses an **npm workspaces monorepo** structure:
+
 ```
 jawab24/
-├── backend/         # Node.js/Fastify API Server
-├── frontend/        # Next.js Web Dashboard
-├── ai-worker/       # AI Processing Service
-├── nginx/           # Nginx Configuration
-├── scripts/         # Deployment & Utility Scripts
-├── env/             # Environment Configs
-└── .github/         # CI/CD Workflows
+├── backend/           # Node.js/Fastify API Server
+├── frontend/          # Next.js Web Dashboard
+├── ai-worker/         # AI Processing Service
+├── packages/
+│   └── shared/        # Shared TypeScript types (@jawab24/shared)
+├── nginx/             # Nginx Configuration
+├── scripts/           # Deployment & Utility Scripts
+├── env/               # Environment Configs
+├── .github/           # CI/CD Workflows
+└── package.json       # Root workspace config
+```
+
+### Shared Types
+
+The `@jawab24/shared` package contains common TypeScript interfaces used across services:
+- `Message`, `Comment`, `Page` - Core data types
+- `Template`, `Rule` - Configuration types
+- `DashboardStats` - Analytics types
+
+```typescript
+import { Message, Comment } from '@jawab24/shared';
 ```
 
 ---
@@ -109,11 +140,12 @@ For manual deployment steps, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 ## 🧪 Testing
 
 ```bash
-# Backend tests (Vitest)
-cd backend && npm test
+# Run all tests (from root)
+npm test
 
-# AI Worker tests
-cd ai-worker && npm test
+# Or individual workspaces
+npm test --workspace=jawab24-backend
+npm test --workspace=jawab24-ai-worker
 ```
 
 **Current Status:** 95 tests passing ✅

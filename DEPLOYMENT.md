@@ -36,10 +36,29 @@ Runs automatically after CI passes on `main` branch.
 
 **Steps:**
 1. SSH into production server
-2. Pull latest code
-3. Build and restart containers
-4. Run health checks
-5. Report success/failure
+2. Create backup of current deployment
+3. Pull latest code
+4. Build and restart containers
+5. **Run database migrations automatically**
+6. Run health checks (with retry logic)
+7. Auto-rollback if health checks fail
+8. Report success/failure
+
+### Database Migrations
+
+Migrations run automatically on container startup:
+- The backend Dockerfile runs `node dist/migrate.js` before starting the app
+- Uses Drizzle ORM migrations from `backend/drizzle/` folder
+- Migrations are generated during Docker build
+
+To run migrations manually:
+```bash
+# Generate new migration after schema changes
+npm run generate --workspace=jawab24-backend
+
+# Apply migrations
+npm run deploy:migrate --workspace=jawab24-backend
+```
 
 ## Required GitHub Secrets
 
@@ -102,7 +121,9 @@ Set up branch protection for `main`:
 
 ## Rollback
 
-If deployment fails:
+The deployment pipeline includes **automatic rollback** if health checks fail. It restores from `.last_successful_deploy` backup.
+
+For manual rollback:
 
 ```bash
 # SSH into server
@@ -117,6 +138,8 @@ git reset --hard HEAD~1
 # Rebuild
 docker-compose up -d --build
 ```
+
+**Note:** Database migrations are forward-only. If you need to rollback a migration, create a new migration that reverses the changes.
 
 ## Monitoring
 
