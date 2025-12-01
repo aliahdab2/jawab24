@@ -11,6 +11,9 @@ RUN npm ci
 RUN npm run build --workspace=@jawab24/shared
 RUN npm run build --workspace=jawab24-backend
 
+# Generate migrations
+RUN npm run generate --workspace=jawab24-backend
+
 # Prune dev dependencies
 RUN npm prune --omit=dev
 
@@ -35,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "node dist/migrate.js && node dist/index.js"]
