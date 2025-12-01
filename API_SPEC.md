@@ -2,37 +2,55 @@
 
 ## Base URL
 ```
-https://jawab24.com/api
+Production: https://jawab24.com/api
+Development: http://localhost:3000
 ```
 
 ---
 
 ## Authentication
-All endpoints require JWT token in header:
+
+All endpoints (except `/auth/*` and `/webhook`) require JWT token in header:
 ```
 Authorization: Bearer <token>
 ```
 
 ---
 
+## Health Check
+
+### GET /health
+Check API health status
+
+```json
+Response: 200 OK
+{
+  "status": "ok",
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+---
+
 ## Endpoints
 
-### 1. Auth
+### 1. Authentication
 
 #### POST /auth/facebook
-Login with Facebook OAuth
+Login/Register with Facebook OAuth
+
 ```json
 Request:
 {
   "accessToken": "fb_user_access_token"
 }
 
-Response:
+Response: 200 OK
 {
   "token": "jwt_token",
   "fbAccessToken": "fb_user_access_token",
   "user": {
-    "id": "user_id",
+    "id": "uuid",
     "name": "User Name",
     "facebookId": "fb_id"
   }
@@ -44,47 +62,54 @@ Response:
 ### 2. Pages
 
 #### GET /pages
-Get user's Facebook pages
+Get user's connected Facebook pages
+
 ```json
-Response:
+Response: 200 OK
 [
   {
-    "id": "page_id",
+    "id": "uuid",
     "facebookPageId": "fb_page_id",
     "name": "Page Name",
     "autoReplyEnabled": true,
-    "knowledgeBase": "Business info..."
+    "knowledgeBase": "Business info...",
+    "commentsCount": 150,
+    "repliesCount": 120,
+    "createdAt": "2024-01-01T00:00:00.000Z"
   }
 ]
 ```
 
 #### POST /pages/sync
 Sync pages from Facebook
+
 ```json
 Request:
 {
   "accessToken": "fb_user_access_token"
 }
 
-Response:
+Response: 200 OK
 {
   "success": true,
-  "syncedCount": 5
+  "syncedCount": 5,
+  "pages": [...]
 }
 ```
 
 #### PUT /pages/:id
 Update page settings
+
 ```json
 Request:
 {
   "autoReplyEnabled": true,
-  "knowledgeBase": "Business info for AI..."
+  "knowledgeBase": "Business info for AI context..."
 }
 
-Response:
+Response: 200 OK
 {
-  "id": "page_id",
+  "id": "uuid",
   "autoReplyEnabled": true,
   "knowledgeBase": "..."
 }
@@ -96,24 +121,27 @@ Response:
 
 #### GET /templates
 Get all reply templates
+
 ```json
-Response:
+Response: 200 OK
 [
   {
-    "id": "template_id",
+    "id": "uuid",
     "name": "Welcome Message",
     "translations": {
-      "en": "Thank you!",
-      "ar": "شكراً!"
+      "en": "Thank you for your message!",
+      "ar": "شكراً لرسالتك!"
     },
-    "keywords": ["hello", "hi"],
-    "active": true
+    "keywords": ["hello", "hi", "مرحبا"],
+    "active": true,
+    "usageCount": 45
   }
 ]
 ```
 
 #### POST /templates
 Create new template
+
 ```json
 Request:
 {
@@ -125,10 +153,11 @@ Request:
   "keywords": ["keyword1", "keyword2"]
 }
 
-Response:
+Response: 201 Created
 {
-  "id": "template_id",
-  "success": true
+  "id": "uuid",
+  "name": "Template Name",
+  ...
 }
 ```
 
@@ -143,17 +172,19 @@ Delete template
 ### 4. Rules
 
 #### GET /rules
-Get all rules
+Get all automation rules (sorted by priority)
+
 ```json
-Response:
+Response: 200 OK
 [
   {
-    "id": "rule_id",
+    "id": "uuid",
     "name": "Price Inquiry",
-    "keywords": ["price", "cost"],
-    "templateId": "template_id",
+    "keywords": ["price", "cost", "كم السعر"],
+    "templateId": "template_uuid",
     "priority": 1,
-    "active": true
+    "active": true,
+    "matchCount": 28
   }
 ]
 ```
@@ -161,14 +192,30 @@ Response:
 #### POST /rules
 Create new rule
 
+```json
+Request:
+{
+  "name": "Rule Name",
+  "keywords": ["keyword1", "keyword2"],
+  "templateId": "template_uuid"
+}
+
+Response: 201 Created
+{
+  "id": "uuid",
+  ...
+}
+```
+
 #### PUT /rules/:id
 Update rule
 
 #### DELETE /rules/:id
 Delete rule
 
-#### PUT /rules/:id/reorder
+#### PUT /rules/:id/priority
 Update rule priority
+
 ```json
 Request:
 {
@@ -182,19 +229,27 @@ Request:
 
 #### GET /comments
 Get recent comments
+
+Query params:
+- `pageId` - Filter by page
+- `replied` - Filter by replied status (true/false)
+- `limit` - Number of results (default: 50)
+
 ```json
-Response:
+Response: 200 OK
 [
   {
-    "id": "comment_id",
-    "postId": "post_id",
+    "id": "uuid",
+    "postId": "post_uuid",
+    "facebookCommentId": "fb_comment_id",
     "message": "Comment text",
     "fromName": "User Name",
-    "fromId": "user_id",
-    "createdTime": "2024-01-01T00:00:00Z",
+    "fromId": "fb_user_id",
     "replied": true,
     "replyText": "Reply content",
-    "replyMethod": "template|ai|manual"
+    "replyMethod": "template",
+    "detectedLanguage": "ar",
+    "createdAt": "2024-01-01T00:00:00.000Z"
   }
 ]
 ```
@@ -205,19 +260,26 @@ Response:
 
 #### GET /messages
 Get direct messages
+
+Query params:
+- `pageId` - Filter by page
+- `senderId` - Filter by sender
+
 ```json
-Response:
+Response: 200 OK
 [
   {
-    "id": "message_id",
-    "pageId": "page_id",
-    "senderId": "user_id",
-    "messageText": "Message content",
-    "direction": "incoming|outgoing",
+    "id": "uuid",
+    "pageId": "page_uuid",
+    "facebookMessageId": "fb_message_id",
+    "senderId": "fb_user_id",
+    "senderName": "User Name",
+    "message": "Message content",
+    "direction": "incoming",
     "replied": true,
     "replyText": "Reply content",
-    "replyMethod": "ai|template",
-    "createdAt": "timestamp"
+    "replyMethod": "ai",
+    "createdAt": "2024-01-01T00:00:00.000Z"
   }
 ]
 ```
@@ -228,28 +290,30 @@ Response:
 
 #### GET /settings
 Get user settings
+
 ```json
-Response:
+Response: 200 OK
 {
-  "id": "settings_id",
-  "dashboardLanguage": "en|ar",
+  "id": "uuid",
+  "userId": "user_uuid",
+  "dashboardLanguage": "ar",
   "defaultReplyLanguage": "ar",
   "autoDetectLanguage": true,
   "aiEnabled": true,
-  "aiModel": "gpt-4-mini",
   "commentsAutoReply": true,
   "messagesAutoReply": true,
   "businessHoursOnly": false,
   "businessHoursStart": "09:00",
   "businessHoursEnd": "18:00",
   "awayMessage": "We are currently away...",
-  "replyDelay": 0,
-  "greetingMessage": "Hi there!..."
+  "greetingMessage": "Hi there!",
+  "replyDelay": 0
 }
 ```
 
 #### PUT /settings
 Update settings
+
 ```json
 Request:
 {
@@ -259,14 +323,145 @@ Request:
   "replyDelay": 5,
   ...
 }
+
+Response: 200 OK
+{
+  ... updated settings
+}
 ```
 
 ---
 
-### 8. Webhooks
+### 8. AI
+
+#### POST /ai/generate
+Generate AI reply (internal use)
+
+```json
+Request:
+{
+  "message": "Customer message",
+  "pageId": "page_uuid",
+  "context": "optional context"
+}
+
+Response: 200 OK
+{
+  "reply": "AI generated reply",
+  "language": "ar",
+  "cached": false
+}
+```
+
+---
+
+### 9. Webhooks
 
 #### GET /webhook
-Webhook verification
+Facebook webhook verification
+
+Query params:
+- `hub.mode` - Should be "subscribe"
+- `hub.verify_token` - Your verify token
+- `hub.challenge` - Challenge to return
 
 #### POST /webhook
-Receive Facebook webhook events (feed, messages)
+Receive Facebook webhook events
+
+```json
+Request (from Facebook):
+{
+  "object": "page",
+  "entry": [
+    {
+      "id": "page_id",
+      "time": 1234567890,
+      "changes": [
+        {
+          "field": "feed",
+          "value": {
+            "item": "comment",
+            "verb": "add",
+            "comment_id": "comment_id",
+            "post_id": "post_id",
+            "message": "Comment text"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+Response: 200 OK
+"EVENT_RECEIVED"
+```
+
+---
+
+## Error Responses
+
+### 400 Bad Request
+```json
+{
+  "error": "Validation error",
+  "message": "Invalid request body",
+  "details": [...]
+}
+```
+
+### 401 Unauthorized
+```json
+{
+  "error": "Unauthorized",
+  "message": "Invalid or expired token"
+}
+```
+
+### 404 Not Found
+```json
+{
+  "error": "Not Found",
+  "message": "Resource not found"
+}
+```
+
+### 500 Internal Server Error
+```json
+{
+  "error": "Internal Server Error",
+  "message": "Something went wrong"
+}
+```
+
+---
+
+## Rate Limiting
+
+| Endpoint | Limit |
+|----------|-------|
+| `/api/*` | 10 requests/second |
+| `/webhook` | 100 requests/second |
+
+Rate limit headers:
+```
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 9
+X-RateLimit-Reset: 1234567890
+```
+
+---
+
+## Shared Types
+
+All types are defined in `@jawab24/shared`:
+
+```typescript
+import type { 
+  Message, 
+  Comment, 
+  Page, 
+  Template, 
+  Rule,
+  DashboardStats 
+} from '@jawab24/shared';
+```

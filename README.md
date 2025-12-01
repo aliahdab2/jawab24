@@ -18,6 +18,8 @@ Jawab24 is an intelligent auto-reply system for Facebook pages. It automates res
 - ⚡ **Smart Automation** - Features like **Business Hours**, **Away Messages**, and **Reply Delays**.
 - 🔒 **Secure** - Facebook OAuth integration and JWT authentication.
 - 📊 **Dashboard** - Comprehensive analytics and management interface.
+- 📱 **Mobile Responsive** - Fully responsive design with mobile-optimized navigation.
+- 🛡️ **Error Handling** - Graceful error boundaries prevent app crashes.
 
 ---
 
@@ -70,19 +72,40 @@ npm run dev --workspace=jawab24-ai-worker
 
 The system is built with a microservices-ready architecture:
 
-1. **Frontend**: Next.js (React) dashboard for management.
-2. **Backend**: Node.js (Fastify) API handling auth, business logic, and webhooks.
-3. **AI Worker**: Dedicated service for OpenAI interactions (decoupled for scalability).
-4. **Database**: PostgreSQL (with Drizzle ORM) for structured data.
-5. **Cache/Queue**: Redis for AI job queues and caching.
-6. **Reverse Proxy**: Nginx handling SSL and routing.
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         NGINX                                │
+│                   (Reverse Proxy + SSL)                      │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+┌───────▼───────┐  ┌───────▼───────┐  ┌───────▼───────┐
+│   Frontend    │  │    Backend    │  │   AI Worker   │
+│   (Next.js)   │  │   (Fastify)   │  │   (OpenAI)    │
+└───────────────┘  └───────┬───────┘  └───────┬───────┘
+                           │                  │
+                    ┌──────┴──────┐    ┌──────┴──────┐
+                    │  PostgreSQL │    │    Redis    │
+                    │  (Database) │    │   (Queue)   │
+                    └─────────────┘    └─────────────┘
+```
+
+### Components
+
+1. **Frontend**: Next.js (React) dashboard for management
+2. **Backend**: Node.js (Fastify) API handling auth, business logic, and webhooks
+3. **AI Worker**: Dedicated service for OpenAI interactions (decoupled for scalability)
+4. **Database**: PostgreSQL (with Drizzle ORM) for structured data
+5. **Cache/Queue**: Redis for AI job queues and caching
+6. **Reverse Proxy**: Nginx handling SSL, routing, and load balancing
 
 ### Data Flow
-1. **Webhook**: Facebook sends event (comment/message) to Backend.
-2. **Processing**: Backend checks Rules Engine.
-3. **AI Fallback**: If no rule matches, job is sent to AI Worker via Redis.
-4. **Generation**: AI Worker generates reply using Page Knowledge Base + Conversation History.
-5. **Response**: Backend posts reply to Facebook Graph API.
+1. **Webhook**: Facebook sends event (comment/message) to Backend
+2. **Processing**: Backend checks Rules Engine
+3. **AI Fallback**: If no rule matches, job is sent to AI Worker via Redis
+4. **Generation**: AI Worker generates reply using Page Knowledge Base + Conversation History
+5. **Response**: Backend posts reply to Facebook Graph API
 
 ---
 
@@ -92,16 +115,31 @@ This project uses an **npm workspaces monorepo** structure:
 
 ```
 jawab24/
-├── backend/           # Node.js/Fastify API Server
-├── frontend/          # Next.js Web Dashboard
-├── ai-worker/         # AI Processing Service
+├── backend/              # Node.js/Fastify API Server
+│   ├── src/
+│   │   ├── controllers/  # Route handlers
+│   │   ├── services/     # Business logic
+│   │   ├── db/           # Database schema & connection
+│   │   └── routes/       # API routes
+│   └── test/             # 95 tests
+├── frontend/             # Next.js Web Dashboard
+│   └── src/
+│       ├── components/   # React components
+│       ├── pages/        # Next.js pages
+│       └── i18n/         # Internationalization
+├── ai-worker/            # AI Processing Service
 ├── packages/
-│   └── shared/        # Shared TypeScript types (@jawab24/shared)
-├── nginx/             # Nginx Configuration
-├── scripts/           # Deployment & Utility Scripts
-├── env/               # Environment Configs
-├── .github/           # CI/CD Workflows
-└── package.json       # Root workspace config
+│   └── shared/           # Shared TypeScript types (@jawab24/shared)
+├── nginx/                # Nginx Configuration
+│   ├── nginx.conf        # Main config
+│   └── upstream.conf     # Blue-green routing
+├── scripts/              # Deployment & Utility Scripts
+├── env/                  # Environment Configs (gitignored)
+├── .github/              # CI/CD Workflows
+├── docker-compose.yml    # Main Docker config
+├── docker-compose.blue.yml   # Blue environment
+├── docker-compose.green.yml  # Green environment
+└── package.json          # Root workspace config
 ```
 
 ### Shared Types
@@ -112,7 +150,7 @@ The `@jawab24/shared` package contains common TypeScript interfaces used across 
 - `DashboardStats` - Analytics types
 
 ```typescript
-import { Message, Comment } from '@jawab24/shared';
+import type { Message, Comment, Page } from '@jawab24/shared';
 ```
 
 ---
@@ -148,21 +186,50 @@ For CI/CD deployment, set these secrets in your GitHub repository:
 
 ## 🔧 Deployment
 
-The project uses **GitHub Actions** for CI/CD with **Docker Swarm** for zero-downtime deployments:
-1. **CI**: Runs tests, linting, and builds on every push.
-2. **CD**: Deploys to the production server via SSH if CI passes.
+The project uses **GitHub Actions** for CI/CD with **Blue-Green Deployment** for zero downtime:
 
-For manual deployment steps, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+### How Blue-Green Works
+
+```
+┌─────────────────────────────────────┐
+│              NGINX                   │
+│         (Load Balancer)              │
+└──────────────┬──────────────────────┘
+               │ (switches instantly)
+┌──────────────┴──────────────┐
+│                             │
+│  BLUE (active)    GREEN (standby)
+│  - backend-blue   - backend-green
+│  - frontend-blue  - frontend-green
+```
+
+1. **CI**: Runs tests (95 tests), linting, and builds on every push
+2. **CD**: Deploys to inactive environment, health checks, then switches traffic
+
+### Manual Commands
+
+```bash
+# Check deployment status
+./scripts/deploy-blue-green.sh status
+
+# Manual deploy
+./scripts/deploy-blue-green.sh deploy
+
+# Instant rollback
+./scripts/deploy-blue-green.sh rollback
+```
+
+For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ---
 
 ## 📖 Documentation
 
-- [Deployment Guide](./DEPLOYMENT.md) - Server setup and deployment.
-- [Facebook Setup](./FACEBOOK_SETUP.md) - Configuring the Meta App.
-- [API Specification](./API_SPEC.md) - Backend API endpoints.
-- [Database Schema](./DATABASE_SCHEMA.md) - PostgreSQL schema.
-- [Language Support](./LANGUAGE_SUPPORT.md) - Multi-language capabilities.
+- [Deployment Guide](./DEPLOYMENT.md) - Blue-green deployment, server setup
+- [Facebook Setup](./FACEBOOK_SETUP.md) - Configuring the Meta App
+- [API Specification](./API_SPEC.md) - Backend API endpoints
+- [Database Schema](./DATABASE_SCHEMA.md) - PostgreSQL schema
+- [Language Support](./LANGUAGE_SUPPORT.md) - Multi-language capabilities
 
 ---
 
@@ -177,7 +244,7 @@ npm test --workspace=jawab24-backend
 npm test --workspace=jawab24-ai-worker
 ```
 
-**Current Status:** 95 tests passing ✅
+**Current Status:** 95 backend tests passing ✅
 
 ---
 
@@ -185,15 +252,37 @@ npm test --workspace=jawab24-ai-worker
 
 | Layer | Technology |
 |-------|------------|
-| **Frontend** | Next.js, React, TailwindCSS, Zustand |
-| **Backend** | Node.js, Fastify, TypeScript |
-| **Database** | PostgreSQL, Drizzle ORM |
-| **Queue/Cache** | Redis, BullMQ |
+| **Frontend** | Next.js 13, React, TailwindCSS, Zustand |
+| **Backend** | Node.js 18, Fastify, TypeScript |
+| **Database** | PostgreSQL 15, Drizzle ORM |
+| **Queue/Cache** | Redis 7 |
 | **AI** | OpenAI GPT-4o-mini |
 | **Infra** | Docker, Nginx, GitHub Actions |
+| **Monitoring** | UptimeRobot |
+
+---
+
+## 📊 Monitoring
+
+- **Uptime Monitoring**: UptimeRobot (external)
+- **Status Check**: `./scripts/check-status.sh`
+- **Health Endpoints**:
+  - Website: https://jawab24.com
+  - API: https://jawab24.com/api/health
+  - Nginx: https://jawab24.com/nginx-health
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ---
 
 ## 📄 License
 
-MIT License.
+MIT License - see [LICENSE](./LICENSE) for details.

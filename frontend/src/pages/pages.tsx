@@ -46,10 +46,22 @@ export default function PagesPage() {
     }
   }, [token, apiUrl]);
 
-  // Fetch pages on load
+  // Fetch pages on load, auto-sync if empty
   useEffect(() => {
-    fetchPages();
+    const loadPages = async () => {
+      await fetchPages();
+    };
+    loadPages();
   }, [fetchPages]);
+
+  // Auto-sync if no pages found after initial load
+  useEffect(() => {
+    if (!loading && pages.length === 0 && fbToken && token && !syncing) {
+      // Auto-sync pages from Facebook
+      handleSync();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, pages.length, fbToken, token]);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
     // Optimistic update

@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { authService } from '../services/auth';
 import { facebookService } from '../services/facebook';
+import { pagesService } from '../services/pages';
 import { AuthRequest } from '../types';
 
 export class AuthController {
@@ -32,7 +33,12 @@ export class AuthController {
             // 4. Generate JWT token
             const token = authService.generateToken(user);
 
-            // 5. Return response
+            // 5. Auto-sync pages from Facebook (non-blocking)
+            pagesService.syncFromFacebook(user.id, accessToken).catch((err) => {
+                request.log.error('Auto-sync pages failed:', err);
+            });
+
+            // 6. Return response
             const response = authService.createAuthResponse(user, token, accessToken);
             return reply.send(response);
 
