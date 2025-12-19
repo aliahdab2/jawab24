@@ -1,4 +1,4 @@
-import { ReactNode, CSSProperties } from 'react';
+import { ReactNode, CSSProperties, MouseEventHandler } from 'react';
 import clsx from 'clsx';
 
 interface CardProps {
@@ -7,9 +7,10 @@ interface CardProps {
   hover?: boolean;
   padding?: 'none' | 'sm' | 'md' | 'lg';
   style?: CSSProperties;
+  onClick?: MouseEventHandler<HTMLDivElement>;
 }
 
-export function Card({ children, className, hover = false, padding = 'md', style }: CardProps) {
+export function Card({ children, className, hover = false, padding = 'md', style, onClick }: CardProps) {
   const paddingClasses = {
     none: '',
     sm: 'p-4',
@@ -22,9 +23,11 @@ export function Card({ children, className, hover = false, padding = 'md', style
       className={clsx(
         hover ? 'card-hover' : 'card',
         paddingClasses[padding],
+        onClick && 'cursor-pointer',
         className
       )}
       style={style}
+      onClick={onClick}
     >
       {children}
     </div>

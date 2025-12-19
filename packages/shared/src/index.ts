@@ -28,6 +28,7 @@ export interface Comment {
   replyMethod: 'template' | 'ai' | 'manual' | string | null;
   detectedLanguage: string | null;
   createdAt: string | Date | null;
+  repliedAt?: string | Date | null;
   postId: string | null;
   facebookCommentId?: string;
 }

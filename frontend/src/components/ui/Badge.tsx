@@ -5,9 +5,10 @@ interface BadgeProps {
   children: ReactNode;
   variant?: 'success' | 'warning' | 'error' | 'info' | 'default';
   size?: 'sm' | 'md';
+  className?: string;
 }
 
-export function Badge({ children, variant = 'default', size = 'md' }: BadgeProps) {
+export function Badge({ children, variant = 'default', size = 'md', className }: BadgeProps) {
   const variantClasses = {
     success: 'badge-success',
     warning: 'badge-warning',
@@ -22,7 +23,7 @@ export function Badge({ children, variant = 'default', size = 'md' }: BadgeProps
   };
 
   return (
-    <span className={clsx('badge', variantClasses[variant], sizeClasses[size])}>
+    <span className={clsx('badge', variantClasses[variant], sizeClasses[size], className)}>
       {children}
     </span>
   );
