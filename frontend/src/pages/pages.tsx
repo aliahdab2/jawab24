@@ -354,9 +354,23 @@ Returns: 14 days, no questions asked`}
                   : 'Write your business information here...'
                 }
                 value={knowledgeBase}
-                onChange={(e) => setKnowledgeBase(e.target.value)}
+                onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
+                maxLength={2000}
                 dir={language === 'ar' ? 'rtl' : 'ltr'}
               />
+              
+              {/* Character Counter */}
+              <div className={`text-sm mt-2 ${language === 'ar' ? 'text-left' : 'text-right'}`}>
+                <span className={
+                  knowledgeBase.length > 1900 
+                    ? 'text-red-500 font-medium' 
+                    : knowledgeBase.length > 1500 
+                      ? 'text-amber-500' 
+                      : 'text-surface-400'
+                }>
+                  {knowledgeBase.length.toLocaleString()}/2,000 {language === 'ar' ? 'حرف' : 'characters'}
+                </span>
+              </div>
             </div>
 
             {/* Modal Footer */}
