@@ -1,0 +1,14 @@
+{
+  "version": "5",
+  "dialect": "pg",
+  "entries": [
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1734638400000,
+      "tag": "0001_add_knowledge_base",
+      "breakpoints": true
+    }
+  ]
+}
+

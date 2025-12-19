@@ -8,9 +8,11 @@
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "lint": "eslint src/**/*.ts",
-    "generate": "drizzle-kit generate:pg",
-    "migrate": "drizzle-kit push:pg",
-    "deploy:migrate": "node dist/migrate.js",
+    "db:generate": "drizzle-kit generate:pg",
+    "db:push": "drizzle-kit push:pg",
+    "db:migrate": "node dist/migrate.js",
+    "db:studio": "drizzle-kit studio",
+    "db:check": "drizzle-kit check:pg",
     "test": "vitest"
   },
   "dependencies": {

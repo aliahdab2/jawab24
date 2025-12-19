@@ -61,6 +61,72 @@ We use **Blue-Green Deployment** for zero-downtime updates:
 | **Safe Testing** | New version is tested before switch |
 | **No User Impact** | Users never see errors during deploy |
 
+## Database Migrations
+
+### How Migrations Work
+
+Drizzle ORM handles database schema changes automatically:
+
+1. **Schema changes** are made in `backend/src/db/schema.ts`
+2. **Migrations are generated** and saved in `backend/drizzle/`
+3. **Migrations run automatically** on each deployment
+
+### Workflow for Schema Changes
+
+```bash
+# 1. Make changes to backend/src/db/schema.ts
+
+# 2. Generate migration (run locally with Node 18+)
+cd backend
+npm run db:generate
+
+# 3. Review the generated SQL in backend/drizzle/
+
+# 4. Commit the migration files
+git add drizzle/
+git commit -m "Add migration for [description]"
+
+# 5. Push to deploy (migrations run automatically)
+git push
+```
+
+### Manual Migration on Server
+
+If you need to run migrations manually:
+
+```bash
+ssh root@91.99.95.196
+cd /var/www/jawab24
+
+# Run migrations inside the backend container
+docker exec -it jawab24-backend node dist/migrate.js
+```
+
+### Adding Columns Manually (Emergency)
+
+If a column is missing and causing errors:
+
+```bash
+# Connect to database
+docker exec -it jawab24-postgres psql -U postgres -d jawab24
+
+# Add the missing column
+ALTER TABLE table_name ADD COLUMN IF NOT EXISTS column_name TYPE;
+
+# Example:
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS knowledge_base TEXT;
+```
+
+### Best Practices
+
+| Rule | Why |
+|------|-----|
+| **Always generate migrations** | Prevents schema drift between environments |
+| **Commit migration files** | Ensures all environments get the same changes |
+| **Use IF NOT EXISTS** | Makes migrations idempotent (safe to re-run) |
+| **Test locally first** | Catch issues before production |
+| **Review generated SQL** | Ensure no destructive changes |
+
 ## CI Pipeline (`ci.yml`)
 
 Runs on every push to `main` or `develop`, and on all PRs to `main`.
@@ -218,4 +284,31 @@ docker exec jawab24-nginx nginx -t
 
 # Reload nginx
 docker exec jawab24-nginx nginx -s reload
+```
+
+### Database schema errors (500 on API endpoints)
+```bash
+# Check which columns exist
+docker exec -it jawab24-postgres psql -U postgres -d jawab24 -c "\d pages"
+
+# Compare with expected schema in backend/src/db/schema.ts
+# Add any missing columns:
+docker exec -it jawab24-postgres psql -U postgres -d jawab24 -c \
+  "ALTER TABLE pages ADD COLUMN IF NOT EXISTS knowledge_base TEXT;"
+
+# Verify the fix
+docker logs jawab24-nginx --tail 10
+# Should now show 200 instead of 500
+```
+
+### Database connection issues
+```bash
+# Check if PostgreSQL is running
+docker exec jawab24-postgres pg_isready
+
+# Check database exists
+docker exec -it jawab24-postgres psql -U postgres -c "\l"
+
+# Check tables exist
+docker exec -it jawab24-postgres psql -U postgres -d jawab24 -c "\dt"
 ```
