@@ -225,17 +225,33 @@ export default function PagesPage() {
                 </div>
               </div>
 
-              {/* Knowledge Base Indicator */}
-              {page.knowledgeBase && (
-                <div className="mt-4 p-3 bg-brand-50 rounded-lg border border-brand-100">
-                  <div className="flex items-center gap-2 text-brand-700">
-                    <BookOpen className="w-4 h-4" />
-                    <span className="text-sm font-medium">
-                      {language === 'ar' ? 'قاعدة المعرفة مُفعّلة' : 'Knowledge Base Active'}
-                    </span>
-                  </div>
+              {/* Knowledge Base CTA */}
+              <button 
+                onClick={() => openKnowledgeBase(page)}
+                className={`w-full mt-4 p-3 rounded-xl border-2 border-dashed transition-all ${
+                  page.knowledgeBase 
+                    ? 'border-brand-200 bg-brand-50 hover:bg-brand-100' 
+                    : 'border-surface-200 bg-surface-50 hover:bg-surface-100 hover:border-brand-300'
+                }`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <BookOpen className={`w-5 h-5 ${page.knowledgeBase ? 'text-brand-600' : 'text-surface-400'}`} />
+                  <span className={`text-sm font-medium ${page.knowledgeBase ? 'text-brand-700' : 'text-surface-600'}`}>
+                    {page.knowledgeBase 
+                      ? (language === 'ar' ? '✓ تعديل قاعدة المعرفة' : '✓ Edit Knowledge Base')
+                      : (language === 'ar' ? '+ إضافة قاعدة المعرفة' : '+ Add Knowledge Base')
+                    }
+                  </span>
                 </div>
-              )}
+                {!page.knowledgeBase && (
+                  <p className="text-xs text-surface-400 mt-1">
+                    {language === 'ar' 
+                      ? 'أضف معلومات عملك لتحسين ردود الذكاء الاصطناعي'
+                      : 'Add your business info to improve AI replies'
+                    }
+                  </p>
+                )}
+              </button>
 
               {/* Footer */}
               <div className="flex items-center justify-between mt-4">
@@ -247,24 +263,15 @@ export default function PagesPage() {
                     {page.lastActivity ? formatTime(page.lastActivity) : t('common.noData')}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => openKnowledgeBase(page)}
-                    title={language === 'ar' ? 'قاعدة المعرفة' : 'Knowledge Base'}
-                  >
-                    <BookOpen className="w-4 h-4" />
-                  </Button>
-                  <a 
-                    href={`https://facebook.com/${page.facebookPageId}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center p-2 rounded-xl hover:bg-surface-100 text-surface-600 transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
+                <a 
+                  href={`https://facebook.com/${page.facebookPageId}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-sm text-surface-500 hover:text-surface-700 hover:bg-surface-100 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{language === 'ar' ? 'عرض الصفحة' : 'View Page'}</span>
+                </a>
               </div>
             </Card>
           ))}
