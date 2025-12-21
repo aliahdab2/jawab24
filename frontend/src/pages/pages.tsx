@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';‚
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, Badge, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
@@ -238,16 +238,16 @@ export default function PagesPage() {
                   <BookOpen className={`w-5 h-5 ${page.knowledgeBase ? 'text-brand-600' : 'text-surface-400'}`} />
                   <span className={`text-sm font-medium ${page.knowledgeBase ? 'text-brand-700' : 'text-surface-600'}`}>
                     {page.knowledgeBase 
-                      ? (language === 'ar' ? '✓ تعديل قاعدة المعرفة' : '✓ Edit Knowledge Base')
-                      : (language === 'ar' ? '+ إضافة قاعدة المعرفة' : '+ Add Knowledge Base')
+                      ? (language === 'ar' ? '✓ تعديل معلومات عملك' : '✓ Edit Business Info')
+                      : (language === 'ar' ? '+ أضف معلومات عملك' : '+ Add Business Info')
                     }
                   </span>
                 </div>
                 {!page.knowledgeBase && (
                   <p className="text-xs text-surface-400 mt-1">
                     {language === 'ar' 
-                      ? 'أضف معلومات عملك لتحسين ردود الذكاء الاصطناعي'
-                      : 'Add your business info to improve AI replies'
+                      ? 'أضف معلومات عملك لتحسين جودة الردود'
+                      : 'Add your business info for better replies'
                     }
                   </p>
                 )}
@@ -303,7 +303,7 @@ export default function PagesPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-surface-900">
-                    {language === 'ar' ? 'قاعدة المعرفة' : 'Knowledge Base'}
+                    {language === 'ar' ? 'معلومات عملك' : 'Your Business Info'}
                   </h2>
                   <p className="text-sm text-surface-500">{editingPage.name}</p>
                 </div>
@@ -320,8 +320,8 @@ export default function PagesPage() {
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               <p className="text-sm text-surface-600 mb-4">
                 {language === 'ar' 
-                  ? 'أضف معلومات عن عملك هنا. سيستخدمها الذكاء الاصطناعي للرد على أسئلة العملاء بدقة.'
-                  : 'Add information about your business here. The AI will use this to answer customer questions accurately.'
+                  ? 'أضف معلومات عن عملك هنا لنتمكن من الرد على أسئلة عملائك بدقة.'
+                  : 'Add information about your business here to answer customer questions accurately.'
                 }
               </p>
               

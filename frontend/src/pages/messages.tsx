@@ -504,7 +504,7 @@ export default function MessagesPage() {
               <div className="flex items-center justify-between">
                 <p className="text-sm text-surface-500">
                   {language === 'ar' 
-                    ? 'الردود تتم تلقائياً عبر الذكاء الاصطناعي' 
+                    ? 'الردود تتم تلقائياً' 
                     : 'Replies are handled automatically by AI'}
                 </p>
                 <Button variant="secondary" onClick={() => setSelectedConversation(null)}>

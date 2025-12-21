@@ -5,27 +5,12 @@ dist/
 build/
 *.log
 .DS_Store
-
-# Database and cache data
 data/postgres/*
 data/redis/*
 !data/.gitkeep
-
-# SSL certificates
 nginx/ssl/*
 !nginx/ssl/.gitkeep
 
 # Environment files with secrets (keep only .example files)
 env/*.env
 !env/*.env.example
-
-# Next.js build output
-.next/
-out/
-
-# Package lock files (optional - uncomment if needed)
-# package-lock.json
-
-# IDE
-.idea/
-.vscode/
