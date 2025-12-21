@@ -10,16 +10,29 @@ Jawab24 is an intelligent auto-reply system for Facebook pages. It automates res
 
 ## ✨ Features
 
-- 🤖 **AI-Powered Replies** - Uses GPT-4o-mini to generate context-aware responses based on your business knowledge base.
-- 💬 **Message & Comment Support** - Automates replies for both public comments and private messages.
-- 📝 **Template System** - Create reusable reply templates with keywords.
-- 🧠 **Business Knowledge Base** - Teach the AI about your products, prices, and policies for accurate answers.
-- 🔤 **Multi-Language** - Supports unlimited languages (Arabic, English, Swedish, etc.) with auto-detection.
-- ⚡ **Smart Automation** - Features like **Business Hours**, **Away Messages**, and **Reply Delays**.
-- 🔒 **Secure** - Facebook OAuth integration and JWT authentication.
-- 📊 **Dashboard** - Comprehensive analytics and management interface.
-- 📱 **Mobile Responsive** - Fully responsive design with mobile-optimized navigation.
-- 🛡️ **Error Handling** - Graceful error boundaries prevent app crashes.
+### Core
+- 🤖 **Smart Auto-Replies** - Intelligent responses powered by GPT-4o-mini, based on your business info.
+- 💬 **Comments & Messages** - Automates replies for both public comments and private messages (DMs).
+- 📝 **Template System** - Create reusable reply templates with keyword triggers.
+- 🧠 **Business Info** - Add your products, prices, and policies for accurate, personalized answers.
+- 🔤 **Multi-Language** - Supports Arabic, English, Swedish, and more with auto-detection.
+
+### Automation
+- ⚡ **Business Hours** - Auto-reply only during your working hours.
+- 💤 **Away Messages** - Custom messages when you're unavailable.
+- ⏱️ **Reply Delays** - Natural delays to avoid instant bot-like responses.
+
+### Management
+- 📊 **Dashboard** - Analytics and performance overview.
+- 📜 **Conversation History** - View full message threads with customers.
+- 🤝 **Human Handoff** - Get notified when smart replies can't help (negative sentiment, complex questions).
+- 📥 **Export Data** - Download comments and messages as CSV.
+
+### Technical
+- 🔒 **Secure** - Facebook OAuth + JWT authentication.
+- 📱 **Mobile Responsive** - Works great on all devices.
+- 🛡️ **Error Handling** - Graceful error boundaries prevent crashes.
+- 🚀 **Zero-Downtime Deploys** - Blue-green deployment strategy.
 
 ---
 
