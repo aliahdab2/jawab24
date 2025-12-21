@@ -1,0 +1,16 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2DD4BF"/>
+      <stop offset="100%" style="stop-color:#F97316"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="220" ry="220" fill="url(#bgGradient)"/>
+  
+  <!-- Chat bubble icon -->
+  <path d="M512 240C339.2 240 198.4 355.2 198.4 496C198.4 564.8 233.6 627.2 291.2 672C291.2 672 275.2 752 224 800C224 800 332.8 784 400 736C435.2 752 473.6 760 512 760C684.8 760 825.6 644.8 825.6 504C825.6 363.2 684.8 240 512 240Z" fill="white" fill-opacity="0.95"/>
+</svg>
+
