@@ -3,6 +3,7 @@
 node_modules/
 dist/
 build/
+.next/
 *.log
 .DS_Store
 data/postgres/*
