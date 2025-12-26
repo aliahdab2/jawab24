@@ -379,132 +379,88 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Pricing Section */}
+        {/* Pricing Section - No hardcoded prices, links to /pricing */}
         <section id="pricing" className="py-32 bg-white relative">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-20">
+            <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-50 text-brand-600 border border-brand-100 mb-6 font-bold text-xs uppercase tracking-widest">
                 {isRTL ? 'خطط مرنة للجميع' : 'Flexible Plans'}
               </div>
               <h2 className="text-4xl sm:text-5xl font-display font-extrabold text-surface-900 mb-6 tracking-tight">
-                {isRTL ? 'اختر الباقة المناسبة لك' : 'Choose Your Plan'}
+                {isRTL ? 'ابدأ مجاناً لمدة 30 يوم' : 'Start Free for 30 Days'}
               </h2>
-              <p className="text-xl text-surface-600 max-w-2xl mx-auto leading-relaxed">
+              <p className="text-xl text-surface-600 max-w-2xl mx-auto leading-relaxed mb-10">
                 {isRTL 
-                  ? 'ابدأ بتجربة مجانية لمدة شهر، ثم اختر الباقة التي تناسب حجم عملك'
-                  : 'Start with a 30-day free trial, then choose the plan that fits your business'}
+                  ? 'جرّب الخدمة بالكامل مجاناً، ثم اختر الباقة التي تناسب حجم عملك'
+                  : 'Try the full service free, then choose the plan that fits your business'}
               </p>
             </div>
 
-            {/* Pricing Cards - 3 Plans */}
-            <div className="grid md:grid-cols-3 gap-6 mb-16 max-w-5xl mx-auto">
-              {/* Starter - with Free Trial */}
-              <div className="bg-white rounded-3xl p-8 border-2 border-surface-200 relative shadow-lg">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-brand-100 text-brand-700 text-xs font-bold rounded-full">
-                  {isRTL ? '30 يوم مجاناً' : '30 days free'}
+            {/* Plan Features Preview */}
+            <div className="grid md:grid-cols-3 gap-8 mb-16 max-w-4xl mx-auto">
+              {/* Starter */}
+              <div className="text-center p-6 rounded-2xl hover:bg-surface-50 transition-colors">
+                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <Zap className="w-7 h-7" />
                 </div>
-                <div className="text-center mb-6 pt-2">
-                  <h3 className="text-xl font-bold text-surface-900 mb-2">{isRTL ? 'المبتدئ' : 'Starter'}</h3>
-                  <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-4xl font-extrabold text-surface-900">$5</span>
-                    <span className="text-surface-500">/{isRTL ? 'شهر' : 'mo'}</span>
-                  </div>
-                </div>
-                <ul className="space-y-3 mb-8">
-                  <li className="flex items-center gap-2 text-sm text-surface-600">
-                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
-                    <span>{isRTL ? 'صفحة واحدة' : '1 page'}</span>
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-surface-600">
-                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
-                    <span>{isRTL ? '60 رد ذكي' : '60 AI replies'}</span>
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-surface-600">
-                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
-                    <span>{isRTL ? 'فيسبوك وإنستغرام' : 'FB & Instagram'}</span>
-                  </li>
+                <h3 className="text-lg font-bold text-surface-900 mb-2">{isRTL ? 'المبتدئ' : 'Starter'}</h3>
+                <p className="text-sm text-surface-500 mb-3">
+                  {isRTL ? 'للمشاريع الصغيرة' : 'For small projects'}
+                </p>
+                <ul className="text-sm text-surface-600 space-y-1">
+                  <li>{isRTL ? '✓ صفحة واحدة' : '✓ 1 page'}</li>
+                  <li>{isRTL ? '✓ ردود ذكية' : '✓ AI replies'}</li>
+                  <li>{isRTL ? '✓ 30 يوم مجاناً' : '✓ 30 days free'}</li>
                 </ul>
-                <Link href="/login" className="block">
-                  <Button variant="secondary" className="w-full rounded-xl font-bold">
-                    {isRTL ? 'ابدأ مجاناً' : 'Start Free Trial'}
-                  </Button>
-                </Link>
               </div>
 
-              {/* Business - Most Popular */}
-              <div className="bg-brand-600 rounded-3xl p-8 border-2 border-brand-500 relative shadow-2xl scale-105">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-amber-400 text-amber-900 text-xs font-bold rounded-full uppercase tracking-widest">
+              {/* Business */}
+              <div className="text-center p-6 rounded-2xl bg-brand-50 border-2 border-brand-200 relative">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-brand-600 text-white text-xs font-bold rounded-full">
                   {isRTL ? 'الأكثر طلباً' : 'Popular'}
                 </div>
-                <div className="text-center mb-6 pt-2">
-                  <h3 className="text-xl font-bold text-white mb-2">{isRTL ? 'الأعمال' : 'Business'}</h3>
-                  <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-4xl font-extrabold text-white">$30</span>
-                    <span className="text-brand-200">/{isRTL ? 'شهر' : 'mo'}</span>
-                  </div>
+                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center">
+                  <Sparkles className="w-7 h-7" />
                 </div>
-                <ul className="space-y-3 mb-8">
-                  <li className="flex items-center gap-2 text-sm text-brand-100">
-                    <Check className="w-4 h-4 text-white flex-shrink-0" />
-                    <span>{isRTL ? '3 صفحات' : '3 pages'}</span>
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-brand-100">
-                    <Check className="w-4 h-4 text-white flex-shrink-0" />
-                    <span>{isRTL ? '1,500 رد ذكي' : '1,500 AI replies'}</span>
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-brand-100">
-                    <Check className="w-4 h-4 text-white flex-shrink-0" />
-                    <span>{isRTL ? 'بدون علامة تجارية' : 'No branding'}</span>
-                  </li>
+                <h3 className="text-lg font-bold text-surface-900 mb-2">{isRTL ? 'الأعمال' : 'Business'}</h3>
+                <p className="text-sm text-surface-500 mb-3">
+                  {isRTL ? 'للمتاجر النشطة' : 'For active stores'}
+                </p>
+                <ul className="text-sm text-surface-600 space-y-1">
+                  <li>{isRTL ? '✓ عدة صفحات' : '✓ Multiple pages'}</li>
+                  <li>{isRTL ? '✓ ردود أكثر' : '✓ More AI replies'}</li>
+                  <li>{isRTL ? '✓ بدون علامة تجارية' : '✓ No branding'}</li>
                 </ul>
-                <Link href="/pricing" className="block">
-                  <Button className="w-full rounded-xl font-bold bg-white text-brand-600 hover:bg-brand-50">
-                    {isRTL ? 'اختر هذه الباقة' : 'Choose Plan'}
-                  </Button>
-                </Link>
               </div>
 
               {/* Pro */}
-              <div className="bg-surface-900 rounded-3xl p-8 border-2 border-surface-700 relative shadow-lg">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-violet-500 text-white text-xs font-bold rounded-full uppercase tracking-widest flex items-center gap-1">
-                  <Crown className="w-3 h-3" />
-                  {isRTL ? 'للوكالات' : 'Agencies'}
+              <div className="text-center p-6 rounded-2xl hover:bg-surface-50 transition-colors">
+                <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center">
+                  <Crown className="w-7 h-7" />
                 </div>
-                <div className="text-center mb-6 pt-2">
-                  <h3 className="text-xl font-bold text-white mb-2">{isRTL ? 'الاحترافي' : 'Pro'}</h3>
-                  <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-4xl font-extrabold text-white">$70</span>
-                    <span className="text-surface-400">/{isRTL ? 'شهر' : 'mo'}</span>
-                  </div>
-                </div>
-                <ul className="space-y-3 mb-8">
-                  <li className="flex items-center gap-2 text-sm text-surface-300">
-                    <Check className="w-4 h-4 text-violet-400 flex-shrink-0" />
-                    <span>{isRTL ? '10 صفحات' : '10 pages'}</span>
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-surface-300">
-                    <Check className="w-4 h-4 text-violet-400 flex-shrink-0" />
-                    <span>{isRTL ? '9,000 رد ذكي' : '9,000 AI replies'}</span>
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-surface-300">
-                    <Check className="w-4 h-4 text-violet-400 flex-shrink-0" />
-                    <span>{isRTL ? 'بدون علامة تجارية' : 'No branding'}</span>
-                  </li>
+                <h3 className="text-lg font-bold text-surface-900 mb-2">{isRTL ? 'الاحترافي' : 'Pro'}</h3>
+                <p className="text-sm text-surface-500 mb-3">
+                  {isRTL ? 'للوكالات والمتاجر الكبيرة' : 'For agencies'}
+                </p>
+                <ul className="text-sm text-surface-600 space-y-1">
+                  <li>{isRTL ? '✓ صفحات أكثر' : '✓ More pages'}</li>
+                  <li>{isRTL ? '✓ ردود غير محدودة' : '✓ Unlimited replies'}</li>
+                  <li>{isRTL ? '✓ دعم ذو أولوية' : '✓ Priority support'}</li>
                 </ul>
-                <Link href="/pricing" className="block">
-                  <Button className="w-full rounded-xl font-bold bg-violet-500 hover:bg-violet-600 text-white">
-                    {isRTL ? 'تواصل معنا' : 'Contact Us'}
-                  </Button>
-                </Link>
               </div>
             </div>
 
-            {/* View Full Pricing Link */}
+            {/* CTA */}
             <div className="text-center">
-              <Link href="/pricing" className="inline-flex items-center gap-2 text-brand-600 font-bold hover:text-brand-700 transition-colors group">
-                {isRTL ? 'عرض جميع التفاصيل والمقارنة الكاملة' : 'View full pricing comparison'}
-                {isRTL ? <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> : <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+              <Link href="/pricing">
+                <Button size="lg" className="px-12 py-6 text-lg font-bold rounded-2xl shadow-xl shadow-brand-200">
+                  {isRTL ? 'عرض الأسعار والتفاصيل' : 'View Pricing & Details'}
+                  {isRTL ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
+                </Button>
               </Link>
+              <p className="text-sm text-surface-400 mt-4">
+                {isRTL ? 'لا حاجة لبطاقة ائتمان للبدء' : 'No credit card required to start'}
+              </p>
             </div>
           </div>
         </section>
