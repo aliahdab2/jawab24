@@ -58,78 +58,106 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
     );
   }
 
-  if (!isAuthenticated) {
+  // If not public and not authenticated, we're redirecting, so show nothing
+  if (!isPublic && !isAuthenticated) {
     return null;
   }
+
+  const isCleanLayout = isPublic;
 
   return (
     <>
       <Head>
         <title>{pageTitle} | Jawab24</title>
       </Head>
+
       <div className="min-h-screen bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
-        {/* Sidebar - hidden on mobile */}
-        <div className="hidden md:block">
-          <Sidebar />
-        </div>
+        {/* Sidebar - hidden on mobile and on clean layouts */}
+        {!isCleanLayout && (
+          <div className="hidden md:block">
+            <Sidebar />
+          </div>
+        )}
         
-        {/* Mobile header */}
-        <div className="md:hidden fixed top-0 left-0 right-0 h-20 bg-surface-900 text-white flex items-center justify-between px-6 z-40 shadow-xl border-b border-white/5">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-              <MessageCircle className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-display font-bold text-xl tracking-tight">Jawab24</span>
-          </Link>
-          <button 
-            onClick={() => router.push('/settings')}
-            className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5 shadow-inner"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-        </div>
+        {/* Mobile header - Clean version for public pages */}
+        {isCleanLayout ? (
+          <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 z-40 border-b border-surface-100 shadow-sm">
+            <Link href="/" className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md shadow-brand-500/20">
+                <MessageCircle className="w-4 h-4 text-white" />
+              </div>
+              <span className="font-display font-bold text-lg tracking-tight text-surface-900">Jawab24</span>
+            </Link>
+            <Link href={isAuthenticated ? '/dashboard' : '/login'}>
+              <button className="text-sm font-bold text-brand-600 hover:text-brand-700 bg-brand-50 px-4 py-2 rounded-xl transition-all">
+                {isAuthenticated ? (isRTL ? 'لوحة التحكم' : 'Dashboard') : (isRTL ? 'تسجيل الدخول' : 'Login')}
+              </button>
+            </Link>
+          </div>
+        ) : (
+          <div className="md:hidden fixed top-0 left-0 right-0 h-20 bg-surface-900 text-white flex items-center justify-between px-6 z-40 shadow-xl border-b border-white/5">
+            <Link href="/dashboard" className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                <MessageCircle className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-display font-bold text-xl tracking-tight">Jawab24</span>
+            </Link>
+            <button 
+              onClick={() => router.push('/settings')}
+              className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5 shadow-inner"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
+        )}
         
         {/* Main content */}
         <main 
           className={clsx(
-            'transition-all duration-500 min-h-screen pt-20 md:pt-0',
-            sidebarOpen ? 'md:ms-64' : 'md:ms-20'
+            'transition-all duration-500 min-h-screen',
+            isCleanLayout ? 'pt-16 md:pt-20' : 'pt-20 md:pt-0',
+            !isCleanLayout && (sidebarOpen ? 'md:ms-64' : 'md:ms-20')
           )}
         >
-          <div className="p-4 md:p-8 lg:p-12 pb-24 md:pb-12 max-w-[1600px] mx-auto">
+          <div className={clsx(
+            'p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
+            isCleanLayout ? 'pb-12' : 'pb-24 md:pb-12'
+          )}>
             {children}
           </div>
         </main>
         
-        {/* Mobile bottom navigation */}
-        <nav 
-          className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-surface-100 flex justify-around items-center h-20 px-2 z-40 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]"
-        >
-          <MobileNavButton 
-            onClick={() => router.push('/dashboard')} 
-            icon={<LayoutDashboard className="w-5 h-5" />}
-            label={t('nav.dashboard')}
-            active={router.pathname === '/dashboard'}
-          />
-          <MobileNavButton 
-            onClick={() => router.push('/comments')} 
-            icon={<MessageSquare className="w-5 h-5" />}
-            label={t('nav.comments')}
-            active={router.pathname === '/comments'}
-          />
-          <MobileNavButton 
-            onClick={() => router.push('/messages')} 
-            icon={<MessageCircle className="w-5 h-5" />}
-            label={t('nav.messages')}
-            active={router.pathname === '/messages'}
-          />
-          <MobileNavButton 
-            onClick={() => setMobileMenuOpen(true)} 
-            icon={<MoreHorizontal className="w-5 h-5" />}
-            label={t('nav.more') || 'More'}
-            active={mobileMenuOpen}
-          />
-        </nav>
+        {/* Mobile bottom navigation - hidden on clean layouts */}
+        {!isCleanLayout && (
+          <nav 
+            className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-surface-100 flex justify-around items-center h-20 px-2 z-40 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]"
+          >
+            <MobileNavButton 
+              onClick={() => router.push('/dashboard')} 
+              icon={<LayoutDashboard className="w-5 h-5" />}
+              label={t('nav.dashboard')}
+              active={router.pathname === '/dashboard'}
+            />
+            <MobileNavButton 
+              onClick={() => router.push('/comments')} 
+              icon={<MessageSquare className="w-5 h-5" />}
+              label={t('nav.comments')}
+              active={router.pathname === '/comments'}
+            />
+            <MobileNavButton 
+              onClick={() => router.push('/messages')} 
+              icon={<MessageCircle className="w-5 h-5" />}
+              label={t('nav.messages')}
+              active={router.pathname === '/messages'}
+            />
+            <MobileNavButton 
+              onClick={() => setMobileMenuOpen(true)} 
+              icon={<MoreHorizontal className="w-5 h-5" />}
+              label={t('nav.more') || 'More'}
+              active={mobileMenuOpen}
+            />
+          </nav>
+        )}
 
         {/* Mobile full menu overlay */}
         {mobileMenuOpen && (

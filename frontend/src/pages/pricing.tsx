@@ -63,8 +63,8 @@ function PlanCard({
     <Card 
       className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
         isPopular 
-          ? 'ring-2 ring-brand-500 shadow-brand-100 shadow-xl scale-105 z-10' 
-          : 'border-surface-200'
+          ? 'ring-2 ring-brand-500 shadow-brand-100 shadow-xl md:scale-105 z-10' 
+          : 'border-surface-200 shadow-sm'
       } ${isCurrentPlan ? 'bg-brand-50/50' : 'bg-white'}`}
     >
       {/* Popular badge */}
@@ -332,7 +332,7 @@ export default function PricingPage() {
       )}
       
       {/* Plans Grid - Centered for 3 plans */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 pb-6 items-stretch max-w-5xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 pb-12 items-stretch max-w-6xl mx-auto px-4 md:px-0">
         {activePlans.map((plan) => (
           <PlanCard
             key={plan.id}
