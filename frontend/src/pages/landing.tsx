@@ -118,14 +118,14 @@ export default function LandingPage() {
     {
       question: isRTL ? 'هل Jawab24 يدعم إنستغرام؟' : 'Does Jawab24 support Instagram?',
       answer: isRTL 
-        ? 'نعم، Jawab24 يدعم كلاً من صفحات فيسبوك وحسابات إنستغرام التجارية المرتبطة بها.'
-        : 'Yes, Jawab24 supports both Facebook Pages and linked Instagram Business accounts.',
+        ? 'نعم، Jawab24 يدعم كلاً من صفحات فيسبوك وحسابات إنستغرام التجارية المرتبطة بها في جميع الباقات.'
+        : 'Yes, Jawab24 supports both Facebook Pages and linked Instagram Business accounts on all plans.',
     },
     {
-      question: isRTL ? 'هل يمكنني تجربة الخدمة مجاناً؟' : 'Can I try the service for free?',
+      question: isRTL ? 'كم تكلفة الخدمة؟' : 'How much does it cost?',
       answer: isRTL 
-        ? 'بالتأكيد! نوفر فترة تجريبية مجانية لجميع المستخدمين الجدد لتجربة قوة الردود الذكية.'
-        : 'Absolutely! We offer a free trial for all new users to experience the power of smart replies.',
+        ? 'نوفر تجربة مجانية لمدة 30 يوم، ثم تبدأ الباقات من $5 شهرياً. باقة الأعمال بـ$19 تناسب معظم المستخدمين مع 9,000 رد ذكي شهرياً.'
+        : 'We offer a 30-day free trial, then plans start at $5/month. The Business plan at $19/month fits most users with 9,000 AI replies monthly.',
     },
     {
       question: isRTL ? 'كيف يضمن النظام دقة الردود؟' : 'How does the system ensure accuracy?',
@@ -134,10 +134,10 @@ export default function LandingPage() {
         : 'Through the "Knowledge Base" you add, the AI sticks to the information you provide to ensure no wrong answers are given.',
     },
     {
-      question: isRTL ? 'هل يمكنني إيقاف الردود التلقائية؟' : 'Can I stop auto-replies?',
+      question: isRTL ? 'هل يمكنني الترقية أو تغيير الباقة لاحقاً؟' : 'Can I upgrade or change my plan later?',
       answer: isRTL 
-        ? 'نعم، يمكنك تفعيل أو تعطيل الردود لكل صفحة على حدة بضغطة زر واحدة من لوحة التحكم.'
-        : 'Yes, you can enable or disable replies for each page individually with a single click from the dashboard.',
+        ? 'بالتأكيد! يمكنك الترقية أو تغيير باقتك في أي وقت من لوحة التحكم. التغيير يطبق فوراً.'
+        : 'Absolutely! You can upgrade or change your plan anytime from the dashboard. Changes apply immediately.',
     },
   ];
 
@@ -178,6 +178,9 @@ export default function LandingPage() {
 
               {/* Actions */}
               <div className="flex items-center gap-4">
+                <Link href="#pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
+                  {isRTL ? 'الأسعار' : 'Pricing'}
+                </Link>
                 <button
                   onClick={toggleLanguage}
                   className="px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
@@ -191,7 +194,7 @@ export default function LandingPage() {
                 </Link>
                 <Link href="/login">
                   <Button size="sm" className="font-bold shadow-xl shadow-brand-500/20 px-6">
-                    {isRTL ? 'ابدأ الآن' : 'Get Started'}
+                    {isRTL ? 'ابدأ تجربتك' : 'Start Trial'}
                   </Button>
                 </Link>
               </div>
@@ -376,40 +379,160 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Pricing CTA Section */}
-        <section className="py-32 bg-white relative">
+        {/* Pricing Section */}
+        <section id="pricing" className="py-32 bg-white relative">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="bg-surface-900 rounded-[40px] p-12 lg:p-24 relative overflow-hidden shadow-2xl">
-              <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.15),transparent)]"></div>
-              <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.15),transparent)]"></div>
-              
-              <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-12">
-                <div className="text-center lg:text-start max-w-2xl">
-                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 text-brand-400 border border-white/10 mb-6 font-bold text-xs uppercase tracking-widest">
-                    {isRTL ? 'خطط مرنة تناسب الجميع' : 'Flexible plans for everyone'}
-                  </div>
-                  <h2 className="text-4xl sm:text-5xl font-display font-extrabold text-white mb-6 leading-tight tracking-tight">
-                    {isRTL ? 'ابدأ مجاناً اليوم' : 'Start Free Today'}
-                    <span className="block text-surface-400 font-medium text-2xl mt-4 leading-relaxed">
-                      {isRTL 
-                        ? 'وجرّب بنفسك كيف يمكن للذكاء الاصطناعي تغيير طريقتك في العمل' 
-                        : 'Experience firsthand how AI can transform your business operations'}
-                    </span>
-                  </h2>
-                </div>
-                <div className="flex flex-col gap-4 w-full sm:w-auto">
-                  <Link href="/pricing">
-                    <Button size="lg" className="w-full sm:w-auto bg-white text-surface-900 hover:bg-brand-50 px-12 py-8 text-xl font-bold rounded-2xl shadow-2xl">
-                      {isRTL ? 'عرض الأسعار' : 'See Pricing'}
-                    </Button>
-                  </Link>
-                  <Link href="/login">
-                    <Button variant="secondary" size="lg" className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10 px-12 py-8 text-xl font-bold rounded-2xl">
-                      {isRTL ? 'ابدأ الآن' : 'Get Started'}
-                    </Button>
-                  </Link>
-                </div>
+            <div className="text-center mb-20">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-50 text-brand-600 border border-brand-100 mb-6 font-bold text-xs uppercase tracking-widest">
+                {isRTL ? 'خطط مرنة للجميع' : 'Flexible Plans'}
               </div>
+              <h2 className="text-4xl sm:text-5xl font-display font-extrabold text-surface-900 mb-6 tracking-tight">
+                {isRTL ? 'اختر الباقة المناسبة لك' : 'Choose Your Plan'}
+              </h2>
+              <p className="text-xl text-surface-600 max-w-2xl mx-auto leading-relaxed">
+                {isRTL 
+                  ? 'ابدأ بتجربة مجانية لمدة شهر، ثم اختر الباقة التي تناسب حجم عملك'
+                  : 'Start with a 30-day free trial, then choose the plan that fits your business'}
+              </p>
+            </div>
+
+            {/* Pricing Cards */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+              {/* Free Trial */}
+              <div className="bg-surface-50 rounded-3xl p-8 border-2 border-surface-100 relative">
+                <div className="text-center mb-6">
+                  <h3 className="text-xl font-bold text-surface-900 mb-2">{isRTL ? 'تجربة مجانية' : 'Free Trial'}</h3>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-4xl font-extrabold text-surface-900">$0</span>
+                    <span className="text-surface-500">/{isRTL ? 'شهر' : 'mo'}</span>
+                  </div>
+                  <p className="text-sm text-surface-500 mt-2">{isRTL ? '30 يوم تجربة' : '30 days trial'}</p>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-center gap-2 text-sm text-surface-600">
+                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                    <span>{isRTL ? 'صفحة واحدة' : '1 page'}</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-surface-600">
+                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                    <span>{isRTL ? '60 رد ذكي' : '60 AI replies'}</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-surface-600">
+                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                    <span>{isRTL ? 'فيسبوك وإنستغرام' : 'FB & Instagram'}</span>
+                  </li>
+                </ul>
+                <Link href="/login" className="block">
+                  <Button variant="secondary" className="w-full rounded-xl font-bold">
+                    {isRTL ? 'ابدأ مجاناً' : 'Start Free'}
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Starter */}
+              <div className="bg-white rounded-3xl p-8 border-2 border-surface-200 relative shadow-lg">
+                <div className="text-center mb-6">
+                  <h3 className="text-xl font-bold text-surface-900 mb-2">{isRTL ? 'المبتدئ' : 'Starter'}</h3>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-4xl font-extrabold text-surface-900">$5</span>
+                    <span className="text-surface-500">/{isRTL ? 'شهر' : 'mo'}</span>
+                  </div>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-center gap-2 text-sm text-surface-600">
+                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                    <span>{isRTL ? 'صفحتين' : '2 pages'}</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-surface-600">
+                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                    <span>{isRTL ? '1,500 رد ذكي' : '1,500 AI replies'}</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-surface-600">
+                    <Check className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                    <span>{isRTL ? 'فيسبوك وإنستغرام' : 'FB & Instagram'}</span>
+                  </li>
+                </ul>
+                <Link href="/pricing" className="block">
+                  <Button variant="secondary" className="w-full rounded-xl font-bold">
+                    {isRTL ? 'عرض التفاصيل' : 'View Details'}
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Business - Most Popular */}
+              <div className="bg-brand-600 rounded-3xl p-8 border-2 border-brand-500 relative shadow-2xl scale-105">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-amber-400 text-amber-900 text-xs font-bold rounded-full uppercase tracking-widest">
+                  {isRTL ? 'الأكثر طلباً' : 'Popular'}
+                </div>
+                <div className="text-center mb-6">
+                  <h3 className="text-xl font-bold text-white mb-2">{isRTL ? 'الأعمال' : 'Business'}</h3>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-4xl font-extrabold text-white">$19</span>
+                    <span className="text-brand-200">/{isRTL ? 'شهر' : 'mo'}</span>
+                  </div>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-center gap-2 text-sm text-brand-100">
+                    <Check className="w-4 h-4 text-white flex-shrink-0" />
+                    <span>{isRTL ? '5 صفحات' : '5 pages'}</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-brand-100">
+                    <Check className="w-4 h-4 text-white flex-shrink-0" />
+                    <span>{isRTL ? '9,000 رد ذكي' : '9,000 AI replies'}</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-brand-100">
+                    <Check className="w-4 h-4 text-white flex-shrink-0" />
+                    <span>{isRTL ? 'دعم ذو أولوية' : 'Priority support'}</span>
+                  </li>
+                </ul>
+                <Link href="/pricing" className="block">
+                  <Button className="w-full rounded-xl font-bold bg-white text-brand-600 hover:bg-brand-50">
+                    {isRTL ? 'اختر هذه الباقة' : 'Choose Plan'}
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Pro */}
+              <div className="bg-surface-900 rounded-3xl p-8 border-2 border-surface-700 relative shadow-lg">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-violet-500 text-white text-xs font-bold rounded-full uppercase tracking-widest flex items-center gap-1">
+                  <Crown className="w-3 h-3" />
+                  {isRTL ? 'احترافي' : 'Pro'}
+                </div>
+                <div className="text-center mb-6">
+                  <h3 className="text-xl font-bold text-white mb-2">{isRTL ? 'الاحترافي' : 'Pro'}</h3>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-4xl font-extrabold text-white">$49</span>
+                    <span className="text-surface-400">/{isRTL ? 'شهر' : 'mo'}</span>
+                  </div>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-center gap-2 text-sm text-surface-300">
+                    <Check className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                    <span>{isRTL ? 'صفحات غير محدودة' : 'Unlimited pages'}</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-surface-300">
+                    <Check className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                    <span>{isRTL ? 'ردود غير محدودة' : 'Unlimited replies'}</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-surface-300">
+                    <Check className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                    <span>{isRTL ? 'بدون علامة تجارية' : 'White label'}</span>
+                  </li>
+                </ul>
+                <Link href="/pricing" className="block">
+                  <Button className="w-full rounded-xl font-bold bg-violet-500 hover:bg-violet-600 text-white">
+                    {isRTL ? 'تواصل معنا' : 'Contact Us'}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            {/* View Full Pricing Link */}
+            <div className="text-center">
+              <Link href="/pricing" className="inline-flex items-center gap-2 text-brand-600 font-bold hover:text-brand-700 transition-colors group">
+                {isRTL ? 'عرض جميع التفاصيل والمقارنة الكاملة' : 'View full pricing comparison'}
+                {isRTL ? <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> : <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+              </Link>
             </div>
           </div>
         </section>
@@ -485,8 +608,8 @@ export default function LandingPage() {
               <div>
                 <h4 className="font-bold text-white text-lg mb-8 uppercase tracking-widest">{isRTL ? 'روابط هامة' : 'Quick Links'}</h4>
                 <ul className="space-y-4 font-medium">
-                  <li><Link href="/pricing" className="text-surface-400 hover:text-brand-400 transition-colors">{isRTL ? 'الأسئلة والخطط' : 'Pricing Plans'}</Link></li>
-                  <li><Link href="/login" className="text-surface-400 hover:text-brand-400 transition-colors">{isRTL ? 'تسجيل الدخول' : 'Sign In'}</Link></li>
+                  <li><Link href="/pricing" className="text-surface-400 hover:text-brand-400 transition-colors">{isRTL ? 'الباقات والأسعار' : 'Pricing Plans'}</Link></li>
+                  <li><Link href="/login" className="text-surface-400 hover:text-brand-400 transition-colors">{isRTL ? 'ابدأ تجربتك المجانية' : 'Start Free Trial'}</Link></li>
                   <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{isRTL ? 'شروط الخدمة' : 'Terms of Service'}</Link></li>
                   <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{isRTL ? 'سياسة الخصوصية' : 'Privacy Policy'}</Link></li>
                 </ul>
