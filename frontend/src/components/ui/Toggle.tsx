@@ -41,15 +41,15 @@ export function Toggle({ enabled, onChange, disabled = false, size = 'md' }: Tog
       disabled={disabled}
       onClick={() => onChange(!enabled)}
       className={clsx(
-        'relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2',
+        'relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-brand-500/10',
         sizeClasses[size].track,
-        enabled ? 'bg-brand-600' : 'bg-surface-300',
+        enabled ? 'bg-brand-600 shadow-lg shadow-brand-600/20' : 'bg-surface-200',
         disabled && 'opacity-50 cursor-not-allowed'
       )}
     >
       <span
         className={clsx(
-          'pointer-events-none inline-block rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+          'pointer-events-none inline-block rounded-full bg-white shadow-md ring-0 transition-all duration-300 ease-in-out',
           sizeClasses[size].thumb
         )}
         style={{ transform: getTransform() }}

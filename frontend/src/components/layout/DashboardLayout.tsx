@@ -65,41 +65,43 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
       <Head>
         <title>{pageTitle} | Jawab24</title>
       </Head>
-      <div className="min-h-screen bg-surface-50" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="min-h-screen bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Sidebar - hidden on mobile */}
         <div className="hidden md:block">
           <Sidebar />
         </div>
         
         {/* Mobile header */}
-        <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-surface-900 text-white flex items-center justify-between px-4 z-40">
-          <span className="font-display font-bold">Jawab24</span>
+        <div className="md:hidden fixed top-0 left-0 right-0 h-20 bg-surface-900 text-white flex items-center justify-between px-6 z-40 shadow-xl border-b border-white/5">
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+              <MessageCircle className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-display font-bold text-xl tracking-tight">Jawab24</span>
+          </Link>
           <button 
             onClick={() => router.push('/settings')}
-            className="p-2 rounded-lg hover:bg-surface-800"
+            className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5 shadow-inner"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+            <Settings className="w-5 h-5" />
           </button>
         </div>
         
         {/* Main content */}
         <main 
           className={clsx(
-            'transition-all duration-300 min-h-screen pt-14 md:pt-0',
+            'transition-all duration-500 min-h-screen pt-20 md:pt-0',
             sidebarOpen ? 'md:ms-64' : 'md:ms-20'
           )}
         >
-          <div className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
+          <div className="p-4 md:p-8 lg:p-12 pb-24 md:pb-12 max-w-[1600px] mx-auto">
             {children}
           </div>
         </main>
         
         {/* Mobile bottom navigation */}
         <nav 
-          className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-200 flex justify-around items-start pt-2 z-40"
-          style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0.5rem))' }}
+          className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-surface-100 flex justify-around items-center h-20 px-2 z-40 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]"
         >
           <MobileNavButton 
             onClick={() => router.push('/dashboard')} 
@@ -197,12 +199,23 @@ function MobileNavButton({ onClick, icon, label, active }: {
     <button 
       onClick={onClick} 
       className={clsx(
-        "flex flex-col items-center p-2 transition-colors",
-        active ? "text-brand-600" : "text-surface-500 hover:text-brand-600"
+        "flex flex-col items-center justify-center h-full px-4 transition-all duration-300 relative",
+        active ? "text-brand-600" : "text-surface-400 hover:text-brand-500"
       )}
     >
-      {icon}
-      <span className="text-[10px] mt-1 font-medium">{label}</span>
+      <div className={clsx(
+        "transition-transform duration-300 mb-1",
+        active ? "scale-110" : "scale-100"
+      )}>
+        {icon}
+      </div>
+      <span className={clsx(
+        "text-[10px] font-bold uppercase tracking-widest",
+        active ? "opacity-100" : "opacity-60"
+      )}>{label}</span>
+      {active && (
+        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-1 bg-brand-600 rounded-full shadow-[0_0_10px_rgba(13,148,136,0.5)]"></div>
+      )}
     </button>
   );
 }
@@ -216,10 +229,12 @@ function MobileMenuButton({ onClick, icon, label }: {
   return (
     <button 
       onClick={onClick} 
-      className="flex flex-col items-center p-4 rounded-xl hover:bg-surface-100 transition-colors"
+      className="flex flex-col items-center p-6 rounded-[2rem] bg-surface-50 border border-surface-100 hover:border-brand-200 hover:bg-brand-50/30 transition-all group"
     >
-      <div className="text-brand-600 mb-2">{icon}</div>
-      <span className="text-xs font-medium text-surface-700">{label}</span>
+      <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-surface-100 flex items-center justify-center text-brand-600 mb-3 group-hover:scale-110 group-hover:rotate-3 transition-transform">
+        {icon}
+      </div>
+      <span className="text-xs font-bold text-surface-900 uppercase tracking-tight">{label}</span>
     </button>
   );
 }

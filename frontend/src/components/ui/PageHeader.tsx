@@ -8,19 +8,19 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, action }: PageHeaderProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-6 mb-12 animate-slide-up">
       <div className="flex-1 text-start">
-        <h1 className="text-2xl lg:text-3xl font-display font-bold text-surface-900">
+        <h1 className="text-3xl lg:text-4xl font-display font-extrabold text-surface-900 tracking-tight">
           {title}
         </h1>
         {description && (
-          <p className="text-surface-500 mt-1">
+          <p className="text-lg text-surface-500 mt-2 font-medium leading-relaxed">
             {description}
           </p>
         )}
       </div>
       {action && (
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 flex items-center gap-3">
           {action}
         </div>
       )}

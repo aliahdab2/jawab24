@@ -43,23 +43,23 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       <div className="flex min-h-full items-center justify-center p-4">
         <div 
           className={clsx(
-            'relative w-full bg-white rounded-2xl shadow-2xl animate-slide-up',
+            'relative w-full bg-white rounded-[2.5rem] shadow-2xl animate-slide-up overflow-hidden border border-surface-100',
             sizeClasses[size]
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-surface-200">
-            <h2 className="text-xl font-semibold text-surface-900">{title}</h2>
+          <div className="flex items-center justify-between px-8 py-6 border-b border-surface-100 bg-surface-50/50">
+            <h2 className="text-2xl font-display font-bold text-surface-900 tracking-tight">{title}</h2>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg text-surface-400 hover:text-surface-600 hover:bg-surface-100 transition-colors"
+              className="p-3 rounded-2xl text-surface-400 hover:text-red-600 hover:bg-red-50 transition-all active:scale-90"
             >
-              <X className="w-5 h-5" />
+              <X className="w-6 h-6" />
             </button>
           </div>
           
           {/* Content */}
-          <div className="p-6">
+          <div className="p-8">
             {children}
           </div>
         </div>

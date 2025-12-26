@@ -154,26 +154,27 @@ export default function TemplatesPage() {
 
       {/* Templates Grid */}
       {templates.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
           {templates.map((template, i) => (
             <Card 
               key={template.id}
               hover
-              className="animate-slide-up"
+              className={`animate-slide-up border-none shadow-lg shadow-surface-200/50 flex flex-col h-full rounded-2xl overflow-hidden group ${!template.active ? 'opacity-75' : ''}`}
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
               {/* Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-accent-100 flex items-center justify-center">
-                    <BookTemplate className="w-5 h-5 text-accent-600" />
+              <div className="p-5 border-b border-surface-100 bg-gradient-to-br from-surface-50 to-white flex items-start justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-inner transition-colors ${template.active ? 'bg-accent-100 text-accent-600' : 'bg-surface-200 text-surface-400'}`}>
+                    <BookTemplate className="w-6 h-6" />
                   </div>
                   <div className="text-start">
-                    <h3 className="font-semibold text-surface-900">{template.name}</h3>
+                    <h3 className="font-bold text-surface-900 text-lg leading-tight">{template.name}</h3>
                     {template.usageCount !== undefined && (
-                        <p className="text-xs text-surface-500">
-                        {t('templates.usageCount')}: {template.usageCount}
-                        </p>
+                        <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
+                          <Zap className="w-3 h-3 text-amber-500" />
+                          <span>{t('templates.usageCount')}: {template.usageCount}</span>
+                        </div>
                     )}
                   </div>
                 </div>
@@ -185,58 +186,74 @@ export default function TemplatesPage() {
               </div>
 
               {/* Translations */}
-              <div className="space-y-3 mb-4">
-                {template.translations.en && (
-                  <div className="p-3 rounded-lg bg-surface-50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Globe className="w-3 h-3 text-surface-400" />
-                      <span className="text-xs font-medium text-surface-500">{t('templates.english')}</span>
+              <div className="p-5 space-y-4 flex-1">
+                {template.translations.ar && (
+                  <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative overflow-hidden group/ar">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-brand-600 uppercase tracking-widest">
+                        <Globe className="w-3 h-3" />
+                        <span>{t('templates.arabic')}</span>
+                      </div>
                     </div>
-                    <p className="text-sm text-surface-700 line-clamp-2 text-start">
-                      {template.translations.en}
+                    <p className="text-sm text-surface-700 leading-relaxed text-start italic italic-arabic" dir="rtl">
+                      "{template.translations.ar}"
                     </p>
                   </div>
                 )}
-                {template.translations.ar && (
-                  <div className="p-3 rounded-lg bg-surface-50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Globe className="w-3 h-3 text-surface-400" />
-                      <span className="text-xs font-medium text-surface-500">{t('templates.arabic')}</span>
+                
+                {template.translations.en && (
+                  <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 relative overflow-hidden group/en">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
+                        <Globe className="w-3 h-3" />
+                        <span>{t('templates.english')}</span>
+                      </div>
                     </div>
-                    <p className="text-sm text-surface-700 line-clamp-2 text-start" dir="rtl">
-                      {template.translations.ar}
+                    <p className="text-sm text-surface-700 leading-relaxed text-start italic">
+                      "{template.translations.en}"
                     </p>
                   </div>
                 )}
               </div>
 
               {/* Keywords */}
-              <div className="flex items-center gap-2 flex-wrap mb-4">
-                <Tag className="w-4 h-4 text-surface-400" />
-                {(template.keywords || []).slice(0, 4).map((keyword) => (
-                  <Badge key={keyword} size="sm" variant="default">
-                    {keyword}
-                  </Badge>
-                ))}
-                {(template.keywords || []).length > 4 && (
-                  <Badge size="sm" variant="default">+{(template.keywords || []).length - 4}</Badge>
-                )}
+              <div className="px-5 pb-2">
+                <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
+                  <Tag className="w-3.5 h-3.5 text-surface-300" />
+                  {(template.keywords || []).length > 0 ? (
+                    (template.keywords || []).slice(0, 6).map((keyword) => (
+                      <span key={keyword} className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-600 text-[10px] font-bold uppercase tracking-wider">
+                        {keyword}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[10px] font-medium text-surface-400 italic">{isRTL ? 'لا توجد كلمات مفتاحية' : 'No keywords'}</span>
+                  )}
+                  {(template.keywords || []).length > 6 && (
+                    <span className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-600 text-[10px] font-bold uppercase tracking-wider">
+                      +{(template.keywords || []).length - 6}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-4 border-t border-surface-100">
-                <Badge variant={template.active ? 'success' : 'default'}>
-                  {template.active ? t('common.active') : t('common.inactive')}
-                </Badge>
+              {/* Actions Footer */}
+              <div className="px-5 py-4 mt-auto border-t border-surface-100 bg-surface-50/30 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => handleOpenModal(template)}>
+                  <div className={`w-2 h-2 rounded-full ${template.active ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
+                  <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">
+                    {template.active ? t('common.active') : t('common.inactive')}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => handleOpenModal(template)} className="text-surface-400 hover:text-brand-600 hover:bg-brand-50">
                     <Edit className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="text-surface-400 hover:text-brand-600 hover:bg-brand-50">
                     <Copy className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(template.id)}>
-                    <Trash2 className="w-4 h-4 text-red-500" />
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(template.id)} className="text-surface-400 hover:text-red-600 hover:bg-red-50">
+                    <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               </div>

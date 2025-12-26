@@ -26,12 +26,24 @@ type FilterType = 'all' | 'replied' | 'pending' | 'needs_attention';
 export default function CommentsPage() {
   const { t, language } = useTranslation();
   const { token } = useAuthStore();
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<FilterType>('all');
-  const [exporting, setExporting] = useState(false);
-  const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
+  // ... rest of state ...
+
+  // Helper component for stats
+  const StatCard = ({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) => (
+    <Card className="text-center p-4 border-none shadow-md shadow-surface-200/50 flex flex-col items-center">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${
+        color === 'brand' ? 'bg-brand-100 text-brand-600' :
+        color === 'emerald' ? 'bg-emerald-100 text-emerald-600' :
+        color === 'amber' ? 'bg-amber-100 text-amber-600' :
+        color === 'violet' ? 'bg-violet-100 text-violet-600' :
+        'bg-red-100 text-red-600'
+      }`}>
+        {icon}
+      </div>
+      <p className="text-2xl font-bold text-surface-900">{value.toLocaleString()}</p>
+      <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest truncate w-full">{title}</p>
+    </Card>
+  );
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -200,60 +212,49 @@ export default function CommentsPage() {
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mb-6">
-        <Card className="text-center p-4 md:p-6">
-          <p className="text-xl md:text-2xl font-bold text-surface-900">{stats.total}</p>
-          <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.totalComments')}</p>
-        </Card>
-        <Card className="text-center p-4 md:p-6">
-          <p className="text-xl md:text-2xl font-bold text-emerald-600">{stats.replied}</p>
-          <p className="text-xs md:text-sm text-surface-500 truncate">{t('comments.replied')}</p>
-        </Card>
-        <Card className="text-center p-4 md:p-6">
-          <p className="text-xl md:text-2xl font-bold text-amber-600">{stats.pending}</p>
-          <p className="text-xs md:text-sm text-surface-500 truncate">{t('comments.pending')}</p>
-        </Card>
-        <Card className="text-center p-4 md:p-6">
-          <p className="text-xl md:text-2xl font-bold text-brand-600">{stats.aiReplies}</p>
-          <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.aiReplies')}</p>
-        </Card>
-        <Card className="text-center p-4 md:p-6">
-          <p className="text-xl md:text-2xl font-bold text-red-600">{stats.needsAttention}</p>
-          <p className="text-xs md:text-sm text-surface-500 truncate">{language === 'ar' ? 'تحتاج اهتمام' : 'Needs Attention'}</p>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <StatCard title={t('dashboard.totalComments')} value={stats.total} icon={<MessageSquare className="w-4 h-4" />} color="brand" />
+        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle className="w-4 h-4" />} color="emerald" />
+        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock className="w-4 h-4" />} color="amber" />
+        <StatCard title={t('dashboard.aiReplies')} value={stats.aiReplies} icon={<Bot className="w-4 h-4" />} color="violet" />
+        <StatCard title={language === 'ar' ? 'تحتاج اهتمام' : 'Needs Attention'} value={stats.needsAttention} icon={<AlertTriangle className="w-4 h-4" />} color="red" />
       </div>
 
-      {/* Filters */}
-      <Card className="mb-6 p-4 md:p-6">
-        <div className="flex flex-col gap-3 md:gap-4">
-          <div className="relative">
+      {/* Filters & Search */}
+      <Card className="mb-8 border-none shadow-lg shadow-surface-200/50">
+        <div className="p-4 md:p-6 flex flex-col gap-6">
+          <div className="relative group">
             <Search 
-              className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400"
-              style={{ insetInlineStart: '0.75rem' }}
+              className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400 group-focus-within:text-brand-500 transition-colors"
+              style={{ insetInlineStart: '1rem' }}
             />
             <Input
               placeholder={t('common.search') + '...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ paddingInlineStart: '2.5rem' }}
+              className="py-6 ps-12 rounded-2xl bg-surface-50 border-none focus:ring-2 focus:ring-brand-500 transition-all"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
             {(['all', 'replied', 'pending', 'needs_attention'] as FilterType[]).map((f) => (
               <Button
                 key={f}
                 variant={filter === f ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => setFilter(f)}
-                className={`whitespace-nowrap flex-shrink-0 ${f === 'needs_attention' && needsAttentionCount > 0 ? 'ring-2 ring-red-300' : ''}`}
+                className={`rounded-full whitespace-nowrap px-6 transition-all duration-300 ${
+                  filter === f ? 'shadow-md shadow-brand-100' : ''
+                } ${f === 'needs_attention' && needsAttentionCount > 0 ? 'ring-2 ring-red-200' : ''}`}
               >
-                {f === 'needs_attention' && <AlertTriangle className="w-3 h-3 mr-1" />}
-                {getFilterLabel(f)}
-                {f === 'needs_attention' && needsAttentionCount > 0 && (
-                  <span className="ml-1 bg-red-500 text-white text-xs rounded-full px-1.5">
-                    {needsAttentionCount}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {f === 'needs_attention' && <AlertTriangle className="w-3.5 h-3.5" />}
+                  <span>{getFilterLabel(f)}</span>
+                  {f === 'needs_attention' && needsAttentionCount > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {needsAttentionCount}
+                    </span>
+                  )}
+                </div>
               </Button>
             ))}
           </div>
@@ -262,84 +263,100 @@ export default function CommentsPage() {
 
       {/* Comments List */}
       {filteredComments.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-6 pb-12">
           {filteredComments.map((comment, i) => {
             const needsAttention = checkNeedsAttention(comment);
             return (
               <Card 
                 key={comment.id} 
                 hover
-                className={`animate-slide-up cursor-pointer ${needsAttention ? 'ring-2 ring-red-200 bg-red-50/50' : ''}`}
+                className={`animate-slide-up cursor-pointer border-none shadow-md hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden ${
+                  needsAttention ? 'ring-2 ring-red-200 bg-red-50/10' : ''
+                }`}
                 style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
                 onClick={() => setSelectedComment(comment)}
               >
-                <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-                  {/* Comment Content */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className="font-semibold text-surface-900">{comment.fromName || t('common.unknownUser')}</span>
-                      {needsAttention && (
-                        <Badge size="sm" variant="warning">
-                          <AlertTriangle className="w-3 h-3 mr-1" />
-                          {language === 'ar' ? 'يحتاج تدخل' : 'Needs Attention'}
-                        </Badge>
-                      )}
-                      <span className="text-surface-300">•</span>
-                      <span className="text-xs text-surface-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(comment.createdAt)}
-                      </span>
-                    </div>
-                    
-                    <p className="text-surface-700 mb-2 text-start line-clamp-2">{comment.message}</p>
-                    
-                    <div className="flex items-center gap-2 text-xs text-surface-400 flex-wrap">
-                      <FileText className="w-3 h-3" />
-                      <span className="truncate max-w-[150px]">Post: {comment.postId?.slice(0, 8)}...</span>
-                      {comment.detectedLanguage && (
-                          <Badge size="sm" variant="default">
-                          {comment.detectedLanguage === 'ar' ? t('templates.arabic') : 
-                           comment.detectedLanguage === 'en' ? t('templates.english') : comment.detectedLanguage}
-                          </Badge>
-                      )}
+                <div className="p-6">
+                  <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+                    {/* User Avatar Placeholder */}
+                    <div className="hidden sm:flex w-12 h-12 rounded-full bg-surface-100 items-center justify-center text-surface-400 flex-shrink-0">
+                      <span className="text-lg font-bold">{(comment.fromName || 'U').charAt(0).toUpperCase()}</span>
                     </div>
 
-                    {/* Reply Preview */}
-                    {comment.replied && comment.replyText && (
-                      <div 
-                        className="mt-4 p-3 bg-brand-50/50 rounded-lg border-s-2 border-brand-200"
-                        style={{ paddingInlineStart: '1rem' }}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <Reply className="w-4 h-4 text-brand-600" />
-                          <span className="text-sm font-medium text-brand-700">{t('comments.reply')}</span>
-                          <Badge size="sm" variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>
-                            {comment.replyMethod === 'ai' ? (
-                              <span className="flex items-center gap-1">
-                                <Bot className="w-3 h-3" /> {t('dashboard.aiReply')}
-                              </span>
-                            ) : (
-                              <>{t('dashboard.templateReply')}</>
-                            )}
-                          </Badge>
+                    {/* Comment Content */}
+                    <div className="flex-1 min-w-0 text-start">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className="font-bold text-surface-900 text-lg">{comment.fromName || t('common.unknownUser')}</span>
+                        {needsAttention && (
+                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider">
+                            <AlertTriangle className="w-3 h-3" />
+                            {language === 'ar' ? 'يحتاج تدخل' : 'Needs Attention'}
+                          </div>
+                        )}
+                        <span className="text-surface-300">•</span>
+                        <div className="flex items-center gap-1 text-xs font-medium text-surface-400">
+                          <Clock className="w-3 h-3" />
+                          {formatTime(comment.createdAt)}
                         </div>
-                        <p className="text-sm text-surface-600 text-start line-clamp-2">{comment.replyText}</p>
                       </div>
-                    )}
-                  </div>
+                      
+                      <p className="text-surface-700 text-base leading-relaxed mb-4 italic italic-arabic">"{comment.message}"</p>
+                      
+                      <div className="flex items-center gap-4 text-xs font-semibold text-surface-400 uppercase tracking-widest">
+                        <div className="flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>POST: {comment.postId?.slice(0, 8)}</span>
+                        </div>
+                        {comment.detectedLanguage && (
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-100 text-surface-600">
+                            <Globe className="w-3 h-3" />
+                            <span>{comment.detectedLanguage === 'ar' ? t('templates.arabic') : 
+                             comment.detectedLanguage === 'en' ? t('templates.english') : comment.detectedLanguage}</span>
+                          </div>
+                        )}
+                      </div>
 
-                  {/* Actions */}
-                  <div className="flex lg:flex-col items-center gap-2 lg:items-end">
-                    {comment.replied ? (
-                      <div className="flex items-center gap-1 text-emerald-600">
-                        <CheckCircle className="w-5 h-5" />
-                        <span className="text-sm font-medium">{t('comments.replied')}</span>
-                      </div>
-                    ) : (
-                      <Badge variant="warning" size="sm">
-                        {t('comments.pending')}
-                      </Badge>
-                    )}
+                      {/* Reply Preview */}
+                      {comment.replied && comment.replyText && (
+                        <div 
+                          className="mt-6 p-4 bg-brand-50/30 rounded-2xl border border-brand-100 relative group/reply"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center text-brand-600">
+                                <Reply className="w-4 h-4" />
+                              </div>
+                              <span className="text-sm font-bold text-brand-900">{t('comments.reply')}</span>
+                            </div>
+                            <Badge variant={comment.replyMethod === 'ai' ? 'info' : 'success'} className="shadow-sm">
+                              {comment.replyMethod === 'ai' ? (
+                                <span className="flex items-center gap-1">
+                                  <Bot className="w-3 h-3" /> {t('dashboard.aiReply')}
+                                </span>
+                              ) : (
+                                <>{t('dashboard.templateReply')}</>
+                              )}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-surface-600 line-clamp-2 italic italic-arabic">"{comment.replyText}"</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Status Badge */}
+                    <div className="flex lg:flex-col items-center gap-2 lg:items-end flex-shrink-0">
+                      {comment.replied ? (
+                        <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-xs font-bold uppercase tracking-wider">{t('comments.replied')}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
+                          <Clock className="w-4 h-4" />
+                          <span className="text-xs font-bold uppercase tracking-wider">{t('comments.pending')}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </Card>
@@ -347,7 +364,7 @@ export default function CommentsPage() {
           })}
         </div>
       ) : (
-        <Card>
+        <Card className="border-none shadow-xl shadow-surface-200/50 rounded-3xl">
           <EmptyState
             icon={MessageSquare}
             title={t('comments.noComments')}

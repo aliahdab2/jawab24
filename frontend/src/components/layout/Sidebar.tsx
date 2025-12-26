@@ -40,24 +40,27 @@ export function Sidebar() {
   return (
     <aside 
       className={clsx(
-        'fixed top-0 h-full bg-surface-900 text-white transition-all duration-300 z-40',
+        'fixed top-0 h-full bg-surface-900 text-white transition-all duration-500 z-40 shadow-2xl',
         sidebarOpen ? 'w-64' : 'w-20'
       )}
-      style={{ insetInlineStart: 0 }}
+      style={{ 
+        insetInlineStart: 0,
+        background: 'linear-gradient(180deg, #0F172A 0%, #1E293B 100%)'
+      }}
     >
       {/* Logo */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-surface-800">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 to-accent-500 flex items-center justify-center">
-            <MessageCircle className="w-5 h-5 text-white" />
+      <div className="h-20 flex items-center justify-between px-4 border-b border-white/5">
+        <Link href="/dashboard" className="flex items-center gap-3 group">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
+            <MessageCircle className="w-6 h-6 text-white" />
           </div>
           {sidebarOpen && (
-            <span className="font-display font-bold text-lg">Jawab24</span>
+            <span className="font-display font-bold text-xl tracking-tight">Jawab24</span>
           )}
         </Link>
         <button 
           onClick={toggleSidebar}
-          className="p-1.5 rounded-lg hover:bg-surface-800 transition-colors"
+          className="p-2 rounded-xl hover:bg-white/5 transition-all text-surface-400 hover:text-white"
         >
           {sidebarOpen ? (
             isRTL ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />
@@ -68,7 +71,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto custom-scrollbar">
         {navigationKeys.map((item) => {
           const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
           return (
@@ -76,33 +79,45 @@ export function Sidebar() {
               key={item.key}
               href={item.href}
               className={clsx(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200',
+                'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group relative',
                 isActive 
-                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30' 
-                  : 'text-surface-400 hover:bg-surface-800 hover:text-white'
+                  ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20' 
+                  : 'text-surface-400 hover:bg-white/5 hover:text-white'
               )}
             >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {sidebarOpen && <span className="font-medium">{t(item.key)}</span>}
+              <item.icon className={clsx(
+                "w-5 h-5 flex-shrink-0 transition-transform group-hover:scale-110",
+                isActive ? "text-white" : "text-surface-500 group-hover:text-brand-400"
+              )} />
+              {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key)}</span>}
+              
+              {isActive && (
+                <div className="absolute inset-y-2 start-0 w-1 bg-white rounded-full"></div>
+              )}
             </Link>
           );
         })}
       </nav>
 
       {/* User & Logout */}
-      <div className="p-3 border-t border-surface-800">
+      <div className="p-4 border-t border-white/5 bg-black/20">
         {sidebarOpen && user && (
-          <div className="px-3 py-2 mb-2 text-end">
-            <p className="text-sm font-medium text-white truncate">{user.name}</p>
-            <p className="text-xs text-surface-400 truncate">{user.email}</p>
+          <div className="px-3 py-3 mb-4 rounded-2xl bg-white/5 border border-white/5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-sm border border-brand-500/20">
+              {user.name?.charAt(0) || 'U'}
+            </div>
+            <div className="min-w-0 text-start">
+              <p className="text-sm font-bold text-white truncate leading-tight">{user.name}</p>
+              <p className="text-[10px] text-surface-400 truncate uppercase tracking-widest font-bold mt-0.5">{t('common.active') || 'Active'}</p>
+            </div>
           </div>
         )}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-surface-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-surface-400 hover:bg-red-500 hover:text-white transition-all duration-300 group"
         >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
-          {sidebarOpen && <span className="font-medium">{t('nav.logout')}</span>}
+          <LogOut className="w-5 h-5 flex-shrink-0 group-hover:-translate-x-1 transition-transform" />
+          {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('nav.logout')}</span>}
         </button>
       </div>
     </aside>

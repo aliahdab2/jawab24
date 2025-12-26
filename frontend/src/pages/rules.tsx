@@ -12,7 +12,8 @@ import {
   ArrowUp,
   ArrowDown,
   Tag,
-  BookTemplate
+  BookTemplate,
+  ChevronRight
 } from 'lucide-react';
 import type { Rule, Template } from '@jawab24/shared';
 
@@ -194,14 +195,15 @@ export default function RulesPage() {
       />
 
       {/* Info Card */}
-      <Card className="mb-6 bg-gradient-to-r from-brand-50 to-accent-50 border-brand-200">
-        <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
-            <Zap className="w-5 h-5 text-brand-600" />
+      <Card className="mb-8 border-none shadow-lg shadow-brand-100/50 bg-gradient-to-r from-brand-50 to-white overflow-hidden relative">
+        <div className="absolute -right-8 -top-8 w-32 h-32 bg-brand-100 rounded-full opacity-50 blur-2xl"></div>
+        <div className="relative z-10 flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0 shadow-inner">
+            <Zap className="w-6 h-6" />
           </div>
           <div className="text-start">
-            <h3 className="font-semibold text-surface-900 mb-1">{t('rules.title')}</h3>
-            <p className="text-sm text-surface-600">
+            <h3 className="font-bold text-surface-900 text-lg mb-1">{t('rules.title')}</h3>
+            <p className="text-sm text-surface-600 leading-relaxed max-w-2xl">
               {t('rules.description')}
             </p>
           </div>
@@ -210,136 +212,127 @@ export default function RulesPage() {
 
       {/* Rules List */}
       {rules.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-6 pb-12">
           {rules.map((rule, i) => (
             <Card 
               key={rule.id}
               hover
-              className="animate-slide-up"
+              className={`animate-slide-up border-none shadow-lg shadow-surface-200/50 flex flex-col h-full rounded-2xl overflow-hidden group ${!rule.active ? 'opacity-75' : ''}`}
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
-              <div className="flex flex-col gap-4">
-                {/* Mobile: Header with priority and toggle */}
-                <div className="flex items-center justify-between lg:hidden">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-surface-100 flex items-center justify-center">
-                      <span className="text-sm font-bold text-surface-600">#{rule.priority}</span>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handlePriorityChange(rule.id, 'up')}
-                        disabled={i === 0}
-                      >
-                        <ArrowUp className="w-4 h-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handlePriorityChange(rule.id, 'down')}
-                        disabled={i === rules.length - 1}
-                      >
-                        <ArrowDown className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  <Toggle 
-                    enabled={rule.active ?? false} 
-                    onChange={(active) => handleToggle(rule.id, active)}
-                    size="sm"
-                  />
-                </div>
-
-                <div className="flex lg:items-center gap-4">
-                  {/* Desktop: Priority Controls */}
-                  <div className="hidden lg:flex lg:flex-col items-center gap-1">
+              <div className="flex flex-col lg:flex-row">
+                {/* Priority & Reorder Controls */}
+                <div className="bg-surface-50 border-b lg:border-b-0 lg:border-e border-surface-100 p-4 lg:p-6 flex lg:flex-col items-center justify-between lg:justify-center gap-4">
+                  <div className="flex lg:flex-col items-center gap-2">
                     <Button 
                       variant="ghost" 
                       size="sm" 
                       onClick={() => handlePriorityChange(rule.id, 'up')}
                       disabled={i === 0}
+                      className="text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm"
                     >
                       <ArrowUp className="w-4 h-4" />
                     </Button>
-                    <div className="w-8 h-8 rounded-lg bg-surface-100 flex items-center justify-center">
-                      <span className="text-sm font-bold text-surface-600">{rule.priority}</span>
+                    <div className="w-10 h-10 rounded-xl bg-white border border-surface-200 shadow-sm flex items-center justify-center">
+                      <span className="text-lg font-bold text-surface-900">{rule.priority}</span>
                     </div>
                     <Button 
                       variant="ghost" 
                       size="sm" 
                       onClick={() => handlePriorityChange(rule.id, 'down')}
                       disabled={i === rules.length - 1}
+                      className="text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm"
                     >
                       <ArrowDown className="w-4 h-4" />
                     </Button>
                   </div>
+                  <div className="lg:hidden">
+                    <Toggle 
+                      enabled={rule.active ?? false} 
+                      onChange={(active) => handleToggle(rule.id, active)}
+                      size="sm"
+                    />
+                  </div>
+                </div>
 
                 {/* Rule Content */}
-                <div className="flex-1 text-start">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="font-semibold text-surface-900">{rule.name}</h3>
-                    <Badge variant={rule.active ? 'success' : 'default'} size="sm">
-                      {rule.active ? t('common.active') : t('common.inactive')}
-                    </Badge>
+                <div className="flex-1 p-6 text-start">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-bold text-surface-900">{rule.name}</h3>
+                      <div className={`w-2 h-2 rounded-full ${rule.active ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
+                    </div>
+                    <div className="hidden lg:block">
+                      <Toggle 
+                        enabled={rule.active ?? false} 
+                        onChange={(active) => handleToggle(rule.id, active)}
+                        size="sm"
+                      />
+                    </div>
                   </div>
 
-                  {/* Keywords */}
-                  <div className="flex items-center gap-2 flex-wrap mb-3">
-                    <Tag className="w-4 h-4 text-surface-400" />
-                    {(rule.keywords || []).slice(0, 5).map((keyword) => (
-                      <Badge key={keyword} size="sm" variant="default">
-                        {keyword}
-                      </Badge>
-                    ))}
-                    {(rule.keywords || []).length > 5 && (
-                      <Badge size="sm" variant="default">+{(rule.keywords || []).length - 5}</Badge>
-                    )}
-                  </div>
+                  <div className="space-y-4">
+                    {/* Condition Box */}
+                    <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 relative group/condition">
+                      <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
+                        <Tag className="w-3 h-3" />
+                        <span>{t('rules.condition')}</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {(rule.keywords || []).map((keyword) => (
+                          <span key={keyword} className="px-2.5 py-1 rounded-lg bg-white border border-surface-200 text-surface-700 text-xs font-bold shadow-sm">
+                            {keyword}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
 
-                  {/* Template Link */}
-                  <div className="flex items-center gap-2 text-sm text-surface-500">
-                    <BookTemplate className="w-4 h-4" />
-                    <span>{t('rules.actions.replyWithTemplate')}:</span>
-                    <span className="font-medium text-brand-600">{getTemplateName(rule.templateId)}</span>
-                    <span className="text-surface-300">•</span>
-                    <span>{rule.matchCount || 0} {isRTL ? 'تطابق' : 'matches'}</span>
+                    {/* Action Box */}
+                    <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative group/action">
+                      <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-brand-600 uppercase tracking-widest">
+                        <BookTemplate className="w-3 h-3" />
+                        <span>{t('rules.action')}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-surface-500">{t('rules.actions.replyWithTemplate')}:</span>
+                        <span className="text-sm font-bold text-brand-900">{getTemplateName(rule.templateId)}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Actions - Desktop */}
-                <div className="hidden lg:flex items-center gap-2">
-                  <Toggle 
-                    enabled={rule.active ?? false} 
-                    onChange={(active) => handleToggle(rule.id, active)}
-                    size="sm"
-                  />
-                  <Button variant="ghost" size="sm" onClick={() => handleOpenModal(rule)}>
+                {/* Actions Footer / Side */}
+                <div className="bg-surface-50 lg:bg-white border-t lg:border-t-0 lg:border-s border-surface-100 p-4 lg:p-6 flex lg:flex-col items-center justify-end lg:justify-center gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => handleOpenModal(rule)}
+                    className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
+                  >
                     <Edit className="w-4 h-4" />
+                    <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('common.edit')}</span>
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(rule.id)}>
-                    <Trash2 className="w-4 h-4 text-red-500" />
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => handleDelete(rule.id)}
+                    className="text-surface-400 hover:text-red-600 hover:bg-red-50 flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="lg:hidden text-xs font-bold uppercase tracking-wider text-red-600">{t('common.delete')}</span>
                   </Button>
-                </div>
-                </div>
-
-                {/* Actions - Mobile */}
-                <div className="flex lg:hidden items-center justify-end gap-2 pt-3 border-t border-surface-100">
-                  <Button variant="ghost" size="sm" onClick={() => handleOpenModal(rule)}>
-                    <Edit className="w-4 h-4" />
-                    <span className="text-xs">{t('common.edit')}</span>
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(rule.id)}>
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                    <span className="text-xs text-red-500">{t('common.delete')}</span>
-                  </Button>
+                  {rule.matchCount !== undefined && (
+                    <div className="mt-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
+                      {rule.matchCount} {isRTL ? 'تطابق' : 'matches'}
+                    </div>
+                  )}
                 </div>
               </div>
             </Card>
           ))}
         </div>
       ) : (
-        <Card>
+        <Card className="border-none shadow-xl shadow-surface-200/50 rounded-3xl">
           <EmptyState
             icon={Zap}
             title={t('rules.noRules')}

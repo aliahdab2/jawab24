@@ -22,7 +22,7 @@ import {
 import Link from 'next/link';
 import { useTranslation, useLanguage } from '@/i18n';
 
-// Simple toggle row component
+// Simple toggle row component with better design
 function SimpleToggle({ 
   icon, 
   title, 
@@ -37,14 +37,18 @@ function SimpleToggle({
   onChange: (enabled: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-surface-50 border border-surface-200">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
+    <div className={`flex items-center justify-between gap-4 p-5 rounded-2xl border transition-all duration-300 ${
+      enabled ? 'bg-brand-50/30 border-brand-100 shadow-sm' : 'bg-white border-surface-200'
+    }`}>
+      <div className="flex items-center gap-4 min-w-0 flex-1">
+        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
+          enabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'
+        }`}>
           {icon}
         </div>
         <div className="text-start min-w-0">
-          <p className="font-medium text-surface-900">{title}</p>
-          <p className="text-sm text-surface-500">{description}</p>
+          <p className={`font-bold ${enabled ? 'text-brand-900' : 'text-surface-900'}`}>{title}</p>
+          <p className="text-xs font-medium text-surface-500 leading-relaxed">{description}</p>
         </div>
       </div>
       <Toggle enabled={enabled} onChange={onChange} />
@@ -172,50 +176,70 @@ export default function SettingsPage() {
         }
       />
 
-      {/* Main Settings - Simple */}
-      <div className="space-y-4 mb-6">
-        {/* Language - Most important */}
-        <Card>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-brand-100 flex items-center justify-center">
-              <Globe className="w-6 h-6 text-brand-600" />
+      {/* Main Settings - Simplified */}
+      <div className="space-y-6 mb-8">
+        {/* Language Selection */}
+        <Card className="border-none shadow-xl shadow-surface-200/50 p-6">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-brand-600 text-white flex items-center justify-center shadow-lg shadow-brand-100">
+              <Globe className="w-7 h-7" />
             </div>
-            <div>
-              <h3 className="font-semibold text-surface-900 text-lg">{t('settings.language')}</h3>
-              <p className="text-surface-500 text-sm">
-                {isRTL ? 'اختر لغة التطبيق والردود' : 'Choose app and reply language'}
+            <div className="text-start">
+              <h3 className="font-bold text-surface-900 text-xl">{t('settings.language')}</h3>
+              <p className="text-surface-500 text-sm font-medium">
+                {isRTL ? 'اختر لغة لوحة التحكم والردود الافتراضية' : 'Dashboard and default reply language'}
               </p>
             </div>
           </div>
-          <select
-            className="input text-lg"
-            value={settings.dashboardLanguage}
-            onChange={(e) => setSettings({ ...settings, dashboardLanguage: e.target.value as 'ar' | 'en' })}
-          >
-            <option value="ar">العربية (Arabic)</option>
-            <option value="en">English</option>
-          </select>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              onClick={() => setSettings({ ...settings, dashboardLanguage: 'ar' })}
+              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
+                settings.dashboardLanguage === 'ar' 
+                  ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500' 
+                  : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
+              }`}
+            >
+              <span className={`font-bold ${settings.dashboardLanguage === 'ar' ? 'text-brand-900' : 'text-surface-600'}`}>العربية (Arabic)</span>
+              {settings.dashboardLanguage === 'ar' && <Check className="w-5 h-5 text-brand-500" />}
+            </button>
+            
+            <button
+              onClick={() => setSettings({ ...settings, dashboardLanguage: 'en' })}
+              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
+                settings.dashboardLanguage === 'en' 
+                  ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500' 
+                  : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
+              }`}
+            >
+              <span className={`font-bold ${settings.dashboardLanguage === 'en' ? 'text-brand-900' : 'text-surface-600'}`}>English</span>
+              {settings.dashboardLanguage === 'en' && <Check className="w-5 h-5 text-brand-500" />}
+            </button>
+          </div>
         </Card>
 
-        {/* Auto Reply Toggles - Simple cards */}
-        <SimpleToggle
-          icon={<MessageSquare className="w-5 h-5 text-brand-600" />}
-          title={t('settings.commentsAutoReply')}
-          description={t('settings.commentsAutoReplyDesc')}
-          enabled={settings.commentsAutoReply}
-          onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
-        />
+        {/* Auto Reply Toggles */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SimpleToggle
+            icon={<MessageSquare className="w-6 h-6" />}
+            title={t('settings.commentsAutoReply')}
+            description={t('settings.commentsAutoReplyDesc')}
+            enabled={settings.commentsAutoReply}
+            onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
+          />
+
+          <SimpleToggle
+            icon={<MessageCircle className="w-6 h-6" />}
+            title={t('settings.messagesAutoReply')}
+            description={t('settings.messagesAutoReplyDesc')}
+            enabled={settings.messagesAutoReply}
+            onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
+          />
+        </div>
 
         <SimpleToggle
-          icon={<MessageCircle className="w-5 h-5 text-brand-600" />}
-          title={t('settings.messagesAutoReply')}
-          description={t('settings.messagesAutoReplyDesc')}
-          enabled={settings.messagesAutoReply}
-          onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
-        />
-
-        <SimpleToggle
-          icon={<Bot className="w-5 h-5 text-brand-600" />}
+          icon={<Bot className="w-6 h-6" />}
           title={t('settings.enableAI')}
           description={t('settings.aiDescription')}
           enabled={settings.aiEnabled}
@@ -226,180 +250,206 @@ export default function SettingsPage() {
       {/* Advanced Settings Toggle */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="w-full flex items-center justify-between p-4 rounded-xl bg-surface-100 hover:bg-surface-200 transition-colors mb-4"
+        className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-300 mb-6 ${
+          showAdvanced ? 'bg-surface-900 border-surface-900 shadow-lg' : 'bg-white border-surface-200 hover:border-brand-300'
+        }`}
       >
-        <div className="flex items-center gap-3">
-          <Settings2 className="w-5 h-5 text-surface-500" />
-          <span className="font-medium text-surface-700">
-            {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
-          </span>
+        <div className="flex items-center gap-4">
+          <div className={`p-2.5 rounded-xl ${showAdvanced ? 'bg-surface-800 text-brand-400' : 'bg-surface-100 text-surface-500'}`}>
+            <Settings2 className="w-6 h-6" />
+          </div>
+          <div className="text-start">
+            <span className={`block font-bold text-lg ${showAdvanced ? 'text-white' : 'text-surface-700'}`}>
+              {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
+            </span>
+            <p className={`text-xs ${showAdvanced ? 'text-surface-400' : 'text-surface-500'}`}>
+              {isRTL ? 'تخصيص ساعات العمل والردود والمزيد' : 'Customize business hours, replies and more'}
+            </p>
+          </div>
         </div>
         {showAdvanced ? (
-          <ChevronUp className="w-5 h-5 text-surface-500" />
+          <ChevronUp className="w-6 h-6 text-brand-400" />
         ) : (
-          <ChevronDown className="w-5 h-5 text-surface-500" />
+          <ChevronDown className="w-6 h-6 text-surface-400" />
         )}
       </button>
 
       {/* Advanced Settings - Hidden by default */}
       {showAdvanced && (
-        <div className="space-y-4 animate-slide-up">
-          {/* Templates & Rules Links */}
-          <Card>
-            <h4 className="font-semibold text-surface-900 mb-4">
-              {isRTL ? 'إدارة الردود' : 'Manage Replies'}
-            </h4>
-            <div className="space-y-2">
-              <Link
-                href="/templates"
-                className="flex items-center justify-between p-3 rounded-xl bg-surface-50 hover:bg-surface-100 transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
-                    <BookTemplate className="w-5 h-5 text-violet-600" />
+        <div className="space-y-6 animate-slide-up pb-12">
+          {/* Templates & Rules Links - Prominent Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Link href="/templates" className="group">
+              <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 group-hover:bg-brand-50/10">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-inner">
+                    <BookTemplate className="w-8 h-8" />
                   </div>
-                  <div>
-                    <p className="font-medium text-surface-900">{t('nav.templates')}</p>
-                    <p className="text-sm text-surface-500">
-                      {isRTL ? 'إنشاء ردود جاهزة للاستخدام السريع' : 'Create ready-made replies'}
-                    </p>
+                  <h4 className="text-lg font-bold text-surface-900 mb-1">{t('nav.templates')}</h4>
+                  <p className="text-sm text-surface-500 mb-6">
+                    {isRTL ? 'إنشاء ردود جاهزة لاستخدامها في القواعد' : 'Create ready-made replies to use in rules'}
+                  </p>
+                  <div className="mt-auto flex items-center gap-1 text-violet-600 font-bold text-sm uppercase tracking-widest">
+                    <span>{isRTL ? 'عرض القوالب' : 'View Templates'}</span>
+                    <ChevronRight className={`w-4 h-4 ${language === 'ar' ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
-                <ChevronRight className="w-5 h-5 text-surface-400 group-hover:text-surface-600 transition-colors rtl:rotate-180" />
-              </Link>
-              
-              <Link
-                href="/rules"
-                className="flex items-center justify-between p-3 rounded-xl bg-surface-50 hover:bg-surface-100 transition-colors group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                    <Zap className="w-5 h-5 text-amber-600" />
+              </Card>
+            </Link>
+            
+            <Link href="/rules" className="group">
+              <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 group-hover:bg-amber-50/10">
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-inner">
+                    <Zap className="w-8 h-8" />
                   </div>
-                  <div>
-                    <p className="font-medium text-surface-900">{t('nav.rules')}</p>
-                    <p className="text-sm text-surface-500">
-                      {isRTL ? 'قواعد للرد التلقائي بناءً على الكلمات' : 'Auto-reply rules based on keywords'}
-                    </p>
+                  <h4 className="text-lg font-bold text-surface-900 mb-1">{t('nav.rules')}</h4>
+                  <p className="text-sm text-surface-500 mb-6">
+                    {isRTL ? 'قواعد ذكية للرد بناءً على كلمات محددة' : 'Smart rules to reply based on specific words'}
+                  </p>
+                  <div className="mt-auto flex items-center gap-1 text-amber-600 font-bold text-sm uppercase tracking-widest">
+                    <span>{isRTL ? 'عرض القواعد' : 'View Rules'}</span>
+                    <ChevronRight className={`w-4 h-4 ${language === 'ar' ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
-                <ChevronRight className="w-5 h-5 text-surface-400 group-hover:text-surface-600 transition-colors rtl:rotate-180" />
-              </Link>
-            </div>
-          </Card>
+              </Card>
+            </Link>
+          </div>
 
           {/* Business Hours */}
-          <Card>
-            <SimpleToggle
-              icon={<Clock className="w-5 h-5 text-brand-600" />}
-              title={t('settings.businessHours')}
-              description={t('settings.businessHoursDesc')}
-              enabled={settings.businessHoursOnly}
-              onChange={(enabled) => setSettings({ ...settings, businessHoursOnly: enabled })}
-            />
+          <Card className="border-none shadow-lg shadow-surface-200/50 p-6 overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600 shadow-inner' : 'bg-surface-100 text-surface-400'}`}>
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div className="text-start">
+                  <h4 className="font-bold text-surface-900 text-lg">{t('settings.businessHours')}</h4>
+                  <p className="text-xs text-surface-500 font-medium">{t('settings.businessHoursDesc')}</p>
+                </div>
+              </div>
+              <Toggle enabled={settings.businessHoursOnly} onChange={(enabled) => setSettings({ ...settings, businessHoursOnly: enabled })} />
+            </div>
+            
             {settings.businessHoursOnly && (
-              <div className="mt-4 flex items-center gap-4 ps-14">
+              <div className="grid grid-cols-2 gap-6 p-5 rounded-2xl bg-surface-50 border border-surface-100 animate-slide-up">
                 <div>
-                  <label className="label text-xs">{t('settings.businessHoursStart')}</label>
-                  <Input
-                    type="time"
-                    value={settings.businessHoursStart}
-                    onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
-                    className="w-32"
-                  />
+                  <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
+                  <div className="relative">
+                    <Clock className="absolute top-1/2 -translate-y-1/2 left-4 w-4 h-4 text-surface-400" />
+                    <Input
+                      type="time"
+                      value={settings.businessHoursStart}
+                      onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
+                      className="ps-10 py-4 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="label text-xs">{t('settings.businessHoursEnd')}</label>
-                  <Input
-                    type="time"
-                    value={settings.businessHoursEnd}
-                    onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
-                    className="w-32"
-                  />
+                  <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
+                  <div className="relative">
+                    <Clock className="absolute top-1/2 -translate-y-1/2 left-4 w-4 h-4 text-surface-400" />
+                    <Input
+                      type="time"
+                      value={settings.businessHoursEnd}
+                      onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
+                      className="ps-10 py-4 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
                 </div>
               </div>
             )}
           </Card>
 
-          {/* Reply Delay */}
-          <Card>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-brand-600" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Reply Delay */}
+            <Card className="border-none shadow-lg shadow-surface-200/50 p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div className="text-start">
+                  <h4 className="font-bold text-surface-900 text-lg">{t('settings.responseTime')}</h4>
+                  <p className="text-xs text-surface-500 font-medium">{t('settings.replyDelay')}</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium text-surface-900">{t('settings.responseTime')}</p>
-                <p className="text-sm text-surface-500">{t('settings.replyDelay')}</p>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={settings.replyDelay}
+                  onChange={(e) => setSettings({ ...settings, replyDelay: parseInt(e.target.value) || 0 })}
+                  className="w-full py-4 text-center font-bold text-lg border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
+                />
+                <span className="text-sm font-bold text-surface-400 uppercase tracking-widest">{t('settings.seconds')}</span>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={0}
-                max={60}
-                value={settings.replyDelay}
-                onChange={(e) => setSettings({ ...settings, replyDelay: parseInt(e.target.value) || 0 })}
-                className="w-24"
+            </Card>
+
+            {/* Notifications */}
+            <Card className="border-none shadow-lg shadow-surface-200/50 p-6 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600 shadow-inner' : 'bg-surface-100 text-surface-400'}`}>
+                    <Bell className="w-6 h-6" />
+                  </div>
+                  <div className="text-start">
+                    <h4 className="font-bold text-surface-900 text-lg">{t('settings.notifications')}</h4>
+                    <p className="text-xs text-surface-500 font-medium">{t('settings.emailNotifications')}</p>
+                  </div>
+                </div>
+                <Toggle enabled={settings.notificationsEnabled} onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })} />
+              </div>
+            </Card>
+          </div>
+
+          {/* Messaging */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="border-none shadow-lg shadow-surface-200/50 p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
+                  <MessageCircle className="w-6 h-6" />
+                </div>
+                <div className="text-start">
+                  <h4 className="font-bold text-surface-900 text-lg">{t('settings.greetingMessage')}</h4>
+                  <p className="text-xs text-surface-500 font-medium">{t('settings.greetingMessageDesc')}</p>
+                </div>
+              </div>
+              <textarea
+                className="input min-h-[100px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
+                placeholder={t('settings.greetingMessagePlaceholder')}
+                value={settings.greetingMessage}
+                onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
               />
-              <span className="text-sm text-surface-500">{t('settings.seconds')}</span>
-            </div>
-          </Card>
+            </Card>
 
-          {/* Greeting Message */}
-          <Card>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
-                <MessageCircle className="w-5 h-5 text-brand-600" />
+            <Card className="border-none shadow-lg shadow-surface-200/50 p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 flex items-center justify-center shadow-inner">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div className="text-start">
+                  <h4 className="font-bold text-surface-900 text-lg">{t('settings.awayMessage')}</h4>
+                  <p className="text-xs text-surface-500 font-medium">{t('settings.awayMessageDesc')}</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium text-surface-900">{t('settings.greetingMessage')}</p>
-                <p className="text-sm text-surface-500">{t('settings.greetingMessageDesc')}</p>
-              </div>
-            </div>
-            <textarea
-              className="input min-h-[80px]"
-              placeholder={t('settings.greetingMessagePlaceholder')}
-              value={settings.greetingMessage}
-              onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
-            />
-          </Card>
-
-          {/* Away Message */}
-          <Card>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-surface-100 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-surface-600" />
-              </div>
-              <div>
-                <p className="font-medium text-surface-900">{t('settings.awayMessage')}</p>
-                <p className="text-sm text-surface-500">{t('settings.awayMessageDesc')}</p>
-              </div>
-            </div>
-            <textarea
-              className="input min-h-[80px]"
-              placeholder={t('settings.awayMessagePlaceholder')}
-              value={settings.awayMessage}
-              onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
-            />
-          </Card>
-
-          {/* Notifications */}
-          <SimpleToggle
-            icon={<Bell className="w-5 h-5 text-brand-600" />}
-            title={t('settings.notifications')}
-            description={t('settings.emailNotifications')}
-            enabled={settings.notificationsEnabled}
-            onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })}
-          />
+              <textarea
+                className="input min-h-[100px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
+                placeholder={t('settings.awayMessagePlaceholder')}
+                value={settings.awayMessage}
+                onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
+              />
+            </Card>
+          </div>
 
           {/* Delete Account */}
-          <Card className="border-red-200 bg-red-50/50">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h4 className="font-medium text-red-700">{t('settings.dangerZone')}</h4>
-                <p className="text-sm text-red-600 mt-1">{t('settings.deleteAccountWarning')}</p>
+          <Card className="border-none shadow-lg shadow-red-100/50 bg-red-50/30 p-8">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+              <div className="text-center sm:text-start">
+                <h4 className="font-bold text-red-700 text-lg">{t('settings.dangerZone')}</h4>
+                <p className="text-sm text-red-600/80 font-medium mt-1">{t('settings.deleteAccountWarning')}</p>
               </div>
-              <Button variant="danger" size="sm">
+              <Button variant="danger" className="px-8 py-4 shadow-lg shadow-red-200">
                 {t('settings.deleteAccount')}
               </Button>
             </div>

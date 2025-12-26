@@ -13,9 +13,9 @@ interface CardProps {
 export function Card({ children, className, hover = false, padding = 'md', style, onClick }: CardProps) {
   const paddingClasses = {
     none: '',
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8',
+    sm: 'p-5',
+    md: 'p-8',
+    lg: 'p-12',
   };
 
   return (
@@ -23,7 +23,7 @@ export function Card({ children, className, hover = false, padding = 'md', style
       className={clsx(
         hover ? 'card-hover' : 'card',
         paddingClasses[padding],
-        onClick && 'cursor-pointer',
+        onClick && 'cursor-pointer active:scale-[0.98] transition-transform duration-300',
         className
       )}
       style={style}
@@ -42,14 +42,14 @@ interface CardHeaderProps {
 
 export function CardHeader({ title, description, action }: CardHeaderProps) {
   return (
-    <div className="flex items-start justify-between mb-6">
-      <div>
-        <h3 className="text-lg font-semibold text-surface-900">{title}</h3>
+    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
+      <div className="text-start">
+        <h3 className="text-xl font-bold text-surface-900 tracking-tight">{title}</h3>
         {description && (
-          <p className="text-sm text-surface-500 mt-1">{description}</p>
+          <p className="text-sm font-medium text-surface-500 mt-1 leading-relaxed">{description}</p>
         )}
       </div>
-      {action && <div>{action}</div>}
+      {action && <div className="flex-shrink-0">{action}</div>}
     </div>
   );
 }

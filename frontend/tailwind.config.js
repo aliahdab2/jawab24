@@ -59,8 +59,12 @@ module.exports = {
         'slide-up': 'slideUp 0.5s ease-out',
         'slide-in-right': 'slideInRight 0.3s ease-out',
         'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+        'shimmer': 'shimmer 2s infinite linear',
       },
       keyframes: {
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
+        },
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },

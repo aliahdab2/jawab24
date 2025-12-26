@@ -1,266 +1,252 @@
-import { useState } from 'react';
-import { useRouter } from 'next/router';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { MessageCircle, Facebook, ArrowRight, ArrowLeft, MessageSquare, Zap, Globe, Shield, Clock, Star } from 'lucide-react';
-import { useAuthStore } from '@/lib/store';
+import { useRouter } from 'next/router';
+import { 
+  Facebook, 
+  MessageCircle, 
+  CheckCircle2, 
+  Zap, 
+  ShieldCheck, 
+  ArrowLeft, 
+  ArrowRight, 
+  Sparkles,
+  Lock,
+  MessageSquare,
+  Bot,
+  Globe,
+  Star,
+  Smartphone,
+  CheckCircle,
+  HelpCircle
+} from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { t, language } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
   const isRTL = language === 'ar';
-  const { setAuth, isAuthenticated } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already authenticated
-  if (isAuthenticated) {
-    router.push('/dashboard');
-    return null;
-  }
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   const handleFacebookLogin = () => {
     setLoading(true);
+    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/facebook`;
+  };
 
-    const FB_APP_ID = process.env.NEXT_PUBLIC_FB_APP_ID;
-
-    // If no App ID configured, use demo mode
-    if (!FB_APP_ID) {
-      setTimeout(() => {
-        setAuth(
-          { id: 'demo-user', name: 'مستخدم تجريبي', email: 'demo@jawab24.com', facebookId: 'demo123' },
-          'demo-token-123',
-          'demo-fb-token-123'
-        );
-        router.push('/dashboard');
-      }, 1500);
-      return;
-    }
-
-    // Real Facebook OAuth
-    const redirectUri = `${window.location.origin}/auth/callback`;
-    // Only request permissions that are approved/ready for testing in the Facebook App
-    const scope = 'public_profile,pages_show_list,pages_read_engagement,pages_messaging,pages_manage_metadata';
-    const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FB_APP_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&response_type=code`;
-
-    window.location.href = authUrl;
+  const toggleLanguage = () => {
+    setLanguage(language === 'ar' ? 'en' : 'ar');
   };
 
   const features = [
-    { icon: MessageSquare, titleKey: 'auth.feature1Title', descKey: 'auth.feature1Desc' },
-    { icon: Zap, titleKey: 'auth.feature2Title', descKey: 'auth.feature2Desc' },
-    { icon: Globe, titleKey: 'auth.feature3Title', descKey: 'auth.feature3Desc' },
-  ];
-
-  const stats = [
-    { value: '24/7', labelKey: 'auth.stat1Label' },
-    { value: '<1s', labelKey: 'auth.stat2Label' },
-    { value: '99%', labelKey: 'auth.stat3Label' },
+    {
+      icon: Zap,
+      title: isRTL ? 'تفعيل فوري' : 'Instant Setup',
+      desc: isRTL ? 'اربط صفحتك وابدأ الردود في دقيقة واحدة' : 'Connect your page and start replying in 1 minute',
+      color: 'text-amber-500',
+      bg: 'bg-amber-50'
+    },
+    {
+      icon: ShieldCheck,
+      title: isRTL ? 'آمن ومعتمد' : 'Secure & Official',
+      desc: isRTL ? 'نستخدم واجهة Meta الرسمية لحماية بياناتك' : 'We use official Meta APIs to protect your data',
+      color: 'text-brand-600',
+      bg: 'bg-brand-50'
+    },
+    {
+      icon: MessageSquare,
+      title: isRTL ? 'دقة مذهلة' : 'Amazing Accuracy',
+      desc: isRTL ? 'ردود ذكية تفهم لهجات عملائك بدقة' : 'Smart replies that understand your customers\' dialects',
+      color: 'text-violet-600',
+      bg: 'bg-violet-50'
+    }
   ];
 
   return (
     <>
       <Head>
-        <title>Jawab24 - Smart Facebook Auto-Replies 24/7 | ردود ذكية على مدار الساعة</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-        <meta name="description" content={isRTL 
-          ? "ردود ذكية تلقائية لصفحات فيسبوك على مدار الساعة. رد على التعليقات والرسائل بالذكاء الاصطناعي"
-          : "AI-powered auto-replies for Facebook Pages. Respond to comments and messages 24/7 in Arabic and English."
-        } />
-        <link rel="canonical" href="https://jawab24.com/login" />
+        <title>{isRTL ? 'تسجيل الدخول - Jawab24' : 'Login - Jawab24'}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
       </Head>
 
-      {/* Dynamic RTL based on language */}
-      <div className="min-h-screen bg-gradient-to-br from-surface-50 via-white to-brand-50" dir={isRTL ? 'rtl' : 'ltr'}>
-        {/* Desktop Layout */}
-        <div className="hidden lg:flex min-h-screen">
-          {/* Left Panel - Branding */}
-          <div className="w-1/2 bg-gradient-to-br from-surface-900 via-surface-800 to-surface-900 relative overflow-hidden flex items-center">
-            {/* Background Pattern */}
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute top-0 left-0 w-96 h-96 bg-brand-500 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-              <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-500 rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+      <div className="min-h-screen bg-white flex flex-col lg:flex-row" dir={isRTL ? 'rtl' : 'ltr'}>
+        {/* Left Side: Visual/Marketing (Hidden on mobile) */}
+        <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-20">
+          {/* Animated Background */}
+          <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.15),transparent)]"></div>
+          <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.15),transparent)]"></div>
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+
+          <div className="relative z-10 w-full max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/10 mb-12 animate-slide-up">
+              <Sparkles className="w-4 h-4 text-brand-400" />
+              <span className="text-sm font-bold text-brand-400 uppercase tracking-widest">
+                {isRTL ? 'الجيل القادم من الردود التلقائية' : 'Next-Gen Auto Replies'}
+              </span>
             </div>
 
-            <div className="relative z-10 px-12 xl:px-16 py-8 w-full">
-              {/* Logo */}
-              <div className="flex items-center gap-3 mb-12">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-400 to-accent-500 flex items-center justify-center shadow-2xl shadow-brand-500/30">
-                  <MessageCircle className="w-7 h-7 text-white" />
-                </div>
-                <span className="font-display font-bold text-3xl text-white">Jawab24</span>
-              </div>
+            <h1 className="text-5xl lg:text-6xl font-display font-extrabold text-white mb-8 leading-tight tracking-tight animate-slide-up animation-delay-100">
+              {isRTL ? 'ابدأ رحلة' : 'Start Your'}
+              <span className="block text-brand-500">{isRTL ? 'النمو الذكي لعملك' : 'Smart Growth Journey'}</span>
+            </h1>
 
-              {/* Tagline */}
-              <h1 className="text-4xl xl:text-5xl font-display font-bold text-white mb-6 leading-loose">
-                {t('auth.tagline1')}
-                <span className="block gradient-text pb-2">{t('auth.tagline2')}</span>
-              </h1>
-              <p className="text-lg text-surface-300 mb-12 max-w-md">
-                {t('auth.taglineDesc')}
-              </p>
+            <p className="text-xl text-surface-400 mb-16 leading-relaxed font-medium animate-slide-up animation-delay-200">
+              {isRTL 
+                ? 'انضم إلى آلاف أصحاب الصفحات الذين يثقون بـ Jawab24 لإدارة تفاعلاتهم وزيادة مبيعاتهم باستخدام الذكاء الاصطناعي.'
+                : 'Join thousands of page owners who trust Jawab24 to manage their engagements and boost sales using AI.'}
+            </p>
 
-              {/* Features */}
-              <div className="space-y-6">
-                {features.map((feature, i) => (
-                  <div
-                    key={feature.titleKey}
-                    className="flex items-center gap-4 animate-slide-up"
-                    style={{ animationDelay: `${i * 0.1}s` }}
-                  >
-                    <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center">
-                      <feature.icon className="w-6 h-6 text-brand-400" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-white">{t(feature.titleKey)}</h3>
-                      <p className="text-sm text-surface-400">{t(feature.descKey)}</p>
-                    </div>
+            <div className="grid grid-cols-1 gap-8 animate-slide-up animation-delay-300">
+              {features.map((f, i) => (
+                <div key={i} className="flex gap-6 items-start group">
+                  <div className={`w-14 h-14 rounded-2xl ${f.bg} flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 shadow-lg`}>
+                    <f.icon className={`w-7 h-7 ${f.color}`} />
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white mb-2">{f.title}</h3>
+                    <p className="text-surface-400 font-medium">{f.desc}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
 
-          {/* Right Panel - Login Form */}
-          <div className="w-1/2 flex items-center justify-center p-16">
-            <div className="w-full max-w-md">
-              <div className="text-center mb-10">
-                <h2 className="text-3xl font-display font-bold text-surface-900 mb-3">
-                  {t('auth.welcome')}
-                </h2>
-                <p className="text-surface-500">
-                  {t('auth.loginDescription')}
-                </p>
+            {/* Testimonial Snippet */}
+            <div className="mt-20 p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-sm animate-slide-up animation-delay-500">
+              <div className="flex gap-1 mb-4">
+                {[1,2,3,4,5].map(s => <Star key={s} className="w-4 h-4 text-amber-400 fill-amber-400" />)}
               </div>
-
-              {/* Login Button */}
-              <Button
-                onClick={handleFacebookLogin}
-                loading={loading}
-                className="w-full bg-[#1877F2] hover:bg-[#166FE5] shadow-lg shadow-[#1877F2]/25"
-                size="lg"
-              >
-                <Facebook className="w-5 h-5" />
-                {t('auth.loginWithFacebook')}
-                {isRTL ? <ArrowLeft className="w-4 h-4 ms-auto" /> : <ArrowRight className="w-4 h-4 ms-auto" />}
-              </Button>
-
-              <p className="mt-8 text-center text-sm text-surface-500">
-                {t('auth.termsAgreement')}{' '}
-                <a href="/terms" className="text-brand-600 hover:underline">{t('auth.termsOfService')}</a>
-                {' '}{t('auth.and')}{' '}
-                <a href="/privacy" className="text-brand-600 hover:underline">{t('auth.privacyPolicy')}</a>
+              <p className="text-white font-medium italic mb-4">
+                {isRTL 
+                  ? '"وفر لي ساعات من العمل يومياً، والعملاء منبهرون بسرعة الرد ودقته!"' 
+                  : '"Saved me hours of work daily, and customers are impressed with the speed and accuracy!"'}
               </p>
-
-
-
-              {/* Demo Notice */}
-              <div className="mt-8 p-4 rounded-xl bg-amber-50 border border-amber-200">
-                <p className="text-sm text-amber-800 text-center">
-                  <strong>{t('auth.demoMode')}</strong> {t('auth.demoDescription')}
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white font-bold text-xs">MA</div>
+                <div>
+                  <div className="text-white font-bold text-sm">Mohammed A.</div>
+                  <div className="text-surface-500 text-xs font-bold uppercase tracking-widest">{isRTL ? 'مدير تسويق' : 'Marketing Manager'}</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Mobile Layout */}
-        <div className="lg:hidden min-h-screen flex flex-col">
-          {/* Header with gradient background - reduced size */}
-          <div className="bg-gradient-to-br from-surface-900 via-surface-800 to-surface-900 px-6 pt-8 pb-12 relative overflow-hidden">
-            {/* Background Pattern */}
-            <div className="absolute inset-0 opacity-20">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500 rounded-full blur-3xl translate-x-1/2 -translate-y-1/2" />
-              <div className="absolute bottom-0 left-0 w-48 h-48 bg-accent-500 rounded-full blur-3xl -translate-x-1/2 translate-y-1/2" />
-            </div>
-
-            <div className="relative z-10">
-              {/* Logo */}
-              <div className="flex items-center justify-center gap-3 mb-8">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-400 to-accent-500 flex items-center justify-center shadow-xl">
-                  <MessageCircle className="w-6 h-6 text-white" />
-                </div>
-                <span className="font-display font-bold text-2xl text-white">Jawab24</span>
+        {/* Right Side: Login Form */}
+        <div className="flex-1 flex flex-col bg-white overflow-y-auto">
+          {/* Mobile Nav */}
+          <div className="flex items-center justify-between p-6 lg:p-12">
+            <div className="flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
+                <MessageCircle className="w-5 h-5 text-white" />
               </div>
-
-              {/* Tagline */}
-              <h1 className="text-2xl sm:text-3xl font-display font-bold text-white text-center mb-3 leading-relaxed">
-                {t('auth.tagline1')} {t('auth.tagline2')}
-              </h1>
-              <p className="text-surface-300 text-center text-sm sm:text-base max-w-xs mx-auto">
-                {t('auth.taglineDesc')}
-              </p>
-
-              {/* Stats Row */}
-              <div className="flex justify-center gap-6 mt-8">
-                {stats.map((stat) => (
-                  <div key={stat.labelKey} className="text-center">
-                    <div className="text-xl font-bold text-brand-400">{stat.value}</div>
-                    <div className="text-xs text-surface-400">{t(stat.labelKey)}</div>
-                  </div>
-                ))}
-              </div>
+              <span className="font-display font-bold text-xl text-surface-900 tracking-tight">Jawab24</span>
             </div>
+            <button
+              onClick={toggleLanguage}
+              className="px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
+            >
+              {language === 'ar' ? 'English' : 'العربية'}
+            </button>
           </div>
 
-          {/* Login Card - with spacing from header */}
-          <div className="flex-1 px-6 pt-6 pb-8">
-            <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-sm mx-auto">
-              <div className="text-center mb-6">
-                <h2 className="text-xl font-display font-bold text-surface-900 mb-2">
-                  {t('auth.welcome')}
+          <div className="flex-1 flex items-center justify-center px-6 py-12">
+            <div className="w-full max-w-md">
+              <div className="text-center lg:text-start mb-12">
+                <h2 className="text-4xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
+                  {isRTL ? 'مرحباً بك مجدداً' : 'Welcome Back'}
                 </h2>
-                <p className="text-surface-500 text-sm">
-                  {t('auth.loginDescription')}
+                <p className="text-lg text-surface-500 font-medium">
+                  {isRTL ? 'سجل دخولك لتبدأ إدارة مبيعاتك بذكاء' : 'Sign in to start managing your sales smartly'}
                 </p>
               </div>
 
-              {/* Login Button */}
-              <Button
-                onClick={handleFacebookLogin}
-                loading={loading}
-                className="w-full bg-[#1877F2] hover:bg-[#166FE5] shadow-lg shadow-[#1877F2]/25"
-                size="lg"
-              >
-                <Facebook className="w-5 h-5" />
-                {t('auth.loginWithFacebook')}
-              </Button>
+              <div className="space-y-6">
+                <Button
+                  onClick={handleFacebookLogin}
+                  disabled={loading}
+                  size="xl"
+                  className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
+                >
+                  {loading ? (
+                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Facebook className="w-6 h-6 mr-2" />
+                      {isRTL ? 'تسجيل الدخول باستخدام فيسبوك' : 'Login with Facebook'}
+                    </>
+                  )}
+                </Button>
 
-              {/* Features - compact mobile version */}
-              <div className="mt-6 pt-6 border-t border-surface-100">
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  {features.map((feature) => (
-                    <div key={feature.titleKey} className="p-2">
-                      <div className="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center mx-auto mb-2">
-                        <feature.icon className="w-5 h-5 text-brand-600" />
-                      </div>
-                      <p className="text-xs text-surface-600 font-medium">{t(feature.titleKey)}</p>
+                <div className="flex items-center gap-4 py-4">
+                  <div className="flex-1 h-px bg-surface-100"></div>
+                  <span className="text-surface-400 font-bold text-xs uppercase tracking-widest">{isRTL ? 'أو' : 'OR'}</span>
+                  <div className="flex-1 h-px bg-surface-100"></div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 flex flex-col items-center justify-center text-center group hover:bg-white hover:border-brand-200 transition-all cursor-pointer">
+                    <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                      <HelpCircle className="w-5 h-5 text-surface-400 group-hover:text-brand-600" />
                     </div>
-                  ))}
+                    <span className="text-xs font-bold text-surface-600 uppercase tracking-tight">{isRTL ? 'مركز المساعدة' : 'Help Center'}</span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 flex flex-col items-center justify-center text-center group hover:bg-white hover:border-brand-200 transition-all cursor-pointer">
+                    <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                      <Globe className="w-5 h-5 text-surface-400 group-hover:text-brand-600" />
+                    </div>
+                    <span className="text-xs font-bold text-surface-600 uppercase tracking-tight">{isRTL ? 'المدونة' : 'Our Blog'}</span>
+                  </div>
+                </div>
+
+                <div className="p-6 rounded-3xl bg-brand-50/50 border border-brand-100 mt-12">
+                  <div className="flex gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 text-brand-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-brand-900 text-sm mb-1">{isRTL ? 'هل تعلم؟' : 'Did you know?'}</h4>
+                      <p className="text-brand-700/80 text-sm font-medium leading-relaxed">
+                        {isRTL 
+                          ? 'الردود الفورية تزيد من فرصة إتمام البيع بنسبة تزيد عن 60%.' 
+                          : 'Instant replies increase the chance of closing a sale by more than 60%.'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Demo Notice */}
-              <div className="mt-6 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                <p className="text-xs text-amber-800 text-center">
-                  <strong>{t('auth.demoMode')}</strong> {t('auth.demoDescription')}
+              <div className="mt-12 text-center">
+                <p className="text-sm text-surface-400 font-medium">
+                  {isRTL ? 'بتسجيل دخولك، أنت توافق على' : 'By signing in, you agree to our'}
+                  <br className="sm:hidden" />
+                  <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{isRTL ? 'شروط الخدمة' : 'Terms of Service'}</Link>
+                  {isRTL ? 'و' : '&'}
+                  <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{isRTL ? 'سياسة الخصوصية' : 'Privacy Policy'}</Link>
                 </p>
               </div>
-
-              {/* Terms */}
-              <p className="mt-4 text-center text-xs text-surface-400">
-                {t('auth.termsAgreement')}{' '}
-                <a href="/terms" className="text-brand-600">{t('auth.termsOfService')}</a>
-                {' '}{t('auth.and')}{' '}
-                <a href="/privacy" className="text-brand-600">{t('auth.privacyPolicy')}</a>
-              </p>
-
-
             </div>
           </div>
 
-          {/* Bottom safe area */}
-          <div className="h-safe-area-inset-bottom" />
+          {/* Footer Info */}
+          <div className="p-8 border-t border-surface-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-xs font-bold text-surface-400 uppercase tracking-widest">
+              © {new Date().getFullYear()} Jawab24
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">{isRTL ? 'الأنظمة تعمل' : 'Systems Active'}</span>
+              </div>
+              <div className="w-px h-4 bg-surface-100"></div>
+              <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">v2.4.0</span>
+            </div>
+          </div>
         </div>
       </div>
     </>

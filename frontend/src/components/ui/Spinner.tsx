@@ -1,22 +1,31 @@
 import clsx from 'clsx';
 
 interface SpinnerProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
 export function Spinner({ size = 'md', className }: SpinnerProps) {
   const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12',
+    sm: 'w-5 h-5 border-2',
+    md: 'w-10 h-10 border-3',
+    lg: 'w-16 h-16 border-4',
+    xl: 'w-24 h-24 border-5',
   };
 
   return (
-    <div className={clsx('flex items-center justify-center', className)}>
+    <div className={clsx('relative flex items-center justify-center', className)}>
+      {/* Outer ring */}
       <div 
         className={clsx(
-          'border-2 border-brand-200 border-t-brand-600 rounded-full animate-spin',
+          'absolute border-surface-100 rounded-full',
+          sizeClasses[size]
+        )}
+      />
+      {/* Spinning ring */}
+      <div 
+        className={clsx(
+          'border-transparent border-t-brand-600 rounded-full animate-spin',
           sizeClasses[size]
         )}
       />
@@ -26,9 +35,14 @@ export function Spinner({ size = 'md', className }: SpinnerProps) {
 
 export function PageSpinner() {
   return (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <Spinner size="lg" />
+    <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 animate-fade-in">
+      <div className="relative">
+        <div className="absolute inset-0 bg-brand-500/20 rounded-full blur-3xl animate-pulse"></div>
+        <Spinner size="lg" />
+      </div>
+      <p className="text-sm font-bold text-surface-400 uppercase tracking-[0.2em] animate-pulse">
+        Loading Jawab24
+      </p>
     </div>
   );
 }
-

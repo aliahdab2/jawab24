@@ -29,9 +29,9 @@ export function Button({
   };
 
   const sizeClasses = {
-    sm: 'text-sm px-3 py-1.5',
-    md: 'text-sm px-4 py-2.5',
-    lg: 'text-base px-6 py-3',
+    sm: 'text-xs px-4 py-2 rounded-xl',
+    md: 'text-sm px-6 py-3 rounded-2xl',
+    lg: 'text-base px-8 py-4 rounded-2xl',
   };
 
   return (
@@ -39,17 +39,28 @@ export function Button({
       className={clsx(
         variantClasses[variant],
         sizeClasses[size],
+        'relative overflow-hidden group',
         className
       )}
       disabled={disabled || loading}
       {...props}
     >
-      {loading ? (
-        <Loader2 className="w-4 h-4 animate-spin" />
-      ) : icon ? (
-        icon
-      ) : null}
-      {children}
+      <div className={clsx(
+        "flex items-center justify-center gap-2 transition-all duration-300",
+        loading ? "opacity-0" : "opacity-100"
+      )}>
+        {icon && <span className="transition-transform group-hover:scale-110 group-hover:rotate-3">{icon}</span>}
+        <span className="font-bold tracking-tight">{children}</span>
+      </div>
+      
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      )}
+      
+      {/* Subtle shine effect on hover */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none"></div>
     </button>
   );
 }
