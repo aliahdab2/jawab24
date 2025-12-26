@@ -3,7 +3,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSpinner } from '@/components/ui';
 import { plansApi, subscriptionApi } from '@/lib/api';
 import { useTranslation } from '@/i18n';
-import { Check, X, Zap, Crown, Sparkles, Facebook, Instagram, MessageSquare } from 'lucide-react';
+import { Check, X, Zap, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 
 function PlanCard({
@@ -281,97 +281,50 @@ export default function PricingPage() {
   
   const currentPlanId = usage?.subscription?.plan?.id;
   
+  // Filter out inactive plans (like the old "free" plan)
+  const activePlans = plans.filter(p => p.slug !== 'free' || p.isActive !== false);
+  
   return (
     <DashboardLayout title={t('pricing.title')}>
-      {/* Hero Section - Compact */}
-      <div className="relative overflow-hidden py-6 md:py-8 px-4 md:px-6 rounded-2xl md:rounded-3xl bg-surface-900 text-white mb-6 md:mb-8">
-        {/* Background blobs - smaller */}
-        <div className="absolute top-0 right-0 w-40 h-40 bg-brand-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-40 h-40 bg-violet-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
-        
-        <div className="relative z-10">
-          {/* Mobile: Icon + Title inline | Desktop: Stacked */}
-          <div className="flex flex-col md:flex-row items-center justify-center gap-3 md:gap-4 mb-3 md:mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-                <Facebook className="w-4 h-4 md:w-5 md:h-5 text-white" />
-              </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-                <Instagram className="w-4 h-4 md:w-5 md:h-5 text-white" />
-              </div>
-            </div>
-            <h1 className="text-xl md:text-3xl lg:text-4xl font-display font-bold tracking-tight text-center md:text-start">
-              {t('pricing.heroTitle')}
-            </h1>
-          </div>
-          
-          {/* Pills - inline on all screens */}
-          <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 md:px-3 md:py-1.5 bg-white/5 rounded-full border border-white/10 text-xs md:text-sm">
-              <div className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse"></div>
-              <span className="font-medium">{t('pricing.replyToComments')}</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 md:px-3 md:py-1.5 bg-white/5 rounded-full border border-white/10 text-xs md:text-sm">
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></div>
-              <span className="font-medium">{t('pricing.aiPowered')}</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 md:px-3 md:py-1.5 bg-white/5 rounded-full border border-white/10 text-xs md:text-sm">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
-              <span className="font-medium">{t('pricing.works247')}</span>
-            </div>
-          </div>
-        </div>
+      {/* Simple Header */}
+      <div className="text-center mb-6">
+        <h1 className="text-2xl md:text-3xl font-display font-bold text-surface-900 mb-2">
+          {t('pricing.title')}
+        </h1>
+        <p className="text-surface-500 text-sm">
+          {language === 'ar' ? 'اختر الباقة المناسبة لعملك' : 'Choose the right plan for your business'}
+        </p>
       </div>
       
-      {/* Usage Summary if subscribed - Compact */}
+      {/* Usage Summary if subscribed - Inline */}
       {usage && (
-        <Card className="mb-6 overflow-hidden border-none shadow-lg shadow-brand-100/30 bg-white">
-          <div className="p-4 md:p-5 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-brand-50 flex items-center justify-center text-brand-600">
-                <Crown className="w-5 h-5 md:w-6 md:h-6" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">{t('subscription.currentPlan')}</p>
-                <p className="text-lg md:text-xl font-bold text-surface-900 tracking-tight">
-                  {language === 'ar' ? (
-                    usage.subscription.plan.slug === 'free' ? 'تجربة مجانية' :
-                    usage.subscription.plan.slug === 'starter' ? 'المبتدئ' :
-                    usage.subscription.plan.slug === 'business' ? 'الأعمال' :
-                    usage.subscription.plan.slug === 'pro' ? 'الاحترافي' :
-                    usage.subscription.plan.name
-                  ) : usage.subscription.plan.name}
-                </p>
-                {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
-                  <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-100">
-                    <Zap className="w-2.5 h-2.5" />
-                    {usage.subscription.trialDaysRemaining} {t('subscription.days')} {language === 'ar' ? 'متبقي' : 'left'}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex flex-wrap gap-6 md:gap-8">
-              <UsageMetric 
-                label={t('subscription.aiRepliesUsed')} 
-                used={usage.aiReplies.used} 
-                limit={usage.aiReplies.limit} 
-                t={t}
-              />
-              <UsageMetric 
-                label={t('subscription.pagesUsed')} 
-                used={usage.pages.used} 
-                limit={usage.pages.limit} 
-                t={t}
-              />
-            </div>
+        <div className="flex flex-wrap items-center justify-center gap-4 mb-6 p-3 bg-brand-50 rounded-xl border border-brand-100">
+          <div className="flex items-center gap-2">
+            <Crown className="w-4 h-4 text-brand-600" />
+            <span className="text-sm font-bold text-brand-700">
+              {language === 'ar' ? (
+                usage.subscription.plan.slug === 'starter' ? 'المبتدئ' :
+                usage.subscription.plan.slug === 'business' ? 'الأعمال' :
+                usage.subscription.plan.slug === 'pro' ? 'الاحترافي' :
+                usage.subscription.plan.name
+              ) : usage.subscription.plan.name}
+            </span>
           </div>
-        </Card>
+          <div className="text-xs text-brand-600">
+            {usage.aiReplies.used}/{usage.aiReplies.limit || '∞'} {language === 'ar' ? 'رد' : 'replies'}
+          </div>
+          {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
+            <div className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+              <Zap className="w-3 h-3" />
+              {usage.subscription.trialDaysRemaining} {language === 'ar' ? 'يوم متبقي' : 'days left'}
+            </div>
+          )}
+        </div>
       )}
       
-      {/* Plans Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 pb-8 items-stretch px-1 md:px-0">
-        {plans.map((plan) => (
+      {/* Plans Grid - Centered for 3 plans */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5 pb-6 items-stretch max-w-5xl mx-auto">
+        {activePlans.map((plan) => (
           <PlanCard
             key={plan.id}
             plan={plan}
@@ -384,62 +337,12 @@ export default function PricingPage() {
         ))}
       </div>
       
-      {/* Trust section */}
-      <div className="text-center pb-20 mt-10 border-t border-surface-100 pt-16">
-        <h2 className="text-2xl font-bold text-surface-900 mb-8">{language === 'ar' ? 'نحن نهتم بنجاحك' : 'We care about your success'}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-          <TrustItem 
-            icon={<Zap className="w-6 h-6 text-brand-600" />}
-            title={language === 'ar' ? 'إعداد سريع' : 'Fast Setup'}
-            desc={language === 'ar' ? 'ابدأ في أقل من دقيقتين' : 'Get started in under 2 minutes'}
-          />
-          <TrustItem 
-            icon={<Check className="w-6 h-6 text-green-600" />}
-            title={language === 'ar' ? 'دقيق بنسبة 99%' : '99% Accurate'}
-            desc={language === 'ar' ? 'ردود ذكية تفهم سياق الحديث' : 'Smart replies that understand context'}
-          />
-          <TrustItem 
-            icon={<MessageSquare className="w-6 h-6 text-blue-600" />}
-            title={language === 'ar' ? 'دعم مستمر' : 'Always Here'}
-            desc={language === 'ar' ? 'فريق الدعم متواجد لمساعدتك' : 'Our team is here to help you'}
-          />
-        </div>
+      {/* Simple footer note */}
+      <div className="text-center py-6 text-sm text-surface-400">
+        {language === 'ar' ? 'جميع الباقات تشمل دعم فيسبوك وإنستغرام' : 'All plans include Facebook & Instagram support'}
       </div>
     </DashboardLayout>
   );
 }
 
-function UsageMetric({ label, used, limit, t }: { label: string; used: number; limit: number | null; t: any }) {
-  const percent = limit ? Math.round((used / limit) * 100) : 0;
-  
-  return (
-    <div className="flex flex-col gap-1">
-      <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest">{label}</p>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-2xl font-bold text-surface-900">{used.toLocaleString()}</span>
-        <span className="text-surface-400 font-medium text-sm">/ {limit ? limit.toLocaleString() : '∞'}</span>
-      </div>
-      {limit && (
-        <div className="w-32 h-1.5 bg-surface-100 rounded-full overflow-hidden mt-1">
-          <div 
-            className={`h-full rounded-full ${percent > 90 ? 'bg-red-500' : percent > 70 ? 'bg-amber-500' : 'bg-brand-500'}`}
-            style={{ width: `${Math.min(percent, 100)}%` }}
-          ></div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TrustItem({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div className="group flex flex-col items-center text-center p-6 rounded-2xl transition-all duration-300 hover:bg-white hover:shadow-lg hover:shadow-brand-50/50">
-      <div className="w-12 h-12 rounded-2xl bg-surface-50 flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-110">
-        {icon}
-      </div>
-      <h4 className="text-lg font-bold text-surface-900 mb-2">{title}</h4>
-      <p className="text-sm text-surface-500 leading-relaxed">{desc}</p>
-    </div>
-  );
-}
 
