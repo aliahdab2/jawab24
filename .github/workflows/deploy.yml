@@ -1,11 +1,20 @@
 name: Deploy to Production
 
 on:
+  # Trigger after CI passes (may have delays)
   workflow_run:
     workflows: ["CI - Test & Build"]
     types:
       - completed
     branches: [main]
+  
+  # Also trigger directly on push to main (faster)
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+  
   # Allow manual deployment
   workflow_dispatch:
     inputs:
@@ -24,8 +33,8 @@ jobs:
   deploy:
     name: 🚀 Deploy (Zero Downtime)
     runs-on: ubuntu-latest
-    # Only deploy if CI passed (or manual trigger)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Deploy on: manual trigger, push to main, or CI success
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     
     steps:
       - name: 📋 Deployment Info
@@ -334,6 +343,7 @@ jobs:
   deploy-skipped:
     name: ⏭️ CI Failed - Skip Deploy
     runs-on: ubuntu-latest
+    # Only skip if triggered by workflow_run and CI failed
     if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}
     
     steps:
