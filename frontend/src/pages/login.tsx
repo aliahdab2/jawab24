@@ -147,9 +147,9 @@ export default function LoginPage() {
 
               <p className="mt-8 text-center text-sm text-surface-500">
                 {t('auth.termsAgreement')}{' '}
-                <a href="#" className="text-brand-600 hover:underline">{t('auth.termsOfService')}</a>
+                <a href="/terms" className="text-brand-600 hover:underline">{t('auth.termsOfService')}</a>
                 {' '}{t('auth.and')}{' '}
-                <a href="#" className="text-brand-600 hover:underline">{t('auth.privacyPolicy')}</a>
+                <a href="/privacy" className="text-brand-600 hover:underline">{t('auth.privacyPolicy')}</a>
               </p>
 
 
@@ -250,9 +250,9 @@ export default function LoginPage() {
               {/* Terms */}
               <p className="mt-4 text-center text-xs text-surface-400">
                 {t('auth.termsAgreement')}{' '}
-                <a href="#" className="text-brand-600">{t('auth.termsOfService')}</a>
+                <a href="/terms" className="text-brand-600">{t('auth.termsOfService')}</a>
                 {' '}{t('auth.and')}{' '}
-                <a href="#" className="text-brand-600">{t('auth.privacyPolicy')}</a>
+                <a href="/privacy" className="text-brand-600">{t('auth.privacyPolicy')}</a>
               </p>
 
 

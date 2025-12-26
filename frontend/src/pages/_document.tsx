@@ -33,7 +33,7 @@ export default function Document() {
         <meta name="twitter:description" content="AI-powered auto-replies for Facebook Pages. Respond to comments and messages 24/7." />
         <meta name="twitter:image" content="https://jawab24.com/og-image.png" />
         
-        {/* Structured Data - Organization */}
+        {/* Structured Data - SoftwareApplication */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -53,15 +53,27 @@ export default function Document() {
                 "@type": "Offer",
                 "price": "0",
                 "priceCurrency": "USD"
-              },
-              "aggregateRating": {
-                "@type": "AggregateRating",
-                "ratingValue": "4.8",
-                "ratingCount": "50"
               }
             })
           }}
         />
+        
+        {/* Google Analytics - Replace GA_MEASUREMENT_ID with your actual ID */}
+        {process.env.NEXT_PUBLIC_GA_ID && (
+          <>
+            <script async src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`} />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `
+                  window.dataLayer = window.dataLayer || [];
+                  function gtag(){dataLayer.push(arguments);}
+                  gtag('js', new Date());
+                  gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}');
+                `
+              }}
+            />
+          </>
+        )}
         
         {/* Additional SEO */}
         <meta name="robots" content="index, follow" />

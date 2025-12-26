@@ -28,7 +28,8 @@ export default function Home() {
       if (isAuthenticated) {
         router.push('/dashboard');
       } else {
-        router.push('/login');
+        // Redirect to landing page for unauthenticated users
+        router.push('/landing');
       }
     }
   }, [isAuthenticated, _hasHydrated, mounted, router]);

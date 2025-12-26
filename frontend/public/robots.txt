@@ -1,6 +1,7 @@
 # Jawab24 robots.txt
 User-agent: *
 Allow: /
+Allow: /landing
 Allow: /login
 Allow: /privacy
 Allow: /terms
