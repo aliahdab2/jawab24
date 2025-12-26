@@ -9,6 +9,14 @@ export const api = axios.create({
   },
 });
 
+// Public API instance (no auth interceptor)
+export const publicApi = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
 // Add auth token to requests
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -103,10 +111,10 @@ export const statsApi = {
   get: () => api.get('/stats'),
 };
 
-// Plans API (Public)
+// Plans API (Public - uses publicApi to avoid auth redirect issues)
 export const plansApi = {
-  getAll: () => api.get('/api/plans'),
-  getById: (id: string) => api.get(`/api/plans/${id}`),
+  getAll: () => publicApi.get('/api/plans'),
+  getById: (id: string) => publicApi.get(`/api/plans/${id}`),
 };
 
 // Plans Admin API
