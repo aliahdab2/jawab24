@@ -367,7 +367,7 @@ Returns: 14 days, no questions asked`}
               />
               
               {/* Character Counter */}
-              <div className={`text-sm mt-2 ${language === 'ar' ? 'text-left' : 'text-right'}`}>
+              <div className="text-sm mt-2 text-end">
                 <span className={
                   knowledgeBase.length > 1900 
                     ? 'text-red-500 font-medium' 
