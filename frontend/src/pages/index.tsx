@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
+import { useLanguage } from '@/i18n';
 
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, _hasHydrated } = useAuthStore();
+  const { language } = useLanguage();
+  const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Update document direction
+  useEffect(() => {
+    if (mounted) {
+      document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+      document.documentElement.lang = isRTL ? 'ar' : 'en';
+    }
+  }, [isRTL, mounted]);
 
   useEffect(() => {
     // Wait for both mounting and hydration before redirecting
@@ -24,7 +35,7 @@ export default function Home() {
 
   // Show a loading state while waiting
   return (
-    <div className="min-h-screen bg-surface-50 flex items-center justify-center">
+    <div className="min-h-screen bg-surface-50 flex items-center justify-center" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="text-center">
         <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-brand-400 to-accent-500 flex items-center justify-center animate-pulse">
           <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -32,7 +43,9 @@ export default function Home() {
           </svg>
         </div>
         <h1 className="text-xl font-display font-bold text-surface-900">Jawab24</h1>
-        <p className="text-surface-500 mt-2">جاري التحميل...</p>
+        <p className="text-surface-500 mt-2">
+          {isRTL ? 'جاري التحميل...' : 'Loading...'}
+        </p>
       </div>
     </div>
   );
