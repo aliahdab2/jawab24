@@ -209,8 +209,8 @@ export default function LandingPage() {
           <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-violet-200/30 rounded-full blur-[120px] animate-pulse delay-1000" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col lg:flex-row items-center gap-12">
-              <div className="text-center lg:text-start lg:w-3/5">
+            <div className="flex flex-col lg:flex-row items-center gap-16">
+              <div className="text-center lg:text-start lg:w-[65%]">
                 {/* Badge */}
                 <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-50 border border-brand-100 mb-10 animate-slide-up">
                   <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></div>
@@ -264,37 +264,21 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Robot Mascot Column */}
-              <div className="lg:w-2/5 relative animate-float py-12 lg:py-0">
-                <div className="relative z-10 w-full max-w-[400px] mx-auto">
-                  {/* Robot Illustration Placeholder - Using a stylized 3D-effect CSS/SVG robot */}
+              {/* Robot Mascot Column - Simplified & Smaller */}
+              <div className="lg:w-2/5 relative py-12 lg:py-0 hidden lg:block">
+                <div className="relative z-10 w-full max-w-[320px] mx-auto animate-float">
                   <div className="relative aspect-square">
-                    {/* Glow effect behind robot */}
-                    <div className="absolute inset-0 bg-brand-500/20 rounded-full blur-[80px] animate-pulse"></div>
+                    {/* Soft glow behind robot */}
+                    <div className="absolute inset-0 bg-brand-500/10 rounded-full blur-[60px]"></div>
                     
-                    {/* 3D Robot Illustration (Premium Placeholder) */}
+                    {/* High-quality reliable Robot Image */}
                     <img 
-                      src="https://cdn3d.iconscout.com/3d/premium/thumb/robot-5611144-4673111.png?f=webp" 
-                      alt="Jawab24 Robot Mascot" 
-                      className="w-full h-full object-contain relative z-10 drop-shadow-[0_20px_50px_rgba(14,165,233,0.3)]"
+                      src="https://img.freepik.com/premium-vector/cute-robot-mascot-design-vector-illustration_1023984-14533.jpg?w=740" 
+                      alt="Jawab24 AI" 
+                      className="w-full h-full object-contain relative z-10 mix-blend-multiply opacity-90"
                     />
-                    
-                    {/* Animated floating badges around robot */}
-                    <div className="absolute top-0 -right-4 bg-white p-3 rounded-2xl shadow-xl border border-surface-100 animate-bounce delay-700 hidden sm:block">
-                      <MessageSquare className="w-6 h-6 text-brand-500" />
-                    </div>
-                    <div className="absolute bottom-10 -left-8 bg-white p-3 rounded-2xl shadow-xl border border-surface-100 animate-bounce hidden sm:block">
-                      <Sparkles className="w-6 h-6 text-amber-500" />
-                    </div>
-                    <div className="absolute top-1/2 -left-12 bg-white p-3 rounded-2xl shadow-xl border border-surface-100 animate-bounce delay-1000 hidden sm:block">
-                      <Bot className="w-6 h-6 text-violet-500" />
-                    </div>
                   </div>
                 </div>
-                
-                {/* Decorative floating dots */}
-                <div className="absolute top-0 right-0 w-4 h-4 bg-brand-400 rounded-full animate-ping"></div>
-                <div className="absolute bottom-20 left-0 w-3 h-3 bg-violet-400 rounded-full animate-ping delay-300"></div>
               </div>
             </div>
           </div>
