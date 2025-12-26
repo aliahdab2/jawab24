@@ -57,11 +57,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: 🔍 Validate Migrations
         run: |
+          # Install only what's needed for validation (fast)
+          npm ci --workspace=jawab24-backend --ignore-scripts
           cd backend
-          npm install --save-dev ts-node typescript
           npx ts-node scripts/validate-migrations.ts
           echo "✅ All migrations validated"
 

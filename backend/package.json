@@ -14,8 +14,7 @@
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check:pg",
     "db:validate": "ts-node scripts/validate-migrations.ts",
-    "test": "vitest",
-    "pretest": "npm run db:validate"
+    "test": "vitest"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",
