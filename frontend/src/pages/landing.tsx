@@ -264,67 +264,19 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Robot Mascot Column - Using inline SVG for reliability */}
+              {/* Robot Mascot Column - Custom Jawab24 Robot */}
               <div className="lg:w-2/5 relative py-12 lg:py-0 hidden lg:block">
-                <div className="relative z-10 w-full max-w-[320px] mx-auto animate-float">
-                  <div className="relative aspect-square flex items-center justify-center">
+                <div className="relative z-10 w-full max-w-[450px] mx-auto animate-float">
+                  <div className="relative">
                     {/* Soft glow behind robot */}
-                    <div className="absolute inset-0 bg-brand-500/20 rounded-full blur-[80px]"></div>
+                    <div className="absolute inset-0 bg-brand-500/15 rounded-full blur-[100px] scale-110"></div>
                     
-                    {/* Friendly Robot SVG */}
-                    <div className="relative z-10 w-full h-full flex items-center justify-center">
-                      <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-2xl" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        {/* Robot Body */}
-                        <rect x="50" y="80" width="100" height="90" rx="20" fill="url(#bodyGradient)" stroke="#0D9488" strokeWidth="3"/>
-                        
-                        {/* Robot Head */}
-                        <rect x="45" y="25" width="110" height="65" rx="15" fill="url(#headGradient)" stroke="#0D9488" strokeWidth="3"/>
-                        
-                        {/* Antenna */}
-                        <circle cx="100" cy="15" r="8" fill="#0D9488"/>
-                        <rect x="97" y="15" width="6" height="15" fill="#0D9488"/>
-                        
-                        {/* Eyes */}
-                        <circle cx="75" cy="55" r="15" fill="white" stroke="#0D9488" strokeWidth="2"/>
-                        <circle cx="125" cy="55" r="15" fill="white" stroke="#0D9488" strokeWidth="2"/>
-                        <circle cx="78" cy="55" r="6" fill="#0D9488"/>
-                        <circle cx="128" cy="55" r="6" fill="#0D9488"/>
-                        <circle cx="80" cy="53" r="2" fill="white"/>
-                        <circle cx="130" cy="53" r="2" fill="white"/>
-                        
-                        {/* Smile */}
-                        <path d="M80 75 Q100 90 120 75" stroke="#0D9488" strokeWidth="3" strokeLinecap="round" fill="none"/>
-                        
-                        {/* Chest Panel */}
-                        <rect x="70" y="100" width="60" height="40" rx="8" fill="white" stroke="#0D9488" strokeWidth="2"/>
-                        <circle cx="85" cy="115" r="5" fill="#10B981"/>
-                        <circle cx="100" cy="115" r="5" fill="#F59E0B"/>
-                        <circle cx="115" cy="115" r="5" fill="#0D9488"/>
-                        <rect x="80" y="125" width="40" height="8" rx="2" fill="#E5E7EB"/>
-                        
-                        {/* Arms */}
-                        <rect x="25" y="90" width="30" height="15" rx="7" fill="url(#bodyGradient)" stroke="#0D9488" strokeWidth="2"/>
-                        <rect x="145" y="90" width="30" height="15" rx="7" fill="url(#bodyGradient)" stroke="#0D9488" strokeWidth="2"/>
-                        <circle cx="20" cy="97" r="10" fill="url(#bodyGradient)" stroke="#0D9488" strokeWidth="2"/>
-                        <circle cx="180" cy="97" r="10" fill="url(#bodyGradient)" stroke="#0D9488" strokeWidth="2"/>
-                        
-                        {/* Legs */}
-                        <rect x="65" y="165" width="25" height="30" rx="8" fill="url(#bodyGradient)" stroke="#0D9488" strokeWidth="2"/>
-                        <rect x="110" y="165" width="25" height="30" rx="8" fill="url(#bodyGradient)" stroke="#0D9488" strokeWidth="2"/>
-                        
-                        {/* Gradients */}
-                        <defs>
-                          <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#14B8A6"/>
-                            <stop offset="100%" stopColor="#0D9488"/>
-                          </linearGradient>
-                          <linearGradient id="headGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#5EEAD4"/>
-                            <stop offset="100%" stopColor="#14B8A6"/>
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                    </div>
+                    {/* Custom Jawab24 Robot Image */}
+                    <img 
+                      src="/robot-mascot.png" 
+                      alt="Jawab24 AI Robot - Auto-reply for Facebook & Instagram" 
+                      className="w-full h-auto relative z-10 drop-shadow-2xl"
+                    />
                   </div>
                 </div>
               </div>
