@@ -287,7 +287,8 @@
     "prioritySupport": "Priority Support",
     "trialDays": "{days} day free trial",
     "facebookInstagram": "Facebook & Instagram",
-    "allPlatforms": "All Platforms"
+    "allPlatforms": "All Platforms",
+    "noCreditCard": "No credit card required"
   },
   "subscription": {
     "title": "Subscription",
