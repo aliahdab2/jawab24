@@ -38,7 +38,15 @@ export default function LoginPage() {
 
   const handleFacebookLogin = () => {
     setLoading(true);
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/facebook`;
+    
+    // Build Facebook OAuth URL
+    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
+    const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
+    const scope = encodeURIComponent('pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_comments,instagram_manage_messages');
+    
+    const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
+    
+    window.location.href = facebookAuthUrl;
   };
 
   const toggleLanguage = () => {

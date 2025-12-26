@@ -25,8 +25,8 @@ export default function AuthCallback() {
 
       try {
         // Exchange code for token via our backend
-        // Use absolute URL to avoid any routing issues
-        const response = await fetch('https://jawab24.com/api/auth/facebook', {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+        const response = await fetch(`${apiUrl}/auth/facebook`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
