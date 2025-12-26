@@ -13,6 +13,7 @@ import postsRoutes from './routes/posts';
 import commentsRoutes from './routes/comments';
 import settingsRoutes from './routes/settings';
 import messagesRoutes from './routes/messages';
+import versionRoutes from './routes/version';
 
 dotenv.config();
 
@@ -28,6 +29,7 @@ const start = async () => {
 
         // Register routes
         await server.register(healthRoutes);
+        await server.register(versionRoutes);
         await server.register(authRoutes);
         await server.register(webhookRoutes);
         await server.register(rulesRoutes);

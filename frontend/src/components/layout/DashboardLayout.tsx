@@ -5,7 +5,7 @@ import Head from 'next/head';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
-import { PageSpinner } from '@/components/ui';
+import { PageSpinner, VersionBadge } from '@/components/ui';
 import clsx from 'clsx';
 
 interface DashboardLayoutProps {
@@ -184,6 +184,9 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
             </div>
           </div>
         )}
+
+        {/* Version badge - subtle indicator in corner */}
+        <VersionBadge />
       </div>
     </>
   );

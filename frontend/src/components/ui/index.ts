@@ -8,4 +8,5 @@ export { Modal } from './Modal';
 export { EmptyState } from './EmptyState';
 export { Spinner, PageSpinner } from './Spinner';
 export { PageHeader } from './PageHeader';
+export { VersionBadge } from './VersionBadge';
 
