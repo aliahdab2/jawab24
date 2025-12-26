@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSpinner } from '@/components/ui';
 import { plansApi, subscriptionApi } from '@/lib/api';
 import { useTranslation } from '@/i18n';
+import { useAuthStore } from '@/lib/store';
 import { Check, X, Zap, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 
@@ -226,7 +228,9 @@ function FeatureRow({
 }
 
 export default function PricingPage() {
+  const router = useRouter();
   const { t, language } = useTranslation();
+  const { isAuthenticated } = useAuthStore();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -237,7 +241,7 @@ export default function PricingPage() {
       try {
         const [plansRes, usageRes] = await Promise.all([
           plansApi.getAll(),
-          subscriptionApi.getUsage().catch(() => null),
+          isAuthenticated ? subscriptionApi.getUsage().catch(() => null) : Promise.resolve(null),
         ]);
         setPlans(plansRes.data.data || []);
         if (usageRes?.data?.data) {
@@ -251,9 +255,14 @@ export default function PricingPage() {
     };
     
     fetchData();
-  }, []);
+  }, [isAuthenticated]);
   
   const handleSelectPlan = async (planId: string) => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    
     setChangingPlan(planId);
     try {
       await subscriptionApi.changePlan(planId);
@@ -271,7 +280,7 @@ export default function PricingPage() {
   
   if (loading) {
     return (
-      <DashboardLayout title={t('pricing.title')}>
+      <DashboardLayout title={t('pricing.title')} isPublic={true}>
         <div className="flex items-center justify-center min-h-[400px]">
           <PageSpinner />
         </div>
@@ -285,7 +294,7 @@ export default function PricingPage() {
   const activePlans = plans.filter(p => p.slug !== 'free' || p.isActive !== false);
   
   return (
-    <DashboardLayout title={t('pricing.title')}>
+    <DashboardLayout title={t('pricing.title')} isPublic={true}>
       {/* Simple Header */}
       <div className="text-center mb-6">
         <h1 className="text-2xl md:text-3xl font-display font-bold text-surface-900 mb-2">

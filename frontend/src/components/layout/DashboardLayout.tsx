@@ -12,9 +12,10 @@ import clsx from 'clsx';
 interface DashboardLayoutProps {
   children: ReactNode;
   title?: string;
+  isPublic?: boolean;
 }
 
-export function DashboardLayout({ children, title }: DashboardLayoutProps) {
+export function DashboardLayout({ children, title, isPublic = false }: DashboardLayoutProps) {
   const router = useRouter();
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
@@ -30,10 +31,10 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
   }, []);
 
   useEffect(() => {
-    if (_hasHydrated && !isAuthenticated) {
+    if (_hasHydrated && !isAuthenticated && !isPublic) {
       router.push('/login');
     }
-  }, [_hasHydrated, isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, isPublic, router]);
 
   // Update document direction based on language
   useEffect(() => {
