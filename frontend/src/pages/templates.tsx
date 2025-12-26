@@ -11,7 +11,8 @@ import {
   Trash2,
   Copy,
   Globe,
-  Tag
+  Tag,
+  Zap
 } from 'lucide-react';
 import type { Template } from '@jawab24/shared';
 

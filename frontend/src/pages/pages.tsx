@@ -13,7 +13,9 @@ import {
   X,
   Save,
   Check,
-  Instagram
+  Instagram,
+  ChevronRight,
+  Clock
 } from 'lucide-react';
 import axios from 'axios';
 import type { Page } from '@jawab24/shared';

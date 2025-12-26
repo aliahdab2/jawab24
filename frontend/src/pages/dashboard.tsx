@@ -335,7 +335,7 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {usage.subscription.trialEndsAt && (
+              {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
                 <div className="mt-8 p-4 rounded-2xl bg-amber-50 border border-amber-100 flex items-center gap-3 text-amber-700 animate-pulse-soft">
                   <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
                     <Zap className="w-4 h-4" />

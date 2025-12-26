@@ -317,7 +317,7 @@ export default function PricingPage() {
               <div>
                 <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider">{t('subscription.currentPlan')}</p>
                 <p className="text-2xl font-bold text-surface-900 tracking-tight">{usage.subscription.plan.name}</p>
-                {usage.subscription.trialEndsAt && (
+                {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
                   <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 text-[10px] font-bold mt-1 px-2 py-0.5 rounded-md border border-amber-100">
                     <Zap className="w-3 h-3" />
                     {t('subscription.trialEndsIn')} {usage.subscription.trialDaysRemaining} {t('subscription.days')}

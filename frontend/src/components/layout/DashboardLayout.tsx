@@ -2,6 +2,7 @@ import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, More
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import Link from 'next/link';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';

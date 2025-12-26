@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -170,7 +171,7 @@ export default function LoginPage() {
                 <Button
                   onClick={handleFacebookLogin}
                   disabled={loading}
-                  size="xl"
+                  size="lg"
                   className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
                 >
                   {loading ? (

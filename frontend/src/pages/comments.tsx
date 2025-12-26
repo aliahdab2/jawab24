@@ -14,7 +14,8 @@ import {
   Download,
   AlertTriangle,
   X,
-  ExternalLink
+  ExternalLink,
+  Globe
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -26,7 +27,13 @@ type FilterType = 'all' | 'replied' | 'pending' | 'needs_attention';
 export default function CommentsPage() {
   const { t, language } = useTranslation();
   const { token } = useAuthStore();
-  // ... rest of state ...
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const isRTL = language === 'ar';
 
   // Helper component for stats
   const StatCard = ({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) => (
