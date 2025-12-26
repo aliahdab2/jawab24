@@ -6,8 +6,6 @@ import {
   MessageSquare, 
   Settings, 
   LogOut,
-  Zap,
-  BookTemplate,
   MessageCircle,
   ChevronLeft,
   ChevronRight
@@ -16,14 +14,14 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import clsx from 'clsx';
 
+// Simplified navigation - only essential items for low-tech users
 const navigationKeys = [
   { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'nav.pages', href: '/pages', icon: FileText },
   { key: 'nav.comments', href: '/comments', icon: MessageSquare },
   { key: 'nav.messages', href: '/messages', icon: MessageCircle },
-  { key: 'nav.templates', href: '/templates', icon: BookTemplate },
-  { key: 'nav.rules', href: '/rules', icon: Zap },
   { key: 'nav.settings', href: '/settings', icon: Settings },
+  // Templates and Rules are hidden - advanced users can access via direct URL
 ];
 
 export function Sidebar() {

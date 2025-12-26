@@ -7,18 +7,19 @@ import {
   Globe,
   Bot,
   Bell,
-  Shield,
   Save,
-  RefreshCw,
   MessageSquare,
   MessageCircle,
   Clock,
-  Check
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Settings2
 } from 'lucide-react';
 import { useTranslation, useLanguage } from '@/i18n';
 
-// Helper component for settings toggle rows
-function SettingsToggleRow({ 
+// Simple toggle row component
+function SimpleToggle({ 
   icon, 
   title, 
   description, 
@@ -32,17 +33,17 @@ function SettingsToggleRow({
   onChange: (enabled: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-3">
-      <div className="flex items-start gap-3 min-w-0 flex-1">
-        <div className="flex-shrink-0 mt-0.5">{icon}</div>
+    <div className="flex items-center justify-between gap-3 p-4 rounded-xl bg-surface-50 border border-surface-200">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
+          {icon}
+        </div>
         <div className="text-start min-w-0">
-          <p className="font-medium text-surface-900 text-sm md:text-base">{title}</p>
-          <p className="text-xs md:text-sm text-surface-500 line-clamp-2">{description}</p>
+          <p className="font-medium text-surface-900">{title}</p>
+          <p className="text-sm text-surface-500">{description}</p>
         </div>
       </div>
-      <div className="flex-shrink-0">
-        <Toggle enabled={enabled} onChange={onChange} />
-      </div>
+      <Toggle enabled={enabled} onChange={onChange} />
     </div>
   );
 }
@@ -53,6 +54,9 @@ export default function SettingsPage() {
   const { token } = useAuthStore();
   const isRTL = language === 'ar';
   
+  // Show/hide advanced settings
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  
   const [settings, setSettings] = useState({
     dashboardLanguage: language,
     defaultReplyLanguage: 'ar',
@@ -62,7 +66,6 @@ export default function SettingsPage() {
     notificationsEnabled: true,
     emailNotifications: true,
     webhookRetries: 3,
-    // Auto-reply settings
     commentsAutoReply: true,
     messagesAutoReply: true,
     businessHoursOnly: false,
@@ -78,7 +81,6 @@ export default function SettingsPage() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
-  // Fetch settings from backend
   const fetchSettings = useCallback(async () => {
     if (!token) return;
     try {
@@ -114,7 +116,6 @@ export default function SettingsPage() {
     fetchSettings();
   }, [fetchSettings]);
 
-  // Update dashboard language when setting changes
   useEffect(() => {
     if (settings.dashboardLanguage !== language) {
       setLanguage(settings.dashboardLanguage as 'ar' | 'en');
@@ -126,21 +127,7 @@ export default function SettingsPage() {
     setSaving(true);
     setSaved(false);
     try {
-      await axios.put(`${apiUrl}/settings`, {
-        dashboardLanguage: settings.dashboardLanguage,
-        defaultReplyLanguage: settings.defaultReplyLanguage,
-        autoDetectLanguage: settings.autoDetectLanguage,
-        aiEnabled: settings.aiEnabled,
-        aiModel: settings.aiModel,
-        commentsAutoReply: settings.commentsAutoReply,
-        messagesAutoReply: settings.messagesAutoReply,
-        businessHoursOnly: settings.businessHoursOnly,
-        businessHoursStart: settings.businessHoursStart,
-        businessHoursEnd: settings.businessHoursEnd,
-        awayMessage: settings.awayMessage || null,
-        replyDelay: settings.replyDelay,
-        greetingMessage: settings.greetingMessage || null,
-      }, {
+      await axios.put(`${apiUrl}/settings`, settings, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSaved(true);
@@ -174,249 +161,203 @@ export default function SettingsPage() {
             loading={saving} 
             icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
             variant={saved ? 'secondary' : 'primary'}
+            size="lg"
           >
             {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
           </Button>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Auto-Reply Settings - Most Important */}
-        <Card className="lg:col-span-2">
-          <CardHeader 
-            title={t('settings.autoReplySettings')} 
-            description={t('settings.autoReplyDescription')}
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Comments Auto-Reply */}
-            <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
-              <SettingsToggleRow
-                icon={<MessageSquare className="w-5 h-5 text-brand-600" />}
-                title={t('settings.commentsAutoReply')}
-                description={t('settings.commentsAutoReplyDesc')}
-                enabled={settings.commentsAutoReply}
-                onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
-              />
-            </div>
-
-            {/* Messages Auto-Reply */}
-            <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
-              <SettingsToggleRow
-                icon={<MessageCircle className="w-5 h-5 text-brand-600" />}
-                title={t('settings.messagesAutoReply')}
-                description={t('settings.messagesAutoReplyDesc')}
-                enabled={settings.messagesAutoReply}
-                onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
-              />
-            </div>
-
-            {/* Business Hours */}
-            <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
-              <SettingsToggleRow
-                icon={<Clock className="w-5 h-5 text-brand-600" />}
-                title={t('settings.businessHours')}
-                description={t('settings.businessHoursDesc')}
-                enabled={settings.businessHoursOnly}
-                onChange={(enabled) => setSettings({ ...settings, businessHoursOnly: enabled })}
-              />
-              {settings.businessHoursOnly && (
-                <div className="mt-4 flex items-center gap-4">
-                  <div>
-                    <label className="label text-xs">{t('settings.businessHoursStart')}</label>
-                    <Input
-                      type="time"
-                      value={settings.businessHoursStart}
-                      onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
-                      className="w-32"
-                    />
-                  </div>
-                  <div>
-                    <label className="label text-xs">{t('settings.businessHoursEnd')}</label>
-                    <Input
-                      type="time"
-                      value={settings.businessHoursEnd}
-                      onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
-                      className="w-32"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Reply Delay */}
-            <div className="p-4 rounded-xl bg-surface-50 border border-surface-200">
-              <div className="flex items-center gap-3 mb-3">
-                <Clock className="w-5 h-5 text-brand-600" />
-                <div className="text-start">
-                  <p className="font-medium text-surface-900">{t('settings.responseTime')}</p>
-                  <p className="text-sm text-surface-500">{t('settings.replyDelay')}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  max={60}
-                  value={settings.replyDelay}
-                  onChange={(e) => setSettings({ ...settings, replyDelay: parseInt(e.target.value) || 0 })}
-                  className="w-24"
-                />
-                <span className="text-sm text-surface-500">{t('settings.seconds')}</span>
-              </div>
-            </div>
-
-            {/* Away Message */}
-            <div className="md:col-span-2">
-              <label className="label">{t('settings.awayMessage')}</label>
-              <p className="text-xs text-surface-500 mb-2">{t('settings.awayMessageDesc')}</p>
-              <textarea
-                className="input min-h-[80px]"
-                placeholder={t('settings.awayMessagePlaceholder')}
-                value={settings.awayMessage}
-                onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
-              />
-            </div>
-
-            {/* Greeting Message */}
-            <div className="md:col-span-2">
-              <label className="label">{t('settings.greetingMessage')}</label>
-              <p className="text-xs text-surface-500 mb-2">{t('settings.greetingMessageDesc')}</p>
-              <textarea
-                className="input min-h-[80px]"
-                placeholder={t('settings.greetingMessagePlaceholder')}
-                value={settings.greetingMessage}
-                onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
-              />
-            </div>
-          </div>
-        </Card>
-
-        {/* Language Settings */}
+      {/* Main Settings - Simple */}
+      <div className="space-y-4 mb-6">
+        {/* Language - Most important */}
         <Card>
-          <CardHeader 
-            title={t('settings.language')} 
-            description={t('settings.description')}
-          />
-          <div className="space-y-6">
-            <div>
-              <label className="label">{t('settings.language')}</label>
-              <select
-                className="input"
-                value={settings.dashboardLanguage}
-                onChange={(e) => setSettings({ ...settings, dashboardLanguage: e.target.value as 'ar' | 'en' })}
-              >
-                <option value="ar">العربية (Arabic)</option>
-                <option value="en">English</option>
-              </select>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-brand-100 flex items-center justify-center">
+              <Globe className="w-6 h-6 text-brand-600" />
             </div>
-
             <div>
-              <label className="label">{t('settings.defaultReplyLanguage')}</label>
-              <select
-                className="input"
-                value={settings.defaultReplyLanguage}
-                onChange={(e) => setSettings({ ...settings, defaultReplyLanguage: e.target.value })}
-              >
-                <option value="ar">العربية (Arabic)</option>
-                <option value="en">English</option>
-              </select>
-              <p className="text-xs text-surface-500 mt-1">
-                {t('settings.description')}
+              <h3 className="font-semibold text-surface-900 text-lg">{t('settings.language')}</h3>
+              <p className="text-surface-500 text-sm">
+                {isRTL ? 'اختر لغة التطبيق والردود' : 'Choose app and reply language'}
               </p>
             </div>
-
-            <SettingsToggleRow
-              icon={<Globe className="w-5 h-5 text-brand-600" />}
-              title={t('settings.autoDetect')}
-              description={t('settings.description')}
-              enabled={settings.autoDetectLanguage}
-              onChange={(enabled) => setSettings({ ...settings, autoDetectLanguage: enabled })}
-            />
           </div>
+          <select
+            className="input text-lg"
+            value={settings.dashboardLanguage}
+            onChange={(e) => setSettings({ ...settings, dashboardLanguage: e.target.value as 'ar' | 'en' })}
+          >
+            <option value="ar">العربية (Arabic)</option>
+            <option value="en">English</option>
+          </select>
         </Card>
 
-        {/* AI Settings */}
-        <Card>
-          <CardHeader 
-            title={t('settings.aiSettings')} 
-            description={t('settings.description')}
-          />
-          <div className="space-y-4">
-            <SettingsToggleRow
-              icon={<Bot className="w-5 h-5 text-brand-600" />}
-              title={t('settings.enableAI')}
-              description={t('settings.aiDescription')}
-              enabled={settings.aiEnabled}
-              onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
-            />
-          </div>
-        </Card>
+        {/* Auto Reply Toggles - Simple cards */}
+        <SimpleToggle
+          icon={<MessageSquare className="w-5 h-5 text-brand-600" />}
+          title={t('settings.commentsAutoReply')}
+          description={t('settings.commentsAutoReplyDesc')}
+          enabled={settings.commentsAutoReply}
+          onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
+        />
 
-        {/* Notifications */}
-        <Card>
-          <CardHeader 
-            title={t('settings.notifications')} 
-            description={t('settings.description')}
-          />
-          <div className="space-y-4">
-            <SettingsToggleRow
-              icon={<Bell className="w-5 h-5 text-brand-600" />}
-              title={t('settings.notifications')}
-              description={t('settings.description')}
-              enabled={settings.notificationsEnabled}
-              onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })}
-            />
+        <SimpleToggle
+          icon={<MessageCircle className="w-5 h-5 text-brand-600" />}
+          title={t('settings.messagesAutoReply')}
+          description={t('settings.messagesAutoReplyDesc')}
+          enabled={settings.messagesAutoReply}
+          onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
+        />
 
-            <SettingsToggleRow
-              icon={<Bell className="w-5 h-5 text-brand-600" />}
-              title={t('settings.emailNotifications')}
-              description={t('settings.description')}
-              enabled={settings.emailNotifications}
-              onChange={(enabled) => setSettings({ ...settings, emailNotifications: enabled })}
-            />
-          </div>
-        </Card>
-
-        {/* General Settings */}
-        <Card>
-          <CardHeader 
-            title={t('settings.general')} 
-            description={t('settings.description')}
-          />
-          <div className="space-y-6">
-            <div className="p-4 rounded-xl bg-surface-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <RefreshCw className="w-5 h-5 text-brand-600" />
-                  <div className="text-start">
-                    <p className="font-medium text-surface-900">Webhook</p>
-                    <p className="text-sm text-emerald-600">{t('common.active')}</p>
-                  </div>
-                </div>
-                <Button variant="secondary" size="sm" icon={<RefreshCw className="w-4 h-4" />}>
-                  {t('common.confirm')}
-                </Button>
-              </div>
-            </div>
-
-            {/* Danger Zone */}
-            <div className="p-4 rounded-xl border border-red-200 bg-red-50">
-              <h4 className="font-medium text-red-700 mb-2">{t('settings.dangerZone')}</h4>
-              <p className="text-sm text-red-600 mb-4">
-                {t('settings.deleteAccountWarning')}
-              </p>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm">
-                  {t('common.delete')}
-                </Button>
-                <Button variant="danger" size="sm">
-                  {t('settings.deleteAccount')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Card>
+        <SimpleToggle
+          icon={<Bot className="w-5 h-5 text-brand-600" />}
+          title={t('settings.enableAI')}
+          description={t('settings.aiDescription')}
+          enabled={settings.aiEnabled}
+          onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
+        />
       </div>
+
+      {/* Advanced Settings Toggle */}
+      <button
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="w-full flex items-center justify-between p-4 rounded-xl bg-surface-100 hover:bg-surface-200 transition-colors mb-4"
+      >
+        <div className="flex items-center gap-3">
+          <Settings2 className="w-5 h-5 text-surface-500" />
+          <span className="font-medium text-surface-700">
+            {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
+          </span>
+        </div>
+        {showAdvanced ? (
+          <ChevronUp className="w-5 h-5 text-surface-500" />
+        ) : (
+          <ChevronDown className="w-5 h-5 text-surface-500" />
+        )}
+      </button>
+
+      {/* Advanced Settings - Hidden by default */}
+      {showAdvanced && (
+        <div className="space-y-4 animate-slide-up">
+          {/* Business Hours */}
+          <Card>
+            <SimpleToggle
+              icon={<Clock className="w-5 h-5 text-brand-600" />}
+              title={t('settings.businessHours')}
+              description={t('settings.businessHoursDesc')}
+              enabled={settings.businessHoursOnly}
+              onChange={(enabled) => setSettings({ ...settings, businessHoursOnly: enabled })}
+            />
+            {settings.businessHoursOnly && (
+              <div className="mt-4 flex items-center gap-4 ps-14">
+                <div>
+                  <label className="label text-xs">{t('settings.businessHoursStart')}</label>
+                  <Input
+                    type="time"
+                    value={settings.businessHoursStart}
+                    onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
+                    className="w-32"
+                  />
+                </div>
+                <div>
+                  <label className="label text-xs">{t('settings.businessHoursEnd')}</label>
+                  <Input
+                    type="time"
+                    value={settings.businessHoursEnd}
+                    onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
+                    className="w-32"
+                  />
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Reply Delay */}
+          <Card>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-brand-600" />
+              </div>
+              <div>
+                <p className="font-medium text-surface-900">{t('settings.responseTime')}</p>
+                <p className="text-sm text-surface-500">{t('settings.replyDelay')}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                max={60}
+                value={settings.replyDelay}
+                onChange={(e) => setSettings({ ...settings, replyDelay: parseInt(e.target.value) || 0 })}
+                className="w-24"
+              />
+              <span className="text-sm text-surface-500">{t('settings.seconds')}</span>
+            </div>
+          </Card>
+
+          {/* Greeting Message */}
+          <Card>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
+                <MessageCircle className="w-5 h-5 text-brand-600" />
+              </div>
+              <div>
+                <p className="font-medium text-surface-900">{t('settings.greetingMessage')}</p>
+                <p className="text-sm text-surface-500">{t('settings.greetingMessageDesc')}</p>
+              </div>
+            </div>
+            <textarea
+              className="input min-h-[80px]"
+              placeholder={t('settings.greetingMessagePlaceholder')}
+              value={settings.greetingMessage}
+              onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
+            />
+          </Card>
+
+          {/* Away Message */}
+          <Card>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-surface-100 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-surface-600" />
+              </div>
+              <div>
+                <p className="font-medium text-surface-900">{t('settings.awayMessage')}</p>
+                <p className="text-sm text-surface-500">{t('settings.awayMessageDesc')}</p>
+              </div>
+            </div>
+            <textarea
+              className="input min-h-[80px]"
+              placeholder={t('settings.awayMessagePlaceholder')}
+              value={settings.awayMessage}
+              onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
+            />
+          </Card>
+
+          {/* Notifications */}
+          <SimpleToggle
+            icon={<Bell className="w-5 h-5 text-brand-600" />}
+            title={t('settings.notifications')}
+            description={t('settings.emailNotifications')}
+            enabled={settings.notificationsEnabled}
+            onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })}
+          />
+
+          {/* Delete Account */}
+          <Card className="border-red-200 bg-red-50/50">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-medium text-red-700">{t('settings.dangerZone')}</h4>
+                <p className="text-sm text-red-600 mt-1">{t('settings.deleteAccountWarning')}</p>
+              </div>
+              <Button variant="danger" size="sm">
+                {t('settings.deleteAccount')}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

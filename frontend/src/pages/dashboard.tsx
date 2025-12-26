@@ -7,13 +7,8 @@ import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import { 
   MessageSquare, 
-  TrendingUp, 
   Zap, 
   Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  BarChart3,
-  Bot,
   FileText
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -100,38 +95,28 @@ export default function DashboardPage() {
     }
   };
 
+  // Simplified stats - only 3 essential metrics for low-tech users
   const stats = [
     { 
       nameKey: 'dashboard.totalComments', 
       value: statsData.totalComments.toLocaleString(), 
-      change: '+0%', // Real trend requires historical data
-      trend: 'up',
       icon: MessageSquare,
-      color: 'brand'
+      color: 'brand',
+      description: language === 'ar' ? 'تعليقات صفحاتك' : 'Your page comments'
     },
     { 
       nameKey: 'dashboard.autoReplies', 
       value: statsData.autoReplies.toLocaleString(), 
-      change: '+0%', 
-      trend: 'up',
       icon: Zap,
-      color: 'accent'
+      color: 'emerald',
+      description: language === 'ar' ? 'تم الرد عليها ✓' : 'Replied ✓'
     },
     { 
-      nameKey: 'dashboard.aiReplies', 
-      value: statsData.aiReplies.toLocaleString(), 
-      change: '+0%', 
-      trend: 'up',
-      icon: Bot,
-      color: 'emerald'
-    },
-    { 
-      nameKey: 'dashboard.avgResponseTime', 
-      value: statsData.avgResponseTime, 
-      change: '0%', 
-      trend: 'up',
+      nameKey: 'dashboard.pending', 
+      value: (statsData.totalComments - statsData.autoReplies).toLocaleString(), 
       icon: Clock,
-      color: 'violet'
+      color: 'amber',
+      description: language === 'ar' ? 'بانتظار الرد' : 'Waiting for reply'
     },
   ];
 
@@ -153,43 +138,30 @@ export default function DashboardPage() {
         description={t('dashboard.overview')} 
       />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 lg:gap-6 mb-6 md:mb-8">
+      {/* Stats Grid - Simplified to 3 cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 md:mb-8">
         {stats.map((stat, i) => (
           <Card 
             key={stat.nameKey} 
             hover 
-            className="animate-slide-up"
+            className="animate-slide-up text-center"
             style={{ animationDelay: `${i * 0.1}s` } as React.CSSProperties}
           >
-            <div className="flex items-start justify-between">
-              <div className="text-start flex-1 min-w-0">
-                <p className="text-xs md:text-sm text-surface-500 mb-1 truncate">{t(stat.nameKey)}</p>
-                <p className="text-xl md:text-2xl lg:text-3xl font-display font-bold text-surface-900">
-                  {stat.value}
-                </p>
-              </div>
-              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                stat.color === 'brand' ? 'bg-brand-100' :
-                stat.color === 'accent' ? 'bg-accent-100' :
-                stat.color === 'emerald' ? 'bg-emerald-100' :
-                'bg-violet-100'
-              }`}>
-                <stat.icon className={`w-5 h-5 md:w-6 md:h-6 ${
-                  stat.color === 'brand' ? 'text-brand-600' :
-                  stat.color === 'accent' ? 'text-accent-600' :
-                  stat.color === 'emerald' ? 'text-emerald-600' :
-                  'text-violet-600'
-                }`} />
-              </div>
+            <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center mx-auto mb-3 ${
+              stat.color === 'brand' ? 'bg-brand-100' :
+              stat.color === 'emerald' ? 'bg-emerald-100' :
+              'bg-amber-100'
+            }`}>
+              <stat.icon className={`w-7 h-7 md:w-8 md:h-8 ${
+                stat.color === 'brand' ? 'text-brand-600' :
+                stat.color === 'emerald' ? 'text-emerald-600' :
+                'text-amber-600'
+              }`} />
             </div>
-            {/* Trend - hidden on small mobile */}
-            <div className="mt-2 md:mt-4 hidden sm:flex items-center gap-1 opacity-50">
-              <ArrowUpRight className="w-3 h-3 md:w-4 md:h-4 text-surface-400" />
-              <span className="text-xs md:text-sm text-surface-400">
-                {t('dashboard.vsLastWeek')}
-              </span>
-            </div>
+            <p className="text-3xl md:text-4xl font-display font-bold text-surface-900 mb-1">
+              {stat.value}
+            </p>
+            <p className="text-sm text-surface-500">{stat.description}</p>
           </Card>
         ))}
       </div>
@@ -277,47 +249,30 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Quick Stats Bar */}
-      <Card className="mt-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
-              <BarChart3 className="w-5 h-5 text-brand-600" />
+      {/* Simple status message */}
+      {statsData.activePages > 0 && (
+        <Card className="mt-6 bg-emerald-50 border-emerald-200">
+          <div className="flex items-center gap-3 text-emerald-700">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-emerald-600" />
             </div>
-            <div className="text-start min-w-0">
-              <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.replyRate')}</p>
-              <p className="text-lg md:text-xl font-bold text-surface-900">{statsData.replyRate}%</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div className="text-start min-w-0">
-              <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.activePages')}</p>
-              <p className="text-lg md:text-xl font-bold text-surface-900">{statsData.activePages}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-accent-100 flex items-center justify-center flex-shrink-0">
-              <FileText className="w-5 h-5 text-accent-600" />
-            </div>
-            <div className="text-start min-w-0">
-              <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.templates')}</p>
-              <p className="text-lg md:text-xl font-bold text-surface-900">{statsData.templatesCount}</p>
+            <div>
+              <p className="font-medium">
+                {language === 'ar' 
+                  ? `✓ الردود التلقائية مفعلة على ${statsData.activePages} صفحة`
+                  : `✓ Auto-replies active on ${statsData.activePages} page${statsData.activePages > 1 ? 's' : ''}`
+                }
+              </p>
+              <p className="text-sm text-emerald-600">
+                {language === 'ar' 
+                  ? 'سنرد على تعليقات ورسائل عملائك تلقائياً'
+                  : "We'll auto-reply to your customers' comments and messages"
+                }
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
-              <Zap className="w-5 h-5 text-violet-600" />
-            </div>
-            <div className="text-start min-w-0">
-              <p className="text-xs md:text-sm text-surface-500 truncate">{t('dashboard.activeRules')}</p>
-              <p className="text-lg md:text-xl font-bold text-surface-900">{statsData.activeRules}</p>
-            </div>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      )}
     </DashboardLayout>
   );
 }

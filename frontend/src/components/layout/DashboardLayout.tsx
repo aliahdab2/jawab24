@@ -1,11 +1,11 @@
-import { MessageCircle, LayoutDashboard, FileText, MessageSquare, BookTemplate, Zap, Settings, MoreHorizontal, X } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X } from 'lucide-react';
 import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
-import { PageSpinner, VersionBadge } from '@/components/ui';
+import { PageSpinner, VersionBadge, WhatsAppHelpButton } from '@/components/ui';
 import clsx from 'clsx';
 
 interface DashboardLayoutProps {
@@ -144,6 +144,7 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              {/* Simplified menu - only essential items */}
               <div className="grid grid-cols-3 gap-4">
                 <MobileMenuButton 
                   onClick={() => { router.push('/dashboard'); setMobileMenuOpen(false); }}
@@ -166,16 +167,6 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
                   label={t('nav.messages')}
                 />
                 <MobileMenuButton 
-                  onClick={() => { router.push('/templates'); setMobileMenuOpen(false); }}
-                  icon={<BookTemplate className="w-6 h-6" />}
-                  label={t('nav.templates')}
-                />
-                <MobileMenuButton 
-                  onClick={() => { router.push('/rules'); setMobileMenuOpen(false); }}
-                  icon={<Zap className="w-6 h-6" />}
-                  label={t('nav.rules')}
-                />
-                <MobileMenuButton 
                   onClick={() => { router.push('/settings'); setMobileMenuOpen(false); }}
                   icon={<Settings className="w-6 h-6" />}
                   label={t('nav.settings')}
@@ -187,6 +178,9 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
 
         {/* Version badge - subtle indicator in corner */}
         <VersionBadge />
+
+        {/* WhatsApp help button - floating */}
+        <WhatsAppHelpButton />
       </div>
     </>
   );
