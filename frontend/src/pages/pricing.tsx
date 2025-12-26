@@ -149,7 +149,7 @@ function PlanCard({
         </Button>
         {isFree && (
           <p className="text-[10px] text-surface-400 text-center mt-3 font-medium italic">
-            * {t('common.noCreditCardRequired') || (t('pricing.noCreditCard') || 'No credit card required')}
+            * {t('pricing.noCreditCard')}
           </p>
         )}
       </div>
