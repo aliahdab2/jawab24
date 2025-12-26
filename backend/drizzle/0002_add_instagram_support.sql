@@ -52,10 +52,34 @@ CREATE INDEX IF NOT EXISTS idx_instagram_comments_media_id ON instagram_comments
 CREATE INDEX IF NOT EXISTS idx_instagram_comments_id ON instagram_comments(instagram_comment_id);
 CREATE INDEX IF NOT EXISTS idx_instagram_comments_replied ON instagram_comments(replied);
 
--- 4. Add Instagram DMs support to messages table
+-- 4. Create messages table if not exists (for DMs - Facebook & Instagram)
+CREATE TABLE IF NOT EXISTS messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
+    facebook_message_id VARCHAR(255) UNIQUE NOT NULL,
+    instagram_message_id VARCHAR(255),
+    platform VARCHAR(20) DEFAULT 'facebook',
+    sender_id VARCHAR(255) NOT NULL,
+    sender_name VARCHAR(255),
+    message TEXT NOT NULL,
+    direction VARCHAR(10) DEFAULT 'incoming',
+    replied BOOLEAN DEFAULT false,
+    reply_text TEXT,
+    reply_method VARCHAR(50),
+    created_time TIMESTAMP,
+    replied_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Add columns if table already existed without them
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS platform VARCHAR(20) DEFAULT 'facebook';
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS instagram_message_id VARCHAR(255);
 
--- Create index for platform filtering
+-- Create indexes for messages
+CREATE INDEX IF NOT EXISTS idx_messages_page_id ON messages(page_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_messages_facebook_message_id ON messages(facebook_message_id);
+CREATE INDEX IF NOT EXISTS idx_messages_direction ON messages(direction);
 CREATE INDEX IF NOT EXISTS idx_messages_platform ON messages(platform);
 
