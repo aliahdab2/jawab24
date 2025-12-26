@@ -8,6 +8,20 @@
       "when": 1734638400000,
       "tag": "0001_add_knowledge_base",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1734724800000,
+      "tag": "0002_add_instagram_support",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1735225200000,
+      "tag": "0003_add_pricing_system",
+      "breakpoints": true
     }
   ]
 }

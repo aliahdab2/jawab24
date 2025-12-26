@@ -3,6 +3,7 @@ import { pages } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
 import { facebookService } from './facebook';
+import { instagramService } from './instagram';
 
 export class PagesService {
     /**
@@ -100,7 +101,7 @@ export class PagesService {
     }
 
     /**
-     * Sync pages from Facebook
+     * Sync pages from Facebook (and linked Instagram accounts)
      */
     async syncFromFacebook(userId: string, userAccessToken: string) {
         console.log(`[Pages] Starting sync for user ${userId}`);
@@ -122,6 +123,24 @@ export class PagesService {
         for (const fbPage of fbPages.data) {
             console.log(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
             
+            // Try to fetch linked Instagram account
+            let instagramAccountId: string | null = null;
+            let instagramUsername: string | null = null;
+            
+            try {
+                const igAccount = await instagramService.getLinkedInstagramAccount(
+                    fbPage.id, 
+                    fbPage.access_token
+                );
+                if (igAccount) {
+                    instagramAccountId = igAccount.id;
+                    instagramUsername = igAccount.username;
+                    console.log(`[Pages] Found linked Instagram: @${instagramUsername}`);
+                }
+            } catch (error) {
+                console.log(`[Pages] Could not fetch Instagram account (may not be linked): ${error}`);
+            }
+            
             // Check if page already exists
             const existingPage = await this.getPageByFacebookId(fbPage.id);
             
@@ -133,6 +152,8 @@ export class PagesService {
                     .set({
                         name: fbPage.name,
                         accessToken: fbPage.access_token,
+                        instagramAccountId,
+                        instagramUsername,
                         updatedAt: new Date(),
                     })
                     .where(eq(pages.id, existingPage.id))
@@ -141,17 +162,53 @@ export class PagesService {
             } else {
                 // Create new page
                 console.log(`[Pages] Creating new page: ${fbPage.name}`);
-                const created = await this.createPage(userId, {
-                    facebookPageId: fbPage.id,
-                    name: fbPage.name,
-                    accessToken: fbPage.access_token,
-                });
+                const [created] = await db
+                    .insert(pages)
+                    .values({
+                        userId,
+                        facebookPageId: fbPage.id,
+                        name: fbPage.name,
+                        accessToken: fbPage.access_token,
+                        autoReplyEnabled: true,
+                        instagramAccountId,
+                        instagramUsername,
+                        instagramAutoReplyEnabled: true,
+                    })
+                    .returning();
                 syncedPages.push(created);
             }
         }
 
         console.log(`[Pages] Sync complete. ${syncedPages.length} pages synced.`);
         return syncedPages;
+    }
+
+    /**
+     * Toggle Instagram auto-reply for a page
+     */
+    async toggleInstagramAutoReply(userId: string, pageId: string, enabled: boolean) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({
+                instagramAutoReplyEnabled: enabled,
+                updatedAt: new Date(),
+            })
+            .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
+            .returning();
+        
+        return updatedPage;
+    }
+
+    /**
+     * Get page by Instagram Account ID
+     */
+    async getPageByInstagramId(instagramAccountId: string) {
+        const result = await db
+            .select()
+            .from(pages)
+            .where(eq(pages.instagramAccountId, instagramAccountId));
+        
+        return result[0] || null;
     }
 }
 

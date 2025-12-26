@@ -119,6 +119,58 @@ export class FacebookService {
             throw error;
         }
     }
+
+    /**
+     * Get post content from Facebook
+     * Fetches the message/text content of a post
+     */
+    async getPostContent(postId: string, pageAccessToken: string): Promise<string | null> {
+        try {
+            console.log(`[Facebook] Fetching post content for ${postId}`);
+            const response = await axios.get(`${FACEBOOK_GRAPH_API}/${postId}`, {
+                params: {
+                    fields: 'message,story,created_time',
+                    access_token: pageAccessToken,
+                },
+            });
+
+            const message = response.data.message || response.data.story || null;
+            console.log(`[Facebook] Post content: ${message ? message.substring(0, 100) + '...' : '(no content)'}`);
+            return message;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                console.error('[Facebook] Error fetching post:', error.response?.data);
+                // Don't throw - just return null if we can't fetch the post
+                return null;
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Get comment details from Facebook
+     */
+    async getCommentDetails(commentId: string, pageAccessToken: string): Promise<{
+        message: string;
+        from?: { id: string; name: string };
+    } | null> {
+        try {
+            const response = await axios.get(`${FACEBOOK_GRAPH_API}/${commentId}`, {
+                params: {
+                    fields: 'message,from',
+                    access_token: pageAccessToken,
+                },
+            });
+
+            return response.data;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                console.error('[Facebook] Error fetching comment:', error.response?.data);
+                return null;
+            }
+            return null;
+        }
+    }
 }
 
 export const facebookService = new FacebookService();

@@ -7,6 +7,11 @@ import { authService } from '../../src/services/auth';
 // Mock services
 vi.mock('../../src/services/rules');
 vi.mock('../../src/services/auth');
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        canAddRule: vi.fn().mockResolvedValue({ allowed: true, limit: 10, used: 1, remaining: 9 }),
+    }
+}));
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: async (req: any) => {
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };

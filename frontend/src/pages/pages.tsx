@@ -12,7 +12,8 @@ import {
   BookOpen,
   X,
   Save,
-  Check
+  Check,
+  Instagram
 } from 'lucide-react';
 import axios from 'axios';
 import type { Page } from '@jawab24/shared';
@@ -79,6 +80,26 @@ export default function PagesPage() {
       // Revert on error
       setPages(pages.map(page => 
         page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
+      ));
+    }
+  };
+
+  const handleInstagramToggle = async (pageId: string, enabled: boolean) => {
+    // Optimistic update
+    setPages(pages.map(page => 
+      page.id === pageId ? { ...page, instagramAutoReplyEnabled: enabled } : page
+    ));
+
+    try {
+      await axios.patch(`${apiUrl}/pages/${pageId}/instagram-auto-reply`, 
+        { enabled },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (error) {
+      console.error('Failed to toggle Instagram auto-reply:', error);
+      // Revert on error
+      setPages(pages.map(page => 
+        page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
       ));
     }
   };
@@ -192,13 +213,59 @@ export default function PagesPage() {
                   </div>
                   <div className="text-start min-w-0">
                     <h3 className="font-semibold text-surface-900 truncate">{page.name}</h3>
-                    <p className="text-xs md:text-sm text-surface-500 truncate">ID: {page.facebookPageId}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs text-surface-500 truncate">Facebook</p>
+                      {page.instagramUsername && (
+                        <p className="text-xs text-pink-500 flex items-center gap-1">
+                          <Instagram className="w-3 h-3" />
+                          @{page.instagramUsername}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <Toggle 
-                  enabled={page.autoReplyEnabled ?? false} 
-                  onChange={(enabled) => handleToggle(page.id, enabled)} 
-                />
+              </div>
+              
+              {/* Platform Toggles */}
+              <div className="flex flex-col gap-3 mb-4 p-3 bg-surface-50 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-blue-100 flex items-center justify-center">
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    </div>
+                    <span className="text-sm text-surface-700">Facebook</span>
+                  </div>
+                  <Toggle 
+                    enabled={page.autoReplyEnabled ?? false} 
+                    onChange={(enabled) => handleToggle(page.id, enabled)} 
+                  />
+                </div>
+                
+                {page.instagramUsername ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                        <Instagram className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <span className="text-sm text-surface-700">Instagram</span>
+                    </div>
+                    <Toggle 
+                      enabled={page.instagramAutoReplyEnabled ?? false} 
+                      onChange={(enabled) => handleInstagramToggle(page.id, enabled)} 
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between opacity-50">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded bg-surface-200 flex items-center justify-center">
+                        <Instagram className="w-3.5 h-3.5 text-surface-400" />
+                      </div>
+                      <span className="text-sm text-surface-500">
+                        {language === 'ar' ? 'لم يتم ربط Instagram' : 'Instagram not linked'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Stats */}
@@ -256,22 +323,35 @@ export default function PagesPage() {
               {/* Footer */}
               <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2">
-                  <Badge variant={page.autoReplyEnabled ? 'success' : 'default'}>
-                    {page.autoReplyEnabled ? t('common.active') : t('common.inactive')}
+                  <Badge variant={(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? 'success' : 'default'}>
+                    {(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? t('common.active') : t('common.inactive')}
                   </Badge>
                   <span className="text-xs text-surface-400">
                     {page.lastActivity ? formatTime(page.lastActivity) : t('common.noData')}
                   </span>
                 </div>
-                <a 
-                  href={`https://facebook.com/${page.facebookPageId}`} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-sm text-surface-500 hover:text-surface-700 hover:bg-surface-100 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{language === 'ar' ? 'عرض الصفحة' : 'View Page'}</span>
-                </a>
+                <div className="flex items-center gap-2">
+                  <a 
+                    href={`https://facebook.com/${page.facebookPageId}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-sm text-blue-500 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                    title="Facebook"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                  </a>
+                  {page.instagramUsername && (
+                    <a 
+                      href={`https://instagram.com/${page.instagramUsername}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-sm text-pink-500 hover:text-pink-700 hover:bg-pink-50 transition-colors"
+                      title="Instagram"
+                    >
+                      <Instagram className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
               </div>
             </Card>
           ))}

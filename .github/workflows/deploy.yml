@@ -100,6 +100,43 @@ jobs:
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🗄️  STEP 1.5: Running database migrations"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Ensure postgres is running
+            docker-compose up -d postgres
+            sleep 5
+            
+            # Create migrations tracking directory
+            mkdir -p .migrations
+            
+            # Run any new SQL migrations from backend/drizzle/
+            for migration in backend/drizzle/*.sql; do
+              if [ -f "$migration" ]; then
+                MIGRATION_NAME=$(basename "$migration")
+                # Check if migration was already applied (using a simple marker file)
+                if [ ! -f ".migrations/$MIGRATION_NAME.done" ]; then
+                  echo "   📦 Applying: $MIGRATION_NAME"
+                  # Copy migration to container and run it
+                  docker cp "$migration" jawab24-postgres:/tmp/migration.sql
+                  if docker exec jawab24-postgres psql -U postgres -d jawab24 -f /tmp/migration.sql 2>&1; then
+                    touch ".migrations/$MIGRATION_NAME.done"
+                    echo "   ✅ Applied: $MIGRATION_NAME"
+                  else
+                    echo "   ⚠️  Migration may have been applied already (tables exist)"
+                    touch ".migrations/$MIGRATION_NAME.done"
+                  fi
+                  docker exec jawab24-postgres rm -f /tmp/migration.sql
+                else
+                  echo "   ⏭️  Already applied: $MIGRATION_NAME"
+                fi
+              fi
+            done
+            
+            echo "✅ Migrations complete"
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🔍 STEP 2: Determine deployment target"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             

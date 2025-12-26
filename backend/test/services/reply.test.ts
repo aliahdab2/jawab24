@@ -18,6 +18,12 @@ vi.mock('../../src/services/ai');
 vi.mock('../../src/services/settings');
 vi.mock('../../src/services/messages');
 vi.mock('../../src/services/facebook');
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        canUseAiReplies: vi.fn().mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 }),
+        incrementAiReplies: vi.fn().mockResolvedValue(undefined),
+    }
+}));
 vi.mock('axios');
 vi.mock('../../src/config', () => ({
     config: {

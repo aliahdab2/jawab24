@@ -8,20 +8,21 @@ import {
   LogOut,
   MessageCircle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CreditCard
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import clsx from 'clsx';
 
-// Simplified navigation - only essential items for low-tech users
+// Simple navigation - Templates & Rules are in Settings > Advanced
 const navigationKeys = [
   { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'nav.pages', href: '/pages', icon: FileText },
   { key: 'nav.comments', href: '/comments', icon: MessageSquare },
   { key: 'nav.messages', href: '/messages', icon: MessageCircle },
+  { key: 'pricing.title', href: '/pricing', icon: CreditCard },
   { key: 'nav.settings', href: '/settings', icon: Settings },
-  // Templates and Rules are hidden - advanced users can access via direct URL
 ];
 
 export function Sidebar() {

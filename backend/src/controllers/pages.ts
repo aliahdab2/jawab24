@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { pagesService } from '../services/pages';
+import { subscriptionsService } from '../services/subscriptions';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 
@@ -12,6 +13,16 @@ export class PagesController {
         const { userId } = (request as AuthenticatedRequest).user!;
         
         try {
+            // Check page limit before creating
+            const limitCheck = await subscriptionsService.canAddPage(userId);
+            if (!limitCheck.allowed) {
+                return reply.status(403).send({ 
+                    error: limitCheck.reason || 'Page limit reached',
+                    limit: limitCheck.limit,
+                    used: limitCheck.used,
+                });
+            }
+            
             const page = await pagesService.createPage(userId, request.body);
             return reply.status(201).send(page);
         } catch (error) {
@@ -130,6 +141,9 @@ export class PagesController {
         }
 
         try {
+            // Check page limit before syncing
+            const limitCheck = await subscriptionsService.canAddPage(userId);
+            
             request.log.info(`[Pages] Sync requested for user ${userId}`);
             const pages = await pagesService.syncFromFacebook(userId, accessToken);
             
@@ -141,7 +155,15 @@ export class PagesController {
                 });
             }
             
-            return reply.send({ synced: pages.length, pages });
+            // Warn if user is at or near their limit
+            const response: Record<string, unknown> = { synced: pages.length, pages };
+            if (!limitCheck.allowed) {
+                response.warning = `You have reached your page limit (${limitCheck.limit}). Some pages may not be synced. Upgrade to add more pages.`;
+            } else if (limitCheck.remaining !== null && limitCheck.remaining !== undefined && limitCheck.remaining <= 1) {
+                response.warning = `You can add ${limitCheck.remaining} more page(s). Consider upgrading for more pages.`;
+            }
+            
+            return reply.send(response);
         } catch (error) {
             request.log.error(error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';

@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { rulesService } from '../services/rules';
+import { subscriptionsService } from '../services/subscriptions';
 import { CreateRuleDTO, UpdateRuleDTO } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 
@@ -12,6 +13,16 @@ export class RulesController {
         const { userId } = (request as AuthenticatedRequest).user!;
         
         try {
+            // Check rule limit before creating
+            const limitCheck = await subscriptionsService.canAddRule(userId);
+            if (!limitCheck.allowed) {
+                return reply.status(403).send({ 
+                    error: limitCheck.reason || 'Rule limit reached',
+                    limit: limitCheck.limit,
+                    used: limitCheck.used,
+                });
+            }
+            
             const rule = await rulesService.createRule(userId, request.body);
             return reply.status(201).send(rule);
         } catch (error) {

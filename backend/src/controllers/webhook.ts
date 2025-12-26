@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
 import { replyService } from '../services/reply';
+import { instagramReplyService } from '../services/instagramReply';
 
 interface WebhookEntry {
     id: string;
@@ -12,17 +13,24 @@ interface WebhookEntry {
 interface WebhookChange {
     field: string;
     value: {
-        item: string;
-        verb: string;
+        item?: string;
+        verb?: string;
         comment_id?: string;
         post_id?: string;
         parent_id?: string;
         message?: string;
         from?: {
             id: string;
-            name: string;
+            name?: string;
+            username?: string;
         };
         created_time?: number;
+        // Instagram specific fields
+        id?: string;
+        text?: string;
+        media?: {
+            id: string;
+        };
     };
 }
 
@@ -63,15 +71,22 @@ export class WebhookController {
         console.log('Received webhook:', JSON.stringify(body, null, 2));
 
         if (body.object === 'page') {
-            // Process asynchronously - respond immediately to Facebook
+            // Process Facebook webhooks asynchronously
             this.processWebhookAsync(body.entry).catch(err => {
-                console.error('Error processing webhook:', err);
+                console.error('Error processing Facebook webhook:', err);
             });
 
-            // Return a '200 OK' response immediately
+            return reply.status(200).send('EVENT_RECEIVED');
+        } else if (body.object === 'instagram') {
+            // Process Instagram webhooks asynchronously
+            this.processInstagramWebhookAsync(body.entry).catch(err => {
+                console.error('Error processing Instagram webhook:', err);
+            });
+
             return reply.status(200).send('EVENT_RECEIVED');
         } else {
-            // Return a '404 Not Found' if event is not from a page subscription
+            // Return a '404 Not Found' if event is not from a page or instagram subscription
+            console.log(`Unknown webhook object type: ${body.object}`);
             return reply.status(404).send();
         }
     }
@@ -201,6 +216,124 @@ export class WebhookController {
             }
         } catch (error) {
             console.error(`Error processing comment ${comment_id}:`, error);
+        }
+    }
+
+    // ================== Instagram Webhook Handlers ==================
+
+    /**
+     * Process Instagram webhook entries asynchronously
+     */
+    private async processInstagramWebhookAsync(entries: WebhookEntry[]) {
+        for (const entry of entries) {
+            const instagramAccountId = entry.id;
+
+            // Handle Instagram changes (comments, mentions)
+            if (entry.changes) {
+                for (const change of entry.changes) {
+                    await this.processInstagramChange(instagramAccountId, change);
+                }
+            }
+
+            // Handle Instagram messaging events (DMs)
+            if (entry.messaging) {
+                for (const messageEvent of entry.messaging) {
+                    if (messageEvent.message && messageEvent.message.text) {
+                        await this.processInstagramMessage(instagramAccountId, messageEvent);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Process an Instagram change event
+     */
+    private async processInstagramChange(instagramAccountId: string, change: WebhookChange) {
+        console.log(`[Instagram] Processing change: ${change.field}`);
+
+        // Handle comments on Instagram media
+        if (change.field === 'comments') {
+            await this.processInstagramComment(instagramAccountId, change.value);
+        }
+
+        // Handle mentions
+        if (change.field === 'mentions') {
+            console.log('[Instagram] Mention received - not processing for now');
+        }
+    }
+
+    /**
+     * Process an Instagram comment
+     */
+    private async processInstagramComment(instagramAccountId: string, value: WebhookChange['value']) {
+        const commentId = value.id;
+        const commentText = value.text;
+        const mediaId = value.media?.id;
+        const from = value.from;
+
+        if (!commentId || !commentText || !mediaId) {
+            console.log('[Instagram] Missing required fields for comment processing');
+            return;
+        }
+
+        // Don't reply to our own comments
+        if (from?.id === instagramAccountId) {
+            console.log('[Instagram] Skipping own comment');
+            return;
+        }
+
+        console.log(`[Instagram] Processing new comment: ${commentId} on media ${mediaId}`);
+
+        try {
+            const result = await instagramReplyService.processComment(
+                instagramAccountId,
+                mediaId,
+                commentId,
+                commentText,
+                from?.id,
+                from?.username
+            );
+
+            if (result.success) {
+                console.log(`[Instagram] Successfully replied to comment ${commentId}`);
+            } else {
+                console.log(`[Instagram] Failed to reply to comment ${commentId}: ${result.error}`);
+            }
+        } catch (error) {
+            console.error(`[Instagram] Error processing comment ${commentId}:`, error);
+        }
+    }
+
+    /**
+     * Process an Instagram DM
+     */
+    private async processInstagramMessage(instagramAccountId: string, event: any) {
+        const senderId = event.sender?.id;
+        const messageText = event.message?.text;
+        const messageId = event.message?.mid;
+
+        if (!senderId || !messageText) {
+            return;
+        }
+
+        console.log(`[Instagram] Processing message from ${senderId}: ${messageText}`);
+
+        try {
+            const result = await instagramReplyService.processMessage(
+                instagramAccountId,
+                senderId,
+                messageText,
+                messageId
+            );
+
+            if (result.success) {
+                console.log(`[Instagram] Successfully replied to message ${messageId}`);
+            } else {
+                console.log(`[Instagram] Failed to reply to message ${messageId}: ${result.error}`);
+            }
+        } catch (error) {
+            console.error(`[Instagram] Error processing message ${messageId}:`, error);
         }
     }
 }

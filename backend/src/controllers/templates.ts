@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { templatesService } from '../services/templates';
+import { subscriptionsService } from '../services/subscriptions';
 import { CreateTemplateDTO, UpdateTemplateDTO } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 
@@ -12,6 +13,16 @@ export class TemplatesController {
         const { userId } = (request as AuthenticatedRequest).user!;
         
         try {
+            // Check template limit before creating
+            const limitCheck = await subscriptionsService.canAddTemplate(userId);
+            if (!limitCheck.allowed) {
+                return reply.status(403).send({ 
+                    error: limitCheck.reason || 'Template limit reached',
+                    limit: limitCheck.limit,
+                    used: limitCheck.used,
+                });
+            }
+            
             const template = await templatesService.createTemplate(userId, request.body);
             return reply.status(201).send(template);
         } catch (error) {

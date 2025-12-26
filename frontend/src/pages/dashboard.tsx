@@ -1,20 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardHeader, Badge, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, CardHeader, Badge, PageHeader, PageSpinner, Button } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
+import { subscriptionApi } from '@/lib/api';
 import { 
   MessageSquare, 
   Zap, 
   Clock,
-  FileText
+  FileText,
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-import type { Comment, Page } from '@jawab24/shared';
+import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 
 // Key for localStorage to track if onboarding was completed
 const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
@@ -36,18 +39,25 @@ export default function DashboardPage() {
     templatesCount: 0,
     activeRules: 0
   });
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      const [commentsRes, pagesRes, templatesRes, rulesRes] = await Promise.all([
+      const [commentsRes, pagesRes, templatesRes, rulesRes, usageRes] = await Promise.all([
         axios.get(`${apiUrl}/comments`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${apiUrl}/pages`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${apiUrl}/templates`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } }),
+        subscriptionApi.getUsage().catch(() => null)
       ]);
+      
+      // Set usage data if available
+      if (usageRes?.data?.data) {
+        setUsage(usageRes.data.data);
+      }
 
       const comments: Comment[] = commentsRes.data;
       const fetchedPages: Page[] = pagesRes.data;
@@ -278,6 +288,79 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* Usage & Plan Status */}
+      {usage && (
+        <Card className="mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-brand-100 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-brand-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-surface-900">{usage.subscription.plan.name}</p>
+                {usage.subscription.trialDaysRemaining !== undefined && usage.subscription.trialDaysRemaining > 0 && (
+                  <p className="text-sm text-amber-600 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    {language === 'ar' 
+                      ? `تنتهي التجربة في ${usage.subscription.trialDaysRemaining} يوم`
+                      : `Trial ends in ${usage.subscription.trialDaysRemaining} days`
+                    }
+                  </p>
+                )}
+              </div>
+            </div>
+            
+            {/* Usage bars */}
+            <div className="flex gap-6">
+              {/* AI Replies usage */}
+              <div className="text-center">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-24 h-2 bg-surface-200 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full ${usage.aiReplies.percentUsed >= 90 ? 'bg-red-500' : usage.aiReplies.percentUsed >= 70 ? 'bg-amber-500' : 'bg-brand-500'}`}
+                      style={{ width: `${Math.min(100, usage.aiReplies.percentUsed)}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-medium text-surface-700">
+                    {usage.aiReplies.used}/{usage.aiReplies.limit || '∞'}
+                  </span>
+                </div>
+                <p className="text-xs text-surface-500">
+                  {language === 'ar' ? 'ردود ذكية' : 'AI Replies'}
+                </p>
+              </div>
+              
+              {/* Pages usage */}
+              <div className="text-center">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-16 h-2 bg-surface-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-brand-500 rounded-full"
+                      style={{ width: `${usage.pages.limit ? Math.min(100, (usage.pages.used / usage.pages.limit) * 100) : 0}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-medium text-surface-700">
+                    {usage.pages.used}/{usage.pages.limit || '∞'}
+                  </span>
+                </div>
+                <p className="text-xs text-surface-500">
+                  {language === 'ar' ? 'صفحات' : 'Pages'}
+                </p>
+              </div>
+            </div>
+            
+            {/* Upgrade button if near limit */}
+            {(usage.aiReplies.percentUsed >= 70 || usage.subscription.trialDaysRemaining !== undefined) && (
+              <Link href="/pricing">
+                <Button size="sm" variant="primary">
+                  {language === 'ar' ? 'ترقية الخطة' : 'Upgrade'}
+                </Button>
+              </Link>
+            )}
+          </div>
+        </Card>
+      )}
+      
       {/* Simple status message */}
       {statsData.activePages > 0 && (
         <Card className="mt-6 bg-emerald-50 border-emerald-200">

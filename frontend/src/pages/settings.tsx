@@ -14,8 +14,12 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Settings2
+  Settings2,
+  BookTemplate,
+  Zap,
+  ChevronRight
 } from 'lucide-react';
+import Link from 'next/link';
 import { useTranslation, useLanguage } from '@/i18n';
 
 // Simple toggle row component
@@ -240,6 +244,50 @@ export default function SettingsPage() {
       {/* Advanced Settings - Hidden by default */}
       {showAdvanced && (
         <div className="space-y-4 animate-slide-up">
+          {/* Templates & Rules Links */}
+          <Card>
+            <h4 className="font-semibold text-surface-900 mb-4">
+              {isRTL ? 'إدارة الردود' : 'Manage Replies'}
+            </h4>
+            <div className="space-y-2">
+              <Link
+                href="/templates"
+                className="flex items-center justify-between p-3 rounded-xl bg-surface-50 hover:bg-surface-100 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
+                    <BookTemplate className="w-5 h-5 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-surface-900">{t('nav.templates')}</p>
+                    <p className="text-sm text-surface-500">
+                      {isRTL ? 'إنشاء ردود جاهزة للاستخدام السريع' : 'Create ready-made replies'}
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-surface-400 group-hover:text-surface-600 transition-colors rtl:rotate-180" />
+              </Link>
+              
+              <Link
+                href="/rules"
+                className="flex items-center justify-between p-3 rounded-xl bg-surface-50 hover:bg-surface-100 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <Zap className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-surface-900">{t('nav.rules')}</p>
+                    <p className="text-sm text-surface-500">
+                      {isRTL ? 'قواعد للرد التلقائي بناءً على الكلمات' : 'Auto-reply rules based on keywords'}
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-surface-400 group-hover:text-surface-600 transition-colors rtl:rotate-180" />
+              </Link>
+            </div>
+          </Card>
+
           {/* Business Hours */}
           <Card>
             <SimpleToggle

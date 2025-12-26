@@ -39,11 +39,46 @@ export interface Page {
   name: string;
   facebookPageId: string;
   autoReplyEnabled: boolean | null;
+  // Instagram fields
+  instagramAccountId?: string | null;
+  instagramUsername?: string | null;
+  instagramAutoReplyEnabled?: boolean | null;
+  // Other fields
   knowledgeBase?: string | null;
   commentsCount?: number;
   repliesCount?: number;
   replyRate?: number;
   lastActivity?: number;
+  createdAt: string | Date | null;
+}
+
+// --- Instagram Types ---
+export interface InstagramMedia {
+  id: string;
+  pageId: string;
+  instagramMediaId: string;
+  mediaType: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM' | 'REELS';
+  caption?: string | null;
+  permalink?: string | null;
+  thumbnailUrl?: string | null;
+  autoReplyEnabled: boolean | null;
+  createdTime?: string | Date | null;
+  createdAt: string | Date | null;
+}
+
+export interface InstagramComment {
+  id: string;
+  mediaId: string;
+  instagramCommentId: string;
+  message: string;
+  fromId?: string | null;
+  fromUsername?: string | null;
+  replied: boolean | null;
+  replyText?: string | null;
+  replyMethod?: 'template' | 'ai' | 'manual' | null;
+  detectedLanguage?: string | null;
+  createdTime?: string | Date | null;
+  repliedAt?: string | Date | null;
   createdAt: string | Date | null;
 }
 
@@ -78,4 +113,105 @@ export interface DashboardStats {
   activePages: number;
   templatesCount: number;
   activeRules: number;
+}
+
+// --- Pricing & Subscription Types ---
+export interface Plan {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  price: number; // in cents
+  currency: string;
+  interval: 'month' | 'year';
+  // Limits
+  maxPages: number | null;
+  maxAiRepliesPerMonth: number | null;
+  maxTemplates: number | null;
+  maxRules: number | null;
+  // Features
+  facebookEnabled: boolean;
+  instagramEnabled: boolean;
+  whatsappEnabled: boolean;
+  showBranding: boolean;
+  prioritySupport: boolean;
+  // Trial
+  trialDays: number;
+  // Regional pricing
+  regionalPricing?: Record<string, number>;
+  // Status
+  isActive: boolean;
+  isDefault: boolean;
+  sortOrder: number;
+}
+
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'paused';
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  planId: string;
+  plan?: Plan; // Joined plan data
+  status: SubscriptionStatus;
+  trialEndsAt?: string | Date | null;
+  currentPeriodStart: string | Date;
+  currentPeriodEnd?: string | Date | null;
+  canceledAt?: string | Date | null;
+  cancelReason?: string | null;
+  createdAt: string | Date;
+}
+
+export interface Usage {
+  id: string;
+  userId: string;
+  periodStart: string | Date;
+  periodEnd: string | Date;
+  aiRepliesCount: number;
+  templateRepliesCount: number;
+  totalCommentsProcessed: number;
+  totalMessagesProcessed: number;
+  dailyBreakdown?: Record<string, { ai: number; template: number }>;
+}
+
+export interface UsageSummary {
+  currentPeriod: {
+    start: string;
+    end: string;
+  };
+  aiReplies: {
+    used: number;
+    limit: number | null; // null = unlimited
+    remaining: number | null;
+    percentUsed: number;
+  };
+  pages: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+  };
+  templates: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+  };
+  rules: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+  };
+  subscription: {
+    plan: Plan;
+    status: SubscriptionStatus;
+    trialDaysRemaining?: number;
+    renewsAt?: string;
+  };
+}
+
+// --- API Response Types ---
+export interface LimitCheckResult {
+  allowed: boolean;
+  reason?: string;
+  limit?: number;
+  used?: number;
+  remaining?: number;
 }

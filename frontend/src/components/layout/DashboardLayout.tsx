@@ -144,7 +144,7 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              {/* Simplified menu - only essential items */}
+              {/* Simple navigation - Templates & Rules are in Settings */}
               <div className="grid grid-cols-3 gap-4">
                 <MobileMenuButton 
                   onClick={() => { router.push('/dashboard'); setMobileMenuOpen(false); }}

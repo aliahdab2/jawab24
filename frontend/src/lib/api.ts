@@ -103,3 +103,32 @@ export const statsApi = {
   get: () => api.get('/stats'),
 };
 
+// Plans API (Public)
+export const plansApi = {
+  getAll: () => api.get('/api/plans'),
+  getById: (id: string) => api.get(`/api/plans/${id}`),
+};
+
+// Plans Admin API
+export const plansAdminApi = {
+  getAll: () => api.get('/api/plans/admin/all'),
+  create: (data: Record<string, unknown>) => api.post('/api/plans/admin', data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/api/plans/admin/${id}`, data),
+  delete: (id: string) => api.delete(`/api/plans/admin/${id}`),
+  setDefault: (id: string) => api.post(`/api/plans/admin/${id}/set-default`),
+};
+
+// Subscription API
+export const subscriptionApi = {
+  get: () => api.get('/api/subscription'),
+  getUsage: () => api.get('/api/subscription/usage'),
+  changePlan: (planId: string) => api.post('/api/subscription/change-plan', { planId }),
+  cancel: (reason?: string) => api.post('/api/subscription/cancel', { reason }),
+  pause: () => api.post('/api/subscription/pause'),
+  resume: () => api.post('/api/subscription/resume'),
+  checkAiLimit: () => api.get('/api/subscription/limits/ai'),
+  checkPageLimit: () => api.get('/api/subscription/limits/pages'),
+  checkTemplateLimit: () => api.get('/api/subscription/limits/templates'),
+  checkRuleLimit: () => api.get('/api/subscription/limits/rules'),
+};
+

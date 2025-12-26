@@ -1,8 +1,9 @@
 import { db } from '../db';
-import { users } from '../db/schema';
+import { users, subscriptions } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { config } from '../config';
 import type { User, JWTPayload, AuthResponse } from '../types';
+import { subscriptionsService } from './subscriptions';
 
 export class AuthService {
     /**
@@ -27,6 +28,10 @@ export class AuthService {
 
                 return { ...user, name, email: email ?? null, updatedAt: new Date() };
             }
+            
+            // Ensure existing user has a subscription
+            await this.ensureSubscription(user.id);
+            
             return user;
         }
 
@@ -40,7 +45,40 @@ export class AuthService {
             })
             .returning();
 
-        return newUsers[0];
+        const newUser = newUsers[0];
+        
+        // Create subscription for new user (with free trial)
+        await this.createSubscriptionForNewUser(newUser.id);
+
+        return newUser;
+    }
+    
+    /**
+     * Create subscription for a new user
+     */
+    private async createSubscriptionForNewUser(userId: string): Promise<void> {
+        try {
+            await subscriptionsService.createSubscription(userId);
+            console.log(`[Auth] Created subscription for new user: ${userId}`);
+        } catch (error) {
+            // Log but don't fail the auth if subscription creation fails
+            console.error(`[Auth] Failed to create subscription for user ${userId}:`, error);
+        }
+    }
+    
+    /**
+     * Ensure user has a subscription (for existing users who might not have one)
+     */
+    private async ensureSubscription(userId: string): Promise<void> {
+        try {
+            const existing = await subscriptionsService.getUserSubscription(userId);
+            if (!existing) {
+                await subscriptionsService.createSubscription(userId);
+                console.log(`[Auth] Created missing subscription for existing user: ${userId}`);
+            }
+        } catch (error) {
+            console.error(`[Auth] Failed to ensure subscription for user ${userId}:`, error);
+        }
     }
 
     /**

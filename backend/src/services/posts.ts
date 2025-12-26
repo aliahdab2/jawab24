@@ -2,6 +2,7 @@ import { db } from '../db';
 import { posts, pages } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { CreatePostDTO, UpdatePostDTO } from '../types';
+import { facebookService } from './facebook';
 
 export class PostsService {
     /**
@@ -122,18 +123,34 @@ export class PostsService {
 
     /**
      * Find or create post from Facebook webhook
+     * Automatically fetches post content from Facebook if not provided
      */
-    async findOrCreateFromWebhook(pageId: string, facebookPostId: string, message?: string) {
+    async findOrCreateFromWebhook(pageId: string, facebookPostId: string, message?: string, pageAccessToken?: string) {
         const existing = await this.getPostByFacebookId(facebookPostId);
         
         if (existing) {
+            // If we have the post but no message, try to fetch it
+            if (!existing.message && pageAccessToken) {
+                const postContent = await facebookService.getPostContent(facebookPostId, pageAccessToken);
+                if (postContent) {
+                    console.log(`[Posts] Updating post ${facebookPostId} with fetched content`);
+                    return await this.updatePost(existing.id, { message: postContent });
+                }
+            }
             return existing;
+        }
+
+        // Try to fetch post content from Facebook if not provided
+        let postMessage = message;
+        if (!postMessage && pageAccessToken) {
+            console.log(`[Posts] Fetching content for new post ${facebookPostId}`);
+            postMessage = await facebookService.getPostContent(facebookPostId, pageAccessToken) || undefined;
         }
 
         return await this.createPost({
             pageId,
             facebookPostId,
-            message,
+            message: postMessage,
         });
     }
 }

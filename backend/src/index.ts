@@ -13,7 +13,10 @@ import postsRoutes from './routes/posts';
 import commentsRoutes from './routes/comments';
 import settingsRoutes from './routes/settings';
 import messagesRoutes from './routes/messages';
+import instagramRoutes from './routes/instagram';
 import versionRoutes from './routes/version';
+import plansRoutes from './routes/plans';
+import subscriptionsRoutes from './routes/subscriptions';
 
 dotenv.config();
 
@@ -40,6 +43,9 @@ const start = async () => {
         await server.register(commentsRoutes);
         await server.register(settingsRoutes);
         await server.register(messagesRoutes);
+        await server.register(instagramRoutes);
+        await server.register(plansRoutes, { prefix: '/api/plans' });
+        await server.register(subscriptionsRoutes, { prefix: '/api/subscription' });
 
         const port = parseInt(process.env.PORT || '3000', 10);
         const host = '0.0.0.0';

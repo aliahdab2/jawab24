@@ -8,6 +8,7 @@ import { aiService } from './ai';
 import { facebookService } from './facebook';
 import { settingsService } from './settings';
 import { messagesService } from './messages';
+import { subscriptionsService } from './subscriptions';
 import { config } from '../config';
 
 const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v18.0';
@@ -106,23 +107,35 @@ export class ReplyService {
             // 6. If no template reply, use AI with conversation context
             const userSettings = await settingsService.getSettings(page.userId!);
             if (!replyText && userSettings.aiEnabled) {
-                // Get conversation history for context
-                const conversationHistory = await messagesService.getConversationHistory(
-                    page.id,
-                    senderId,
-                    10 // Last 10 messages
-                );
+                // Check AI usage limits before generating reply
+                const limitCheck = await subscriptionsService.canUseAiReplies(page.userId!);
+                if (!limitCheck.allowed) {
+                    console.log(`[Reply] AI limit reached for user: ${limitCheck.reason}`);
+                    // Fall back to a generic message when limit is reached
+                    replyText = 'Thank you for your message! We will get back to you soon.';
+                    replyMethod = 'template';
+                } else {
+                    // Get conversation history for context
+                    const conversationHistory = await messagesService.getConversationHistory(
+                        page.id,
+                        senderId,
+                        10 // Last 10 messages
+                    );
 
-                const aiResponse = await aiService.generateReply({
-                    comment: messageText,
-                    context: {
-                        pageName: page.name || undefined,
-                        knowledgeBase: page.knowledgeBase || undefined,
-                        conversationHistory,
-                    }
-                });
-                replyText = aiResponse.reply;
-                replyMethod = 'ai';
+                    const aiResponse = await aiService.generateReply({
+                        comment: messageText,
+                        context: {
+                            pageName: page.name || undefined,
+                            knowledgeBase: page.knowledgeBase || undefined,
+                            conversationHistory,
+                        }
+                    });
+                    replyText = aiResponse.reply;
+                    replyMethod = 'ai';
+                    
+                    // Track AI usage
+                    await subscriptionsService.incrementAiReplies(page.userId!);
+                }
             }
 
             // 7. If still no reply, ignore (don't spam empty messages)
@@ -191,8 +204,8 @@ export class ReplyService {
             // 2. Check user settings for comments auto-reply
             const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(page.userId!);
             
-            // 3. Find or create the post
-            const post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined);
+            // 3. Find or create the post (WITHOUT fetching content yet - we'll do it lazily)
+            let post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined);
             
             if (!post.autoReplyEnabled) {
                 return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this post' };
@@ -223,14 +236,14 @@ export class ReplyService {
                 await this.delay(replyDelay * 1000);
             }
 
-            // 6. Try to find a matching rule
+            // 6. Try to find a matching rule FIRST (no need for post content)
             const matchingRule = await rulesService.findMatchingRule(page.userId!, commentMessage);
 
             let replyText: string | null = null;
             let replyMethod: 'template' | 'ai' = 'ai';
             let templateId: string | undefined;
 
-            // 7. If rule found with template, use template
+            // 7. If rule found with template, use template (NO API CALL NEEDED!)
             if (matchingRule && matchingRule.templateId) {
                 const template = await templatesService.getTemplate(page.userId!, matchingRule.templateId);
                 
@@ -240,28 +253,48 @@ export class ReplyService {
                     replyText = translations['en'] || translations['ar'] || Object.values(translations)[0];
                     replyMethod = 'template';
                     templateId = template.id;
+                    console.log(`[Reply] Using template "${template.name}" - no API call for post content needed`);
                 }
             }
 
             // 8. If no template reply, use AI with knowledge base (check user settings)
             const userSettings = await settingsService.getSettings(page.userId!);
             if (!replyText && userSettings.aiEnabled) {
-                const aiResponse = await aiService.generateReply({
-                    comment: commentMessage,
-                    context: {
-                        pageName: page.name || undefined,
-                        postMessage: post.message || undefined,
-                        knowledgeBase: page.knowledgeBase || undefined,
+                // Check AI usage limits before generating reply
+                const limitCheck = await subscriptionsService.canUseAiReplies(page.userId!);
+                if (!limitCheck.allowed) {
+                    console.log(`[Reply] AI limit reached for user: ${limitCheck.reason}`);
+                    // Fall back to a generic message when limit is reached
+                    replyText = 'Thank you for your comment!';
+                    replyMethod = 'template';
+                } else {
+                    // NOW we need post content - fetch it lazily
+                    if (!post.message) {
+                        console.log(`[Reply] AI enabled, fetching post content for context...`);
+                        post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined, page.accessToken);
                     }
-                });
-                replyText = aiResponse.reply;
-                replyMethod = 'ai';
+                    
+                    const aiResponse = await aiService.generateReply({
+                        comment: commentMessage,
+                        context: {
+                            pageName: page.name || undefined,
+                            postMessage: post.message || undefined,
+                            knowledgeBase: page.knowledgeBase || undefined,
+                        }
+                    });
+                    replyText = aiResponse.reply;
+                    replyMethod = 'ai';
+                    
+                    // Track AI usage
+                    await subscriptionsService.incrementAiReplies(page.userId!);
+                }
             }
 
             // 9. If still no reply (AI disabled and no template), use fallback
             if (!replyText) {
                 replyText = 'Thank you for your comment!';
                 replyMethod = 'template';
+                console.log(`[Reply] Using fallback reply - no API call for post content needed`);
             }
 
             // 10. Post reply to Facebook
@@ -354,4 +387,5 @@ export class ReplyService {
 }
 
 export const replyService = new ReplyService();
+
 
