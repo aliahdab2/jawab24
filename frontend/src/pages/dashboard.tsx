@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, Badge, PageHeader, PageSpinner } from '@/components/ui';
+import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
@@ -15,10 +16,14 @@ import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import type { Comment, Page } from '@jawab24/shared';
 
+// Key for localStorage to track if onboarding was completed
+const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
+
 export default function DashboardPage() {
   const { t, language } = useTranslation();
   const { token } = useAuthStore();
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [recentComments, setRecentComments] = useState<Comment[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
   const [statsData, setStatsData] = useState({
@@ -51,6 +56,12 @@ export default function DashboardPage() {
 
       setRecentComments(comments.slice(0, 5));
       setPages(fetchedPages);
+
+      // Show onboarding for new users (no pages connected and haven't completed onboarding)
+      const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+      if (fetchedPages.length === 0 && !onboardingComplete) {
+        setShowOnboarding(true);
+      }
 
       // Calculate stats
       const totalComments = comments.length;
@@ -120,6 +131,17 @@ export default function DashboardPage() {
     },
   ];
 
+  // Handle onboarding completion
+  const handleOnboardingComplete = () => {
+    localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+    setShowOnboarding(false);
+  };
+
+  const handleOnboardingSkip = () => {
+    localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
+    setShowOnboarding(false);
+  };
+
   if (loading) {
       return (
         <DashboardLayout title={t('dashboard.title')}>
@@ -132,6 +154,13 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout title={t('dashboard.title')}>
+      {/* Onboarding Wizard for new users */}
+      {showOnboarding && (
+        <OnboardingWizard 
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingSkip}
+        />
+      )}
       {/* Header */}
       <PageHeader 
         title={t('dashboard.title')} 
