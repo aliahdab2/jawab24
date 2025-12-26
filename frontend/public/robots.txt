@@ -1,0 +1,21 @@
+# Jawab24 robots.txt
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /privacy
+Allow: /terms
+Allow: /data-deletion
+
+# Disallow dashboard pages (require auth)
+Disallow: /dashboard
+Disallow: /pages
+Disallow: /comments
+Disallow: /messages
+Disallow: /templates
+Disallow: /rules
+Disallow: /settings
+Disallow: /auth/
+
+# Sitemap
+Sitemap: https://jawab24.com/sitemap.xml
+

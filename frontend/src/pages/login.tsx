@@ -61,8 +61,13 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>{t('auth.login')} | Jawab24</title>
+        <title>Jawab24 - Smart Facebook Auto-Replies 24/7 | ردود ذكية على مدار الساعة</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <meta name="description" content={isRTL 
+          ? "ردود ذكية تلقائية لصفحات فيسبوك على مدار الساعة. رد على التعليقات والرسائل بالذكاء الاصطناعي"
+          : "AI-powered auto-replies for Facebook Pages. Respond to comments and messages 24/7 in Arabic and English."
+        } />
+        <link rel="canonical" href="https://jawab24.com/login" />
       </Head>
 
       {/* Dynamic RTL based on language */}
