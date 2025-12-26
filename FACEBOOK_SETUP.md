@@ -4,6 +4,21 @@ This document provides full instructions for configuring Meta (Facebook) for Jaw
 
 ---
 
+---
+
+## 0. Prerequisites: Verification (In Progress)
+
+To pass Facebook App Review and gain Advanced Access for sensitive permissions (like managing page comments), you must verify your identity or business.
+
+### Status: Company Registration
+- **Type**: Enskild Näringsverksamhet (Sole Trader) + FA-tax
+- **Registration Date**: 26 Dec 2025
+- **Next Steps**:
+  1. Wait for "Registreringsbevis" (Registration Certificate) from Bolagsverket/Skatteverket (1-2 weeks).
+  2. Use this document to complete "Business Verification" in Meta Business Suite.
+  3. Ensure your website footer says: "Operated by: [Your Name] (Org. nr: [Your Personal Number])" to match the registration.
+
+---
 ## 1. Create Meta Developer Account
 
 1. Go to https://developers.facebook.com

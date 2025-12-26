@@ -7,11 +7,11 @@ export default function PrivacyPolicy() {
         <title>Privacy Policy - Jawab24</title>
         <meta name="description" content="Privacy Policy for Jawab24 - Smart Auto-Reply for Facebook Pages" />
       </Head>
-      
+
       <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm p-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Privacy Policy</h1>
-          
+
           <div className="prose prose-gray max-w-none">
             <p className="text-gray-600 mb-6">
               <strong>Last updated:</strong> December 2024
@@ -20,8 +20,8 @@ export default function PrivacyPolicy() {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">1. Introduction</h2>
               <p className="text-gray-700 mb-4">
-                Jawab24 (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is committed to protecting your privacy. 
-                This Privacy Policy explains how we collect, use, and safeguard your information when you use our 
+                Jawab24 (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) is committed to protecting your privacy.
+                This Privacy Policy explains how we collect, use, and safeguard your information when you use our
                 Facebook auto-reply service at jawab24.com.
               </p>
             </section>
@@ -63,8 +63,8 @@ export default function PrivacyPolicy() {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">5. Data Security</h2>
               <p className="text-gray-700 mb-4">
-                We implement industry-standard security measures including encryption, secure servers, 
-                and access controls to protect your data. However, no method of transmission over the 
+                We implement industry-standard security measures including encryption, secure servers,
+                and access controls to protect your data. However, no method of transmission over the
                 Internet is 100% secure.
               </p>
             </section>
@@ -72,7 +72,7 @@ export default function PrivacyPolicy() {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">6. Data Retention</h2>
               <p className="text-gray-700 mb-4">
-                We retain your data for as long as your account is active or as needed to provide services. 
+                We retain your data for as long as your account is active or as needed to provide services.
                 You can request deletion of your data at any time by contacting us.
               </p>
             </section>
@@ -104,7 +104,7 @@ export default function PrivacyPolicy() {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">9. Changes to This Policy</h2>
               <p className="text-gray-700 mb-4">
-                We may update this Privacy Policy from time to time. We will notify you of any changes 
+                We may update this Privacy Policy from time to time. We will notify you of any changes
                 by posting the new policy on this page and updating the &quot;Last updated&quot; date.
               </p>
             </section>
@@ -118,8 +118,21 @@ export default function PrivacyPolicy() {
                 <strong>Email:</strong> aliahdab@gmail.com
               </p>
             </section>
+
+            <section className="mb-8">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">11. Corporate Information</h2>
+              <p className="text-gray-700 mb-4">
+                Jawab24 is operated by:
+              </p>
+              <p className="text-gray-700">
+                <strong>Mohammad Ali Ahdab</strong><br />
+                Enskild Näringsverksamhet (Sole Trader)<br />
+                <strong>Org. nr:</strong> 19810312-5335<br />
+                <strong>Registered Address:</strong> Bergavägen 15 A lgh 1002, 241 39 Eslöv, Sweden
+              </p>
+            </section>
           </div>
-          
+
           <div className="mt-8 pt-8 border-t border-gray-200">
             <a href="/" className="text-blue-600 hover:text-blue-800 font-medium">
               ← Back to Jawab24
@@ -130,4 +143,5 @@ export default function PrivacyPolicy() {
     </>
   );
 }
+
 

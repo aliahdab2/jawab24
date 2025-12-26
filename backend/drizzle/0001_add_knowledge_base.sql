@@ -8,3 +8,4 @@ ALTER TABLE pages ADD COLUMN IF NOT EXISTS knowledge_base TEXT;
 
 
 
+
