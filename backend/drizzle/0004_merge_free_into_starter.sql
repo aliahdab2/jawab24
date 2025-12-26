@@ -11,8 +11,8 @@ SET
     "updated_at" = now()
 WHERE "slug" = 'starter';
 
--- Step 2: Update sort order for other plans
-UPDATE "plans" SET "sort_order" = 1, "updated_at" = now() WHERE "slug" = 'business';
+-- Step 2: Update sort order and price for other plans
+UPDATE "plans" SET "sort_order" = 1, "price" = 3000, "updated_at" = now() WHERE "slug" = 'business';
 UPDATE "plans" SET "sort_order" = 2, "updated_at" = now() WHERE "slug" = 'pro';
 
 -- Step 3: Migrate existing Free Trial users to Starter

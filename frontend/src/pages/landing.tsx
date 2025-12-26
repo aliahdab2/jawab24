@@ -439,7 +439,7 @@ export default function LandingPage() {
                 <div className="text-center mb-6 pt-2">
                   <h3 className="text-xl font-bold text-white mb-2">{isRTL ? 'الأعمال' : 'Business'}</h3>
                   <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-4xl font-extrabold text-white">$25</span>
+                    <span className="text-4xl font-extrabold text-white">$30</span>
                     <span className="text-brand-200">/{isRTL ? 'شهر' : 'mo'}</span>
                   </div>
                 </div>

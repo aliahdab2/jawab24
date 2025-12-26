@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS "idx_usage_logs_created_at" ON "usage_logs" ("created
 INSERT INTO "plans" ("name", "slug", "description", "price", "max_pages", "max_ai_replies_per_month", "max_templates", "max_rules", "show_branding", "trial_days", "is_default", "sort_order") VALUES
     ('Free Trial', 'free', 'Auto-reply to your Facebook & Instagram pages - 30 days free', 0, 1, 60, 3, 2, true, 30, true, 0),
     ('Starter', 'starter', 'Auto-reply to 1 Facebook/Instagram page', 500, 1, 60, 3, 2, true, 0, false, 1),
-    ('Business', 'business', 'Auto-reply to 3 Facebook/Instagram pages with unlimited templates', 2500, 3, 1500, NULL, NULL, false, 0, false, 2),
+    ('Business', 'business', 'Auto-reply to 3 Facebook/Instagram pages with unlimited templates', 3000, 3, 1500, NULL, NULL, false, 0, false, 2),
     ('Pro', 'pro', 'Auto-reply to 10 Facebook/Instagram pages - for agencies', 7000, 10, 9000, NULL, NULL, false, 0, false, 3)
 ON CONFLICT ("slug") DO NOTHING;
 
