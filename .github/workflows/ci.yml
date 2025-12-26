@@ -76,6 +76,11 @@ jobs:
       - name: Run linter
         run: npm run lint --workspace=jawab24-backend
 
+      - name: Validate migrations
+        run: |
+          cd backend
+          npx ts-node scripts/validate-migrations.ts
+
       - name: Check for uncommitted migrations
         run: |
           cd backend
