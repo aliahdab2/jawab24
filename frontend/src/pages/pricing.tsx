@@ -12,15 +12,45 @@ function PlanCard({
   onSelect,
   loading,
   t,
+  language,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
   onSelect: () => void;
   loading: boolean;
   t: (key: string) => string;
+  language: string;
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
+  
+  // Translate plan names based on slug
+  const getPlanName = () => {
+    if (language === 'ar') {
+      switch (plan.slug) {
+        case 'free': return 'تجربة مجانية';
+        case 'starter': return 'المبتدئ';
+        case 'business': return 'الأعمال';
+        case 'pro': return 'الاحترافي';
+        default: return plan.name;
+      }
+    }
+    return plan.name;
+  };
+  
+  // Translate plan descriptions
+  const getPlanDescription = () => {
+    if (language === 'ar') {
+      switch (plan.slug) {
+        case 'free': return 'جرّب الخدمة مجاناً لمدة شهر';
+        case 'starter': return 'للمشاريع الصغيرة والمتاجر الناشئة';
+        case 'business': return 'للأعمال المتوسطة والمتاجر النشطة';
+        case 'pro': return 'للوكالات والمتاجر الكبيرة';
+        default: return plan.description;
+      }
+    }
+    return plan.description;
+  };
   
   // Format price
   const formatPrice = (price: number) => {
@@ -69,9 +99,9 @@ function PlanCard({
             <Sparkles className="w-5 h-5 md:w-6 md:h-6" />
           )}
         </div>
-        <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight">{plan.name}</h3>
-        {plan.description && (
-          <p className="text-xs md:text-sm text-surface-500 mt-1 leading-snug min-h-[32px] px-1">{plan.description}</p>
+        <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight">{getPlanName()}</h3>
+        {(plan.description || getPlanDescription()) && (
+          <p className="text-xs md:text-sm text-surface-500 mt-1 leading-snug min-h-[32px] px-1">{getPlanDescription()}</p>
         )}
       </div>
       
@@ -303,11 +333,19 @@ export default function PricingPage() {
               </div>
               <div>
                 <p className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">{t('subscription.currentPlan')}</p>
-                <p className="text-lg md:text-xl font-bold text-surface-900 tracking-tight">{usage.subscription.plan.name}</p>
+                <p className="text-lg md:text-xl font-bold text-surface-900 tracking-tight">
+                  {language === 'ar' ? (
+                    usage.subscription.plan.slug === 'free' ? 'تجربة مجانية' :
+                    usage.subscription.plan.slug === 'starter' ? 'المبتدئ' :
+                    usage.subscription.plan.slug === 'business' ? 'الأعمال' :
+                    usage.subscription.plan.slug === 'pro' ? 'الاحترافي' :
+                    usage.subscription.plan.name
+                  ) : usage.subscription.plan.name}
+                </p>
                 {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
                   <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-100">
                     <Zap className="w-2.5 h-2.5" />
-                    {usage.subscription.trialDaysRemaining}d left
+                    {usage.subscription.trialDaysRemaining} {t('subscription.days')} {language === 'ar' ? 'متبقي' : 'left'}
                   </div>
                 )}
               </div>
@@ -341,6 +379,7 @@ export default function PricingPage() {
             onSelect={() => handleSelectPlan(plan.id)}
             loading={changingPlan === plan.id}
             t={t}
+            language={language}
           />
         ))}
       </div>
