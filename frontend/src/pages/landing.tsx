@@ -209,57 +209,92 @@ export default function LandingPage() {
           <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-violet-200/30 rounded-full blur-[120px] animate-pulse delay-1000" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-4xl mx-auto">
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-50 border border-brand-100 mb-10 animate-slide-up">
-                <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></div>
-                <span className="text-sm font-bold text-brand-700 uppercase tracking-widest">
-                  {isRTL ? 'ذكاء اصطناعي فائق الدقة' : 'Advanced AI Auto-Response'}
-                </span>
-              </div>
+            <div className="flex flex-col lg:flex-row items-center gap-12">
+              <div className="text-center lg:text-start lg:w-3/5">
+                {/* Badge */}
+                <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-50 border border-brand-100 mb-10 animate-slide-up">
+                  <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></div>
+                  <span className="text-sm font-bold text-brand-700 uppercase tracking-widest">
+                    {isRTL ? 'ذكاء اصطناعي فائق الدقة' : 'Advanced AI Auto-Response'}
+                  </span>
+                </div>
 
-              {/* Heading */}
-              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-display font-extrabold text-surface-900 mb-8 leading-[1.1] tracking-tight animate-slide-up">
-                {isRTL ? 'حوّل صفحتك إلى' : 'Turn Your Page Into a'}
-                <span className="block bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent pb-2 mt-2">
-                  {isRTL ? 'آلة رد ذكية 24/7' : 'Smart 24/7 Sales Machine'}
-                </span>
-              </h1>
+                {/* Heading */}
+                <h1 className="text-5xl sm:text-6xl lg:text-7xl font-display font-extrabold text-surface-900 mb-8 leading-[1.1] tracking-tight animate-slide-up">
+                  {isRTL ? 'حوّل صفحتك إلى' : 'Turn Your Page Into a'}
+                  <span className="block bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent pb-2 mt-2">
+                    {isRTL ? 'آلة رد ذكية 24/7' : 'Smart 24/7 Sales Machine'}
+                  </span>
+                </h1>
 
-              {/* Description */}
-              <p className="text-lg sm:text-xl text-surface-600 mb-12 max-w-2xl mx-auto leading-relaxed animate-slide-up animation-delay-100">
-                {isRTL 
-                  ? 'أول نظام عربي متخصص في الرد الذكي على تعليقات ورسائل فيسبوك وإنستغرام. وفّر وقتك وزد مبيعاتك بردود فورية دقيقة.'
-                  : 'The first Arabic-specialized AI system for Facebook & Instagram smart replies. Save time and boost sales with instant, accurate responses.'}
-              </p>
+                {/* Description */}
+                <p className="text-lg sm:text-xl text-surface-600 mb-12 max-w-2xl mx-auto lg:mx-0 leading-relaxed animate-slide-up animation-delay-100">
+                  {isRTL 
+                    ? 'أول نظام عربي متخصص في الرد الذكي على تعليقات ورسائل فيسبوك وإنستغرام. وفّر وقتك وزد مبيعاتك بردود فورية دقيقة.'
+                    : 'The first Arabic-specialized AI system for Facebook & Instagram smart replies. Save time and boost sales with instant, accurate responses.'}
+                </p>
 
-              {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-20 animate-slide-up animation-delay-200">
-                <Link href="/login" className="w-full sm:w-auto">
-                  <Button size="lg" className="w-full sm:w-auto shadow-2xl shadow-brand-500/40 px-10 py-8 text-lg font-bold rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                {/* CTA Buttons */}
+                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-6 mb-12 animate-slide-up animation-delay-200">
+                  <Link href="/login" className="w-full sm:w-auto">
+                    <Button size="lg" className="w-full sm:w-auto shadow-2xl shadow-brand-500/40 px-10 py-8 text-lg font-bold rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                      <Facebook className="w-6 h-6" />
+                      {isRTL ? 'ابدأ تجربتك المجانية' : 'Start Your Free Trial'}
+                      {isRTL ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
+                    </Button>
+                  </Link>
+                  <Link href="/pricing" className="w-full sm:w-auto">
+                    <Button variant="secondary" size="lg" className="w-full sm:w-auto px-10 py-8 text-lg font-bold rounded-2xl border-2 border-surface-200 hover:border-brand-500 hover:bg-white transition-all">
+                      {isRTL ? 'عرض الخطط والأسعار' : 'View Plans & Pricing'}
+                    </Button>
+                  </Link>
+                </div>
+
+                {/* Trusted By / Platform Icons */}
+                <div className="flex items-center justify-center lg:justify-start gap-8 text-surface-400 opacity-60 grayscale hover:grayscale-0 transition-all animate-slide-up animation-delay-300">
+                  <div className="flex items-center gap-2 font-bold text-lg">
                     <Facebook className="w-6 h-6" />
-                    {isRTL ? 'ابدأ تجربتك المجانية' : 'Start Your Free Trial'}
-                    {isRTL ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
-                  </Button>
-                </Link>
-                <Link href="/pricing" className="w-full sm:w-auto">
-                  <Button variant="secondary" size="lg" className="w-full sm:w-auto px-10 py-8 text-lg font-bold rounded-2xl border-2 border-surface-200 hover:border-brand-500 hover:bg-white transition-all">
-                    {isRTL ? 'عرض الخطط والأسعار' : 'View Plans & Pricing'}
-                  </Button>
-                </Link>
+                    <span>Facebook</span>
+                  </div>
+                  <div className="w-px h-6 bg-surface-200"></div>
+                  <div className="flex items-center gap-2 font-bold text-lg">
+                    <Instagram className="w-6 h-6" />
+                    <span>Instagram</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Trusted By / Platform Icons */}
-              <div className="flex items-center justify-center gap-8 text-surface-400 opacity-60 grayscale hover:grayscale-0 transition-all animate-slide-up animation-delay-300">
-                <div className="flex items-center gap-2 font-bold text-lg">
-                  <Facebook className="w-6 h-6" />
-                  <span>Facebook</span>
+              {/* Robot Mascot Column */}
+              <div className="lg:w-2/5 relative animate-float py-12 lg:py-0">
+                <div className="relative z-10 w-full max-w-[400px] mx-auto">
+                  {/* Robot Illustration Placeholder - Using a stylized 3D-effect CSS/SVG robot */}
+                  <div className="relative aspect-square">
+                    {/* Glow effect behind robot */}
+                    <div className="absolute inset-0 bg-brand-500/20 rounded-full blur-[80px] animate-pulse"></div>
+                    
+                    {/* 3D Robot Illustration (Premium Placeholder) */}
+                    <img 
+                      src="https://cdn3d.iconscout.com/3d/premium/thumb/robot-5611144-4673111.png?f=webp" 
+                      alt="Jawab24 Robot Mascot" 
+                      className="w-full h-full object-contain relative z-10 drop-shadow-[0_20px_50px_rgba(14,165,233,0.3)]"
+                    />
+                    
+                    {/* Animated floating badges around robot */}
+                    <div className="absolute top-0 -right-4 bg-white p-3 rounded-2xl shadow-xl border border-surface-100 animate-bounce delay-700 hidden sm:block">
+                      <MessageSquare className="w-6 h-6 text-brand-500" />
+                    </div>
+                    <div className="absolute bottom-10 -left-8 bg-white p-3 rounded-2xl shadow-xl border border-surface-100 animate-bounce hidden sm:block">
+                      <Sparkles className="w-6 h-6 text-amber-500" />
+                    </div>
+                    <div className="absolute top-1/2 -left-12 bg-white p-3 rounded-2xl shadow-xl border border-surface-100 animate-bounce delay-1000 hidden sm:block">
+                      <Bot className="w-6 h-6 text-violet-500" />
+                    </div>
+                  </div>
                 </div>
-                <div className="w-px h-6 bg-surface-200"></div>
-                <div className="flex items-center gap-2 font-bold text-lg">
-                  <Instagram className="w-6 h-6" />
-                  <span>Instagram</span>
-                </div>
+                
+                {/* Decorative floating dots */}
+                <div className="absolute top-0 right-0 w-4 h-4 bg-brand-400 rounded-full animate-ping"></div>
+                <div className="absolute bottom-20 left-0 w-3 h-3 bg-violet-400 rounded-full animate-ping delay-300"></div>
               </div>
             </div>
           </div>
