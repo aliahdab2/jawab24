@@ -1,7 +1,8 @@
-# Jawab24 robots.txt
+# Jawab24 جواب24 robots.txt
 User-agent: *
 Allow: /
 Allow: /landing
+Allow: /pricing
 Allow: /login
 Allow: /privacy
 Allow: /terms

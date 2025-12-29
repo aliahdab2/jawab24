@@ -154,13 +154,20 @@ export default function LandingPage() {
   return (
     <>
       <Head>
-        <title>Jawab24 - AI Auto-Replies for Facebook & Instagram | ردود ذكية تلقائية</title>
+        <title>{isRTL 
+          ? "جواب24 | Jawab24 - ردود ذكية تلقائية لفيسبوك وإنستغرام"
+          : "Jawab24 جواب24 - AI Auto-Replies for Facebook & Instagram"
+        }</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content={isRTL 
-          ? "وفّر وقتك مع الردود الذكية التلقائية لصفحات فيسبوك وإنستغرام. ردود دقيقة بالذكاء الاصطناعي على مدار الساعة."
-          : "Save time with AI auto-replies for Facebook & Instagram. Smart, accurate responses 24/7."
+          ? "جواب24 - أول نظام عربي للرد الذكي التلقائي على تعليقات ورسائل فيسبوك وإنستغرام. وفّر وقتك وزد مبيعاتك بردود دقيقة 24/7."
+          : "Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7."
         } />
-        <link rel="canonical" href="https://jawab24.com" />
+        <meta name="keywords" content={isRTL
+          ? "جواب, جواب24, رد تلقائي, ردود ذكية, فيسبوك, انستغرام, بوت عربي, ذكاء اصطناعي, رد آلي"
+          : "jawab, jawab24, جواب, جواب24, auto reply, smart replies, Facebook bot, Instagram bot, AI chatbot"
+        } />
+        <link rel="canonical" href="https://jawab24.com/landing" />
       </Head>
 
       <div className="min-h-screen bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
