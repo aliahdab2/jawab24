@@ -210,7 +210,7 @@ export default function LandingPage() {
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-16">
-              <div className="text-center lg:text-start lg:w-[65%]">
+              <div className="text-center lg:text-start max-w-4xl mx-auto">
                 {/* Badge - Smaller on mobile */}
                 <div className="inline-flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full bg-brand-50 border border-brand-100 mb-6 sm:mb-10 animate-slide-up">
                   <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></div>
@@ -264,22 +264,6 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Robot Mascot Column - Custom Jawab24 Robot */}
-              <div className="lg:w-2/5 relative py-12 lg:py-0 hidden lg:block">
-                <div className="relative z-10 w-full max-w-[450px] mx-auto animate-float">
-                  <div className="relative">
-                    {/* Soft glow behind robot */}
-                    <div className="absolute inset-0 bg-brand-500/15 rounded-full blur-[100px] scale-110"></div>
-                    
-                    {/* Custom Jawab24 Robot Image */}
-                    <img 
-                      src="/robot-mascot.png" 
-                      alt="Jawab24 AI Robot - Auto-reply for Facebook & Instagram" 
-                      className="w-full h-auto relative z-10 drop-shadow-2xl"
-                    />
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </section>
