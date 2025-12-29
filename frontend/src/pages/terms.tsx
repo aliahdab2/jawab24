@@ -1,147 +1,87 @@
 import Head from 'next/head';
+import Link from 'next/link';
+import { useTranslation } from '@/i18n';
 
 export default function TermsOfService() {
+  const { t, language } = useTranslation();
+  const isRTL = language === 'ar';
+
+  const sections = [
+    { title: t('legal.terms.section1Title'), text: t('legal.terms.section1Text') },
+    { title: t('legal.terms.section2Title'), text: t('legal.terms.section2Text') },
+    { title: t('legal.terms.section3Title'), text: t('legal.terms.section3Text'), items: t('legal.terms.section3Items') },
+    { title: t('legal.terms.section4Title'), text: t('legal.terms.section4Text'), items: t('legal.terms.section4Items') },
+    { title: t('legal.terms.section5Title'), text: t('legal.terms.section5Text'), items: t('legal.terms.section5Items') },
+    { title: t('legal.terms.section6Title'), text: t('legal.terms.section6Text') },
+    { title: t('legal.terms.section7Title'), text: t('legal.terms.section7Text'), items: t('legal.terms.section7Items') },
+    { title: t('legal.terms.section8Title'), text: t('legal.terms.section8Text') },
+    { title: t('legal.terms.section9Title'), text: t('legal.terms.section9Text') },
+    { title: t('legal.terms.section10Title'), text: t('legal.terms.section10Text'), showContact: true },
+    { title: t('legal.terms.section11Title'), text: t('legal.terms.section11Text'), showCorporate: true },
+  ];
+
   return (
     <>
       <Head>
-        <title>Terms of Service - Jawab24</title>
-        <meta name="description" content="Terms of Service for Jawab24 - Smart Auto-Reply for Facebook Pages" />
+        <title>{t('legal.terms.title')} - Jawab24</title>
+        <meta name="description" content={t('legal.terms.metaDescription')} />
       </Head>
 
-      <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 text-left" dir="ltr" lang="en">
+      <div 
+        className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8" 
+        dir={isRTL ? 'rtl' : 'ltr'}
+        lang={isRTL ? 'ar' : 'en'}
+      >
         <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">Terms of Service</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-8">
+            {t('legal.terms.title')}
+          </h1>
 
           <div className="prose prose-gray max-w-none">
             <p className="text-gray-600 mb-6">
-              <strong>Last updated:</strong> December 2024
+              <strong>{t('legal.lastUpdated')}</strong> {t('legal.december2024')}
             </p>
 
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">1. Acceptance of Terms</h2>
-              <p className="text-gray-700 mb-4">
-                By accessing and using Jawab24 (&quot;the Service&quot;), you agree to be bound by these
-                Terms of Service. If you do not agree to these terms, please do not use the Service.
-              </p>
-            </section>
+            {sections.map((section, index) => (
+              <section key={index} className="mb-8">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  {section.title}
+                </h2>
+                <p className="text-gray-700 mb-4">{section.text}</p>
+                
+                {section.items && Array.isArray(section.items) && (
+                  <ul className="list-disc ltr:pl-6 rtl:pr-6 text-gray-700 space-y-2">
+                    {section.items.map((item: string, i: number) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                )}
 
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">2. Description of Service</h2>
-              <p className="text-gray-700 mb-4">
-                Jawab24 provides automated reply services for Facebook Pages. The Service uses
-                artificial intelligence to generate and post responses to comments and messages
-                on your connected Facebook Pages.
-              </p>
-            </section>
+                {section.showContact && (
+                  <p className="text-gray-700 mt-4">
+                    <strong>{t('legal.contact.email')}</strong>
+                  </p>
+                )}
 
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">3. Account Requirements</h2>
-              <p className="text-gray-700 mb-4">To use Jawab24, you must:</p>
-              <ul className="list-disc pl-6 text-gray-700 space-y-2">
-                <li>Have a valid Facebook account</li>
-                <li>Be an admin of the Facebook Pages you connect</li>
-                <li>Provide accurate information</li>
-                <li>Maintain the security of your account</li>
-              </ul>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">4. Acceptable Use</h2>
-              <p className="text-gray-700 mb-4">You agree not to use the Service to:</p>
-              <ul className="list-disc pl-6 text-gray-700 space-y-2">
-                <li>Violate Facebook&apos;s Terms of Service or Community Standards</li>
-                <li>Send spam, misleading, or harmful content</li>
-                <li>Harass, abuse, or harm others</li>
-                <li>Impersonate others or misrepresent your affiliation</li>
-                <li>Engage in any illegal activities</li>
-              </ul>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">5. AI-Generated Content</h2>
-              <p className="text-gray-700 mb-4">
-                You acknowledge that responses generated by our AI service may not always be perfect
-                or appropriate. You are responsible for:
-              </p>
-              <ul className="list-disc pl-6 text-gray-700 space-y-2">
-                <li>Reviewing the business information you provide</li>
-                <li>Monitoring the replies sent on your behalf</li>
-                <li>Disabling auto-reply if responses are inappropriate</li>
-              </ul>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">6. Service Availability</h2>
-              <p className="text-gray-700 mb-4">
-                We strive to maintain high availability but do not guarantee uninterrupted service.
-                The Service may be temporarily unavailable due to maintenance, updates, or factors
-                beyond our control.
-              </p>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">7. Limitation of Liability</h2>
-              <p className="text-gray-700 mb-4">
-                Jawab24 is provided &quot;as is&quot; without warranties of any kind. We are not liable for
-                any damages arising from:
-              </p>
-              <ul className="list-disc pl-6 text-gray-700 space-y-2">
-                <li>Use or inability to use the Service</li>
-                <li>AI-generated content posted to your Pages</li>
-                <li>Unauthorized access to your account</li>
-                <li>Actions taken by Facebook regarding your account or Pages</li>
-              </ul>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">8. Termination</h2>
-              <p className="text-gray-700 mb-4">
-                We may suspend or terminate your access to the Service at any time for violation
-                of these terms. You may disconnect your Pages and stop using the Service at any time.
-              </p>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">9. Changes to Terms</h2>
-              <p className="text-gray-700 mb-4">
-                We may modify these Terms at any time. Continued use of the Service after changes
-                constitutes acceptance of the new Terms.
-              </p>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">10. Contact</h2>
-              <p className="text-gray-700 mb-4">
-                For questions about these Terms, contact us at:
-              </p>
-              <p className="text-gray-700">
-                <strong>Email:</strong> aliahdab@gmail.com
-              </p>
-            </section>
-
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">11. Corporate Information</h2>
-              <p className="text-gray-700 mb-4">
-                Jawab24 is operated by:
-              </p>
-              <p className="text-gray-700">
-                <strong>Mohammad Ali Ahdab</strong><br />
-                Enskild Näringsverksamhet (Sole Trader)<br />
-                <strong>Org. nr:</strong> 19810312-5335<br />
-                <strong>Registered Address:</strong> Bergavägen 15 A lgh 1002, 241 39 Eslöv, Sweden
-              </p>
-            </section>
+                {section.showCorporate && (
+                  <p className="text-gray-700 mt-4">
+                    <strong>{t('legal.corporate.name')}</strong><br />
+                    {t('legal.corporate.type')}<br />
+                    <strong>{t('legal.corporate.orgNr')}</strong><br />
+                    <strong>{t('legal.corporate.address')}</strong>
+                  </p>
+                )}
+              </section>
+            ))}
           </div>
 
           <div className="mt-8 pt-8 border-t border-gray-200">
-            <a href="/" className="text-blue-600 hover:text-blue-800 font-medium">
-              ← Back to Jawab24
-            </a>
+            <Link href="/" className="text-blue-600 hover:text-blue-800 font-medium">
+              {t('legal.backToHome')}
+            </Link>
           </div>
         </div>
       </div>
     </>
   );
 }
-
-
