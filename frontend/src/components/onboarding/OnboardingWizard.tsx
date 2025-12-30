@@ -18,7 +18,7 @@ interface OnboardingWizardProps {
 }
 
 export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const isRTL = language === 'ar';
   const [currentStep, setCurrentStep] = useState(0);
 
@@ -26,10 +26,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     {
       icon: Sparkles,
       color: 'brand',
-      title: isRTL ? 'مرحباً بك في Jawab24! 👋' : 'Welcome to Jawab24! 👋',
-      description: isRTL 
-        ? 'سنساعدك على تفعيل الردود التلقائية على صفحتك في فيسبوك في 3 خطوات بسيطة'
-        : "We'll help you set up auto-replies on your Facebook page in 3 simple steps",
+      title: t('onboarding.welcomeTitle'),
+      description: t('onboarding.welcomeDesc'),
       visual: (
         <div className="w-32 h-32 mx-auto bg-gradient-to-br from-brand-400 to-accent-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-brand-500/30">
           <Sparkles className="w-16 h-16 text-white" />
@@ -39,10 +37,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     {
       icon: Facebook,
       color: 'blue',
-      title: isRTL ? '1. ربط صفحة فيسبوك' : '1. Connect Facebook Page',
-      description: isRTL 
-        ? 'اضغط على "صفحاتي" في القائمة واختر صفحة فيسبوك التي تريد تفعيل الردود التلقائية عليها'
-        : 'Click "My Pages" in the menu and select the Facebook page you want to enable auto-replies on',
+      title: t('onboarding.step1Title'),
+      description: t('onboarding.step1Desc'),
       visual: (
         <div className="w-32 h-32 mx-auto bg-blue-100 rounded-3xl flex items-center justify-center">
           <Facebook className="w-16 h-16 text-blue-600" />
@@ -52,10 +48,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     {
       icon: FileText,
       color: 'emerald',
-      title: isRTL ? '2. أضف معلومات عملك' : '2. Add Your Business Info',
-      description: isRTL 
-        ? 'أخبرنا عن منتجاتك وخدماتك وأسعارك لنتمكن من الرد بشكل أفضل على عملائك'
-        : 'Tell us about your products, services, and prices so we can reply better to your customers',
+      title: t('onboarding.step2Title'),
+      description: t('onboarding.step2Desc'),
       visual: (
         <div className="w-32 h-32 mx-auto bg-emerald-100 rounded-3xl flex items-center justify-center">
           <FileText className="w-16 h-16 text-emerald-600" />
@@ -65,10 +59,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     {
       icon: Zap,
       color: 'amber',
-      title: isRTL ? '3. فعّل الردود التلقائية' : '3. Enable Auto-Replies',
-      description: isRTL 
-        ? 'فعّل خاصية الرد التلقائي وستبدأ بالرد على تعليقات ورسائل عملائك تلقائياً!'
-        : 'Turn on auto-reply and we\'ll start responding to your customers\' comments and messages automatically!',
+      title: t('onboarding.step3Title'),
+      description: t('onboarding.step3Desc'),
       visual: (
         <div className="w-32 h-32 mx-auto bg-amber-100 rounded-3xl flex items-center justify-center">
           <Zap className="w-16 h-16 text-amber-600" />
@@ -78,10 +70,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     {
       icon: CheckCircle2,
       color: 'emerald',
-      title: isRTL ? 'تم! أنت جاهز! 🎉' : "You're All Set! 🎉",
-      description: isRTL 
-        ? 'الآن سيتم الرد على تعليقات ورسائل صفحتك تلقائياً على مدار الساعة'
-        : 'Now your page comments and messages will be replied to automatically 24/7',
+      title: t('onboarding.completeTitle'),
+      description: t('onboarding.completeDesc'),
       visual: (
         <div className="w-32 h-32 mx-auto bg-emerald-100 rounded-3xl flex items-center justify-center animate-bounce">
           <CheckCircle2 className="w-16 h-16 text-emerald-600" />
@@ -117,7 +107,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
             onClick={onSkip}
             className="text-surface-400 hover:text-surface-600 text-sm flex items-center gap-1"
           >
-            {isRTL ? 'تخطي' : 'Skip'}
+            {t('onboarding.skip')}
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -164,8 +154,9 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
                 onClick={handlePrev}
                 className="flex-1"
               >
-                {isRTL ? <ArrowRight className="w-5 h-5" /> : <ArrowLeft className="w-5 h-5" />}
-                {isRTL ? 'السابق' : 'Previous'}
+                <span className="rtl:block ltr:hidden"><ArrowRight className="w-5 h-5" /></span>
+                <span className="ltr:block rtl:hidden"><ArrowLeft className="w-5 h-5" /></span>
+                {t('onboarding.previous')}
               </Button>
             )}
             <Button
@@ -173,11 +164,13 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               onClick={handleNext}
               className={`flex-1 ${isFirstStep ? 'w-full' : ''}`}
             >
-              {isLastStep 
-                ? (isRTL ? 'ابدأ الآن! 🚀' : "Let's Go! 🚀")
-                : (isRTL ? 'التالي' : 'Next')
-              }
-              {!isLastStep && (isRTL ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />)}
+              {isLastStep ? t('onboarding.letsGo') : t('onboarding.next')}
+              {!isLastStep && (
+                <>
+                  <span className="rtl:block ltr:hidden"><ArrowLeft className="w-5 h-5" /></span>
+                  <span className="ltr:block rtl:hidden"><ArrowRight className="w-5 h-5" /></span>
+                </>
+              )}
             </Button>
           </div>
         </div>

@@ -45,7 +45,7 @@ export default function Home() {
         </div>
         <h1 className="text-xl font-display font-bold text-surface-900">Jawab24</h1>
         <p className="text-surface-500 mt-2">
-          {isRTL ? 'جاري التحميل...' : 'Loading...'}
+          {t('common.loading')}
         </p>
       </div>
     </div>

@@ -63,9 +63,15 @@ export function Sidebar() {
           className="p-2 rounded-xl hover:bg-white/5 transition-all text-surface-400 hover:text-white"
         >
           {sidebarOpen ? (
-            isRTL ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />
+            <>
+              <span className="rtl:block ltr:hidden"><ChevronRight className="w-5 h-5" /></span>
+              <span className="ltr:block rtl:hidden"><ChevronLeft className="w-5 h-5" /></span>
+            </>
           ) : (
-            isRTL ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />
+            <>
+              <span className="rtl:block ltr:hidden"><ChevronLeft className="w-5 h-5" /></span>
+              <span className="ltr:block rtl:hidden"><ChevronRight className="w-5 h-5" /></span>
+            </>
           )}
         </button>
       </div>

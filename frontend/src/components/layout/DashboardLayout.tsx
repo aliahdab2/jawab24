@@ -90,7 +90,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </Link>
             <Link href={isAuthenticated ? '/dashboard' : '/login'}>
               <button className="text-sm font-bold text-brand-600 hover:text-brand-700 bg-brand-50 px-4 py-2 rounded-xl transition-all">
-                {isAuthenticated ? (isRTL ? 'لوحة التحكم' : 'Dashboard') : (isRTL ? 'تسجيل الدخول' : 'Login')}
+                {isAuthenticated ? t('nav.dashboard') : t('auth.login')}
               </button>
             </Link>
           </div>

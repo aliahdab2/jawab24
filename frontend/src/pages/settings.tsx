@@ -187,7 +187,7 @@ export default function SettingsPage() {
             <div className="text-start">
               <h3 className="font-bold text-surface-900 text-xl">{t('settings.language')}</h3>
               <p className="text-surface-500 text-sm font-medium">
-                {isRTL ? 'اختر لغة لوحة التحكم والردود الافتراضية' : 'Dashboard and default reply language'}
+                {t('settings.languageDescription')}
               </p>
             </div>
           </div>
@@ -263,7 +263,7 @@ export default function SettingsPage() {
               {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
             </span>
             <p className={`text-xs ${showAdvanced ? 'text-surface-400' : 'text-surface-500'}`}>
-              {isRTL ? 'تخصيص ساعات العمل والردود والمزيد' : 'Customize business hours, replies and more'}
+              {t('settings.advancedDescription')}
             </p>
           </div>
         </div>
@@ -287,10 +287,10 @@ export default function SettingsPage() {
                   </div>
                   <h4 className="text-lg font-bold text-surface-900 mb-1">{t('nav.templates')}</h4>
                   <p className="text-sm text-surface-500 mb-6">
-                    {isRTL ? 'إنشاء ردود جاهزة لاستخدامها في القواعد' : 'Create ready-made replies to use in rules'}
+                    {t('settings.templatesCardDesc')}
                   </p>
                   <div className="mt-auto flex items-center gap-1 text-violet-600 font-bold text-sm uppercase tracking-widest">
-                    <span>{isRTL ? 'عرض القوالب' : 'View Templates'}</span>
+                    <span>{t('settings.viewTemplates')}</span>
                     <ChevronRight className={`w-4 h-4 ${language === 'ar' ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
@@ -305,10 +305,10 @@ export default function SettingsPage() {
                   </div>
                   <h4 className="text-lg font-bold text-surface-900 mb-1">{t('nav.rules')}</h4>
                   <p className="text-sm text-surface-500 mb-6">
-                    {isRTL ? 'قواعد ذكية للرد بناءً على كلمات محددة' : 'Smart rules to reply based on specific words'}
+                    {t('settings.rulesCardDesc')}
                   </p>
                   <div className="mt-auto flex items-center gap-1 text-amber-600 font-bold text-sm uppercase tracking-widest">
-                    <span>{isRTL ? 'عرض القواعد' : 'View Rules'}</span>
+                    <span>{t('settings.viewRules')}</span>
                     <ChevronRight className={`w-4 h-4 ${language === 'ar' ? 'rotate-180' : ''}`} />
                   </div>
                 </div>

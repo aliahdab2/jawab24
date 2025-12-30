@@ -323,7 +323,7 @@ export default function RulesPage() {
                   </Button>
                   {rule.matchCount !== undefined && (
                     <div className="mt-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
-                      {rule.matchCount} {isRTL ? 'تطابق' : 'matches'}
+                      {rule.matchCount} {t('rules.matches')}
                     </div>
                   )}
                 </div>
@@ -355,7 +355,7 @@ export default function RulesPage() {
         <div className="space-y-4">
           <Input
             label={t('rules.ruleName')}
-            placeholder={isRTL ? 'مثال: أسئلة الأسعار' : 'e.g., Price Questions'}
+            placeholder={t('rules.ruleNamePlaceholder')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           />

@@ -77,7 +77,7 @@ export default function TermsOfService() {
                 <p className="text-slate-300 leading-relaxed">{section.text}</p>
                 
                 {section.items && (
-                  <ul className={`mt-3 space-y-2 text-slate-300 ${isRTL ? 'pr-6' : 'pl-6'}`}>
+                  <ul className="mt-3 space-y-2 text-slate-300 ltr:pl-6 rtl:pr-6">
                     {section.items.map((item, i) => (
                       <li key={i} className="list-disc">{item}</li>
                     ))}

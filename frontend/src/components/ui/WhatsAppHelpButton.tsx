@@ -27,7 +27,7 @@ export function WhatsAppHelpButton() {
       {/* Floating button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-24 md:bottom-8 ${isRTL ? 'left-8' : 'right-8'} z-50 w-16 h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[2rem] shadow-2xl hover:shadow-emerald-500/40 transition-all flex items-center justify-center group active:scale-90 overflow-hidden`}
+        className="fixed bottom-24 md:bottom-8 ltr:right-8 rtl:left-8 z-50 w-16 h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[2rem] shadow-2xl hover:shadow-emerald-500/40 transition-all flex items-center justify-center group active:scale-90 overflow-hidden"
         aria-label={t('common.needHelp')}
       >
         <div className="absolute inset-0 bg-gradient-to-tr from-emerald-600/20 to-transparent pointer-events-none"></div>
@@ -41,7 +41,7 @@ export function WhatsAppHelpButton() {
       {/* Popup card */}
       {isOpen && (
         <div 
-          className={`fixed bottom-44 md:bottom-28 ${isRTL ? 'left-8' : 'right-8'} z-50 bg-white rounded-[2.5rem] shadow-2xl p-8 w-80 animate-slide-up border border-surface-100 overflow-hidden`}
+          className="fixed bottom-44 md:bottom-28 ltr:right-8 rtl:left-8 z-50 bg-white rounded-[2.5rem] shadow-2xl p-8 w-80 animate-slide-up border border-surface-100 overflow-hidden"
           dir={isRTL ? 'rtl' : 'ltr'}
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 -z-10"></div>

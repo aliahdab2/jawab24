@@ -228,7 +228,7 @@ export default function TemplatesPage() {
                       </span>
                     ))
                   ) : (
-                    <span className="text-[10px] font-medium text-surface-400 italic">{isRTL ? 'لا توجد كلمات مفتاحية' : 'No keywords'}</span>
+                    <span className="text-[10px] font-medium text-surface-400 italic">{t('templates.noKeywords')}</span>
                   )}
                   {(template.keywords || []).length > 6 && (
                     <span className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-600 text-[10px] font-bold uppercase tracking-wider">
@@ -286,7 +286,7 @@ export default function TemplatesPage() {
         <div className="space-y-4">
           <Input
             label={t('templates.templateName')}
-            placeholder={isRTL ? 'مثال: استفسار السعر' : 'e.g., Price Inquiry'}
+            placeholder={t('templates.templateNamePlaceholder')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           />
@@ -309,11 +309,11 @@ export default function TemplatesPage() {
           />
           
           <Input
-            label={isRTL ? 'الكلمات المفتاحية' : 'Keywords'}
+            label={t('templates.keywords')}
             placeholder="price, cost, how much, سعر"
             value={formData.keywords}
             onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-            helperText={isRTL ? 'افصل بين الكلمات بفواصل' : 'Separate keywords with commas'}
+            helperText={t('templates.keywordsHelper')}
           />
 
           <div className="flex justify-end gap-3 pt-4">

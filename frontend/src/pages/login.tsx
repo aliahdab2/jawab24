@@ -56,22 +56,22 @@ export default function LoginPage() {
   const features = [
     {
       icon: Zap,
-      title: isRTL ? 'تفعيل فوري' : 'Instant Setup',
-      desc: isRTL ? 'اربط صفحتك وابدأ الردود في دقيقة واحدة' : 'Connect your page and start replying in 1 minute',
+      title: t('auth.instantSetup'),
+      desc: t('auth.instantSetupDesc'),
       color: 'text-amber-500',
       bg: 'bg-amber-50'
     },
     {
       icon: ShieldCheck,
-      title: isRTL ? 'آمن ومعتمد' : 'Secure & Official',
-      desc: isRTL ? 'نستخدم واجهة Meta الرسمية لحماية بياناتك' : 'We use official Meta APIs to protect your data',
+      title: t('auth.secureOfficial'),
+      desc: t('auth.secureOfficialDesc'),
       color: 'text-brand-600',
       bg: 'bg-brand-50'
     },
     {
       icon: MessageSquare,
-      title: isRTL ? 'دقة مذهلة' : 'Amazing Accuracy',
-      desc: isRTL ? 'ردود ذكية تفهم لهجات عملائك بدقة' : 'Smart replies that understand your customers\' dialects',
+      title: t('auth.amazingAccuracy'),
+      desc: t('auth.amazingAccuracyDesc'),
       color: 'text-violet-600',
       bg: 'bg-violet-50'
     }
@@ -96,19 +96,17 @@ export default function LoginPage() {
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/10 mb-12 animate-slide-up">
               <Sparkles className="w-4 h-4 text-brand-400" />
               <span className="text-sm font-bold text-brand-400 uppercase tracking-widest">
-                {isRTL ? 'الجيل القادم من الردود التلقائية' : 'Next-Gen Auto Replies'}
+                {t('auth.nextGenAutoReplies')}
               </span>
             </div>
 
             <h1 className="text-5xl lg:text-6xl font-display font-extrabold text-white mb-8 leading-tight tracking-tight animate-slide-up animation-delay-100">
-              {isRTL ? 'ابدأ رحلة' : 'Start Your'}
-              <span className="block text-brand-500">{isRTL ? 'النمو الذكي لعملك' : 'Smart Growth Journey'}</span>
+              {t('auth.startYourJourney')}
+              <span className="block text-brand-500">{t('auth.smartGrowthJourney')}</span>
             </h1>
 
             <p className="text-xl text-surface-400 mb-16 leading-relaxed font-medium animate-slide-up animation-delay-200">
-              {isRTL 
-                ? 'انضم إلى آلاف أصحاب الصفحات الذين يثقون بـ Jawab24 لإدارة تفاعلاتهم وزيادة مبيعاتهم باستخدام الذكاء الاصطناعي.'
-                : 'Join thousands of page owners who trust Jawab24 to manage their engagements and boost sales using AI.'}
+              {t('auth.journeyDesc')}
             </p>
 
             <div className="grid grid-cols-1 gap-8 animate-slide-up animation-delay-300">
@@ -131,15 +129,13 @@ export default function LoginPage() {
                 {[1,2,3,4,5].map(s => <Star key={s} className="w-4 h-4 text-amber-400 fill-amber-400" />)}
               </div>
               <p className="text-white font-medium italic mb-4">
-                {isRTL 
-                  ? '"وفر لي ساعات من العمل يومياً، والعملاء منبهرون بسرعة الرد ودقته!"' 
-                  : '"Saved me hours of work daily, and customers are impressed with the speed and accuracy!"'}
+                "{t('auth.testimonialQuote')}"
               </p>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white font-bold text-xs">MA</div>
                 <div>
                   <div className="text-white font-bold text-sm">Mohammed A.</div>
-                  <div className="text-surface-500 text-xs font-bold uppercase tracking-widest">{isRTL ? 'مدير تسويق' : 'Marketing Manager'}</div>
+                  <div className="text-surface-500 text-xs font-bold uppercase tracking-widest">{t('auth.testimonialAuthor')}</div>
                 </div>
               </div>
             </div>
@@ -168,10 +164,10 @@ export default function LoginPage() {
             <div className="w-full max-w-md">
               <div className="text-center lg:text-start mb-12">
                 <h2 className="text-4xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
-                  {isRTL ? 'مرحباً بك مجدداً' : 'Welcome Back'}
+                  {t('auth.welcomeBack')}
                 </h2>
                 <p className="text-lg text-surface-500 font-medium">
-                  {isRTL ? 'سجل دخولك لتبدأ إدارة مبيعاتك بذكاء' : 'Sign in to start managing your sales smartly'}
+                  {t('auth.welcomeBackDesc')}
                 </p>
               </div>
 
@@ -186,15 +182,15 @@ export default function LoginPage() {
                     <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
-                      <Facebook className="w-6 h-6 mr-2" />
-                      {isRTL ? 'تسجيل الدخول باستخدام فيسبوك' : 'Login with Facebook'}
+                      <Facebook className="w-6 h-6 ltr:mr-2 rtl:ml-2" />
+                      {t('auth.loginWithFacebook')}
                     </>
                   )}
                 </Button>
 
                 <div className="flex items-center gap-4 py-4">
                   <div className="flex-1 h-px bg-surface-100"></div>
-                  <span className="text-surface-400 font-bold text-xs uppercase tracking-widest">{isRTL ? 'أو' : 'OR'}</span>
+                  <span className="text-surface-400 font-bold text-xs uppercase tracking-widest">{t('auth.or')}</span>
                   <div className="flex-1 h-px bg-surface-100"></div>
                 </div>
 
@@ -203,13 +199,13 @@ export default function LoginPage() {
                     <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                       <HelpCircle className="w-5 h-5 text-surface-400 group-hover:text-brand-600" />
                     </div>
-                    <span className="text-xs font-bold text-surface-600 uppercase tracking-tight">{isRTL ? 'مركز المساعدة' : 'Help Center'}</span>
+                    <span className="text-xs font-bold text-surface-600 uppercase tracking-tight">{t('auth.helpCenter')}</span>
                   </div>
                   <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 flex flex-col items-center justify-center text-center group hover:bg-white hover:border-brand-200 transition-all cursor-pointer">
                     <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                       <Globe className="w-5 h-5 text-surface-400 group-hover:text-brand-600" />
                     </div>
-                    <span className="text-xs font-bold text-surface-600 uppercase tracking-tight">{isRTL ? 'المدونة' : 'Our Blog'}</span>
+                    <span className="text-xs font-bold text-surface-600 uppercase tracking-tight">{t('auth.ourBlog')}</span>
                   </div>
                 </div>
 
@@ -219,11 +215,9 @@ export default function LoginPage() {
                       <Bot className="w-5 h-5 text-brand-600" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-brand-900 text-sm mb-1">{isRTL ? 'هل تعلم؟' : 'Did you know?'}</h4>
+                      <h4 className="font-bold text-brand-900 text-sm mb-1">{t('auth.didYouKnow')}</h4>
                       <p className="text-brand-700/80 text-sm font-medium leading-relaxed">
-                        {isRTL 
-                          ? 'الردود الفورية تزيد من فرصة إتمام البيع بنسبة تزيد عن 60%.' 
-                          : 'Instant replies increase the chance of closing a sale by more than 60%.'}
+                        {t('auth.didYouKnowDesc')}
                       </p>
                     </div>
                   </div>
@@ -232,11 +226,11 @@ export default function LoginPage() {
 
               <div className="mt-12 text-center">
                 <p className="text-sm text-surface-400 font-medium">
-                  {isRTL ? 'بتسجيل دخولك، أنت توافق على' : 'By signing in, you agree to our'}
+                  {t('auth.termsAgreement')}
                   <br className="sm:hidden" />
-                  <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{isRTL ? 'شروط الخدمة' : 'Terms of Service'}</Link>
-                  {isRTL ? 'و' : '&'}
-                  <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{isRTL ? 'سياسة الخصوصية' : 'Privacy Policy'}</Link>
+                  <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
+                  {t('auth.and')}
+                  <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
                 </p>
               </div>
             </div>
@@ -250,7 +244,7 @@ export default function LoginPage() {
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">{isRTL ? 'الأنظمة تعمل' : 'Systems Active'}</span>
+                <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">{t('auth.systemsActive')}</span>
               </div>
               <div className="w-px h-4 bg-surface-100"></div>
               <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">v2.4.0</span>
