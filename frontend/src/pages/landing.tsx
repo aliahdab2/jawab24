@@ -285,9 +285,9 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row items-center gap-8 sm:gap-12 lg:gap-20">
               <div className="lg:w-1/2">
-                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-normal sm:leading-tight text-center lg:text-start">
+                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-relaxed sm:leading-snug text-center lg:text-start">
                   {t('landing.howItWorks.title1')}
-                  <span className="block text-brand-600 mt-1 sm:mt-0">{t('landing.howItWorks.title2')}</span>
+                  <span className="block text-brand-600 mt-2 sm:mt-1">{t('landing.howItWorks.title2')}</span>
                 </h2>
                 <div className="space-y-4 sm:space-y-6 lg:space-y-10">
                   {howItWorks.map((item, i) => (
