@@ -56,10 +56,10 @@ export default function PrivacyPolicy() {
   return (
     <>
       <Head>
-        <title>{isRTL ? 'سياسة الخصوصية - جواب24' : 'Privacy Policy - Jawab24'}</title>
+        <title>{t('privacy.seoTitle')}</title>
         <meta name="description" content={t('privacy.metaDescription')} />
         <link rel="canonical" href="https://jawab24.com/privacy" />
-        <meta property="og:title" content={isRTL ? 'سياسة الخصوصية - جواب24' : 'Privacy Policy - Jawab24'} />
+        <meta property="og:title" content={t('privacy.seoTitle')} />
         <meta property="og:url" content="https://jawab24.com/privacy" />
       </Head>
       

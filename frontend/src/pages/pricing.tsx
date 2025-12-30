@@ -297,27 +297,12 @@ export default function PricingPage() {
   return (
     <>
       <Head>
-        <title>{language === 'ar' 
-          ? 'الأسعار - جواب24 | باقات الرد التلقائي الذكي'
-          : 'Pricing - Jawab24 | Smart Auto-Reply Plans'
-        }</title>
-        <meta name="description" content={language === 'ar'
-          ? 'اختر باقتك المناسبة من جواب24. باقات مرنة للرد التلقائي الذكي على فيسبوك وإنستغرام تبدأ من مجاني. جرب 30 يوم مجاناً!'
-          : 'Choose your Jawab24 plan. Flexible AI auto-reply packages for Facebook & Instagram starting from free. Try 30 days free!'
-        } />
-        <meta name="keywords" content={language === 'ar'
-          ? 'أسعار جواب24, باقات جواب, جواب مجاني, رد تلقائي مجاني, أسعار الرد التلقائي'
-          : 'jawab24 pricing, jawab plans, jawab free, auto reply pricing, chatbot pricing'
-        } />
+        <title>{t('pricing.seoTitle')}</title>
+        <meta name="description" content={t('pricing.seoDescription')} />
+        <meta name="keywords" content={t('pricing.seoKeywords')} />
         <link rel="canonical" href="https://jawab24.com/pricing" />
-        <meta property="og:title" content={language === 'ar'
-          ? 'الأسعار - جواب24 | باقات الرد التلقائي'
-          : 'Pricing - Jawab24 | Auto-Reply Plans'
-        } />
-        <meta property="og:description" content={language === 'ar'
-          ? 'باقات مرنة للرد التلقائي الذكي. جرب مجاناً!'
-          : 'Flexible AI auto-reply packages. Try free!'
-        } />
+        <meta property="og:title" content={t('pricing.ogTitle')} />
+        <meta property="og:description" content={t('pricing.ogDescription')} />
         <meta property="og:url" content="https://jawab24.com/pricing" />
       </Head>
       <DashboardLayout title={t('pricing.title')} isPublic={true}>
@@ -327,7 +312,7 @@ export default function PricingPage() {
             {t('pricing.title')}
         </h1>
         <p className="text-surface-500 text-sm max-w-md mx-auto">
-          {language === 'ar' ? 'اختر الباقة المناسبة لعملك' : 'Choose the right plan for your business'}
+          {t('pricing.choosePlan')}
         </p>
       </div>
       
@@ -346,12 +331,12 @@ export default function PricingPage() {
             </span>
           </div>
           <div className="text-xs text-brand-600">
-            {usage.aiReplies.used}/{usage.aiReplies.limit || '∞'} {language === 'ar' ? 'رد' : 'replies'}
+            {usage.aiReplies.used}/{usage.aiReplies.limit || '∞'} {t('pricing.replies')}
           </div>
           {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
             <div className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
               <Zap className="w-3 h-3" />
-              {usage.subscription.trialDaysRemaining} {language === 'ar' ? 'يوم متبقي' : 'days left'}
+              {usage.subscription.trialDaysRemaining} {t('pricing.daysLeft')}
             </div>
           )}
         </div>
@@ -374,7 +359,7 @@ export default function PricingPage() {
       
       {/* Simple footer note */}
       <div className="text-center py-6 text-sm text-surface-400">
-        {language === 'ar' ? 'جميع الباقات تشمل دعم فيسبوك وإنستغرام' : 'All plans include Facebook & Instagram support'}
+        {t('pricing.allPlansInclude')}
       </div>
       </DashboardLayout>
     </>
