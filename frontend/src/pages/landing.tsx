@@ -129,8 +129,8 @@ export default function LandingPage() {
     <>
       <Head>
         <title>{isRTL 
-          ? "جواب24 | Jawab24 - ردود ذكية تلقائية لفيسبوك وإنستغرام"
-          : "Jawab24 جواب24 - AI Auto-Replies for Facebook & Instagram"
+          ? "جواب | جواب24 - الرد التلقائي الذكي لفيسبوك وإنستغرام 24/7"
+          : "Jawab24 جواب - Smart AI Auto-Replies for Facebook & Instagram"
         }</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content={isRTL 

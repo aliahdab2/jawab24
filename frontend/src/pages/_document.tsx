@@ -3,15 +3,15 @@ import { Html, Head, Main, NextScript } from 'next/document';
 export default function Document() {
   return (
     // Default to LTR, client-side will update based on user preference
-    <Html lang="en" dir="ltr">
+    <Html lang="ar" dir="rtl">
       <Head>
         {/* Favicon & Icons */}
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/app-icon.svg" />
         
-        {/* Primary Meta Tags - Bilingual */}
-        <meta name="description" content="Jawab24 جواب24 - Smart AI-powered auto-replies for Facebook & Instagram Pages. Respond to comments and messages 24/7 in Arabic and English. ردود ذكية تلقائية لصفحات فيسبوك وإنستغرام. الرد التلقائي الذكي على التعليقات والرسائل." />
-        <meta name="keywords" content="جواب, جواب24, جواب٢٤, jawab, jawab24, ردود تلقائية, رد تلقائي فيسبوك, رد تلقائي انستغرام, بوت فيسبوك, بوت انستغرام عربي, ذكاء اصطناعي, Facebook auto reply, Instagram auto reply, Facebook automation, AI chatbot, Arabic Facebook bot, social media automation, auto reply bot, رد آلي, الرد الذكي, ردود ذكية" />
+        {/* Primary Meta Tags - Arabic First for Arabic SEO */}
+        <meta name="description" content="جواب24 - خدمة الرد التلقائي الذكي على تعليقات ورسائل فيسبوك وإنستغرام. ردود فورية ذكية على مدار الساعة. Jawab24 - Smart AI auto-replies for Facebook & Instagram Pages 24/7." />
+        <meta name="keywords" content="جواب, جواب 24, جواب24, جواب٢٤, رد تلقائي, ردود تلقائية, رد تلقائي فيسبوك, رد تلقائي انستغرام, بوت فيسبوك عربي, بوت انستغرام, ردود ذكية, رد آلي, الرد الذكي, رد على التعليقات, رد على الرسائل, ذكاء اصطناعي عربي, jawab, jawab24, Facebook auto reply, Instagram auto reply, AI chatbot Arabic" />
         <meta name="author" content="Jawab24 جواب24" />
         
         {/* Hreflang Tags for Language Targeting */}
@@ -22,8 +22,8 @@ export default function Document() {
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://jawab24.com/" />
-        <meta property="og:title" content="Jawab24 جواب24 - ردود ذكية تلقائية | Smart Auto-Replies 24/7" />
-        <meta property="og:description" content="AI-powered auto-replies for Facebook & Instagram Pages. الرد الذكي التلقائي على تعليقات ورسائل فيسبوك وإنستغرام 24/7." />
+        <meta property="og:title" content="جواب24 | جواب - الرد التلقائي الذكي لفيسبوك وإنستغرام" />
+        <meta property="og:description" content="جواب24 - خدمة الرد التلقائي الذكي على تعليقات ورسائل فيسبوك وإنستغرام 24/7. ردود فورية ذكية بالعربية والإنجليزية." />
         <meta property="og:image" content="https://jawab24.com/og-image.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
@@ -117,8 +117,13 @@ export default function Document() {
           </>
         )}
         
+        {/* Google Search Console Verification - Replace with your verification code */}
+        {process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION && (
+          <meta name="google-site-verification" content={process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION} />
+        )}
+        
         {/* Additional SEO */}
-        <meta name="robots" content="index, follow" />
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
         <link rel="canonical" href="https://jawab24.com/" />
         
         {/* Load both English and Arabic fonts */}
