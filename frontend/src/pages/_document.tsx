@@ -11,7 +11,7 @@ export default function Document() {
         
         {/* Primary Meta Tags - Arabic First for Arabic SEO */}
         <meta name="description" content="جواب24 - خدمة الرد التلقائي الذكي على تعليقات ورسائل فيسبوك وإنستغرام. ردود فورية ذكية على مدار الساعة. Jawab24 - Smart AI auto-replies for Facebook & Instagram Pages 24/7." />
-        <meta name="keywords" content="جواب, جواب 24, جواب24, جواب٢٤, رد تلقائي, ردود تلقائية, رد تلقائي فيسبوك, رد تلقائي انستغرام, بوت فيسبوك عربي, بوت انستغرام, ردود ذكية, رد آلي, الرد الذكي, رد على التعليقات, رد على الرسائل, ذكاء اصطناعي عربي, jawab, jawab24, Facebook auto reply, Instagram auto reply, AI chatbot Arabic" />
+        <meta name="keywords" content="jawab, jawab24, jawab 24, jawab facebook, jawab instagram, jawab auto reply, jawab bot, جواب, جواب 24, جواب24, جواب٢٤, جواب فيسبوك, جواب انستغرام, جواب بوت, جواب رد تلقائي, رد تلقائي, ردود تلقائية, رد تلقائي فيسبوك, رد تلقائي انستغرام, بوت فيسبوك عربي, بوت انستغرام, ردود ذكية, رد آلي, الرد الذكي, رد على التعليقات, رد على الرسائل, ذكاء اصطناعي عربي, Facebook auto reply, Instagram auto reply, AI chatbot Arabic" />
         <meta name="author" content="Jawab24 جواب24" />
         
         {/* Hreflang Tags for Language Targeting */}
@@ -46,7 +46,7 @@ export default function Document() {
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
               "name": "Jawab24",
-              "alternateName": ["جواب24", "جواب٢٤", "جواب", "Jawab"],
+              "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24", "jawab 24", "جواب ٢٤"],
               "applicationCategory": "BusinessApplication",
               "operatingSystem": "Web",
               "description": "AI-powered auto-replies for Facebook & Instagram Pages. Respond to comments and messages 24/7 in Arabic and English. ردود ذكية تلقائية لصفحات فيسبوك وإنستغرام.",
@@ -73,7 +73,7 @@ export default function Document() {
               "@context": "https://schema.org",
               "@type": "Organization",
               "name": "Jawab24",
-              "alternateName": ["جواب24", "جواب٢٤", "جواب"],
+              "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24"],
               "url": "https://jawab24.com",
               "logo": "https://jawab24.com/app-icon.svg",
               "description": "Smart AI auto-reply service for Facebook & Instagram - خدمة الرد الذكي التلقائي لفيسبوك وإنستغرام",
@@ -93,7 +93,7 @@ export default function Document() {
               "@context": "https://schema.org",
               "@type": "WebSite",
               "name": "Jawab24 جواب24",
-              "alternateName": ["جواب24", "جواب٢٤", "جواب", "Jawab"],
+              "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24", "جواب ٢٤"],
               "url": "https://jawab24.com",
               "inLanguage": ["ar", "en"]
             })
