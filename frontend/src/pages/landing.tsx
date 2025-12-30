@@ -155,9 +155,9 @@ export default function LandingPage() {
                 </Link>
                 <button
                   onClick={toggleLanguage}
-                  className="px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-surface-600 hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-surface-600 hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
                 >
-                  {language === 'ar' ? 'En' : 'ع'}
+                  {language === 'ar' ? 'English' : 'العربية'}
                 </button>
                 <Link href="/login" className="hidden sm:block">
                   <Button variant="secondary" size="sm" className="font-bold border-none bg-surface-100">
