@@ -482,6 +482,7 @@
   "landing.stats.available": "Always Available",
   "landing.stats.speed": "Response Time",
   "landing.stats.accuracy": "Accuracy Rate",
+  "landing.stats.accuracyLabel": "Accuracy",
   "landing.features.sectionTitle": "Everything You Need to Manage Your Pages",
   "landing.features.aiTitle": "AI-Powered Smart Replies",
   "landing.features.aiDesc": "Custom, intelligent responses that understand context and provide accurate answers to your customers",

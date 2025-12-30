@@ -174,67 +174,159 @@ export default function LandingPage() {
           </div>
         </nav>
 
-        {/* Hero Section - Optimized for Mobile */}
-        <section className="relative pt-24 sm:pt-32 lg:pt-40 pb-12 sm:pb-16 lg:pb-24 overflow-hidden">
-          {/* Animated Background Elements - Smaller on mobile */}
-          <div className="absolute top-0 left-1/4 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-brand-200/30 rounded-full blur-[80px] sm:blur-[120px] animate-pulse" />
-          <div className="absolute bottom-0 right-1/4 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-violet-200/30 rounded-full blur-[80px] sm:blur-[120px] animate-pulse delay-1000" />
+        {/* Hero Section - Optimized for Mobile with Illustration */}
+        <section className="relative pt-24 sm:pt-32 lg:pt-40 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
+          {/* Animated Background Elements */}
+          <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
+          <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-16">
-              <div className="text-center lg:text-start max-w-4xl mx-auto">
-                {/* Badge - Smaller on mobile */}
-                <div className="inline-flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full bg-brand-50 border border-brand-100 mb-6 sm:mb-10 animate-slide-up">
-                  <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></div>
-                  <span className="text-xs sm:text-sm font-bold text-brand-700 uppercase tracking-widest">
-                    {t('landing.hero.badge')}
-                  </span>
+            <div className="grid grid-cols-5 sm:grid-cols-2 items-center gap-4 sm:gap-8 lg:gap-12">
+              {/* Hero Illustration - Phone Mockup with Floating Icons */}
+              <div className="relative animate-slide-up col-span-2 sm:col-span-1 order-1 sm:order-2">
+                <div className="relative mx-auto max-w-[120px] sm:max-w-[180px] lg:max-w-[240px]">
+                  {/* Glowing Background */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-brand-400/20 via-violet-400/20 to-pink-400/20 rounded-[50px] blur-3xl scale-110" />
+                  
+                  {/* Phone Mockup */}
+                  <div className="relative bg-surface-900 rounded-[36px] sm:rounded-[42px] p-2.5 sm:p-3 shadow-2xl shadow-surface-900/30 border-4 border-surface-800">
+                    <div className="absolute top-5 sm:top-6 left-1/2 -translate-x-1/2 w-16 sm:w-20 h-4 sm:h-5 bg-surface-900 rounded-full z-10"></div>
+                    <div className="bg-gradient-to-br from-brand-50 to-violet-50 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/16] relative">
+                      {/* App Interface */}
+                      <div className="p-3 sm:p-4">
+                        {/* Status Bar */}
+                        <div className="flex items-center justify-between mb-3 sm:mb-4 pt-3 sm:pt-4">
+                          <div className="flex items-center gap-0.5">
+                            <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-brand-500 rounded-full" />
+                            <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-brand-400 rounded-full" />
+                          </div>
+                          <div className="text-[9px] sm:text-[10px] font-bold text-surface-500">9:41</div>
+                          <div className="flex items-center gap-0.5">
+                            <div className="w-3.5 sm:w-4 h-1.5 bg-brand-500 rounded-sm" />
+                          </div>
+                        </div>
+                        
+                        {/* Logo Area */}
+                        <div className="flex items-center justify-center gap-1.5 mb-3 sm:mb-4">
+                          <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-brand-500 flex items-center justify-center shadow-lg">
+                            <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                          </div>
+                          <span className="font-display font-bold text-sm sm:text-base text-surface-900">Jawab24</span>
+                        </div>
+                        
+                        {/* Chat Preview */}
+                        <div className="space-y-1.5 sm:space-y-2">
+                          <div className="flex items-end gap-1.5 rtl:flex-row-reverse">
+                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center flex-shrink-0">
+                              <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                            </div>
+                            <div className="bg-white rounded-xl rounded-bl-none rtl:rounded-bl-xl rtl:rounded-br-none px-2.5 sm:px-3 py-1.5 shadow-sm max-w-[80%]">
+                              <p className="text-[9px] sm:text-[10px] text-surface-600">ما هو سعر المنتج؟ 🤔</p>
+                            </div>
+                          </div>
+                          <div className="flex items-end gap-1.5 justify-end rtl:flex-row-reverse rtl:justify-start">
+                            <div className="bg-brand-500 rounded-xl rounded-br-none rtl:rounded-br-xl rtl:rounded-bl-none px-2.5 sm:px-3 py-1.5 shadow-sm max-w-[80%]">
+                              <p className="text-[9px] sm:text-[10px] text-white">مرحباً! السعر 99$ فقط 🎉</p>
+                            </div>
+                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
+                              <Bot className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-brand-600" />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[7px] sm:text-[8px] text-brand-600 font-medium justify-end rtl:justify-start">
+                            <Zap className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
+                            <span>{t('landing.stats.speed')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Floating Facebook Icon */}
+                  <div className="absolute -left-3 sm:-left-6 top-1/4 animate-bounce-slow">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1877F2] flex items-center justify-center shadow-xl shadow-[#1877F2]/30 transform -rotate-12 hover:rotate-0 transition-transform">
+                      <Facebook className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                    </div>
+                  </div>
+                  
+                  {/* Floating Instagram Icon */}
+                  <div className="absolute -right-3 sm:-right-6 top-1/3 animate-bounce-slow animation-delay-500">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center shadow-xl shadow-pink-500/30 transform rotate-12 hover:rotate-0 transition-transform">
+                      <Instagram className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                    </div>
+                  </div>
+                  
+                  {/* Floating Messenger Bubble */}
+                  <div className="absolute left-1/4 -bottom-3 sm:-bottom-6 animate-bounce-slow animation-delay-1000">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-xl shadow-blue-500/30 transform rotate-6 hover:rotate-0 transition-transform">
+                      <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                    </div>
+                  </div>
+                  
+                  {/* Floating Sparkle */}
+                  <div className="absolute -right-1 sm:-right-3 bottom-1/4 animate-pulse">
+                    <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-amber-400 flex items-center justify-center shadow-lg shadow-amber-400/40">
+                      <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
+                    </div>
+                  </div>
+                  
+                  {/* Stats Floating Card */}
+                  <div className="absolute -right-2 sm:-right-8 lg:-right-12 top-6 sm:top-10 bg-white rounded-lg sm:rounded-xl p-1.5 sm:p-2 shadow-xl border border-surface-100 animate-slide-up">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-green-100 flex items-center justify-center">
+                        <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-600" />
+                      </div>
+                      <div>
+                        <div className="text-[9px] sm:text-[10px] font-bold text-surface-900">{t('landing.stats.accuracy')}</div>
+                        <div className="text-[7px] sm:text-[8px] text-surface-500">{t('landing.stats.accuracyLabel')}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+              </div>
 
-                {/* Heading - Responsive sizes */}
-                <h1 className="text-3xl sm:text-5xl lg:text-7xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-snug sm:leading-[1.15] tracking-tight animate-slide-up">
+              {/* Text Content */}
+              <div className="text-start col-span-3 sm:col-span-1 order-2 sm:order-1">
+                {/* Heading */}
+                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-snug sm:leading-[1.15] tracking-tight animate-slide-up">
                   {t('landing.hero.title1')}
-                  <span className="block bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-2 sm:mt-2">
+                  <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-2">
                     {t('landing.hero.title2')}
                   </span>
                 </h1>
 
-                {/* Description - Compact on mobile */}
-                <p className="text-base sm:text-lg lg:text-xl text-surface-600 mb-6 sm:mb-12 max-w-2xl mx-auto lg:mx-0 leading-relaxed animate-slide-up animation-delay-100">
+                {/* Description */}
+                <p className="text-base sm:text-lg lg:text-xl text-surface-600 mb-6 sm:mb-12 max-w-xl mx-auto lg:mx-0 leading-relaxed animate-slide-up animation-delay-100">
                   {t('landing.hero.description')}
                 </p>
 
-                {/* CTA Buttons - Compact on mobile */}
-                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-6 mb-6 sm:mb-12 animate-slide-up animation-delay-200">
+                {/* CTA Buttons */}
+                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-6 sm:mb-12 animate-slide-up animation-delay-200">
                   <Link href="/login" className="w-full sm:w-auto">
-                    <Button size="lg" className="w-full sm:w-auto shadow-2xl shadow-brand-500/40 px-6 sm:px-10 py-4 sm:py-8 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
-                      <Facebook className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <Button size="lg" className="w-full sm:w-auto min-w-[200px] sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-4 sm:py-5 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                      <Facebook className="w-5 h-5" />
                       {t('landing.hero.cta1')}
-                      <span className="ltr:block rtl:hidden"><ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" /></span>
-                      <span className="rtl:block ltr:hidden"><ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /></span>
                     </Button>
                   </Link>
                   <Link href="/pricing" className="w-full sm:w-auto">
-                    <Button variant="secondary" size="lg" className="w-full sm:w-auto px-6 sm:px-10 py-4 sm:py-8 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 hover:bg-white transition-all">
+                    <Button variant="secondary" size="lg" className="w-full sm:w-auto min-w-[200px] sm:min-w-[240px] justify-center px-6 sm:px-8 py-4 sm:py-5 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
                       {t('landing.hero.cta2')}
                     </Button>
                   </Link>
                 </div>
 
-                {/* Trusted By / Platform Icons - Smaller on mobile */}
-                <div className="flex items-center justify-center lg:justify-start gap-4 sm:gap-8 text-surface-400 opacity-60 grayscale hover:grayscale-0 transition-all animate-slide-up animation-delay-300">
-                  <div className="flex items-center gap-2 font-bold text-sm sm:text-lg">
-                    <Facebook className="w-5 h-5 sm:w-6 sm:h-6" />
+                {/* Platform Icons */}
+                <div className="flex items-center justify-center lg:justify-start gap-3 sm:gap-6 animate-slide-up animation-delay-300">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#1877F2]/10 text-[#1877F2] font-bold text-sm sm:text-base hover:bg-[#1877F2] hover:text-white transition-all cursor-default">
+                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{t('landing.platforms.facebook')}</span>
                   </div>
-                  <div className="w-px h-4 sm:h-6 bg-surface-200"></div>
-                  <div className="flex items-center gap-2 font-bold text-sm sm:text-lg">
-                    <Instagram className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 font-bold text-sm sm:text-base hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white transition-all cursor-default">
+                    <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{t('landing.platforms.instagram')}</span>
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
         </section>

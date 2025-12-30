@@ -230,8 +230,36 @@
   100% { transform: translateY(0px); }
 }
 
+@keyframes bounce-slow {
+  0%, 100% { 
+    transform: translateY(0) rotate(var(--tw-rotate, 0deg)); 
+  }
+  50% { 
+    transform: translateY(-12px) rotate(var(--tw-rotate, 0deg)); 
+  }
+}
+
+@keyframes slide-up {
+  0% { 
+    opacity: 0;
+    transform: translateY(20px); 
+  }
+  100% { 
+    opacity: 1;
+    transform: translateY(0); 
+  }
+}
+
 .animate-float {
   animation: float 6s ease-in-out infinite;
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 3s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.6s ease-out forwards;
 }
 
 .stagger-1 { animation-delay: 0.1s; }
@@ -239,6 +267,12 @@
 .stagger-3 { animation-delay: 0.3s; }
 .stagger-4 { animation-delay: 0.4s; }
 .stagger-5 { animation-delay: 0.5s; }
+
+.animation-delay-100 { animation-delay: 0.1s; }
+.animation-delay-200 { animation-delay: 0.2s; }
+.animation-delay-300 { animation-delay: 0.3s; }
+.animation-delay-500 { animation-delay: 0.5s; }
+.animation-delay-1000 { animation-delay: 1s; }
 
 /* Safe area insets for mobile devices (notches, gesture bars) */
 .pb-safe {
