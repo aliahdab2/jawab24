@@ -13,11 +13,9 @@ import {
   Lock,
   MessageSquare,
   Bot,
-  Globe,
   Star,
   Smartphone,
-  CheckCircle,
-  HelpCircle
+  CheckCircle
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
@@ -194,28 +192,7 @@ export default function LoginPage() {
                   )}
                 </Button>
 
-                <div className="flex items-center gap-4 py-4">
-                  <div className="flex-1 h-px bg-surface-100"></div>
-                  <span className="text-surface-400 font-bold text-xs uppercase tracking-widest">{t('auth.or')}</span>
-                  <div className="flex-1 h-px bg-surface-100"></div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 flex flex-col items-center justify-center text-center group hover:bg-white hover:border-brand-200 transition-all cursor-pointer">
-                    <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <HelpCircle className="w-5 h-5 text-surface-400 group-hover:text-brand-600" />
-                    </div>
-                    <span className="text-xs font-bold text-surface-600 uppercase tracking-tight">{t('auth.helpCenter')}</span>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 flex flex-col items-center justify-center text-center group hover:bg-white hover:border-brand-200 transition-all cursor-pointer">
-                    <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <Globe className="w-5 h-5 text-surface-400 group-hover:text-brand-600" />
-                    </div>
-                    <span className="text-xs font-bold text-surface-600 uppercase tracking-tight">{t('auth.ourBlog')}</span>
-                  </div>
-                </div>
-
-                <div className="p-6 rounded-3xl bg-brand-50/50 border border-brand-100 mt-12">
+                <div className="p-6 rounded-3xl bg-brand-50/50 border border-brand-100 mt-8">
                   <div className="flex gap-4">
                     <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
                       <Bot className="w-5 h-5 text-brand-600" />
