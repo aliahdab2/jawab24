@@ -14,9 +14,20 @@
   <url>
     <loc>https://jawab24.com/landing</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/landing"/>
-    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/landing"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/ar"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/landing"/>
-    <lastmod>2024-12-29</lastmod>
+    <lastmod>2024-12-30</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  
+  <!-- Arabic Landing Page -->
+  <url>
+    <loc>https://jawab24.com/ar</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/ar"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/landing"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/"/>
+    <lastmod>2024-12-30</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
