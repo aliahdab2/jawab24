@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
-import { useLanguage } from '@/i18n';
+import { useTranslation } from '@/i18n';
 
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, _hasHydrated } = useAuthStore();
-  const { language } = useLanguage();
+  const { t, language } = useTranslation();
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
 
