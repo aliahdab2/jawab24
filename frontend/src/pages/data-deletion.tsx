@@ -53,7 +53,7 @@ export default function DataDeletion() {
                 You can also request data deletion by contacting us directly:
               </p>
               <p className="text-gray-700">
-                <strong>Email:</strong> <a href="mailto:aliahdab@gmail.com" className="text-blue-600 hover:underline">aliahdab@gmail.com</a>
+                <strong>Email:</strong> <a href="mailto:support@jawab24.com" className="text-blue-600 hover:underline">support@jawab24.com</a>
               </p>
               <p className="text-gray-700 mt-4">
                 Please include your Facebook account email or Page name in your request. 
