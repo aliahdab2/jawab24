@@ -247,14 +247,7 @@ export default function LoginPage() {
             <div className="text-xs font-bold text-surface-400 uppercase tracking-widest">
               © {new Date().getFullYear()} Jawab24
             </div>
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">{t('auth.systemsActive')}</span>
-              </div>
-              <div className="w-px h-4 bg-surface-100"></div>
-              <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">v2.4.0</span>
-            </div>
+            <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">v2.4.0</span>
           </div>
         </div>
       </div>
