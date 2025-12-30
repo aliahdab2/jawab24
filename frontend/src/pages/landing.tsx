@@ -227,9 +227,9 @@ export default function LandingPage() {
                 </div>
 
                 {/* Heading - Responsive sizes */}
-                <h1 className="text-3xl sm:text-5xl lg:text-7xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-[1.15] tracking-tight animate-slide-up">
+                <h1 className="text-3xl sm:text-5xl lg:text-7xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-snug sm:leading-[1.15] tracking-tight animate-slide-up">
                   {isRTL ? 'حوّل صفحتك إلى' : 'Turn Your Page Into a'}
-                  <span className="block bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-1 sm:mt-2">
+                  <span className="block bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-2 sm:mt-2">
                     {isRTL ? 'آلة رد ذكية 24/7' : 'Smart 24/7 Sales Machine'}
                   </span>
                 </h1>
@@ -326,9 +326,9 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col lg:flex-row items-center gap-8 sm:gap-12 lg:gap-20">
               <div className="lg:w-1/2">
-                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-tight text-center lg:text-start">
+                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-normal sm:leading-tight text-center lg:text-start">
                   {isRTL ? 'ابدأ في أقل من' : 'Get Started in Under'}
-                  <span className="block text-brand-600">{isRTL ? 'دقيقتين فقط' : '2 Minutes'}</span>
+                  <span className="block text-brand-600 mt-1 sm:mt-0">{isRTL ? 'دقيقتين فقط' : '2 Minutes'}</span>
                 </h2>
                 <div className="space-y-4 sm:space-y-6 lg:space-y-10">
                   {howItWorks.map((item, i) => (
