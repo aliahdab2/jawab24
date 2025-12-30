@@ -1,11 +1,18 @@
 import '@/styles/globals.css';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useUIStore } from '@/lib/store';
+import type { Language } from '@/i18n';
 
 export default function App({ Component, pageProps }: AppProps) {
+  const router = useRouter();
+  const { locale } = router;
+  const setLanguage = useUIStore((state) => state.setLanguage);
+  
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -14,6 +21,16 @@ export default function App({ Component, pageProps }: AppProps) {
       },
     },
   }));
+
+  // Sync Next.js locale with our language store
+  useEffect(() => {
+    if (locale && (locale === 'ar' || locale === 'en')) {
+      setLanguage(locale as Language);
+      // Update document direction and language
+      document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
+      document.documentElement.lang = locale;
+    }
+  }, [locale, setLanguage]);
 
   return (
     <QueryClientProvider client={queryClient}>

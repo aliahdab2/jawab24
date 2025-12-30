@@ -14,9 +14,9 @@ export default function Document() {
         <meta name="keywords" content="jawab, jawab24, jawab 24, jawab facebook, jawab instagram, jawab auto reply, jawab bot, جواب, جواب 24, جواب24, جواب٢٤, جواب فيسبوك, جواب انستغرام, جواب بوت, جواب رد تلقائي, رد تلقائي, ردود تلقائية, رد تلقائي فيسبوك, رد تلقائي انستغرام, بوت فيسبوك عربي, بوت انستغرام, ردود ذكية, رد آلي, الرد الذكي, رد على التعليقات, رد على الرسائل, ذكاء اصطناعي عربي, Facebook auto reply, Instagram auto reply, AI chatbot Arabic" />
         <meta name="author" content="Jawab24 جواب24" />
         
-        {/* Hreflang Tags for Language Targeting */}
-        <link rel="alternate" hrefLang="en" href="https://jawab24.com/" />
+        {/* Hreflang Tags for Language Targeting - Next.js i18n handles per-page */}
         <link rel="alternate" hrefLang="ar" href="https://jawab24.com/" />
+        <link rel="alternate" hrefLang="en" href="https://jawab24.com/en" />
         <link rel="alternate" hrefLang="x-default" href="https://jawab24.com/" />
         
         {/* Open Graph / Facebook */}

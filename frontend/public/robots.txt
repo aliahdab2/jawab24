@@ -1,13 +1,23 @@
 # Jawab24 جواب24 robots.txt
 User-agent: *
+
+# Allow public pages (all locales)
 Allow: /
 Allow: /landing
-Allow: /ar
 Allow: /pricing
 Allow: /login
 Allow: /privacy
 Allow: /terms
 Allow: /data-deletion
+
+# Allow English locale pages
+Allow: /en
+Allow: /en/landing
+Allow: /en/pricing
+Allow: /en/login
+Allow: /en/privacy
+Allow: /en/terms
+Allow: /en/data-deletion
 
 # Disallow dashboard pages (require auth)
 Disallow: /dashboard
@@ -18,7 +28,14 @@ Disallow: /templates
 Disallow: /rules
 Disallow: /settings
 Disallow: /auth/
+Disallow: /en/dashboard
+Disallow: /en/pages
+Disallow: /en/comments
+Disallow: /en/messages
+Disallow: /en/templates
+Disallow: /en/rules
+Disallow: /en/settings
+Disallow: /en/auth/
 
 # Sitemap
 Sitemap: https://jawab24.com/sitemap.xml
-
