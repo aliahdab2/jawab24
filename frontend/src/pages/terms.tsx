@@ -52,8 +52,11 @@ export default function TermsOfService() {
   return (
     <>
       <Head>
-        <title>{t('terms.title')} | Jawab24</title>
+        <title>{isRTL ? 'الشروط والأحكام - جواب24' : 'Terms of Service - Jawab24'}</title>
         <meta name="description" content={t('terms.metaDescription')} />
+        <link rel="canonical" href="https://jawab24.com/terms" />
+        <meta property="og:title" content={isRTL ? 'الشروط والأحكام - جواب24' : 'Terms of Service - Jawab24'} />
+        <meta property="og:url" content="https://jawab24.com/terms" />
       </Head>
       
       <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-900 text-white">

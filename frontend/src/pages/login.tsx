@@ -80,8 +80,23 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>{isRTL ? 'تسجيل الدخول - Jawab24' : 'Login - Jawab24'}</title>
+        <title>{isRTL ? 'تسجيل الدخول - جواب24 | ابدأ الآن مجاناً' : 'Login - Jawab24 | Start Free Today'}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta name="description" content={isRTL
+          ? 'سجل دخولك إلى جواب24 عبر فيسبوك وابدأ بالرد التلقائي الذكي على تعليقاتك ورسائلك. إعداد سريع في دقيقتين!'
+          : 'Login to Jawab24 with Facebook and start smart auto-replies on your comments and messages. Quick 2-minute setup!'
+        } />
+        <meta name="keywords" content={isRTL
+          ? 'تسجيل دخول جواب24, جواب فيسبوك, ربط صفحة فيسبوك'
+          : 'jawab24 login, jawab facebook, connect facebook page'
+        } />
+        <link rel="canonical" href="https://jawab24.com/login" />
+        <meta property="og:title" content={isRTL ? 'تسجيل الدخول - جواب24' : 'Login - Jawab24'} />
+        <meta property="og:description" content={isRTL
+          ? 'ابدأ بالرد التلقائي الذكي مع جواب24'
+          : 'Start smart auto-replies with Jawab24'
+        } />
+        <meta property="og:url" content="https://jawab24.com/login" />
       </Head>
 
       <div className="min-h-screen bg-white flex flex-col lg:flex-row" dir={isRTL ? 'rtl' : 'ltr'}>

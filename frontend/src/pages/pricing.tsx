@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Head from 'next/head';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSpinner } from '@/components/ui';
 import { plansApi, subscriptionApi } from '@/lib/api';
@@ -294,11 +295,36 @@ export default function PricingPage() {
   const activePlans = plans.filter(p => p.slug !== 'free' || p.isActive !== false);
   
   return (
-    <DashboardLayout title={t('pricing.title')} isPublic={true}>
-      {/* Simple Header */}
-      <div className="text-center mb-10 md:mb-12">
-        <h1 className="text-2xl md:text-3xl font-display font-bold text-surface-900 mb-3">
-          {t('pricing.title')}
+    <>
+      <Head>
+        <title>{language === 'ar' 
+          ? 'الأسعار - جواب24 | باقات الرد التلقائي الذكي'
+          : 'Pricing - Jawab24 | Smart Auto-Reply Plans'
+        }</title>
+        <meta name="description" content={language === 'ar'
+          ? 'اختر باقتك المناسبة من جواب24. باقات مرنة للرد التلقائي الذكي على فيسبوك وإنستغرام تبدأ من مجاني. جرب 30 يوم مجاناً!'
+          : 'Choose your Jawab24 plan. Flexible AI auto-reply packages for Facebook & Instagram starting from free. Try 30 days free!'
+        } />
+        <meta name="keywords" content={language === 'ar'
+          ? 'أسعار جواب24, باقات جواب, جواب مجاني, رد تلقائي مجاني, أسعار الرد التلقائي'
+          : 'jawab24 pricing, jawab plans, jawab free, auto reply pricing, chatbot pricing'
+        } />
+        <link rel="canonical" href="https://jawab24.com/pricing" />
+        <meta property="og:title" content={language === 'ar'
+          ? 'الأسعار - جواب24 | باقات الرد التلقائي'
+          : 'Pricing - Jawab24 | Auto-Reply Plans'
+        } />
+        <meta property="og:description" content={language === 'ar'
+          ? 'باقات مرنة للرد التلقائي الذكي. جرب مجاناً!'
+          : 'Flexible AI auto-reply packages. Try free!'
+        } />
+        <meta property="og:url" content="https://jawab24.com/pricing" />
+      </Head>
+      <DashboardLayout title={t('pricing.title')} isPublic={true}>
+        {/* Simple Header */}
+        <div className="text-center mb-10 md:mb-12">
+          <h1 className="text-2xl md:text-3xl font-display font-bold text-surface-900 mb-3">
+            {t('pricing.title')}
         </h1>
         <p className="text-surface-500 text-sm max-w-md mx-auto">
           {language === 'ar' ? 'اختر الباقة المناسبة لعملك' : 'Choose the right plan for your business'}
@@ -350,7 +376,8 @@ export default function PricingPage() {
       <div className="text-center py-6 text-sm text-surface-400">
         {language === 'ar' ? 'جميع الباقات تشمل دعم فيسبوك وإنستغرام' : 'All plans include Facebook & Instagram support'}
       </div>
-    </DashboardLayout>
+      </DashboardLayout>
+    </>
   );
 }
 
