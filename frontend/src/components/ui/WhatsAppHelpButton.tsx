@@ -3,7 +3,7 @@ import { MessageCircle, X } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 
 // Configure your WhatsApp number here (with country code, no + or spaces)
-const WHATSAPP_NUMBER = '46761234567'; // Replace with your actual number
+const WHATSAPP_NUMBER = '963959858266'; // Syria +963
 const DEFAULT_MESSAGE_AR = 'مرحباً، أحتاج مساعدة في استخدام Jawab24';
 const DEFAULT_MESSAGE_EN = 'Hello, I need help using Jawab24';
 
