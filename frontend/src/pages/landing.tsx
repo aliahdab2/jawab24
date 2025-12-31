@@ -25,7 +25,8 @@ import {
   Instagram,
   Crown,
   Smartphone,
-  CheckCircle2
+  CheckCircle2,
+  Mail
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
@@ -564,11 +565,19 @@ export default function LandingPage() {
                   {t('landing.footer.description')}
                 </p>
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <a href="#" className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group">
-                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                  <a 
+                    href="https://wa.me/963959858266?text=مرحباً، أريد الاستفسار عن خدمة Jawab24" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
+                  >
+                    <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hover:scale-110 transition-all" />
                   </a>
-                  <a href="#" className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group">
-                    <Instagram className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                  <a 
+                    href="mailto:support@jawab24.com" 
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group"
+                  >
+                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
                   </a>
                 </div>
               </div>
