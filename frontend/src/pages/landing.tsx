@@ -25,7 +25,8 @@ import {
   Instagram,
   Crown,
   Smartphone,
-  CheckCircle2
+  CheckCircle2,
+  Mail
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
@@ -118,7 +119,6 @@ export default function LandingPage() {
   const statsList = [
     { value: '24/7', label: t('landing.stats.available') },
     { value: '<1s', label: t('landing.stats.speed') },
-    { value: '99%', label: t('landing.stats.accuracy') },
   ];
 
   if (!mounted) {
@@ -150,7 +150,7 @@ export default function LandingPage() {
 
               {/* Actions */}
               <div className="flex items-center gap-1 sm:gap-4">
-                <Link href="#pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
+                <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
                   {t('landing.nav.pricing')}
                 </Link>
                 <button
@@ -174,67 +174,142 @@ export default function LandingPage() {
           </div>
         </nav>
 
-        {/* Hero Section - Optimized for Mobile */}
-        <section className="relative pt-24 sm:pt-32 lg:pt-40 pb-12 sm:pb-16 lg:pb-24 overflow-hidden">
-          {/* Animated Background Elements - Smaller on mobile */}
-          <div className="absolute top-0 left-1/4 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-brand-200/30 rounded-full blur-[80px] sm:blur-[120px] animate-pulse" />
-          <div className="absolute bottom-0 right-1/4 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] bg-violet-200/30 rounded-full blur-[80px] sm:blur-[120px] animate-pulse delay-1000" />
+        {/* Hero Section - Optimized for Mobile with Illustration */}
+        <section className="relative pt-24 sm:pt-32 lg:pt-40 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
+          {/* Animated Background Elements */}
+          <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
+          <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-16">
-              <div className="text-center lg:text-start max-w-4xl mx-auto">
-                {/* Badge - Smaller on mobile */}
-                <div className="inline-flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-full bg-brand-50 border border-brand-100 mb-6 sm:mb-10 animate-slide-up">
-                  <div className="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></div>
-                  <span className="text-xs sm:text-sm font-bold text-brand-700 uppercase tracking-widest">
-                    {t('landing.hero.badge')}
-                  </span>
-                </div>
+            <div className="grid grid-cols-5 sm:grid-cols-2 items-center gap-4 sm:gap-8 lg:gap-12">
+              {/* Hero Illustration - Phone Mockup with Floating Icons */}
+              <div className="relative animate-slide-up col-span-2 sm:col-span-1 order-1 sm:order-2">
+                <div className="relative mx-auto max-w-[140px] sm:max-w-[200px] lg:max-w-[260px]">
+                  {/* Glowing Background - More Vibrant like your image */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
+                  
+                  {/* Phone Mockup - Titanium/Silver Frame instead of Black */}
+                  <div className="relative bg-[#E5E7EB] rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5 shadow-2xl shadow-brand-900/20 border-[6px] border-[#F3F4F6]">
+                    {/* Notch - Smaller and subtle */}
+                    <div className="absolute top-4 sm:top-5 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 bg-[#1F2937] rounded-full z-10"></div>
+                    
+                    {/* Screen Content - Cleaner, more integrated look */}
+                    <div className="bg-gradient-to-br from-white to-brand-50/30 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative border border-white/50">
+                      {/* App Interface */}
+                      <div className="p-3 sm:p-4 h-full flex flex-col">
+                        {/* Status Bar */}
+                        <div className="flex items-center justify-between mb-4 pt-4">
+                          <div className="flex items-center gap-0.5">
+                            <div className="w-1.5 h-1.5 bg-brand-500 rounded-full" />
+                            <div className="w-1.5 h-1.5 bg-brand-300 rounded-full" />
+                          </div>
+                          <div className="text-[8px] font-bold text-brand-900/30">9:41</div>
+                          <div className="w-4 h-1.5 bg-brand-500/10 rounded-sm" />
+                        </div>
+                        
+                        {/* Robot Avatar - Subtler Colors with Pulse Animation */}
+                        <div className="flex flex-col items-center justify-center mb-6 mt-2">
+                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-2 animate-float-pulse border border-brand-50">
+                            <Bot className="w-8 h-8 sm:w-10 sm:h-10 text-brand-500" />
+                          </div>
+                          <span className="font-display font-bold text-[10px] sm:text-xs text-brand-600">jawab24.com</span>
+                        </div>
+                        
+                        {/* Chat Bubbles - Brand Colors */}
+                        <div className="space-y-3">
+                          <div className="flex items-end gap-1.5 rtl:flex-row-reverse animate-slide-up">
+                            <div className="w-5 h-5 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <Facebook className="w-3 h-3 text-surface-600" />
+                            </div>
+                            <div className="bg-white rounded-2xl rounded-bl-none rtl:rounded-bl-2xl rtl:rounded-br-none px-3 py-2 shadow-sm border border-brand-50 max-w-[85%]">
+                              <p className="text-[8px] sm:text-[10px] text-surface-700 font-medium">{t('landing.hero.chatQuery')}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-end gap-1.5 justify-end rtl:flex-row-reverse rtl:justify-start animate-slide-up animation-delay-500">
+                            <div className="bg-brand-500 rounded-2xl rounded-br-none rtl:rounded-br-2xl rtl:rounded-bl-none px-3 py-2 shadow-lg shadow-brand-500/20 max-w-[85%]">
+                              <p className="text-[8px] sm:text-[10px] text-white font-bold leading-tight">{t('landing.hero.chatResponse')}</p>
+                            </div>
+                            <div className="w-5 h-5 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <Zap className="w-3 h-3 text-brand-500" />
+                            </div>
+                          </div>
+                        </div>
 
-                {/* Heading - Responsive sizes */}
-                <h1 className="text-3xl sm:text-5xl lg:text-7xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-snug sm:leading-[1.15] tracking-tight animate-slide-up">
+                        {/* Speed Indicator */}
+                        <div className="mt-auto pb-4 flex items-center justify-center gap-1 opacity-40">
+                           <div className="h-1 w-8 bg-brand-100 rounded-full overflow-hidden">
+                             <div className="h-full w-full bg-brand-400 animate-[loading_1.5s_infinite]" />
+                           </div>
+                           <span className="text-[7px] font-bold text-brand-700 uppercase">{t('landing.stats.speed')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Floating Elements - Each with unique animation */}
+                  {/* Facebook - Original Blue Color */}
+                  <div className="absolute -left-4 sm:-left-8 top-1/4 animate-float-rotate">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-blue-500/20 border-b-2 border-blue-100">
+                      <div className="w-full h-full rounded-full bg-[#1877F2] flex items-center justify-center">
+                        <Facebook className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Instagram - Original Gradient Colors */}
+                  <div className="absolute -right-4 sm:-right-8 top-1/3 animate-float-orbit">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-pink-500/20 border-b-2 border-pink-100">
+                      <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
+                        <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Text Content */}
+              <div className="text-start col-span-3 sm:col-span-1 order-2 sm:order-1">
+                {/* Heading */}
+                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-snug sm:leading-[1.15] tracking-tight animate-slide-up">
                   {t('landing.hero.title1')}
-                  <span className="block bg-gradient-to-r from-brand-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-2 sm:mt-2">
+                  <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-2">
                     {t('landing.hero.title2')}
                   </span>
                 </h1>
 
-                {/* Description - Compact on mobile */}
-                <p className="text-base sm:text-lg lg:text-xl text-surface-600 mb-6 sm:mb-12 max-w-2xl mx-auto lg:mx-0 leading-relaxed animate-slide-up animation-delay-100">
+                {/* Description */}
+                <p className="text-base sm:text-lg lg:text-xl text-surface-600 mb-6 sm:mb-12 max-w-xl mx-auto lg:mx-0 leading-relaxed animate-slide-up animation-delay-100">
                   {t('landing.hero.description')}
                 </p>
 
-                {/* CTA Buttons - Compact on mobile */}
-                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-6 mb-6 sm:mb-12 animate-slide-up animation-delay-200">
+                {/* CTA Buttons */}
+                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-6 sm:mb-12 animate-slide-up animation-delay-200">
                   <Link href="/login" className="w-full sm:w-auto">
-                    <Button size="lg" className="w-full sm:w-auto shadow-2xl shadow-brand-500/40 px-6 sm:px-10 py-4 sm:py-8 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
-                      <Facebook className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <Button size="lg" className="w-full sm:w-auto min-w-[200px] sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-4 sm:py-5 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                      <Facebook className="w-5 h-5" />
                       {t('landing.hero.cta1')}
-                      <span className="ltr:block rtl:hidden"><ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" /></span>
-                      <span className="rtl:block ltr:hidden"><ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /></span>
                     </Button>
                   </Link>
                   <Link href="/pricing" className="w-full sm:w-auto">
-                    <Button variant="secondary" size="lg" className="w-full sm:w-auto px-6 sm:px-10 py-4 sm:py-8 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 hover:bg-white transition-all">
+                    <Button variant="secondary" size="lg" className="w-full sm:w-auto min-w-[200px] sm:min-w-[240px] justify-center px-6 sm:px-8 py-4 sm:py-5 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
                       {t('landing.hero.cta2')}
                     </Button>
                   </Link>
                 </div>
 
-                {/* Trusted By / Platform Icons - Smaller on mobile */}
-                <div className="flex items-center justify-center lg:justify-start gap-4 sm:gap-8 text-surface-400 opacity-60 grayscale hover:grayscale-0 transition-all animate-slide-up animation-delay-300">
-                  <div className="flex items-center gap-2 font-bold text-sm sm:text-lg">
-                    <Facebook className="w-5 h-5 sm:w-6 sm:h-6" />
+                {/* Platform Icons */}
+                <div className="flex items-center justify-center lg:justify-start gap-3 sm:gap-6 animate-slide-up animation-delay-300">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#1877F2]/10 text-[#1877F2] font-bold text-sm sm:text-base hover:bg-[#1877F2] hover:text-white transition-all cursor-default">
+                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{t('landing.platforms.facebook')}</span>
                   </div>
-                  <div className="w-px h-4 sm:h-6 bg-surface-200"></div>
-                  <div className="flex items-center gap-2 font-bold text-sm sm:text-lg">
-                    <Instagram className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 font-bold text-sm sm:text-base hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white transition-all cursor-default">
+                    <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{t('landing.platforms.instagram')}</span>
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
         </section>
@@ -490,11 +565,19 @@ export default function LandingPage() {
                   {t('landing.footer.description')}
                 </p>
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <a href="#" className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group">
-                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                  <a 
+                    href="https://wa.me/963959858266?text=مرحباً، أريد الاستفسار عن خدمة Jawab24" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
+                  >
+                    <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hover:scale-110 transition-all" />
                   </a>
-                  <a href="#" className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group">
-                    <Instagram className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                  <a 
+                    href="mailto:support@jawab24.com" 
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group"
+                  >
+                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
                   </a>
                 </div>
               </div>
@@ -533,9 +616,9 @@ export default function LandingPage() {
                 © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
               </div>
               <div className="flex items-center gap-2 text-surface-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest">
-                <span>MADE WITH</span>
-                <Sparkles className="w-3 h-3 text-brand-500" />
-                <span>IN SYRIA</span>
+                <span>{t('landing.footer.madeWith')}</span>
+                <span className="text-red-500 text-sm">❤️</span>
+                <span>{t('landing.footer.inSyria')}</span>
               </div>
             </div>
           </div>
@@ -544,3 +627,4 @@ export default function LandingPage() {
     </>
   );
 }
+
