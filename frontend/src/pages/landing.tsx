@@ -118,7 +118,6 @@ export default function LandingPage() {
   const statsList = [
     { value: '24/7', label: t('landing.stats.available') },
     { value: '<1s', label: t('landing.stats.speed') },
-    { value: '99%', label: t('landing.stats.accuracy') },
   ];
 
   if (!mounted) {
@@ -185,100 +184,81 @@ export default function LandingPage() {
             <div className="grid grid-cols-5 sm:grid-cols-2 items-center gap-4 sm:gap-8 lg:gap-12">
               {/* Hero Illustration - Phone Mockup with Floating Icons */}
               <div className="relative animate-slide-up col-span-2 sm:col-span-1 order-1 sm:order-2">
-                <div className="relative mx-auto max-w-[120px] sm:max-w-[180px] lg:max-w-[240px]">
-                  {/* Glowing Background */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-brand-400/20 via-violet-400/20 to-pink-400/20 rounded-[50px] blur-3xl scale-110" />
+                <div className="relative mx-auto max-w-[140px] sm:max-w-[200px] lg:max-w-[260px]">
+                  {/* Glowing Background - More Vibrant like your image */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
                   
-                  {/* Phone Mockup */}
-                  <div className="relative bg-surface-900 rounded-[36px] sm:rounded-[42px] p-2.5 sm:p-3 shadow-2xl shadow-surface-900/30 border-4 border-surface-800">
-                    <div className="absolute top-5 sm:top-6 left-1/2 -translate-x-1/2 w-16 sm:w-20 h-4 sm:h-5 bg-surface-900 rounded-full z-10"></div>
-                    <div className="bg-gradient-to-br from-brand-50 to-violet-50 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/16] relative">
+                  {/* Phone Mockup - Titanium/Silver Frame instead of Black */}
+                  <div className="relative bg-[#E5E7EB] rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5 shadow-2xl shadow-brand-900/20 border-[6px] border-[#F3F4F6]">
+                    {/* Notch - Smaller and subtle */}
+                    <div className="absolute top-4 sm:top-5 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 bg-[#1F2937] rounded-full z-10"></div>
+                    
+                    {/* Screen Content - Cleaner, more integrated look */}
+                    <div className="bg-gradient-to-br from-white to-brand-50/30 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative border border-white/50">
                       {/* App Interface */}
-                      <div className="p-3 sm:p-4">
+                      <div className="p-3 sm:p-4 h-full flex flex-col">
                         {/* Status Bar */}
-                        <div className="flex items-center justify-between mb-3 sm:mb-4 pt-3 sm:pt-4">
+                        <div className="flex items-center justify-between mb-4 pt-4">
                           <div className="flex items-center gap-0.5">
-                            <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-brand-500 rounded-full" />
-                            <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-brand-400 rounded-full" />
+                            <div className="w-1.5 h-1.5 bg-brand-500 rounded-full" />
+                            <div className="w-1.5 h-1.5 bg-brand-300 rounded-full" />
                           </div>
-                          <div className="text-[9px] sm:text-[10px] font-bold text-surface-500">9:41</div>
-                          <div className="flex items-center gap-0.5">
-                            <div className="w-3.5 sm:w-4 h-1.5 bg-brand-500 rounded-sm" />
-                          </div>
+                          <div className="text-[8px] font-bold text-brand-900/30">9:41</div>
+                          <div className="w-4 h-1.5 bg-brand-500/10 rounded-sm" />
                         </div>
                         
-                        {/* Logo Area */}
-                        <div className="flex items-center justify-center gap-1.5 mb-3 sm:mb-4">
-                          <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-brand-500 flex items-center justify-center shadow-lg">
-                            <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+                        {/* Robot Avatar - Subtler Colors */}
+                        <div className="flex flex-col items-center justify-center mb-6 mt-2">
+                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-2 transform rotate-3 animate-float border border-brand-50">
+                            <Bot className="w-8 h-8 sm:w-10 sm:h-10 text-brand-500" />
                           </div>
-                          <span className="font-display font-bold text-sm sm:text-base text-surface-900">Jawab24</span>
+                          <span className="font-display font-bold text-[10px] sm:text-xs text-brand-600">jawab24.com</span>
                         </div>
                         
-                        {/* Chat Preview */}
-                        <div className="space-y-1.5 sm:space-y-2">
-                          <div className="flex items-end gap-1.5 rtl:flex-row-reverse">
-                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#1877F2] flex items-center justify-center flex-shrink-0">
-                              <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                        {/* Chat Bubbles - Brand Colors */}
+                        <div className="space-y-3">
+                          <div className="flex items-end gap-1.5 rtl:flex-row-reverse animate-slide-up">
+                            <div className="w-5 h-5 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <Facebook className="w-3 h-3 text-surface-600" />
                             </div>
-                            <div className="bg-white rounded-xl rounded-bl-none rtl:rounded-bl-xl rtl:rounded-br-none px-2.5 sm:px-3 py-1.5 shadow-sm max-w-[80%]">
-                              <p className="text-[9px] sm:text-[10px] text-surface-600">ما هو سعر المنتج؟ 🤔</p>
-                            </div>
-                          </div>
-                          <div className="flex items-end gap-1.5 justify-end rtl:flex-row-reverse rtl:justify-start">
-                            <div className="bg-brand-500 rounded-xl rounded-br-none rtl:rounded-br-xl rtl:rounded-bl-none px-2.5 sm:px-3 py-1.5 shadow-sm max-w-[80%]">
-                              <p className="text-[9px] sm:text-[10px] text-white">مرحباً! السعر 99$ فقط 🎉</p>
-                            </div>
-                            <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
-                              <Bot className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-brand-600" />
+                            <div className="bg-white rounded-2xl rounded-bl-none rtl:rounded-bl-2xl rtl:rounded-br-none px-3 py-2 shadow-sm border border-brand-50 max-w-[85%]">
+                              <p className="text-[8px] sm:text-[10px] text-surface-700 font-medium">{t('landing.hero.chatQuery')}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5 text-[7px] sm:text-[8px] text-brand-600 font-medium justify-end rtl:justify-start">
-                            <Zap className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
-                            <span>{t('landing.stats.speed')}</span>
+                          <div className="flex items-end gap-1.5 justify-end rtl:flex-row-reverse rtl:justify-start animate-slide-up animation-delay-500">
+                            <div className="bg-brand-500 rounded-2xl rounded-br-none rtl:rounded-br-2xl rtl:rounded-bl-none px-3 py-2 shadow-lg shadow-brand-500/20 max-w-[85%]">
+                              <p className="text-[8px] sm:text-[10px] text-white font-bold leading-tight">{t('landing.hero.chatResponse')}</p>
+                            </div>
+                            <div className="w-5 h-5 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <Zap className="w-3 h-3 text-brand-500" />
+                            </div>
                           </div>
+                        </div>
+
+                        {/* Speed Indicator */}
+                        <div className="mt-auto pb-4 flex items-center justify-center gap-1 opacity-40">
+                           <div className="h-1 w-8 bg-brand-100 rounded-full overflow-hidden">
+                             <div className="h-full w-full bg-brand-400 animate-[loading_1.5s_infinite]" />
+                           </div>
+                           <span className="text-[7px] font-bold text-brand-700 uppercase">{t('landing.stats.speed')}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                   
-                  {/* Floating Facebook Icon */}
-                  <div className="absolute -left-3 sm:-left-6 top-1/4 animate-bounce-slow">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1877F2] flex items-center justify-center shadow-xl shadow-[#1877F2]/30 transform -rotate-12 hover:rotate-0 transition-transform">
-                      <Facebook className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                    </div>
-                  </div>
-                  
-                  {/* Floating Instagram Icon */}
-                  <div className="absolute -right-3 sm:-right-6 top-1/3 animate-bounce-slow animation-delay-500">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center shadow-xl shadow-pink-500/30 transform rotate-12 hover:rotate-0 transition-transform">
-                      <Instagram className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                    </div>
-                  </div>
-                  
-                  {/* Floating Messenger Bubble */}
-                  <div className="absolute left-1/4 -bottom-3 sm:-bottom-6 animate-bounce-slow animation-delay-1000">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-xl shadow-blue-500/30 transform rotate-6 hover:rotate-0 transition-transform">
-                      <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                    </div>
-                  </div>
-                  
-                  {/* Floating Sparkle */}
-                  <div className="absolute -right-1 sm:-right-3 bottom-1/4 animate-pulse">
-                    <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-amber-400 flex items-center justify-center shadow-lg shadow-amber-400/40">
-                      <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-                    </div>
-                  </div>
-                  
-                  {/* Stats Floating Card */}
-                  <div className="absolute -right-2 sm:-right-8 lg:-right-12 top-6 sm:top-10 bg-white rounded-lg sm:rounded-xl p-1.5 sm:p-2 shadow-xl border border-surface-100 animate-slide-up">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-md bg-green-100 flex items-center justify-center">
-                        <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-green-600" />
+                  {/* Floating Elements - Simplified and Color-coordinated */}
+                  <div className="absolute -left-4 sm:-left-8 top-1/4 animate-float stagger-1">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-brand-500/10 border-b-2 border-brand-100 transform -rotate-12">
+                      <div className="w-full h-full rounded-full bg-brand-500 flex items-center justify-center">
+                        <Facebook className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                       </div>
-                      <div>
-                        <div className="text-[9px] sm:text-[10px] font-bold text-surface-900">{t('landing.stats.accuracy')}</div>
-                        <div className="text-[7px] sm:text-[8px] text-surface-500">{t('landing.stats.accuracyLabel')}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="absolute -right-4 sm:-right-8 top-1/3 animate-float stagger-2">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-brand-500/10 border-b-2 border-brand-100 transform rotate-12">
+                      <div className="w-full h-full rounded-full bg-brand-600 flex items-center justify-center">
+                        <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                       </div>
                     </div>
                   </div>
@@ -636,3 +616,4 @@ export default function LandingPage() {
     </>
   );
 }
+
