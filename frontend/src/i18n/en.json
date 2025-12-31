@@ -532,6 +532,8 @@
   "landing.footer.termsOfService": "Terms of Service",
   "landing.footer.privacyPolicy": "Privacy Policy",
   "landing.footer.copyright": "All rights reserved.",
+  "landing.footer.madeWith": "MADE WITH",
+  "landing.footer.inSyria": "IN SYRIA",
   "landing.footer.support": "Support",
   "landing.footer.responseTime": "Response within 24h"
 }

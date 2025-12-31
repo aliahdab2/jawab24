@@ -607,9 +607,9 @@ export default function LandingPage() {
                 © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
               </div>
               <div className="flex items-center gap-2 text-surface-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest">
-                <span>MADE WITH</span>
-                <Sparkles className="w-3 h-3 text-brand-500" />
-                <span>IN SYRIA</span>
+                <span>{t('landing.footer.madeWith')}</span>
+                <span className="text-red-500 text-sm">❤️</span>
+                <span>{t('landing.footer.inSyria')}</span>
               </div>
             </div>
           </div>
