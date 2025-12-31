@@ -230,6 +230,33 @@
   100% { transform: translateY(0px); }
 }
 
+/* Floating with rotation - for Facebook icon */
+@keyframes float-rotate {
+  0% { transform: translateY(0px) rotate(-12deg); }
+  25% { transform: translateY(-15px) rotate(-8deg); }
+  50% { transform: translateY(-25px) rotate(-15deg); }
+  75% { transform: translateY(-10px) rotate(-10deg); }
+  100% { transform: translateY(0px) rotate(-12deg); }
+}
+
+/* Orbital floating - for Instagram icon */
+@keyframes float-orbit {
+  0% { transform: translateY(0px) translateX(0px) rotate(12deg); }
+  25% { transform: translateY(-20px) translateX(5px) rotate(8deg); }
+  50% { transform: translateY(-10px) translateX(-5px) rotate(15deg); }
+  75% { transform: translateY(-25px) translateX(3px) rotate(10deg); }
+  100% { transform: translateY(0px) translateX(0px) rotate(12deg); }
+}
+
+/* Gentle pulse with float - for Robot icon */
+@keyframes float-pulse {
+  0% { transform: scale(1) rotate(3deg); }
+  25% { transform: scale(1.05) rotate(5deg); }
+  50% { transform: scale(1) rotate(3deg); }
+  75% { transform: scale(1.03) rotate(1deg); }
+  100% { transform: scale(1) rotate(3deg); }
+}
+
 @keyframes bounce-slow {
   0%, 100% { 
     transform: translateY(0) rotate(var(--tw-rotate, 0deg)); 
@@ -252,6 +279,18 @@
 
 .animate-float {
   animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-rotate {
+  animation: float-rotate 5s ease-in-out infinite;
+}
+
+.animate-float-orbit {
+  animation: float-orbit 7s ease-in-out infinite;
+}
+
+.animate-float-pulse {
+  animation: float-pulse 4s ease-in-out infinite;
 }
 
 .animate-bounce-slow {

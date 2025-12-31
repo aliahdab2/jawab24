@@ -149,7 +149,7 @@ export default function LandingPage() {
 
               {/* Actions */}
               <div className="flex items-center gap-1 sm:gap-4">
-                <Link href="#pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
+                <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
                   {t('landing.nav.pricing')}
                 </Link>
                 <button
@@ -207,9 +207,9 @@ export default function LandingPage() {
                           <div className="w-4 h-1.5 bg-brand-500/10 rounded-sm" />
                         </div>
                         
-                        {/* Robot Avatar - Subtler Colors */}
+                        {/* Robot Avatar - Subtler Colors with Pulse Animation */}
                         <div className="flex flex-col items-center justify-center mb-6 mt-2">
-                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-2 transform rotate-3 animate-float border border-brand-50">
+                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-2 animate-float-pulse border border-brand-50">
                             <Bot className="w-8 h-8 sm:w-10 sm:h-10 text-brand-500" />
                           </div>
                           <span className="font-display font-bold text-[10px] sm:text-xs text-brand-600">jawab24.com</span>
@@ -246,18 +246,20 @@ export default function LandingPage() {
                     </div>
                   </div>
                   
-                  {/* Floating Elements - Simplified and Color-coordinated */}
-                  <div className="absolute -left-4 sm:-left-8 top-1/4 animate-float stagger-1">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-brand-500/10 border-b-2 border-brand-100 transform -rotate-12">
-                      <div className="w-full h-full rounded-full bg-brand-500 flex items-center justify-center">
+                  {/* Floating Elements - Each with unique animation */}
+                  {/* Facebook - Original Blue Color */}
+                  <div className="absolute -left-4 sm:-left-8 top-1/4 animate-float-rotate">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-blue-500/20 border-b-2 border-blue-100">
+                      <div className="w-full h-full rounded-full bg-[#1877F2] flex items-center justify-center">
                         <Facebook className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                       </div>
                     </div>
                   </div>
                   
-                  <div className="absolute -right-4 sm:-right-8 top-1/3 animate-float stagger-2">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-brand-500/10 border-b-2 border-brand-100 transform rotate-12">
-                      <div className="w-full h-full rounded-full bg-brand-600 flex items-center justify-center">
+                  {/* Instagram - Original Gradient Colors */}
+                  <div className="absolute -right-4 sm:-right-8 top-1/3 animate-float-orbit">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-pink-500/20 border-b-2 border-pink-100">
+                      <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
                         <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                       </div>
                     </div>
