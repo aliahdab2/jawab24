@@ -284,26 +284,33 @@ jobs:
         run: |
           echo "🧪 Testing backend container can start..."
           
+          # Clean up any existing test container
+          docker rm -f backend-test 2>/dev/null || true
+          
           # Start backend with minimal config (will fail to connect to DB but should not crash on import)
-          docker run --rm -d --name backend-test \
+          # Note: NOT using --rm so we can get logs even if it crashes
+          docker run -d --name backend-test \
             -e DATABASE_URL=postgres://test:test@localhost:5432/test \
             -e JWT_SECRET=test_secret \
             -e NODE_ENV=production \
             -e PORT=3000 \
-            jawab24-backend:test || true
+            jawab24-backend:test
           
           # Wait a moment for startup
-          sleep 5
+          sleep 8
           
           # Check if container is still running (crashed = not running)
           if docker ps | grep -q backend-test; then
             echo "✅ Backend container started successfully!"
             docker logs backend-test --tail 20
             docker stop backend-test
+            docker rm backend-test
           else
             echo "❌ Backend container crashed on startup!"
-            echo "Last logs:"
-            docker logs backend-test 2>&1 || echo "No logs available"
+            echo ""
+            echo "📋 Container logs:"
+            docker logs backend-test 2>&1
+            docker rm backend-test 2>/dev/null || true
             exit 1
           fi
 
@@ -311,20 +318,26 @@ jobs:
         run: |
           echo "🧪 Testing AI worker container can start..."
           
-          docker run --rm -d --name ai-worker-test \
+          docker rm -f ai-worker-test 2>/dev/null || true
+          
+          docker run -d --name ai-worker-test \
             -e REDIS_URL=redis://localhost:6379 \
             -e NODE_ENV=production \
-            jawab24-ai-worker:test || true
+            jawab24-ai-worker:test
           
-          sleep 5
+          sleep 8
           
           if docker ps | grep -q ai-worker-test; then
             echo "✅ AI Worker container started successfully!"
             docker logs ai-worker-test --tail 20
             docker stop ai-worker-test
+            docker rm ai-worker-test
           else
             echo "❌ AI Worker container crashed on startup!"
-            docker logs ai-worker-test 2>&1 || echo "No logs available"
+            echo ""
+            echo "📋 Container logs:"
+            docker logs ai-worker-test 2>&1
+            docker rm ai-worker-test 2>/dev/null || true
             exit 1
           fi
 
@@ -332,20 +345,26 @@ jobs:
         run: |
           echo "🧪 Testing frontend container can start..."
           
-          docker run --rm -d --name frontend-test \
+          docker rm -f frontend-test 2>/dev/null || true
+          
+          docker run -d --name frontend-test \
             -e NODE_ENV=production \
             -e NEXT_PUBLIC_API_URL=http://localhost:3000 \
-            jawab24-frontend:test || true
+            jawab24-frontend:test
           
-          sleep 5
+          sleep 8
           
           if docker ps | grep -q frontend-test; then
             echo "✅ Frontend container started successfully!"
             docker logs frontend-test --tail 20
             docker stop frontend-test
+            docker rm frontend-test
           else
             echo "❌ Frontend container crashed on startup!"
-            docker logs frontend-test 2>&1 || echo "No logs available"
+            echo ""
+            echo "📋 Container logs:"
+            docker logs frontend-test 2>&1
+            docker rm frontend-test 2>/dev/null || true
             exit 1
           fi
 
