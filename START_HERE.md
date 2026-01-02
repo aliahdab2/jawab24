@@ -7,8 +7,9 @@
 ## 📋 **الخطوة 1: إنشاء حساب Stripe** (10 دقائق)
 
 ### ما تحتاجه:
-- ✅ حساب Revolut Business أو حساب Swedbank
+- ✅ حساب Swedbank (Business Account)
 - ✅ معلومات شركتك (Enskild Näringsverksamhet)
+- ✅ IBAN من Swedbank
 
 ### الخطوات:
 1. افتح: https://stripe.com
@@ -20,10 +21,11 @@
    - Business name: Jawab24
    - Email: بريدك الإلكتروني
    ```
-4. اربط حسابك البنكي:
+4. اربط حساب Swedbank:
    - اذهب: **Settings > Bank accounts**
-   - اضغط **"Add bank account"**
-   - أدخل IBAN من Revolut أو Swedbank
+   - اضغ **"Add bank account"**
+   - أدخل IBAN من Swedbank
+   - **ملاحظة:** Stripe سيحول الأموال إلى SEK تلقائياً
 
 ---
 

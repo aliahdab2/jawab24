@@ -22,10 +22,11 @@
    - Country: Sweden
    - Business details: Jawab24
 
-4. اربط حساب **Revolut Business**:
+4. اربط حساب **Swedbank** (Business Account):
    - Business settings > Bank accounts
    - Add bank account
-   - استخدم IBAN من Revolut
+   - استخدم IBAN من Swedbank
+   - **ملاحظة:** Revolut Business لا يعمل مع الشركات الفردية
 
 ---
 

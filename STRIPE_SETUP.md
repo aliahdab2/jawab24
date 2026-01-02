@@ -39,7 +39,10 @@
 1. اذهب إلى [stripe.com](https://stripe.com)
 2. سجل حساب جديد
 3. أكمل معلومات شركتك (Enskild Näringsverksamhet)
-4. اربط حساب Revolut Business أو البنك السويدي
+4. اربط حساب Swedbank (Business Account)
+   - ستحتاج IBAN من Swedbank
+   - Stripe سيحول الأموال من USD إلى SEK تلقائياً
+   - **ملاحظة مهمة:** Revolut Business قد لا يعمل مع الشركات الفردية، استخدم Swedbank
 
 ### 2. الحصول على API Keys
 
