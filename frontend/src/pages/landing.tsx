@@ -287,7 +287,6 @@ export default function LandingPage() {
                 <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-6 sm:mb-12 animate-slide-up animation-delay-200">
                   <Link href="/login" className="w-full sm:w-auto">
                     <Button size="lg" className="w-full sm:w-auto min-w-[200px] sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-4 sm:py-5 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
-                      <Facebook className="w-5 h-5" />
                       {t('landing.hero.cta1')}
                     </Button>
                   </Link>
