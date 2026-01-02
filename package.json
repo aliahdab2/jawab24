@@ -10,7 +10,9 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
-    "test": "npm run test --workspaces"
+    "test": "npm run test --workspaces",
+    "pre-deploy": "./scripts/pre-deploy-check.sh",
+    "check:esm": "grep -E '\"(uuid|node-fetch|chalk|ora|execa|got|globby)\":' backend/package.json && echo '⚠️  ESM-only packages found!' || echo '✅ No ESM-only packages'"
   }
 }
 

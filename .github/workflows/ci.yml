@@ -70,6 +70,43 @@ jobs:
       - name: Build shared package
         run: npm run build --workspace=@jawab24/shared
 
+      - name: Check for ESM-only packages (CommonJS compatibility)
+        run: |
+          echo "🔍 Checking for known ESM-only packages that break CommonJS builds..."
+          
+          # List of known problematic ESM-only packages
+          ESM_ONLY_PACKAGES=(
+            '"uuid":' 
+            '"node-fetch":' 
+            '"chalk": "5'
+            '"ora": "6'
+            '"execa": "6'
+            '"got": "12'
+            '"globby": "13'
+            '"p-limit": "4'
+            '"strip-ansi": "7'
+            '"wrap-ansi": "8'
+          )
+          
+          FOUND_ISSUES=0
+          
+          for pkg in "${ESM_ONLY_PACKAGES[@]}"; do
+            if grep -q "$pkg" backend/package.json 2>/dev/null; then
+              echo "⚠️  WARNING: Found potentially ESM-only package: $pkg"
+              echo "   This may cause 'ERR_REQUIRE_ESM' errors in production!"
+              FOUND_ISSUES=1
+            fi
+          done
+          
+          if [ $FOUND_ISSUES -eq 1 ]; then
+            echo ""
+            echo "💡 Consider using CommonJS-compatible alternatives or built-in Node.js APIs"
+            echo "   Example: Use crypto.randomUUID() instead of uuid package"
+            # Note: We warn but don't fail - some ESM packages might be dev-only
+          else
+            echo "✅ No known ESM-only packages detected"
+          fi
+
       - name: Run TypeScript check
         run: npm run build --workspace=jawab24-backend
 
@@ -193,10 +230,10 @@ jobs:
           retention-days: 1
 
   # ==========================================
-  # Docker Build Test
+  # Docker Build & Smoke Test
   # ==========================================
   docker:
-    name: Docker - Build Images
+    name: Docker - Build & Test Images
     runs-on: ubuntu-latest
     needs: [backend, ai-worker, frontend]
 
@@ -213,6 +250,7 @@ jobs:
           context: .
           file: backend/Dockerfile
           push: false
+          load: true
           tags: jawab24-backend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -223,6 +261,7 @@ jobs:
           context: .
           file: ai-worker/Dockerfile
           push: false
+          load: true
           tags: jawab24-ai-worker:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -233,9 +272,82 @@ jobs:
           context: .
           file: frontend/Dockerfile
           push: false
+          load: true
           tags: jawab24-frontend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # ==========================================
+      # Smoke Test - Actually run containers
+      # ==========================================
+      - name: Smoke Test - Backend Container
+        run: |
+          echo "🧪 Testing backend container can start..."
+          
+          # Start backend with minimal config (will fail to connect to DB but should not crash on import)
+          docker run --rm -d --name backend-test \
+            -e DATABASE_URL=postgres://test:test@localhost:5432/test \
+            -e JWT_SECRET=test_secret \
+            -e NODE_ENV=production \
+            -e PORT=3000 \
+            jawab24-backend:test || true
+          
+          # Wait a moment for startup
+          sleep 5
+          
+          # Check if container is still running (crashed = not running)
+          if docker ps | grep -q backend-test; then
+            echo "✅ Backend container started successfully!"
+            docker logs backend-test --tail 20
+            docker stop backend-test
+          else
+            echo "❌ Backend container crashed on startup!"
+            echo "Last logs:"
+            docker logs backend-test 2>&1 || echo "No logs available"
+            exit 1
+          fi
+
+      - name: Smoke Test - AI Worker Container
+        run: |
+          echo "🧪 Testing AI worker container can start..."
+          
+          docker run --rm -d --name ai-worker-test \
+            -e REDIS_URL=redis://localhost:6379 \
+            -e NODE_ENV=production \
+            jawab24-ai-worker:test || true
+          
+          sleep 5
+          
+          if docker ps | grep -q ai-worker-test; then
+            echo "✅ AI Worker container started successfully!"
+            docker logs ai-worker-test --tail 20
+            docker stop ai-worker-test
+          else
+            echo "❌ AI Worker container crashed on startup!"
+            docker logs ai-worker-test 2>&1 || echo "No logs available"
+            exit 1
+          fi
+
+      - name: Smoke Test - Frontend Container
+        run: |
+          echo "🧪 Testing frontend container can start..."
+          
+          docker run --rm -d --name frontend-test \
+            -e NODE_ENV=production \
+            -e NEXT_PUBLIC_API_URL=http://localhost:3000 \
+            jawab24-frontend:test || true
+          
+          sleep 5
+          
+          if docker ps | grep -q frontend-test; then
+            echo "✅ Frontend container started successfully!"
+            docker logs frontend-test --tail 20
+            docker stop frontend-test
+          else
+            echo "❌ Frontend container crashed on startup!"
+            docker logs frontend-test 2>&1 || echo "No logs available"
+            exit 1
+          fi
 
   # ==========================================
   # Summary
