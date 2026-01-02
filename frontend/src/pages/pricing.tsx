@@ -87,29 +87,29 @@ function PlanCard({
         </div>
       )}
       
-      <div className="text-center mb-4 pt-6 px-3">
-        <div className={`w-12 h-12 md:w-14 md:h-14 mx-auto mb-3 md:mb-4 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${
+      <div className="text-center mb-3 pt-4 px-3">
+        <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${
           plan.slug === 'free' ? 'bg-slate-100 text-slate-600' :
           plan.slug === 'starter' ? 'bg-blue-100 text-blue-600' :
           plan.slug === 'business' ? 'bg-brand-100 text-brand-600' :
           'bg-amber-100 text-amber-600'
         }`}>
           {plan.slug === 'free' || plan.slug === 'starter' ? (
-            <Zap className="w-6 h-6 md:w-7 md:h-7" />
+            <Zap className="w-5 h-5 md:w-6 md:h-6" />
           ) : plan.slug === 'pro' ? (
-            <Crown className="w-6 h-6 md:w-7 md:h-7" />
+            <Crown className="w-5 h-5 md:w-6 md:h-6" />
           ) : (
-            <Sparkles className="w-6 h-6 md:w-7 md:h-7" />
+            <Sparkles className="w-5 h-5 md:w-6 md:h-6" />
           )}
         </div>
-        <h3 className="text-xl md:text-2xl font-bold text-surface-900 tracking-tight mb-2">{getPlanName()}</h3>
+        <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight mb-1">{getPlanName()}</h3>
         {(plan.description || getPlanDescription()) && (
-          <p className="text-sm text-surface-500 leading-relaxed min-h-[40px] px-2">{getPlanDescription()}</p>
+          <p className="text-xs md:text-sm text-surface-500 leading-relaxed min-h-[32px] px-2">{getPlanDescription()}</p>
         )}
       </div>
       
       {/* Price */}
-      <div className="text-center mb-5 md:mb-6 py-4 bg-surface-50/50 rounded-xl mx-3">
+      <div className="text-center mb-4 py-3 bg-surface-50/50 rounded-xl mx-3">
         <div className="flex items-baseline justify-center gap-1">
           <span className="text-3xl md:text-4xl font-extrabold text-surface-900">
             {isFree ? '$0' : formatPrice(plan.price)}
@@ -127,7 +127,7 @@ function PlanCard({
       </div>
       
       {/* Features */}
-      <div className="space-y-1.5 md:space-y-2 px-3 flex-1">
+      <div className="space-y-1 px-3 flex-1">
         <FeatureRow
           included={true}
           text={`${plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages} ${t('pricing.pages')}`}
@@ -155,21 +155,16 @@ function PlanCard({
           included={!plan.showBranding}
           text={plan.showBranding ? t('pricing.brandingShown') : t('pricing.brandingHidden')}
         />
-        
-        <FeatureRow
-          included={plan.prioritySupport}
-          text={plan.prioritySupport ? t('pricing.prioritySupport') : t('pricing.standardSupport')}
-        />
       </div>
       
       {/* CTA */}
-      <div className="mt-auto pt-4 px-3 pb-1">
+      <div className="mt-auto pt-3 px-3 pb-1">
         <Button
           onClick={onSelect}
           loading={loading}
           disabled={isCurrentPlan}
           variant={isPopular ? 'primary' : 'secondary'}
-          className={`w-full py-4 text-sm md:text-base font-bold rounded-xl transition-all duration-300 ${
+          className={`w-full py-3 text-sm font-bold rounded-xl transition-all duration-300 ${
             isPopular ? 'shadow-lg shadow-brand-200 hover:shadow-brand-300' : ''
           }`}
         >
@@ -308,11 +303,11 @@ export default function PricingPage() {
       </Head>
       <DashboardLayout title={t('pricing.title')} isPublic={true}>
         {/* Simple Header */}
-        <div className="text-center mb-10 md:mb-12">
-          <h1 className="text-2xl md:text-3xl font-display font-bold text-surface-900 mb-3">
+        <div className="text-center mb-6 md:mb-8">
+          <h1 className="text-xl md:text-2xl font-display font-bold text-surface-900 mb-2">
             {t('pricing.title')}
         </h1>
-        <p className="text-surface-500 text-sm max-w-md mx-auto">
+        <p className="text-surface-500 text-xs md:text-sm max-w-md mx-auto">
           {t('pricing.choosePlan')}
         </p>
       </div>
@@ -344,7 +339,7 @@ export default function PricingPage() {
       )}
       
       {/* Plans Grid - Centered for 3 plans */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-5 lg:gap-8 pb-12 items-stretch max-w-6xl mx-auto px-4 md:px-6 lg:px-0 pt-4 md:pt-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-5xl mx-auto px-4 md:px-6 lg:px-0 pt-2 md:pt-4">
         {activePlans.map((plan) => (
           <PlanCard
             key={plan.id}
