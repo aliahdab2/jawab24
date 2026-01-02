@@ -13,8 +13,7 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY 
 export default function CheckoutPage() {
   const router = useRouter();
   const { planId } = router.query;
-  const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
+  const { t } = useTranslation();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -27,14 +26,14 @@ export default function CheckoutPage() {
         setPlan(response.data.data || response.data);
       } catch (err) {
         console.error('Failed to fetch plan:', err);
-        setError('Failed to load plan details. Please try again later.');
+        setError(t('checkout.errorLoadPlan'));
       }
     };
 
     if (planId) {
       fetchPlan();
     }
-  }, [planId]);
+  }, [planId, t]);
 
   const handleCheckout = async () => {
     if (!planId) return;
@@ -70,7 +69,7 @@ export default function CheckoutPage() {
       window.location.href = url;
     } catch (err: any) {
       console.error('Checkout error:', err);
-      setError(err.response?.data?.error || 'Failed to initiate checkout');
+      setError(err.response?.data?.error || t('checkout.errorInitiateCheckout'));
       setLoading(false);
     }
   };
@@ -89,7 +88,7 @@ export default function CheckoutPage() {
         <title>{t('checkout.title')} - Jawab24</title>
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-12 px-4" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-12 px-4">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
@@ -105,7 +104,7 @@ export default function CheckoutPage() {
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-start">
               {error}
             </div>
           )}
@@ -113,12 +112,16 @@ export default function CheckoutPage() {
           {plan && (
             <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
               {/* Plan Details */}
-              <div className="border-b border-surface-200 pb-6 mb-6">
+              <div className="border-b border-surface-200 pb-6 mb-6 text-start">
                 <h2 className="text-2xl font-bold text-surface-900 mb-2">
-                  {t(`plans.${plan.slug}.name`) || plan.name}
+                  {t(`pricing.${plan.slug}`) !== `pricing.${plan.slug}`
+                    ? t(`pricing.${plan.slug}`)
+                    : (t(`plans.${plan.slug}.name`) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name`) : plan.name)}
                 </h2>
                 <p className="text-surface-600 mb-4">
-                  {t(`plans.${plan.slug}.description`) || plan.description}
+                  {t(`pricing.${plan.slug}Desc`) !== `pricing.${plan.slug}Desc`
+                    ? t(`pricing.${plan.slug}Desc`)
+                    : (t(`plans.${plan.slug}.description`) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description`) : plan.description)}
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-bold text-brand-600">
@@ -134,21 +137,21 @@ export default function CheckoutPage() {
               <div className="space-y-3 mb-8">
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                  <span className="text-surface-700">
+                  <span className="text-surface-700 text-start">
                     {plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages} {t('plans.pages')}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                  <span className="text-surface-700">
-                    {plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth} {t('plans.aiReplies')}
+                  <span className="text-surface-700 text-start">
+                    {plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {t('plans.aiReplies')}
                   </span>
                 </div>
                 {plan.trialDays > 0 && (
                   <div className="flex items-center gap-3">
                     <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span className="text-surface-700">
-                      {plan.trialDays} {t('plans.trialDays')}
+                    <span className="text-surface-700 text-start">
+                      {t('pricing.trialDays', { days: plan.trialDays })}
                     </span>
                   </div>
                 )}
@@ -157,7 +160,7 @@ export default function CheckoutPage() {
               {/* Checkout Button */}
               <Button
                 size="lg"
-                className="w-full"
+                className="w-full flex items-center justify-center gap-2"
                 onClick={handleCheckout}
                 disabled={loading}
               >
@@ -169,11 +172,7 @@ export default function CheckoutPage() {
                 ) : (
                   <>
                     {t('checkout.continueToPayment')}
-                    {isRTL ? (
-                      <ArrowLeft className="w-5 h-5" />
-                    ) : (
-                      <ArrowRight className="w-5 h-5" />
-                    )}
+                    <ArrowRight className="w-5 h-5 transition-transform rtl:rotate-180" />
                   </>
                 )}
               </Button>
@@ -187,17 +186,8 @@ export default function CheckoutPage() {
           {/* Back Link */}
           <div className="text-center">
             <Link href="/pricing" className="text-brand-600 hover:text-brand-700 font-medium inline-flex items-center gap-2">
-              {isRTL ? (
-                <>
-                  {t('checkout.backToPricing')}
-                  <ArrowLeft className="w-4 h-4" />
-                </>
-              ) : (
-                <>
-                  <ArrowLeft className="w-4 h-4" />
-                  {t('checkout.backToPricing')}
-                </>
-              )}
+              <ArrowLeft className="w-4 h-4 transition-transform rtl:rotate-180" />
+              {t('checkout.backToPricing')}
             </Link>
           </div>
         </div>

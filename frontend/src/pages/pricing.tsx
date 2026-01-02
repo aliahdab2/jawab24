@@ -16,45 +16,24 @@ function PlanCard({
   onSelect,
   loading,
   t,
-  language,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
   onSelect: () => void;
   loading: boolean;
-  t: (key: string) => string;
-  language: string;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
 
-  // Translate plan names based on slug
-  const getPlanName = () => {
-    if (language === 'ar') {
-      switch (plan.slug) {
-        case 'free': return 'تجربة مجانية';
-        case 'starter': return 'المبتدئ';
-        case 'business': return 'الأعمال';
-        case 'pro': return 'الاحترافي';
-        default: return plan.name;
-      }
-    }
-    return plan.name;
-  };
+  // Translate plan names and descriptions based on slug with fallbacks
+  const planName = t(`pricing.${plan.slug}`) !== `pricing.${plan.slug}`
+    ? t(`pricing.${plan.slug}`)
+    : (t(`plans.${plan.slug}.name`) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name`) : plan.name);
 
-  // Translate plan descriptions
-  const getPlanDescription = () => {
-    if (language === 'ar') {
-      switch (plan.slug) {
-        case 'free': return 'جرّب الخدمة مجاناً لمدة شهر';
-        case 'starter': return 'للمشاريع الصغيرة والمتاجر الناشئة';
-        case 'business': return 'للأعمال المتوسطة والمتاجر النشطة';
-        case 'pro': return 'للوكالات والمتاجر الكبيرة';
-        default: return plan.description;
-      }
-    }
-    return plan.description;
-  };
+  const planDescription = t(`pricing.${plan.slug}Desc`) !== `pricing.${plan.slug}Desc`
+    ? t(`pricing.${plan.slug}Desc`)
+    : (t(`plans.${plan.slug}.description`) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description`) : plan.description);
 
   // Format price
   const formatPrice = (price: number) => {
@@ -64,13 +43,13 @@ function PlanCard({
   return (
     <Card
       className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${isPopular
-          ? 'ring-2 ring-brand-500 shadow-brand-100 shadow-xl md:scale-105 z-10 md:mt-4'
-          : 'border-surface-200 shadow-sm'
+        ? 'ring-2 ring-brand-500 shadow-brand-100 shadow-xl md:scale-105 z-10 md:mt-4'
+        : 'border-surface-200 shadow-sm'
         } ${isCurrentPlan ? 'bg-brand-50/50' : 'bg-white'}`}
     >
-      {/* Popular badge */}
+      {/* Popular badge - using start-1/2 for RTL support */}
       {isPopular && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
+        <div className="absolute -top-3 start-1/2 -translate-x-1/2 z-20">
           <span className="bg-gradient-to-r from-brand-600 to-violet-600 text-white text-xs font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg whitespace-nowrap">
             <Sparkles className="w-3.5 h-3.5" />
             {t('pricing.popular')}
@@ -78,9 +57,9 @@ function PlanCard({
         </div>
       )}
 
-      {/* Current plan badge */}
+      {/* Current plan badge - using end-4 for RTL support */}
       {isCurrentPlan && (
-        <div className="absolute top-4 right-4">
+        <div className="absolute top-4 end-4">
           <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-green-200">
             {t('pricing.currentPlan')}
           </span>
@@ -89,9 +68,9 @@ function PlanCard({
 
       <div className="text-center mb-3 pt-4 px-3">
         <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'bg-slate-100 text-slate-600' :
-            plan.slug === 'starter' ? 'bg-blue-100 text-blue-600' :
-              plan.slug === 'business' ? 'bg-brand-100 text-brand-600' :
-                'bg-amber-100 text-amber-600'
+          plan.slug === 'starter' ? 'bg-blue-100 text-blue-600' :
+            plan.slug === 'business' ? 'bg-brand-100 text-brand-600' :
+              'bg-amber-100 text-amber-600'
           }`}>
           {plan.slug === 'free' || plan.slug === 'starter' ? (
             <Zap className="w-5 h-5 md:w-6 md:h-6" />
@@ -101,9 +80,9 @@ function PlanCard({
             <Sparkles className="w-5 h-5 md:w-6 md:h-6" />
           )}
         </div>
-        <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight mb-1">{getPlanName()}</h3>
-        {(plan.description || getPlanDescription()) && (
-          <p className="text-xs md:text-sm text-surface-500 leading-relaxed min-h-[32px] px-2">{getPlanDescription()}</p>
+        <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight mb-1">{planName}</h3>
+        {planDescription && (
+          <p className="text-xs md:text-sm text-surface-500 leading-relaxed min-h-[32px] px-2">{planDescription}</p>
         )}
       </div>
 
@@ -120,7 +99,7 @@ function PlanCard({
         {plan.trialDays > 0 && (
           <div className="inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
             <Zap className="w-3 h-3" />
-            {t('pricing.trialDays').replace('{days}', String(plan.trialDays))}
+            {t('pricing.trialDays', { days: plan.trialDays })}
           </div>
         )}
       </div>
@@ -129,25 +108,25 @@ function PlanCard({
       <div className="space-y-1 px-3 flex-1">
         <FeatureRow
           included={true}
-          text={`${plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages} ${t('pricing.pages')}`}
+          text={t('pricing.featurePages', { count: plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages })}
           subtext={t('pricing.facebookInstagram')}
         />
 
         <FeatureRow
           included={true}
           highlight={true}
-          text={`${plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} ${t('pricing.aiReplies')}`}
+          text={t('pricing.featureAiReplies', { count: plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString() })}
           subtext={t('pricing.aiPowered')}
         />
 
         <FeatureRow
           included={true}
-          text={`${plan.maxTemplates === null ? t('pricing.unlimited') : plan.maxTemplates} ${t('pricing.templates')}`}
+          text={t('pricing.featureTemplates', { count: plan.maxTemplates === null ? t('pricing.unlimited') : plan.maxTemplates })}
         />
 
         <FeatureRow
           included={true}
-          text={`${plan.maxRules === null ? t('pricing.unlimited') : plan.maxRules} ${t('pricing.rules')}`}
+          text={t('pricing.featureRules', { count: plan.maxRules === null ? t('pricing.unlimited') : plan.maxRules })}
         />
 
         <FeatureRow
@@ -168,14 +147,14 @@ function PlanCard({
         >
           {isCurrentPlan
             ? t('pricing.currentPlan')
-            : isFree
+            : (isFree || plan.trialDays > 0)
               ? t('pricing.startTrial')
               : t('pricing.upgrade')
           }
         </Button>
         {isFree && (
           <p className="text-xs text-surface-400 text-center mt-3 font-medium">
-            * {t('pricing.noCreditCard')}
+            {t('pricing.noCreditCardNote')}
           </p>
         )}
       </div>
@@ -205,12 +184,12 @@ function FeatureRow({
         )}
       </div>
       <div className="flex flex-col min-w-0 flex-1">
-        <span className={`text-xs md:text-sm font-semibold leading-snug ${included ? 'text-surface-700' : 'text-surface-400 line-through decoration-surface-300'
+        <span className={`text-xs md:text-sm font-semibold leading-snug text-start ${included ? 'text-surface-700' : 'text-surface-400 line-through decoration-surface-300'
           }`}>
           {text}
         </span>
         {subtext && (
-          <span className="text-[10px] md:text-xs text-surface-400 font-medium mt-0.5">
+          <span className="text-[10px] md:text-xs text-surface-400 font-medium mt-0.5 text-start">
             {subtext}
           </span>
         )}
@@ -221,7 +200,7 @@ function FeatureRow({
 
 export default function PricingPage() {
   const router = useRouter();
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -263,10 +242,9 @@ export default function PricingPage() {
     const selectedPlan = plans.find(p => p.id === planId);
     if (!selectedPlan) return;
 
-    // If it's a free plan, we might want to just switch directly
-    // But for consistency and better UX (reviewing what you are getting), 
-    // let's send everyone to the checkout page to confirm the switch.
-    // This solves the "takes me nowhere" issue by giving immediate feedback (navigation).
+    setChangingPlan(planId);
+
+    // Navigate to checkout
     router.push(`/checkout?planId=${planId}`);
   };
 
@@ -282,7 +260,7 @@ export default function PricingPage() {
 
   const currentPlanId = usage?.subscription?.plan?.id;
 
-  // Filter out inactive plans (like the old "free" plan)
+  // Filter out inactive plans
   const activePlans = plans.filter(p => p.slug !== 'free' || p.isActive !== false);
 
   return (
@@ -313,21 +291,23 @@ export default function PricingPage() {
             <div className="flex items-center gap-2">
               <Crown className="w-4 h-4 text-brand-600" />
               <span className="text-sm font-bold text-brand-700">
-                {language === 'ar' ? (
-                  usage.subscription.plan.slug === 'starter' ? 'المبتدئ' :
-                    usage.subscription.plan.slug === 'business' ? 'الأعمال' :
-                      usage.subscription.plan.slug === 'pro' ? 'الاحترافي' :
-                        usage.subscription.plan.name
-                ) : usage.subscription.plan.name}
+                {t(`pricing.${usage.subscription.plan.slug}`) !== `pricing.${usage.subscription.plan.slug}`
+                  ? t(`pricing.${usage.subscription.plan.slug}`)
+                  : (t(`plans.${usage.subscription.plan.slug}.name`) !== `plans.${usage.subscription.plan.slug}.name`
+                    ? t(`plans.${usage.subscription.plan.slug}.name`)
+                    : usage.subscription.plan.name)}
               </span>
             </div>
             <div className="text-xs text-brand-600">
-              {usage.aiReplies.used}/{usage.aiReplies.limit || '∞'} {t('pricing.replies')}
+              {t('pricing.usageReplies', {
+                used: usage.aiReplies.used,
+                limit: usage.aiReplies.limit || '∞'
+              })}
             </div>
             {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
               <div className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
                 <Zap className="w-3 h-3" />
-                {usage.subscription.trialDaysRemaining} {t('pricing.daysLeft')}
+                {t('pricing.daysLeftCount', { count: usage.subscription.trialDaysRemaining })}
               </div>
             )}
           </div>
@@ -343,7 +323,6 @@ export default function PricingPage() {
               onSelect={() => handleSelectPlan(plan.id)}
               loading={changingPlan === plan.id}
               t={t}
-              language={language}
             />
           ))}
         </div>
@@ -356,5 +335,3 @@ export default function PricingPage() {
     </>
   );
 }
-
-

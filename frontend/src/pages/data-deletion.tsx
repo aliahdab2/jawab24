@@ -1,91 +1,112 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import { useTranslation } from '@/i18n';
+import { ArrowLeft } from 'lucide-react';
 
 export default function DataDeletion() {
+  const { t } = useTranslation();
+
   return (
     <>
       <Head>
-        <title>Data Deletion - Jawab24</title>
-        <meta name="description" content="How to delete your data from Jawab24" />
+        <title>{t('dataDeletion.title')}</title>
+        <meta name="description" content={t('dataDeletion.metaDescription')} />
       </Head>
 
-      <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 text-left" dir="ltr" lang="en">
-        <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">Data Deletion Instructions</h1>
+      <div className="min-h-screen bg-surface-50 py-12 px-4 sm:px-6 lg:px-8 text-start">
+        <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm p-8 border border-surface-200">
+          <h1 className="text-3xl font-bold text-surface-900 mb-8">{t('dataDeletion.header')}</h1>
 
-          <div className="prose prose-gray max-w-none">
-            <p className="text-gray-600 mb-6">
-              <strong>Last updated:</strong> December 2024
+          <div className="prose prose-slate max-w-none">
+            <p className="text-surface-500 mb-6 italic text-sm">
+              <strong>{t('dataDeletion.lastUpdated')}</strong> {t('dataDeletion.updateDate')}
             </p>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">How to Delete Your Data</h2>
-              <p className="text-gray-700 mb-4">
-                If you want to delete your data from Jawab24, you have several options:
+              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.howToDeleteTitle')}</h2>
+              <p className="text-surface-700 mb-4">
+                {t('dataDeletion.howToDeleteText')}
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Option 1: Delete from Jawab24</h2>
-              <ol className="list-decimal pl-6 text-gray-700 space-y-2">
-                <li>Log in to your Jawab24 account at <a href="https://jawab24.com" className="text-blue-600 hover:underline">jawab24.com</a></li>
-                <li>Go to <strong>Settings</strong></li>
-                <li>Click on <strong>Delete Account</strong></li>
-                <li>Confirm the deletion</li>
+              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.option1Title')}</h2>
+              <ol className="list-decimal ps-6 text-surface-700 space-y-2">
+                <li>
+                  {t('dataDeletion.option1Step1')}{' '}
+                  <a href="https://jawab24.com" className="text-brand-600 hover:underline font-medium">
+                    jawab24.com
+                  </a>
+                </li>
+                <li>{t('dataDeletion.option1Step2')} <strong>{t('nav.settings')}</strong></li>
+                <li>{t('dataDeletion.option1Step3')} <strong>{t('settings.deleteAccount')}</strong></li>
+                <li>{t('dataDeletion.option1Step4')}</li>
               </ol>
-              <p className="text-gray-700 mt-4">
-                This will permanently delete all your data including connected pages, comments, messages, and settings.
+              <p className="text-surface-600 mt-4 p-3 bg-red-50 rounded-lg border border-red-100 text-sm">
+                {t('dataDeletion.option1Note')}
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Option 2: Remove from Facebook</h2>
-              <ol className="list-decimal pl-6 text-gray-700 space-y-2">
-                <li>Go to your <a href="https://www.facebook.com/settings?tab=business_tools" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">Facebook Settings → Business Integrations</a></li>
-                <li>Find <strong>Jawab24</strong> in the list</li>
-                <li>Click <strong>Remove</strong></li>
-                <li>Check the box to delete all data</li>
+              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.option2Title')}</h2>
+              <ol className="list-decimal ps-6 text-surface-700 space-y-2">
+                <li>
+                  {t('dataDeletion.option2Step1')}{' '}
+                  <a
+                    href="https://www.facebook.com/settings?tab=business_tools"
+                    className="text-brand-600 hover:underline font-medium"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {t('dataDeletion.option2Step1Link')}
+                  </a>
+                </li>
+                <li>{t('dataDeletion.option2Step2')} <strong>Jawab24</strong> {t('dataDeletion.option2Step2Suffix')}</li>
+                <li>{t('dataDeletion.option2Step3')} <strong>{t('common.delete')}</strong></li>
+                <li>{t('dataDeletion.option2Step4')}</li>
               </ol>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Option 3: Contact Us</h2>
-              <p className="text-gray-700 mb-4">
-                You can also request data deletion by contacting us directly:
+              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.option3Title')}</h2>
+              <p className="text-surface-700 mb-4">
+                {t('dataDeletion.option3Text')}
               </p>
-              <p className="text-gray-700">
-                <strong>Email:</strong> <a href="mailto:support@jawab24.com" className="text-blue-600 hover:underline">support@jawab24.com</a>
+              <p className="text-surface-700">
+                <strong>{t('dataDeletion.option3Email')}</strong>{' '}
+                <a href="mailto:support@jawab24.com" className="text-brand-600 hover:underline font-medium">
+                  support@jawab24.com
+                </a>
               </p>
-              <p className="text-gray-700 mt-4">
-                Please include your Facebook account email or Page name in your request.
-                We will process your deletion request within 30 days.
+              <p className="text-surface-600 mt-4 text-sm">
+                {t('dataDeletion.option3Note')}
               </p>
             </section>
 
-            <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">What Data Will Be Deleted?</h2>
-              <ul className="list-disc pl-6 text-gray-700 space-y-2">
-                <li>Your account information</li>
-                <li>Connected Facebook Pages</li>
-                <li>Stored comments and messages</li>
-                <li>Reply history</li>
-                <li>Business information / Knowledge base</li>
-                <li>All settings and preferences</li>
+            <section className="mb-8 p-6 bg-surface-50 rounded-2xl border border-surface-100">
+              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.whatWillBeDeletedTitle')}</h2>
+              <ul className="list-disc ps-6 text-surface-700 space-y-2">
+                <li>{t('dataDeletion.whatItemAccount')}</li>
+                <li>{t('dataDeletion.whatItemPages')}</li>
+                <li>{t('dataDeletion.whatItemContent')}</li>
+                <li>{t('dataDeletion.whatItemHistory')}</li>
+                <li>{t('dataDeletion.whatItemKnowledge')}</li>
+                <li>{t('dataDeletion.whatItemSettings')}</li>
               </ul>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Data Retention</h2>
-              <p className="text-gray-700">
-                After deletion, your data will be permanently removed from our servers within 90 days.
-                Some data may be retained in encrypted backups for a limited period for legal compliance.
+              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.dataRetentionTitle')}</h2>
+              <p className="text-surface-700 leading-relaxed">
+                {t('dataDeletion.dataRetentionText')}
               </p>
             </section>
           </div>
 
-          <div className="mt-8 pt-8 border-t border-gray-200">
-            <Link href="/" className="text-blue-600 hover:text-blue-800 font-medium">
-              ← Back to Jawab24
+          <div className="mt-8 pt-8 border-t border-surface-100">
+            <Link href="/" className="text-brand-600 hover:text-brand-700 font-bold inline-flex items-center gap-2 transition-colors">
+              <ArrowLeft className="w-5 h-5 transition-transform rtl:rotate-180" />
+              {t('dataDeletion.backToHome')}
             </Link>
           </div>
         </div>
