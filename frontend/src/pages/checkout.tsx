@@ -32,16 +32,62 @@ export default function CheckoutPage() {
       setPlan(response.data);
     } catch (err) {
       console.error('Failed to fetch plan:', err);
-      // Use mock data for preview if API fails
-      setPlan({
-        id: planId as string,
-        name: 'Pro Plan',
-        description: 'Professional plan for growing businesses',
-        price: 4900, // $49.00 in cents
-        maxPages: 5,
-        maxAiRepliesPerMonth: 1500,
-        trialDays: 7,
-      });
+      
+      // Use mock data based on common plan slugs for preview
+      const mockPlans: Record<string, any> = {
+        free: {
+          id: 'free',
+          name: 'Free Trial',
+          slug: 'free',
+          description: 'Auto-reply to your Facebook & Instagram pages - 30 days free',
+          price: 0,
+          maxPages: 1,
+          maxAiRepliesPerMonth: 60,
+          maxTemplates: 3,
+          maxRules: 2,
+          trialDays: 30,
+        },
+        starter: {
+          id: 'starter',
+          name: 'Starter',
+          slug: 'starter',
+          description: 'Auto-reply to 1 Facebook/Instagram page',
+          price: 500, // $5.00
+          maxPages: 1,
+          maxAiRepliesPerMonth: 60,
+          maxTemplates: 3,
+          maxRules: 2,
+          trialDays: 0,
+        },
+        business: {
+          id: 'business',
+          name: 'Business',
+          slug: 'business',
+          description: 'Auto-reply to 3 Facebook/Instagram pages with unlimited templates',
+          price: 3000, // $30.00
+          maxPages: 3,
+          maxAiRepliesPerMonth: 1500,
+          maxTemplates: null,
+          maxRules: null,
+          trialDays: 0,
+        },
+        pro: {
+          id: 'pro',
+          name: 'Pro',
+          slug: 'pro',
+          description: 'Auto-reply to 10 Facebook/Instagram pages - for agencies',
+          price: 7000, // $70.00
+          maxPages: 10,
+          maxAiRepliesPerMonth: 9000,
+          maxTemplates: null,
+          maxRules: null,
+          trialDays: 0,
+        },
+      };
+
+      // Use mock plan based on planId or default to starter
+      const mockPlan = mockPlans[planId as string] || mockPlans.starter;
+      setPlan(mockPlan);
     }
   };
 
