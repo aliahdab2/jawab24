@@ -21,20 +21,20 @@ export default function CheckoutPage() {
   const [plan, setPlan] = useState<any>(null);
 
   useEffect(() => {
+    const fetchPlan = async () => {
+      try {
+        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/plans/${planId}`);
+        setPlan(response.data.data || response.data);
+      } catch (err) {
+        console.error('Failed to fetch plan:', err);
+        setError('Failed to load plan details. Please try again later.');
+      }
+    };
+
     if (planId) {
       fetchPlan();
     }
   }, [planId]);
-
-  const fetchPlan = async () => {
-    try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/plans/${planId}`);
-      setPlan(response.data.data || response.data);
-    } catch (err) {
-      console.error('Failed to fetch plan:', err);
-      setError('Failed to load plan details. Please try again later.');
-    }
-  };
 
   const handleCheckout = async () => {
     if (!planId) return;

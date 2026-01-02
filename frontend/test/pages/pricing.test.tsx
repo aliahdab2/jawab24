@@ -76,8 +76,8 @@ describe('Pricing Page Data Parsing', () => {
     it('should parse plans from direct array response', () => {
       // API returns: [...]
       const response = { data: mockPlans };
-      const plans = extractArrayData(response.data);
-      
+      const plans = extractArrayData(response.data) as any[];
+
       expect(plans).toHaveLength(3);
       expect(plans[0].slug).toBe('starter');
       expect(plans[1].slug).toBe('business');
@@ -87,8 +87,8 @@ describe('Pricing Page Data Parsing', () => {
     it('should parse plans from wrapped { data: [...] } response', () => {
       // API returns: { data: [...] }
       const response = { data: { data: mockPlans } };
-      const plans = extractArrayData(response.data);
-      
+      const plans = extractArrayData(response.data) as any[];
+
       expect(plans).toHaveLength(3);
       expect(plans[0].name).toBe('Starter');
     });
@@ -100,7 +100,7 @@ describe('Pricing Page Data Parsing', () => {
 
     it('should return empty array for malformed response', () => {
       const response = { data: { error: 'Something went wrong' } };
-      const plans = extractArrayData(response.data);
+      const plans = extractArrayData(response.data) as any[];
       expect(plans).toEqual([]);
     });
   });
@@ -109,8 +109,8 @@ describe('Pricing Page Data Parsing', () => {
     it('should parse usage from direct object response', () => {
       // API returns: { subscription: ..., aiReplies: ... }
       const response = { data: mockUsage };
-      const usage = extractObjectData(response.data);
-      
+      const usage = extractObjectData(response.data) as any;
+
       expect(usage).not.toBeNull();
       expect(usage?.subscription.plan.slug).toBe('starter');
       expect(usage?.aiReplies.used).toBe(50);
@@ -119,8 +119,8 @@ describe('Pricing Page Data Parsing', () => {
     it('should parse usage from wrapped { data: {...} } response', () => {
       // API returns: { data: { subscription: ..., aiReplies: ... } }
       const response = { data: { data: mockUsage } };
-      const usage = extractObjectData(response.data);
-      
+      const usage = extractObjectData(response.data) as any;
+
       expect(usage).not.toBeNull();
       expect(usage?.subscription.trialDaysRemaining).toBe(5);
     });
@@ -134,7 +134,7 @@ describe('Pricing Page Data Parsing', () => {
   describe('Plan Feature Calculations', () => {
     it('should identify unlimited values (null) correctly', () => {
       const proPlan = mockPlans[2];
-      
+
       expect(proPlan.maxPages).toBeNull(); // unlimited
       expect(proPlan.maxAiRepliesPerMonth).toBeNull(); // unlimited
       expect(proPlan.maxTemplates).toBeNull(); // unlimited
@@ -157,7 +157,7 @@ describe('Pricing Page Data Parsing', () => {
   describe('Price Formatting', () => {
     it('should format price correctly (cents to dollars)', () => {
       const formatPrice = (price: number) => `$${(price / 100).toFixed(0)}`;
-      
+
       expect(formatPrice(500)).toBe('$5');
       expect(formatPrice(1500)).toBe('$15');
       expect(formatPrice(4900)).toBe('$49');

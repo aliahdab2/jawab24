@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import Link from 'next/link';
 
 export default function DataDeletion() {
   return (
@@ -7,11 +8,11 @@ export default function DataDeletion() {
         <title>Data Deletion - Jawab24</title>
         <meta name="description" content="How to delete your data from Jawab24" />
       </Head>
-      
+
       <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 text-left" dir="ltr" lang="en">
         <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm p-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Data Deletion Instructions</h1>
-          
+
           <div className="prose prose-gray max-w-none">
             <p className="text-gray-600 mb-6">
               <strong>Last updated:</strong> December 2024
@@ -56,7 +57,7 @@ export default function DataDeletion() {
                 <strong>Email:</strong> <a href="mailto:support@jawab24.com" className="text-blue-600 hover:underline">support@jawab24.com</a>
               </p>
               <p className="text-gray-700 mt-4">
-                Please include your Facebook account email or Page name in your request. 
+                Please include your Facebook account email or Page name in your request.
                 We will process your deletion request within 30 days.
               </p>
             </section>
@@ -76,16 +77,16 @@ export default function DataDeletion() {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Data Retention</h2>
               <p className="text-gray-700">
-                After deletion, your data will be permanently removed from our servers within 90 days. 
+                After deletion, your data will be permanently removed from our servers within 90 days.
                 Some data may be retained in encrypted backups for a limited period for legal compliance.
               </p>
             </section>
           </div>
-          
+
           <div className="mt-8 pt-8 border-t border-gray-200">
-            <a href="/" className="text-blue-600 hover:text-blue-800 font-medium">
+            <Link href="/" className="text-blue-600 hover:text-blue-800 font-medium">
               ← Back to Jawab24
-            </a>
+            </Link>
           </div>
         </div>
       </div>
