@@ -553,5 +553,11 @@
   "plans.month": "شهرياً",
   "plans.pages": "صفحات",
   "plans.aiReplies": "رد ذكي شهرياً",
-  "plans.trialDays": "يوم تجربة مجانية"
+  "plans.trialDays": "يوم تجربة مجانية",
+  "plans.starter.name": "المبتدئ",
+  "plans.starter.description": "مثالي للأعمال الصغيرة الناشئة",
+  "plans.business.name": "الأعمال",
+  "plans.business.description": "رد تلقائي على صفحات فيسبوك وإنستغرام مع قوالب غير محدودة",
+  "plans.pro.name": "الاحترافي",
+  "plans.pro.description": "للوكالات والشركات الكبيرة باحتياجات غير محدودة"
 }

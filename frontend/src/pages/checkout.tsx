@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { loadStripe } from '@stripe/stripe-js';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
-import { CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
@@ -115,10 +115,10 @@ export default function CheckoutPage() {
               {/* Plan Details */}
               <div className="border-b border-surface-200 pb-6 mb-6">
                 <h2 className="text-2xl font-bold text-surface-900 mb-2">
-                  {plan.name}
+                  {t(`plans.${plan.slug}.name`) || plan.name}
                 </h2>
                 <p className="text-surface-600 mb-4">
-                  {plan.description}
+                  {t(`plans.${plan.slug}.description`) || plan.description}
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-bold text-brand-600">
@@ -135,21 +135,23 @@ export default function CheckoutPage() {
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
                   <span className="text-surface-700">
-                    {plan.maxPages} {t('plans.pages')}
+                    {plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages} {t('plans.pages')}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
                   <span className="text-surface-700">
-                    {plan.maxAiRepliesPerMonth} {t('plans.aiReplies')}
+                    {plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth} {t('plans.aiReplies')}
                   </span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                  <span className="text-surface-700">
-                    {plan.trialDays} {t('plans.trialDays')}
-                  </span>
-                </div>
+                {plan.trialDays > 0 && (
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                    <span className="text-surface-700">
+                      {plan.trialDays} {t('plans.trialDays')}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Checkout Button */}
@@ -168,7 +170,7 @@ export default function CheckoutPage() {
                   <>
                     {t('checkout.continueToPayment')}
                     {isRTL ? (
-                      <ArrowRight className="w-5 h-5 rtl:rotate-180" />
+                      <ArrowLeft className="w-5 h-5" />
                     ) : (
                       <ArrowRight className="w-5 h-5" />
                     )}
@@ -184,8 +186,18 @@ export default function CheckoutPage() {
 
           {/* Back Link */}
           <div className="text-center">
-            <Link href="/pricing" className="text-brand-600 hover:text-brand-700 font-medium">
-              ← {t('checkout.backToPricing')}
+            <Link href="/pricing" className="text-brand-600 hover:text-brand-700 font-medium inline-flex items-center gap-2">
+              {isRTL ? (
+                <>
+                  {t('checkout.backToPricing')}
+                  <ArrowLeft className="w-4 h-4" />
+                </>
+              ) : (
+                <>
+                  <ArrowLeft className="w-4 h-4" />
+                  {t('checkout.backToPricing')}
+                </>
+              )}
             </Link>
           </div>
         </div>

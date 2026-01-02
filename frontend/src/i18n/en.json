@@ -554,5 +554,11 @@
   "plans.month": "month",
   "plans.pages": "Pages",
   "plans.aiReplies": "AI Replies per month",
-  "plans.trialDays": "days free trial"
+  "plans.trialDays": "days free trial",
+  "plans.starter.name": "Starter",
+  "plans.starter.description": "Perfect for small businesses getting started",
+  "plans.business.name": "Business",
+  "plans.business.description": "Auto-reply to Facebook/Instagram pages with unlimited templates",
+  "plans.pro.name": "Pro",
+  "plans.pro.description": "For agencies and large businesses with unlimited needs"
 }
