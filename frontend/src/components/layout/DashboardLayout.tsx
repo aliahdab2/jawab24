@@ -1,5 +1,5 @@
 import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X } from 'lucide-react';
-import { ReactNode, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -10,7 +10,7 @@ import { PageSpinner, VersionBadge, WhatsAppHelpButton } from '@/components/ui';
 import clsx from 'clsx';
 
 interface DashboardLayoutProps {
-  children: ReactNode;
+  children: React.ReactNode;
   title?: string;
   isPublic?: boolean;
 }

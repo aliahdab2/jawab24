@@ -1,8 +1,8 @@
-import { ReactNode, CSSProperties, MouseEventHandler } from 'react';
+import React, { CSSProperties, MouseEventHandler } from 'react';
 import clsx from 'clsx';
 
 interface CardProps {
-  children: ReactNode;
+  children: React.ReactNode;
   className?: string;
   hover?: boolean;
   padding?: 'none' | 'sm' | 'md' | 'lg';
@@ -37,7 +37,7 @@ export function Card({ children, className, hover = false, padding = 'md', style
 interface CardHeaderProps {
   title: string;
   description?: string;
-  action?: ReactNode;
+  action?: React.ReactNode;
 }
 
 export function CardHeader({ title, description, action }: CardHeaderProps) {

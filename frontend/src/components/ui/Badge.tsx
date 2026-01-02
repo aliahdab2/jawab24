@@ -1,8 +1,8 @@
-import { ReactNode } from 'react';
+import React from 'react';
 import clsx from 'clsx';
 
 interface BadgeProps {
-  children: ReactNode;
+  children: React.ReactNode;
   variant?: 'success' | 'warning' | 'error' | 'info' | 'default';
   size?: 'sm' | 'md';
   className?: string;

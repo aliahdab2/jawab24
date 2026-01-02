@@ -1,7 +1,7 @@
-import { TextareaHTMLAttributes, forwardRef } from 'react';
+import React, { TextareaHTMLAttributes, forwardRef } from 'react';
 import clsx from 'clsx';
 
-interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'children'> {
   label?: string;
   error?: string;
   helperText?: string;

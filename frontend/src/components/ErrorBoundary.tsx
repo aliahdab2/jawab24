@@ -1,8 +1,7 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, PropsWithChildren } from 'react';
 
-interface Props {
-  children: ReactNode;
-  fallback?: ReactNode;
+interface Props extends PropsWithChildren {
+  fallback?: React.ReactNode;
 }
 
 interface State {
@@ -11,10 +10,8 @@ interface State {
 }
 
 class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+  public state: State = { hasError: false, error: null };
+  public refs = {};
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
@@ -39,7 +36,7 @@ class ErrorBoundary extends Component<Props, State> {
     window.location.href = '/';
   };
 
-  render(): ReactNode {
+  render() {
     if (this.state.hasError) {
       // Custom fallback UI
       if (this.props.fallback) {
@@ -108,11 +105,3 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 export default ErrorBoundary;
-
-
-
-
-
-
-
-

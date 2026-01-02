@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Jawab24 - Smart Facebook Auto-Replies 24/7",
   "private": true,
+  "overrides": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  },
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
@@ -13,37 +17,33 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@tanstack/react-query": "^4.36.1",
-    "axios": "^1.6.2",
+    "@tanstack/react-query": "^5.0.0",
+    "axios": "^1.7.0",
     "clsx": "^2.1.0",
-    "date-fns": "^3.2.0",
-    "lucide-react": "^0.303.0",
-    "next": "^13.5.6",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "zustand": "^4.4.7",
+    "date-fns": "^3.6.0",
+    "lucide-react": "^0.468.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.0",
     "@stripe/stripe-js": "^2.4.0"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.4.0",
-    "@testing-library/react": "^14.2.0",
-    "@types/node": "^18.19.0",
-    "@types/react": "^18.2.46",
-    "@types/react-dom": "^18.2.18",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.16",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "^13.5.11",
-    "jsdom": "^24.0.0",
-    "postcss": "^8.4.32",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.1.0",
+    "jsdom": "^25.0.0",
+    "postcss": "^8.4.47",
     "tailwindcss": "^3.4.0",
     "tailwindcss-rtl": "^0.9.0",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.12",
-    "vitest": "^1.2.2"
-  },
-  "optionalDependencies": {
-    "@next/swc-linux-x64-gnu": "13.5.6",
-    "@next/swc-linux-x64-musl": "13.5.6"
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
   }
 }
