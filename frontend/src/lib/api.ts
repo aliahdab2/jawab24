@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
 export const api = axios.create({
   baseURL: API_URL,

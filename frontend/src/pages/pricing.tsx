@@ -4,6 +4,7 @@ import Head from 'next/head';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSpinner } from '@/components/ui';
 import { plansApi, subscriptionApi } from '@/lib/api';
+import { extractArrayData, extractObjectData } from '@/lib/api-utils';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { Check, X, Zap, Crown, Sparkles } from 'lucide-react';
@@ -239,9 +240,12 @@ export default function PricingPage() {
           plansApi.getAll(),
           isAuthenticated ? subscriptionApi.getUsage().catch(() => null) : Promise.resolve(null),
         ]);
-        setPlans(plansRes.data.data || []);
-        if (usageRes?.data?.data) {
-          setUsage(usageRes.data.data);
+        
+        // Use utility functions for safe response parsing
+        setPlans(extractArrayData<Plan>(plansRes.data));
+        
+        if (usageRes?.data) {
+          setUsage(extractObjectData<UsageSummary>(usageRes.data));
         }
       } catch (error) {
         console.error('Failed to fetch plans:', error);
@@ -265,8 +269,8 @@ export default function PricingPage() {
       await subscriptionApi.changePlan(planId);
       // Refresh usage data
       const usageRes = await subscriptionApi.getUsage();
-      if (usageRes?.data?.data) {
-        setUsage(usageRes.data.data);
+      if (usageRes?.data) {
+        setUsage(extractObjectData<UsageSummary>(usageRes.data));
       }
     } catch (error) {
       console.error('Failed to change plan:', error);

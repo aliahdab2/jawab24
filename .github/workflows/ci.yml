@@ -213,6 +213,9 @@ jobs:
       - name: Build shared package
         run: npm run build --workspace=@jawab24/shared
 
+      - name: Run Frontend Tests
+        run: npm test --workspace=jawab24-frontend -- --run
+
       - name: Check for duplicate API paths
         run: |
           echo "🔍 Checking for duplicate /api/api paths in frontend code..."

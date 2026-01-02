@@ -181,10 +181,10 @@ export default function LandingPage() {
           <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
 
-          <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 sm:grid-cols-2 items-center gap-3 sm:gap-8 lg:gap-12">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col sm:grid sm:grid-cols-2 items-center gap-6 sm:gap-8 lg:gap-12">
               {/* Text Content */}
-              <div className="text-start order-1">
+              <div className="w-full text-center sm:text-start order-1">
                 {/* Heading */}
                 <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
                   {t('landing.hero.title1')}
@@ -199,14 +199,14 @@ export default function LandingPage() {
                 </p>
 
                 {/* CTA Buttons */}
-                <div className="flex flex-col items-stretch gap-2 sm:gap-4 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
+                <div className="flex flex-col items-stretch gap-2 sm:gap-4 mb-4 sm:mb-12 animate-slide-up animation-delay-200 px-2 sm:px-0">
                   <Link href="/login" className="w-full sm:w-auto">
-                    <Button size="lg" className="w-full sm:w-auto sm:min-w-[220px] justify-center shadow-2xl shadow-brand-500/40 px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                    <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95 whitespace-nowrap">
                       {t('landing.hero.cta1')}
                     </Button>
                   </Link>
                   <Link href="/pricing" className="w-full sm:w-auto">
-                    <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[220px] justify-center px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
+                    <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg whitespace-nowrap">
                       {t('landing.hero.cta2')}
                     </Button>
                   </Link>
@@ -226,7 +226,7 @@ export default function LandingPage() {
               </div>
 
               {/* Hero Illustration - Phone Mockup with Floating Icons */}
-              <div className="relative animate-slide-up order-2 flex justify-center">
+              <div className="relative animate-slide-up order-2 flex justify-center w-full mt-6 sm:mt-0">
                 <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
                   {/* Glowing Background - More Vibrant like your image */}
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
@@ -264,7 +264,7 @@ export default function LandingPage() {
                             <div className="w-4 h-4 sm:w-5 sm:h-5 lg:w-7 lg:h-7 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
                               <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-surface-600" />
                             </div>
-                            <div className="bg-white rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-sm border border-brand-50 max-w-[85%]">
+                            <div className="bg-white rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-sm border border-brand-50 max-w-full">
                               <p className="text-[8px] sm:text-[11px] lg:text-base text-surface-700 font-medium leading-tight lg:leading-relaxed">{t('landing.hero.chatQuery')}</p>
                             </div>
                           </div>
