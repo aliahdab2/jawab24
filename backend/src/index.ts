@@ -115,9 +115,9 @@ const start = async () => {
         await server.register(settingsRoutes);
         await server.register(messagesRoutes);
         await server.register(instagramRoutes);
-        await server.register(plansRoutes, { prefix: '/api/plans' });
-        await server.register(subscriptionsRoutes, { prefix: '/api/subscription' });
-        await server.register(paymentRoutes, { prefix: '/api/payment' });
+        await server.register(plansRoutes, { prefix: '/plans' });
+        await server.register(subscriptionsRoutes, { prefix: '/subscription' });
+        await server.register(paymentRoutes, { prefix: '/payment' });
 
         const port = parseInt(process.env.PORT || '3000', 10);
         const host = '0.0.0.0';
