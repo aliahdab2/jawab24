@@ -135,7 +135,7 @@ export default function LandingPage() {
         <link rel="canonical" href="https://jawab24.com/landing" />
       </Head>
 
-      <div className="min-h-screen bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="min-h-screen bg-white overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Navigation - Mobile optimized */}
         <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-surface-100">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -314,9 +314,9 @@ export default function LandingPage() {
         </section>
 
         {/* Stats Section - Compact on mobile */}
-        <section className="py-8 sm:py-16 bg-surface-900 relative w-screen left-1/2 right-1/2 -mx-[50vw]">
+        <section className="py-8 sm:py-16 bg-surface-900 relative">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent"></div>
-          <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32">
+          <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
             {statsList.map((stat, i) => (
               <div key={i} className="text-center group">
                 <div className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-2 sm:mb-3 group-hover:scale-110 transition-transform duration-500">{stat.value}</div>
