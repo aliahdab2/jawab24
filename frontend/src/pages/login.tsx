@@ -40,7 +40,9 @@ export default function LoginPage() {
     // Build Facebook OAuth URL
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
-    const scope = encodeURIComponent('pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_comments,instagram_manage_messages');
+    // Instagram scopes require Instagram product to be set up in Facebook Developer Console
+    // For now, using Facebook-only scopes. Add Instagram scopes after configuring Instagram product.
+    const scope = encodeURIComponent('pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement,pages_messaging');
     
     const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
     
