@@ -287,13 +287,15 @@ jobs:
           # Clean up any existing test container
           docker rm -f backend-test 2>/dev/null || true
           
-          # Start backend with minimal config (will fail to connect to DB but should not crash on import)
-          # Note: NOT using --rm so we can get logs even if it crashes
+          # Start backend with minimal config
+          # SKIP_MIGRATIONS=true skips DB connection at startup
+          # This tests that code loads without import/require errors
           docker run -d --name backend-test \
             -e DATABASE_URL=postgres://test:test@localhost:5432/test \
             -e JWT_SECRET=test_secret \
             -e NODE_ENV=production \
             -e PORT=3000 \
+            -e SKIP_MIGRATIONS=true \
             jawab24-backend:test
           
           # Wait a moment for startup

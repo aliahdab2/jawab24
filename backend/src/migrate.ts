@@ -8,6 +8,12 @@ import fs from 'fs';
 dotenv.config();
 
 const runMigrations = async () => {
+    // Allow skipping migrations for smoke tests (CI)
+    if (process.env.SKIP_MIGRATIONS === 'true') {
+        console.log('⏭️  Skipping migrations (SKIP_MIGRATIONS=true)');
+        return;
+    }
+
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
         throw new Error('DATABASE_URL is not defined');
