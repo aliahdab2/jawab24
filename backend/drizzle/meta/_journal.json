@@ -22,12 +22,27 @@
       "when": 1735225200000,
       "tag": "0003_add_pricing_system",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1735398000000,
+      "tag": "0004_add_stripe_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1735484400000,
+      "tag": "0004_merge_free_into_starter",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1735830000000,
+      "tag": "0005_add_stripe_price_ids",
+      "breakpoints": true
     }
   ]
 }
-
-
-
-
-
-
