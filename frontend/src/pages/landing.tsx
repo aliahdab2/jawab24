@@ -183,9 +183,10 @@ export default function LandingPage() {
 
           <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
             <div className="grid grid-cols-2 sm:grid-cols-2 items-center gap-3 sm:gap-8 lg:gap-12">
-              {/* Hero Illustration - Phone Mockup with Floating Icons */}
-              <div className={`relative animate-slide-up flex justify-center ${isRTL ? 'order-2 sm:order-1' : 'order-1 sm:order-2'}`}>
-                <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
+              {/* Text Content */}
+              <div className="text-start order-1">
+                {/* Heading */}
+                <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
                   {/* Glowing Background - More Vibrant like your image */}
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
                   
@@ -268,10 +269,9 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Text Content */}
-              <div className={`text-start ${isRTL ? 'order-1 sm:order-2' : 'order-2 sm:order-1'}`}>
-                {/* Heading */}
-                <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
+              {/* Hero Illustration - Phone Mockup with Floating Icons */}
+              <div className="relative animate-slide-up order-2 flex justify-center">
+                <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
                   {t('landing.hero.title1')}
                   <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-1 sm:mt-2">
                     {t('landing.hero.title2')}
