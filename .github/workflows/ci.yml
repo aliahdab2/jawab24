@@ -98,6 +98,13 @@ jobs:
 
       - name: Run tests
         run: npm test --workspace=jawab24-backend -- --run
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/autoreply_test
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_TEST_PUBLISHABLE_KEY }}
+          STRIPE_WEBHOOK_SECRET: whsec_test_secret
+          JWT_SECRET: test_jwt_secret_for_ci
+          FRONTEND_URL: http://localhost:3001
       
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
