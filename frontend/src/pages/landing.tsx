@@ -187,6 +187,47 @@ export default function LandingPage() {
               <div className="text-start order-1">
                 {/* Heading */}
                 <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
+                  {t('landing.hero.title1')}
+                  <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-1 sm:mt-2">
+                    {t('landing.hero.title2')}
+                  </span>
+                </h1>
+
+                {/* Description */}
+                <p className="text-xs min-[375px]:text-sm sm:text-lg lg:text-xl text-surface-600 mb-4 sm:mb-12 leading-relaxed animate-slide-up animation-delay-100">
+                  {t('landing.hero.description')}
+                </p>
+
+                {/* CTA Buttons */}
+                <div className="flex flex-col items-stretch gap-2 sm:gap-4 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
+                  <Link href="/login" className="w-full sm:w-auto">
+                    <Button size="lg" className="w-full sm:w-auto sm:min-w-[220px] justify-center shadow-2xl shadow-brand-500/40 px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                      {t('landing.hero.cta1')}
+                    </Button>
+                  </Link>
+                  <Link href="/pricing" className="w-full sm:w-auto">
+                    <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[220px] justify-center px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
+                      {t('landing.hero.cta2')}
+                    </Button>
+                  </Link>
+                </div>
+
+                {/* Platform Icons */}
+                <div className="hidden sm:flex items-center gap-3 sm:gap-6 animate-slide-up animation-delay-300">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#1877F2]/10 text-[#1877F2] font-bold text-sm sm:text-base hover:bg-[#1877F2] hover:text-white transition-all cursor-default">
+                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>{t('landing.platforms.facebook')}</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 font-bold text-sm sm:text-base hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white transition-all cursor-default">
+                    <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>{t('landing.platforms.instagram')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Hero Illustration - Phone Mockup with Floating Icons */}
+              <div className="relative animate-slide-up order-2 flex justify-center">
+                <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
                   {/* Glowing Background - More Vibrant like your image */}
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
                   
@@ -265,47 +306,6 @@ export default function LandingPage() {
                         <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                       </div>
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Hero Illustration - Phone Mockup with Floating Icons */}
-              <div className="relative animate-slide-up order-2 flex justify-center">
-                <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
-                  {t('landing.hero.title1')}
-                  <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-1 sm:mt-2">
-                    {t('landing.hero.title2')}
-                  </span>
-                </h1>
-
-                {/* Description */}
-                <p className="text-xs min-[375px]:text-sm sm:text-lg lg:text-xl text-surface-600 mb-4 sm:mb-12 leading-relaxed animate-slide-up animation-delay-100">
-                  {t('landing.hero.description')}
-                </p>
-
-                {/* CTA Buttons */}
-                <div className="flex flex-col items-stretch gap-2 sm:gap-4 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
-                  <Link href="/login" className="w-full sm:w-auto">
-                    <Button size="lg" className="w-full sm:w-auto sm:min-w-[220px] justify-center shadow-2xl shadow-brand-500/40 px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
-                      {t('landing.hero.cta1')}
-                    </Button>
-                  </Link>
-                  <Link href="/pricing" className="w-full sm:w-auto">
-                    <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[220px] justify-center px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
-                      {t('landing.hero.cta2')}
-                    </Button>
-                  </Link>
-                </div>
-
-                {/* Platform Icons */}
-                <div className="hidden sm:flex items-center gap-3 sm:gap-6 animate-slide-up animation-delay-300">
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#1877F2]/10 text-[#1877F2] font-bold text-sm sm:text-base hover:bg-[#1877F2] hover:text-white transition-all cursor-default">
-                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>{t('landing.platforms.facebook')}</span>
-                  </div>
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 font-bold text-sm sm:text-base hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white transition-all cursor-default">
-                    <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>{t('landing.platforms.instagram')}</span>
                   </div>
                 </div>
               </div>
