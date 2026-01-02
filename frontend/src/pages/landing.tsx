@@ -185,7 +185,7 @@ export default function LandingPage() {
             <div className="grid grid-cols-5 sm:grid-cols-2 items-center gap-4 sm:gap-8 lg:gap-12">
               {/* Hero Illustration - Phone Mockup with Floating Icons */}
               <div className="relative animate-slide-up col-span-2 sm:col-span-1 order-1 sm:order-2">
-                <div className="relative mx-auto max-w-[140px] sm:max-w-[200px] lg:max-w-[260px]">
+                <div className="relative mx-auto max-w-[180px] sm:max-w-[220px] lg:max-w-[280px]">
                   {/* Glowing Background - More Vibrant like your image */}
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
                   
@@ -199,49 +199,49 @@ export default function LandingPage() {
                       {/* App Interface */}
                       <div className="p-3 sm:p-4 h-full flex flex-col">
                         {/* Status Bar */}
-                        <div className="flex items-center justify-between mb-4 pt-4">
+                        <div className="flex items-center justify-between mb-3 sm:mb-4 pt-3 sm:pt-4">
                           <div className="flex items-center gap-0.5">
                             <div className="w-1.5 h-1.5 bg-brand-500 rounded-full" />
                             <div className="w-1.5 h-1.5 bg-brand-300 rounded-full" />
                           </div>
-                          <div className="text-[8px] font-bold text-brand-900/30">9:41</div>
-                          <div className="w-4 h-1.5 bg-brand-500/10 rounded-sm" />
+                          <div className="text-[8px] sm:text-[9px] font-bold text-brand-900/30">9:41</div>
+                          <div className="w-3 sm:w-4 h-1.5 bg-brand-500/10 rounded-sm" />
                         </div>
                         
                         {/* Robot Avatar - Subtler Colors with Pulse Animation */}
-                        <div className="flex flex-col items-center justify-center mb-6 mt-2">
-                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-2 animate-float-pulse border border-brand-50">
-                            <Bot className="w-8 h-8 sm:w-10 sm:h-10 text-brand-500" />
+                        <div className="flex flex-col items-center justify-center mb-4 sm:mb-6 mt-1 sm:mt-2">
+                          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-1.5 sm:mb-2 animate-float-pulse border border-brand-50">
+                            <Bot className="w-7 h-7 sm:w-10 sm:h-10 text-brand-500" />
                           </div>
-                          <span className="font-display font-bold text-[10px] sm:text-xs text-brand-600">jawab24.com</span>
+                          <span className="font-display font-bold text-[9px] sm:text-xs text-brand-600">jawab24.com</span>
                         </div>
                         
                         {/* Chat Bubbles - Brand Colors */}
-                        <div className="space-y-3">
-                          <div className="flex items-end gap-1.5 rtl:flex-row-reverse animate-slide-up">
-                            <div className="w-5 h-5 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
-                              <Facebook className="w-3 h-3 text-surface-600" />
+                        <div className="space-y-2 sm:space-y-3">
+                          <div className="flex items-end gap-1 sm:gap-1.5 rtl:flex-row-reverse animate-slide-up">
+                            <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-surface-600" />
                             </div>
-                            <div className="bg-white rounded-2xl rounded-bl-none rtl:rounded-bl-2xl rtl:rounded-br-none px-3 py-2 shadow-sm border border-brand-50 max-w-[85%]">
-                              <p className="text-[8px] sm:text-[10px] text-surface-700 font-medium">{t('landing.hero.chatQuery')}</p>
+                            <div className="bg-white rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1.5 sm:px-3 sm:py-2 shadow-sm border border-brand-50 max-w-[85%]">
+                              <p className="text-[9px] sm:text-[10px] text-surface-700 font-medium leading-tight">{t('landing.hero.chatQuery')}</p>
                             </div>
                           </div>
-                          <div className="flex items-end gap-1.5 justify-end rtl:flex-row-reverse rtl:justify-start animate-slide-up animation-delay-500">
-                            <div className="bg-brand-500 rounded-2xl rounded-br-none rtl:rounded-br-2xl rtl:rounded-bl-none px-3 py-2 shadow-lg shadow-brand-500/20 max-w-[85%]">
-                              <p className="text-[8px] sm:text-[10px] text-white font-bold leading-tight">{t('landing.hero.chatResponse')}</p>
+                          <div className="flex items-end gap-1 sm:gap-1.5 justify-end rtl:flex-row-reverse rtl:justify-start animate-slide-up animation-delay-500">
+                            <div className="bg-brand-500 rounded-xl sm:rounded-2xl rounded-br-none rtl:rounded-br-xl sm:rtl:rounded-br-2xl rtl:rounded-bl-none px-2 py-1.5 sm:px-3 sm:py-2 shadow-lg shadow-brand-500/20 max-w-[85%]">
+                              <p className="text-[9px] sm:text-[10px] text-white font-bold leading-tight">{t('landing.hero.chatResponse')}</p>
                             </div>
-                            <div className="w-5 h-5 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0 shadow-sm">
-                              <Zap className="w-3 h-3 text-brand-500" />
+                            <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0 shadow-sm">
+                              <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-brand-500" />
                             </div>
                           </div>
                         </div>
 
                         {/* Speed Indicator */}
-                        <div className="mt-auto pb-4 flex items-center justify-center gap-1 opacity-40">
-                           <div className="h-1 w-8 bg-brand-100 rounded-full overflow-hidden">
+                        <div className="mt-auto pb-3 sm:pb-4 flex items-center justify-center gap-1 opacity-40">
+                           <div className="h-0.5 sm:h-1 w-6 sm:w-8 bg-brand-100 rounded-full overflow-hidden">
                              <div className="h-full w-full bg-brand-400 animate-[loading_1.5s_infinite]" />
                            </div>
-                           <span className="text-[7px] font-bold text-brand-700 uppercase">{t('landing.stats.speed')}</span>
+                           <span className="text-[7px] sm:text-[8px] font-bold text-brand-700 uppercase">{t('landing.stats.speed')}</span>
                         </div>
                       </div>
                     </div>
