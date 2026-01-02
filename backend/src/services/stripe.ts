@@ -4,7 +4,7 @@ import { config } from '../config';
 // Initialize Stripe only if keys are provided (optional for preview)
 export const stripe = config.stripe?.secretKey 
     ? new Stripe(config.stripe.secretKey, {
-        apiVersion: '2024-12-18.acacia',
+        apiVersion: '2023-10-16',
         typescript: true,
     })
     : null;
@@ -58,6 +58,9 @@ export class StripeService {
      * Get Stripe Customer by ID
      */
     async getCustomer(customerId: string): Promise<Stripe.Customer> {
+        if (!stripe) {
+            throw new Error('Stripe is not configured.');
+        }
         return await stripe.customers.retrieve(customerId) as Stripe.Customer;
     }
 
@@ -65,6 +68,9 @@ export class StripeService {
      * Get Stripe Subscription by ID
      */
     async getSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+        if (!stripe) {
+            throw new Error('Stripe is not configured.');
+        }
         return await stripe.subscriptions.retrieve(subscriptionId);
     }
 
@@ -72,6 +78,9 @@ export class StripeService {
      * Cancel a subscription at period end
      */
     async cancelSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+        if (!stripe) {
+            throw new Error('Stripe is not configured.');
+        }
         return await stripe.subscriptions.update(subscriptionId, {
             cancel_at_period_end: true,
         });
@@ -81,6 +90,9 @@ export class StripeService {
      * Resume a canceled subscription
      */
     async resumeSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+        if (!stripe) {
+            throw new Error('Stripe is not configured.');
+        }
         return await stripe.subscriptions.update(subscriptionId, {
             cancel_at_period_end: false,
         });
@@ -93,6 +105,9 @@ export class StripeService {
         customerId: string,
         returnUrl: string
     ): Promise<Stripe.BillingPortal.Session> {
+        if (!stripe) {
+            throw new Error('Stripe is not configured.');
+        }
         return await stripe.billingPortal.sessions.create({
             customer: customerId,
             return_url: returnUrl,
@@ -107,9 +122,11 @@ export class StripeService {
         signature: string,
         secret: string
     ): Stripe.Event {
+        if (!stripe) {
+            throw new Error('Stripe is not configured.');
+        }
         return stripe.webhooks.constructEvent(payload, signature, secret);
     }
 }
 
 export const stripeService = new StripeService();
-

@@ -16,7 +16,7 @@ export class PaymentController {
         reply: FastifyReply
     ) {
         try {
-            const userId = (request.user as any)?.id;
+            const userId = (request as any).user?.id;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -58,7 +58,7 @@ export class PaymentController {
                 url: session.url,
             });
         } catch (error) {
-            request.log.error('Create checkout session error:', error);
+            request.log.error({ err: error }, 'Create checkout session error');
             return reply.status(500).send({ error: 'Failed to create checkout session' });
         }
     }
@@ -69,7 +69,7 @@ export class PaymentController {
      */
     async getSubscriptionStatus(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request.user as any)?.id;
+            const userId = (request as any).user?.id;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -109,7 +109,7 @@ export class PaymentController {
 
             return reply.send(response);
         } catch (error) {
-            request.log.error('Get subscription status error:', error);
+            request.log.error({ err: error }, 'Get subscription status error');
             return reply.status(500).send({ error: 'Failed to get subscription status' });
         }
     }
@@ -120,7 +120,7 @@ export class PaymentController {
      */
     async cancelSubscription(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request.user as any)?.id;
+            const userId = (request as any).user?.id;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -150,7 +150,7 @@ export class PaymentController {
 
             return reply.send({ message: 'Subscription will be canceled at the end of the billing period' });
         } catch (error) {
-            request.log.error('Cancel subscription error:', error);
+            request.log.error({ err: error }, 'Cancel subscription error');
             return reply.status(500).send({ error: 'Failed to cancel subscription' });
         }
     }
@@ -161,7 +161,7 @@ export class PaymentController {
      */
     async createBillingPortalSession(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request.user as any)?.id;
+            const userId = (request as any).user?.id;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -185,7 +185,7 @@ export class PaymentController {
 
             return reply.send({ url: session.url });
         } catch (error) {
-            request.log.error('Create billing portal session error:', error);
+            request.log.error({ err: error }, 'Create billing portal session error');
             return reply.status(500).send({ error: 'Failed to create billing portal session' });
         }
     }
@@ -201,9 +201,15 @@ export class PaymentController {
                 return reply.status(400).send({ error: 'Missing stripe-signature header' });
             }
 
+            // Get raw body - Fastify stores it in rawBody when configured
+            const rawBody = (request as any).rawBody as Buffer;
+            if (!rawBody) {
+                return reply.status(400).send({ error: 'Missing raw body' });
+            }
+
             // Verify webhook signature
             const event = stripeService.verifyWebhookSignature(
-                request.rawBody as Buffer,
+                rawBody,
                 signature,
                 config.stripe.webhookSecret
             );
@@ -238,7 +244,7 @@ export class PaymentController {
 
             return reply.send({ received: true });
         } catch (error) {
-            request.log.error('Webhook error:', error);
+            request.log.error({ err: error }, 'Webhook error');
             return reply.status(400).send({ error: 'Webhook verification failed' });
         }
     }
@@ -358,4 +364,3 @@ export class PaymentController {
 }
 
 export const paymentController = new PaymentController();
-

@@ -1,26 +1,38 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
-import paymentRoutes from '../../src/routes/payment';
 
-// Mock the payment controller
-const mockPaymentController = {
-    createCheckoutSession: vi.fn(),
-    handleStripeWebhook: vi.fn(),
-};
-
+// Mock the modules before importing the routes
 vi.mock('../../src/controllers/payment', () => ({
-    paymentController: mockPaymentController,
+    paymentController: {
+        createCheckoutSession: vi.fn().mockImplementation(async (request, reply) => {
+            return reply.send({ url: 'https://checkout.stripe.com/pay/cs_test' });
+        }),
+        getSubscriptionStatus: vi.fn().mockImplementation(async (request, reply) => {
+            return reply.send({ status: 'active' });
+        }),
+        cancelSubscription: vi.fn().mockImplementation(async (request, reply) => {
+            return reply.send({ message: 'Canceled' });
+        }),
+        createBillingPortalSession: vi.fn().mockImplementation(async (request, reply) => {
+            return reply.send({ url: 'https://billing.stripe.com' });
+        }),
+        handleWebhook: vi.fn().mockImplementation(async (request, reply) => {
+            return reply.send({ received: true });
+        }),
+    },
 }));
-
-// Mock auth middleware
-const mockAuthMiddleware = vi.fn((request, reply, done) => {
-    request.user = { id: 'user_123', email: 'test@example.com' };
-    done();
-});
 
 vi.mock('../../src/middleware/auth', () => ({
-    authMiddleware: mockAuthMiddleware,
+    authenticate: vi.fn((request: any, reply: any, done: any) => {
+        request.user = { id: 'user_123', email: 'test@example.com' };
+        done();
+    }),
 }));
+
+// Import after mocking
+import paymentRoutes from '../../src/routes/payment';
+import { paymentController } from '../../src/controllers/payment';
+import { authenticate } from '../../src/middleware/auth';
 
 describe('Payment Routes', () => {
     let app: FastifyInstance;
@@ -38,25 +50,19 @@ describe('Payment Routes', () => {
 
     describe('POST /api/payment/create-checkout-session', () => {
         it('should call createCheckoutSession controller', async () => {
-            mockPaymentController.createCheckoutSession.mockImplementation(
-                async (request, reply) => {
-                    return reply.send({ url: 'https://checkout.stripe.com/pay/cs_test' });
-                }
-            );
-
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/payment/create-checkout-session',
                 payload: { planId: 'plan_123' },
             });
 
-            expect(mockAuthMiddleware).toHaveBeenCalled();
-            expect(mockPaymentController.createCheckoutSession).toHaveBeenCalled();
+            expect(authenticate).toHaveBeenCalled();
+            expect(paymentController.createCheckoutSession).toHaveBeenCalled();
             expect(response.statusCode).toBe(200);
         });
 
         it('should require authentication', async () => {
-            mockAuthMiddleware.mockImplementationOnce((request, reply, done) => {
+            vi.mocked(authenticate).mockImplementationOnce((request: any, reply: any, done: any) => {
                 reply.code(401).send({ error: 'Unauthorized' });
             });
 
@@ -70,14 +76,47 @@ describe('Payment Routes', () => {
         });
     });
 
-    describe('POST /api/payment/webhook', () => {
-        it('should call handleStripeWebhook controller', async () => {
-            mockPaymentController.handleStripeWebhook.mockImplementation(
-                async (request, reply) => {
-                    return reply.status(200).send({ received: true });
-                }
-            );
+    describe('GET /api/payment/subscription-status', () => {
+        it('should call getSubscriptionStatus controller', async () => {
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/payment/subscription-status',
+            });
 
+            expect(authenticate).toHaveBeenCalled();
+            expect(paymentController.getSubscriptionStatus).toHaveBeenCalled();
+            expect(response.statusCode).toBe(200);
+        });
+    });
+
+    describe('POST /api/payment/cancel-subscription', () => {
+        it('should call cancelSubscription controller', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/payment/cancel-subscription',
+            });
+
+            expect(authenticate).toHaveBeenCalled();
+            expect(paymentController.cancelSubscription).toHaveBeenCalled();
+            expect(response.statusCode).toBe(200);
+        });
+    });
+
+    describe('POST /api/payment/billing-portal', () => {
+        it('should call createBillingPortalSession controller', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/payment/billing-portal',
+            });
+
+            expect(authenticate).toHaveBeenCalled();
+            expect(paymentController.createBillingPortalSession).toHaveBeenCalled();
+            expect(response.statusCode).toBe(200);
+        });
+    });
+
+    describe('POST /api/payment/webhook', () => {
+        it('should call handleWebhook controller', async () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/payment/webhook',
@@ -87,26 +126,19 @@ describe('Payment Routes', () => {
                 payload: { type: 'checkout.session.completed' },
             });
 
-            expect(mockPaymentController.handleStripeWebhook).toHaveBeenCalled();
+            expect(paymentController.handleWebhook).toHaveBeenCalled();
             expect(response.statusCode).toBe(200);
         });
 
         it('should not require authentication for webhooks', async () => {
-            mockPaymentController.handleStripeWebhook.mockImplementation(
-                async (request, reply) => {
-                    return reply.status(200).send({ received: true });
-                }
-            );
-
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/payment/webhook',
                 payload: {},
             });
 
-            // Auth middleware should not be called for webhook
-            expect(response.statusCode).not.toBe(401);
+            // Webhook should still work without authentication
+            expect(response.statusCode).toBe(200);
         });
     });
 });
-
