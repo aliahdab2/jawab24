@@ -46,10 +46,10 @@ api.interceptors.response.use(
 
 // Auth API
 export const authApi = {
-  loginWithFacebook: (code: string) => 
+  loginWithFacebook: (code: string) =>
     api.post('/auth/facebook', { code }),
-  
-  getProfile: () => 
+
+  getProfile: () =>
     api.get('/auth/profile'),
 };
 
@@ -57,7 +57,7 @@ export const authApi = {
 export const pagesApi = {
   getAll: () => api.get('/pages'),
   getById: (id: string) => api.get(`/pages/${id}`),
-  toggle: (id: string, enabled: boolean) => 
+  toggle: (id: string, enabled: boolean) =>
     api.post(`/pages/${id}/toggle`, { enabled }),
   sync: () => api.post('/pages/sync'),
 };
@@ -66,16 +66,16 @@ export const pagesApi = {
 export const postsApi = {
   getByPage: (pageId: string) => api.get(`/pages/${pageId}/posts`),
   getById: (id: string) => api.get(`/posts/${id}`),
-  toggle: (id: string, enabled: boolean) => 
+  toggle: (id: string, enabled: boolean) =>
     api.post(`/posts/${id}/toggle`, { enabled }),
 };
 
 // Comments API
 export const commentsApi = {
-  getAll: (params?: { page?: number; limit?: number; replied?: boolean }) => 
+  getAll: (params?: { page?: number; limit?: number; replied?: boolean }) =>
     api.get('/comments', { params }),
   getByPost: (postId: string) => api.get(`/posts/${postId}/comments`),
-  reply: (id: string, text: string) => 
+  reply: (id: string, text: string) =>
     api.post(`/comments/${id}/reply`, { text }),
 };
 
@@ -83,9 +83,9 @@ export const commentsApi = {
 export const templatesApi = {
   getAll: () => api.get('/templates'),
   getById: (id: string) => api.get(`/templates/${id}`),
-  create: (data: { name: string; translations: Record<string, string>; keywords?: string[] }) => 
+  create: (data: { name: string; translations: Record<string, string>; keywords?: string[] }) =>
     api.post('/templates', data),
-  update: (id: string, data: { name?: string; translations?: Record<string, string>; keywords?: string[]; active?: boolean }) => 
+  update: (id: string, data: { name?: string; translations?: Record<string, string>; keywords?: string[]; active?: boolean }) =>
     api.put(`/templates/${id}`, data),
   delete: (id: string) => api.delete(`/templates/${id}`),
 };
@@ -94,9 +94,9 @@ export const templatesApi = {
 export const rulesApi = {
   getAll: () => api.get('/rules'),
   getById: (id: string) => api.get(`/rules/${id}`),
-  create: (data: { name: string; keywords: string[]; templateId: string; priority?: number }) => 
+  create: (data: { name: string; keywords: string[]; templateId: string; priority?: number }) =>
     api.post('/rules', data),
-  update: (id: string, data: { name?: string; keywords?: string[]; templateId?: string; priority?: number; active?: boolean }) => 
+  update: (id: string, data: { name?: string; keywords?: string[]; templateId?: string; priority?: number; active?: boolean }) =>
     api.put(`/rules/${id}`, data),
   delete: (id: string) => api.delete(`/rules/${id}`),
 };
@@ -128,6 +128,7 @@ export const plansAdminApi = {
 };
 
 // Subscription API
+// Subscription API
 export const subscriptionApi = {
   get: () => api.get('/subscription'),
   getUsage: () => api.get('/subscription/usage'),
@@ -137,7 +138,6 @@ export const subscriptionApi = {
   resume: () => api.post('/subscription/resume'),
   checkAiLimit: () => api.get('/subscription/limits/ai'),
   checkPageLimit: () => api.get('/subscription/limits/pages'),
-  checkTemplateLimit: () => api.get('/subscription/limits/templates'),
   checkRuleLimit: () => api.get('/subscription/limits/rules'),
 };
 
