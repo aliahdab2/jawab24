@@ -239,7 +239,7 @@ export default function LandingPage() {
                     {/* Screen Content - Cleaner, more integrated look */}
                     <div className="bg-gradient-to-br from-white to-brand-50/30 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative border border-white/50">
                   {/* App Interface */}
-                  <div className="p-2.5 sm:p-4 h-full flex flex-col justify-between">
+                  <div className="p-2.5 sm:p-4 h-full flex flex-col">
                     {/* Status Bar */}
                     <div className="flex items-center justify-between mb-1.5 sm:mb-3 pt-1.5 sm:pt-3">
                       <div className="flex items-center gap-0.5">
@@ -251,7 +251,7 @@ export default function LandingPage() {
                     </div>
 
                     {/* Robot Avatar - Subtler Colors with Pulse Animation */}
-                    <div className="flex flex-col items-center justify-center mb-1.5 sm:mb-4">
+                    <div className="flex flex-col items-center justify-center mb-2 sm:mb-6">
                       <div className="w-8 h-8 sm:w-16 sm:h-16 rounded-xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-1 sm:mb-2 animate-float-pulse border border-brand-50">
                         <Bot className="w-5 h-5 sm:w-10 sm:h-10 text-brand-500" />
                       </div>
@@ -259,7 +259,7 @@ export default function LandingPage() {
                     </div>
 
                     {/* Chat Bubbles - Brand Colors */}
-                    <div className="space-y-1.5 sm:space-y-3 flex-grow flex flex-col justify-center">
+                    <div className="space-y-1.5 sm:space-y-3">
                           <div className="flex items-end gap-1 sm:gap-1.5 rtl:flex-row-reverse animate-slide-up">
                             <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
                               <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-surface-600" />
