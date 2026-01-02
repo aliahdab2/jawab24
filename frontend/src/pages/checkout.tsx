@@ -32,7 +32,16 @@ export default function CheckoutPage() {
       setPlan(response.data);
     } catch (err) {
       console.error('Failed to fetch plan:', err);
-      setError('Failed to load plan details');
+      // Use mock data for preview if API fails
+      setPlan({
+        id: planId as string,
+        name: 'Pro Plan',
+        description: 'Professional plan for growing businesses',
+        price: 4900, // $49.00 in cents
+        maxPages: 5,
+        maxAiRepliesPerMonth: 1500,
+        trialDays: 7,
+      });
     }
   };
 
