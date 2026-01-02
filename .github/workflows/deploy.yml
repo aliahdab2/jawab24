@@ -203,7 +203,44 @@ jobs:
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "⏳ STEP 5: Waiting for health checks"
+            echo "⏳ STEP 5: Container Startup Verification"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Quick check: Did containers crash immediately?
+            sleep 10
+            echo "🔍 Checking if containers started without crashing..."
+            
+            # Check if backend crashed on startup (catches ESM/require errors)
+            if ! docker ps | grep -q "jawab24-backend-$DEPLOY_ENV"; then
+              echo "❌ Backend container crashed on startup!"
+              echo ""
+              echo "📋 Last 50 lines of backend logs:"
+              docker logs jawab24-backend-$DEPLOY_ENV --tail 50 2>&1 || echo "No logs"
+              echo ""
+              echo "🚫 ABORTING DEPLOYMENT - Backend failed to start"
+              exit 1
+            fi
+            echo "   ✅ Backend container is running"
+            
+            # Check if frontend crashed
+            if ! docker ps | grep -q "jawab24-frontend-$DEPLOY_ENV"; then
+              echo "❌ Frontend container crashed on startup!"
+              docker logs jawab24-frontend-$DEPLOY_ENV --tail 50 2>&1 || echo "No logs"
+              exit 1
+            fi
+            echo "   ✅ Frontend container is running"
+            
+            # Check if AI worker crashed
+            if ! docker ps | grep -q "jawab24-ai-worker-$DEPLOY_ENV"; then
+              echo "⚠️  AI Worker container not running (may be optional)"
+              docker logs jawab24-ai-worker-$DEPLOY_ENV --tail 20 2>&1 || echo "No logs"
+            else
+              echo "   ✅ AI Worker container is running"
+            fi
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "⏳ STEP 5b: Waiting for health checks"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
             # Wait for containers to be healthy
@@ -220,8 +257,18 @@ jobs:
                 break
               fi
               
+              # Check if container crashed during health check wait
+              if ! docker ps | grep -q "jawab24-backend-$DEPLOY_ENV"; then
+                echo "❌ Backend crashed during startup!"
+                docker logs jawab24-backend-$DEPLOY_ENV --tail 50 2>&1
+                exit 1
+              fi
+              
               if [ $WAITED -ge $MAX_WAIT ]; then
                 echo "❌ Health check timeout!"
+                echo ""
+                echo "📋 Backend logs:"
+                docker logs jawab24-backend-$DEPLOY_ENV --tail 30 2>&1
                 exit 1
               fi
               
