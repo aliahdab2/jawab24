@@ -113,30 +113,30 @@ export const statsApi = {
 
 // Plans API (Public - uses publicApi to avoid auth redirect issues)
 export const plansApi = {
-  getAll: () => publicApi.get('/api/plans'),
-  getById: (id: string) => publicApi.get(`/api/plans/${id}`),
+  getAll: () => publicApi.get('/plans'),
+  getById: (id: string) => publicApi.get(`/plans/${id}`),
 };
 
 // Plans Admin API
 export const plansAdminApi = {
-  getAll: () => api.get('/api/plans/admin/all'),
-  create: (data: Record<string, unknown>) => api.post('/api/plans/admin', data),
-  update: (id: string, data: Record<string, unknown>) => api.put(`/api/plans/admin/${id}`, data),
-  delete: (id: string) => api.delete(`/api/plans/admin/${id}`),
-  setDefault: (id: string) => api.post(`/api/plans/admin/${id}/set-default`),
+  getAll: () => api.get('/plans/admin/all'),
+  create: (data: Record<string, unknown>) => api.post('/plans/admin', data),
+  update: (id: string, data: Record<string, unknown>) => api.put(`/plans/admin/${id}`, data),
+  delete: (id: string) => api.delete(`/plans/admin/${id}`),
+  setDefault: (id: string) => api.post(`/plans/admin/${id}/set-default`),
 };
 
 // Subscription API
 export const subscriptionApi = {
-  get: () => api.get('/api/subscription'),
-  getUsage: () => api.get('/api/subscription/usage'),
-  changePlan: (planId: string) => api.post('/api/subscription/change-plan', { planId }),
-  cancel: (reason?: string) => api.post('/api/subscription/cancel', { reason }),
-  pause: () => api.post('/api/subscription/pause'),
-  resume: () => api.post('/api/subscription/resume'),
-  checkAiLimit: () => api.get('/api/subscription/limits/ai'),
-  checkPageLimit: () => api.get('/api/subscription/limits/pages'),
-  checkTemplateLimit: () => api.get('/api/subscription/limits/templates'),
-  checkRuleLimit: () => api.get('/api/subscription/limits/rules'),
+  get: () => api.get('/subscription'),
+  getUsage: () => api.get('/subscription/usage'),
+  changePlan: (planId: string) => api.post('/subscription/change-plan', { planId }),
+  cancel: (reason?: string) => api.post('/subscription/cancel', { reason }),
+  pause: () => api.post('/subscription/pause'),
+  resume: () => api.post('/subscription/resume'),
+  checkAiLimit: () => api.get('/subscription/limits/ai'),
+  checkPageLimit: () => api.get('/subscription/limits/pages'),
+  checkTemplateLimit: () => api.get('/subscription/limits/templates'),
+  checkRuleLimit: () => api.get('/subscription/limits/rules'),
 };
 

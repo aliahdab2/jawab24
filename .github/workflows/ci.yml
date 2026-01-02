@@ -213,6 +213,29 @@ jobs:
       - name: Build shared package
         run: npm run build --workspace=@jawab24/shared
 
+      - name: Check for duplicate API paths
+        run: |
+          echo "🔍 Checking for duplicate /api/api paths in frontend code..."
+          
+          # Search for patterns like '/api/api' or '/api/plans' in API client
+          # The API client baseURL is already /api, so paths should NOT include /api prefix
+          if grep -r "'/api/" frontend/src/lib/api.ts 2>/dev/null; then
+            echo ""
+            echo "❌ ERROR: Found API paths with /api prefix in api.ts!"
+            echo "   The baseURL already includes /api, so paths like '/api/plans' become '/api/api/plans'"
+            echo "   Use '/plans' instead of '/api/plans'"
+            exit 1
+          fi
+          
+          # Check for double /api anywhere in the codebase
+          if grep -r "/api/api" frontend/src/ 2>/dev/null; then
+            echo ""
+            echo "❌ ERROR: Found duplicate /api/api in frontend code!"
+            exit 1
+          fi
+          
+          echo "✅ No duplicate API paths found"
+
       - name: Build Frontend
         run: npm run build --workspace=jawab24-frontend
         env:
