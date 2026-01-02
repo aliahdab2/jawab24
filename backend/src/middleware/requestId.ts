@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 
 /**
  * Request ID Middleware
@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export async function requestIdMiddleware(request: FastifyRequest, reply: FastifyReply) {
     // Use existing request ID from header or generate new one
-    const requestId = (request.headers['x-request-id'] as string) || uuidv4();
+    const requestId = (request.headers['x-request-id'] as string) || crypto.randomUUID();
     
     // Attach to request object
     (request as any).id = requestId;
@@ -15,4 +15,3 @@ export async function requestIdMiddleware(request: FastifyRequest, reply: Fastif
     // Add to response headers
     reply.header('x-request-id', requestId);
 }
-
