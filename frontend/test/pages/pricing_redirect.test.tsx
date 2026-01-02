@@ -20,7 +20,7 @@ vi.mock('@/lib/api', () => ({
                     name: 'Starter',
                     price: 1000,
                     isActive: true,
-                    trialDays: 7,
+                    trialDays: 0,
                     maxAiRepliesPerMonth: 100,
                     maxPages: 1,
                     maxTemplates: 5,

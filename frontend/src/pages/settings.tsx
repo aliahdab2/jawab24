@@ -3,7 +3,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, Button, Input, Toggle, PageHeader, PageSpinner } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
-import { 
+import {
   Globe,
   Bot,
   Bell,
@@ -23,13 +23,13 @@ import Link from 'next/link';
 import { useTranslation, useLanguage } from '@/i18n';
 
 // Simple toggle row component with better design
-function SimpleToggle({ 
-  icon, 
-  title, 
-  description, 
-  enabled, 
-  onChange 
-}: { 
+function SimpleToggle({
+  icon,
+  title,
+  description,
+  enabled,
+  onChange
+}: {
   icon: React.ReactNode;
   title: string;
   description: string;
@@ -37,13 +37,11 @@ function SimpleToggle({
   onChange: (enabled: boolean) => void;
 }) {
   return (
-    <div className={`flex items-center justify-between gap-4 p-5 rounded-2xl border transition-all duration-300 ${
-      enabled ? 'bg-brand-50/30 border-brand-100 shadow-sm' : 'bg-white border-surface-200'
-    }`}>
+    <div className={`flex items-center justify-between gap-4 p-5 rounded-2xl border transition-all duration-300 ${enabled ? 'bg-brand-50/30 border-brand-100 shadow-sm' : 'bg-white border-surface-200'
+      }`}>
       <div className="flex items-center gap-4 min-w-0 flex-1">
-        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
-          enabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'
-        }`}>
+        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${enabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'
+          }`}>
           {icon}
         </div>
         <div className="text-start min-w-0">
@@ -61,10 +59,10 @@ export default function SettingsPage() {
   const { setLanguage } = useLanguage();
   const { token } = useAuthStore();
   const isRTL = language === 'ar';
-  
+
   // Show/hide advanced settings
   const [showAdvanced, setShowAdvanced] = useState(false);
-  
+
   const [settings, setSettings] = useState({
     dashboardLanguage: language,
     defaultReplyLanguage: 'ar',
@@ -160,13 +158,13 @@ export default function SettingsPage() {
   return (
     <DashboardLayout title={t('settings.title')}>
       {/* Header */}
-      <PageHeader 
-        title={t('settings.title')} 
+      <PageHeader
+        title={t('settings.title')}
         description={t('settings.description')}
         action={
-          <Button 
-            onClick={handleSave} 
-            loading={saving} 
+          <Button
+            onClick={handleSave}
+            loading={saving}
             icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
             variant={saved ? 'secondary' : 'primary'}
             size="lg"
@@ -191,27 +189,25 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
               onClick={() => setSettings({ ...settings, dashboardLanguage: 'ar' })}
-              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
-                settings.dashboardLanguage === 'ar' 
-                  ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500' 
+              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${settings.dashboardLanguage === 'ar'
+                  ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500'
                   : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
-              }`}
+                }`}
             >
               <span className={`font-bold ${settings.dashboardLanguage === 'ar' ? 'text-brand-900' : 'text-surface-600'}`}>العربية (Arabic)</span>
               {settings.dashboardLanguage === 'ar' && <Check className="w-5 h-5 text-brand-500" />}
             </button>
-            
+
             <button
               onClick={() => setSettings({ ...settings, dashboardLanguage: 'en' })}
-              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
-                settings.dashboardLanguage === 'en' 
-                  ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500' 
+              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${settings.dashboardLanguage === 'en'
+                  ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500'
                   : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
-              }`}
+                }`}
             >
               <span className={`font-bold ${settings.dashboardLanguage === 'en' ? 'text-brand-900' : 'text-surface-600'}`}>English</span>
               {settings.dashboardLanguage === 'en' && <Check className="w-5 h-5 text-brand-500" />}
@@ -250,9 +246,8 @@ export default function SettingsPage() {
       {/* Advanced Settings Toggle */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-300 mb-6 ${
-          showAdvanced ? 'bg-surface-900 border-surface-900 shadow-lg' : 'bg-white border-surface-200 hover:border-brand-300'
-        }`}
+        className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-300 mb-6 ${showAdvanced ? 'bg-surface-900 border-surface-900 shadow-lg' : 'bg-white border-surface-200 hover:border-brand-300'
+          }`}
       >
         <div className="flex items-center gap-4">
           <div className={`p-2.5 rounded-xl ${showAdvanced ? 'bg-surface-800 text-brand-400' : 'bg-surface-100 text-surface-500'}`}>
@@ -296,7 +291,7 @@ export default function SettingsPage() {
                 </div>
               </Card>
             </Link>
-            
+
             <Link href="/rules" className="group">
               <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 group-hover:bg-amber-50/10">
                 <div className="flex flex-col items-center text-center">
@@ -330,13 +325,13 @@ export default function SettingsPage() {
               </div>
               <Toggle enabled={settings.businessHoursOnly} onChange={(enabled) => setSettings({ ...settings, businessHoursOnly: enabled })} />
             </div>
-            
+
             {settings.businessHoursOnly && (
               <div className="grid grid-cols-2 gap-6 p-5 rounded-2xl bg-surface-50 border border-surface-100 animate-slide-up">
                 <div>
                   <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
                   <div className="relative">
-                    <Clock className="absolute top-1/2 -translate-y-1/2 left-4 w-4 h-4 text-surface-400" />
+                    <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-400" />
                     <Input
                       type="time"
                       value={settings.businessHoursStart}
@@ -348,7 +343,7 @@ export default function SettingsPage() {
                 <div>
                   <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
                   <div className="relative">
-                    <Clock className="absolute top-1/2 -translate-y-1/2 left-4 w-4 h-4 text-surface-400" />
+                    <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-400" />
                     <Input
                       type="time"
                       value={settings.businessHoursEnd}

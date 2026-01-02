@@ -2,16 +2,16 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { 
-  MessageCircle, 
-  Facebook, 
-  ArrowRight, 
+import {
+  MessageCircle,
+  Facebook,
+  ArrowRight,
   ArrowLeft,
-  MessageSquare, 
-  Zap, 
-  Globe, 
-  Shield, 
-  Clock, 
+  MessageSquare,
+  Zap,
+  Globe,
+  Shield,
+  Clock,
   Star,
   Check,
   ChevronDown,
@@ -137,7 +137,7 @@ export default function LandingPage() {
 
       <div className="min-h-screen bg-white overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Navigation - Mobile optimized */}
-        <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-surface-100">
+        <nav className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur-xl border-b border-surface-100">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-14 sm:h-20">
               {/* Logo */}
@@ -177,9 +177,9 @@ export default function LandingPage() {
         {/* Hero Section - Optimized for Mobile with Illustration */}
         <section className="relative pt-24 sm:pt-32 lg:pt-40 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
           {/* Animated Background Elements */}
-          <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
-          <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
+          <div className="absolute top-20 start-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
+          <div className="absolute bottom-0 end-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
+          <div className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col sm:grid sm:grid-cols-2 items-center gap-6 sm:gap-8 lg:gap-12">
@@ -230,36 +230,36 @@ export default function LandingPage() {
                 <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
                   {/* Glowing Background - More Vibrant like your image */}
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
-                  
+
                   {/* Phone Mockup - Titanium/Silver Frame instead of Black */}
                   <div className="relative bg-[#E5E7EB] rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5 shadow-2xl shadow-brand-900/20 border-[6px] border-[#F3F4F6]">
                     {/* Notch - Smaller and subtle */}
-                    <div className="absolute top-4 sm:top-5 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 bg-[#1F2937] rounded-full z-10"></div>
-                    
+                    <div className="absolute top-4 sm:top-5 start-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 bg-[#1F2937] rounded-full z-10"></div>
+
                     {/* Screen Content - Cleaner, more integrated look */}
                     <div className="bg-gradient-to-br from-white to-brand-50/30 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative border border-white/50">
-                  {/* App Interface */}
-                  <div className="p-2.5 sm:p-4 h-full flex flex-col justify-evenly">
-                    {/* Status Bar */}
-                    <div className="flex items-center justify-between pt-1 sm:pt-2">
-                      <div className="flex items-center gap-0.5 sm:gap-1">
-                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-500 rounded-full" />
-                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-300 rounded-full" />
-                      </div>
-                      <div className="text-[8px] sm:text-[9px] lg:text-xs font-bold text-brand-900/30">9:41</div>
-                      <div className="w-3 sm:w-4 lg:w-5 h-1.5 sm:h-2 bg-brand-500/10 rounded-sm" />
-                    </div>
+                      {/* App Interface */}
+                      <div className="p-2.5 sm:p-4 h-full flex flex-col justify-evenly">
+                        {/* Status Bar */}
+                        <div className="flex items-center justify-between pt-1 sm:pt-2">
+                          <div className="flex items-center gap-0.5 sm:gap-1">
+                            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-500 rounded-full" />
+                            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-300 rounded-full" />
+                          </div>
+                          <div className="text-[8px] sm:text-[9px] lg:text-xs font-bold text-brand-900/30">9:41</div>
+                          <div className="w-3 sm:w-4 lg:w-5 h-1.5 sm:h-2 bg-brand-500/10 rounded-sm" />
+                        </div>
 
-                    {/* Robot Avatar - Subtler Colors with Pulse Animation */}
-                    <div className="flex flex-col items-center justify-center">
-                      <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-1 sm:mb-2 animate-float-pulse border border-brand-50">
-                        <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500" />
-                      </div>
-                      <span className="font-display font-bold text-[8px] sm:text-xs lg:text-base text-brand-600">jawab24.com</span>
-                    </div>
+                        {/* Robot Avatar - Subtler Colors with Pulse Animation */}
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-1 sm:mb-2 animate-float-pulse border border-brand-50">
+                            <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500" />
+                          </div>
+                          <span className="font-display font-bold text-[8px] sm:text-xs lg:text-base text-brand-600">jawab24.com</span>
+                        </div>
 
-                    {/* Chat Bubbles - Brand Colors */}
-                    <div className="space-y-1.5 sm:space-y-3 lg:space-y-4 pb-2 sm:pb-4">
+                        {/* Chat Bubbles - Brand Colors */}
+                        <div className="space-y-1.5 sm:space-y-3 lg:space-y-4 pb-2 sm:pb-4">
                           <div className="flex items-end gap-1 sm:gap-1.5 lg:gap-2 rtl:flex-row-reverse animate-slide-up">
                             <div className="w-4 h-4 sm:w-5 sm:h-5 lg:w-7 lg:h-7 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
                               <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-surface-600" />
@@ -280,19 +280,19 @@ export default function LandingPage() {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Floating Elements - Each with unique animation */}
                   {/* Facebook - Original Blue Color */}
-                  <div className="absolute -left-4 sm:-left-8 top-1/4 animate-float-rotate">
+                  <div className="absolute -start-4 sm:-start-8 top-1/4 animate-float-rotate">
                     <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-blue-500/20 border-b-2 border-blue-100">
                       <div className="w-full h-full rounded-full bg-[#1877F2] flex items-center justify-center">
                         <Facebook className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Instagram - Original Gradient Colors */}
-                  <div className="absolute -right-4 sm:-right-8 top-1/3 animate-float-orbit">
+                  <div className="absolute -end-4 sm:-end-8 top-1/3 animate-float-orbit">
                     <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-pink-500/20 border-b-2 border-pink-100">
                       <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
                         <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
@@ -307,7 +307,7 @@ export default function LandingPage() {
 
         {/* Stats Section - Compact on mobile */}
         <section className="py-8 sm:py-16 bg-surface-900 relative">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent"></div>
+          <div className="absolute top-0 start-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent"></div>
           <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
             {statsList.map((stat, i) => (
               <div key={i} className="text-center group">
@@ -371,7 +371,7 @@ export default function LandingPage() {
                     <Button size="lg" className="rounded-xl sm:rounded-2xl px-6 sm:px-10 py-4 sm:py-7 text-base sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
                       <span className="flex items-center gap-2">
                         {t('landing.howItWorks.cta')}
-                        {isRTL ? <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />}
+                        <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 rtl:rotate-180" />
                       </span>
                     </Button>
                   </Link>
@@ -384,8 +384,8 @@ export default function LandingPage() {
                   <div className="absolute inset-0 bg-gradient-to-t from-brand-900/20 to-transparent"></div>
                 </div>
                 {/* Decorative Elements */}
-                <div className="absolute -top-10 -right-10 w-32 h-32 bg-accent-100 rounded-full -z-10 blur-2xl"></div>
-                <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-brand-100 rounded-full -z-10 blur-3xl"></div>
+                <div className="absolute -top-10 -end-10 w-32 h-32 bg-accent-100 rounded-full -z-10 blur-2xl"></div>
+                <div className="absolute -bottom-10 -start-10 w-40 h-40 bg-brand-100 rounded-full -z-10 blur-3xl"></div>
               </div>
             </div>
           </div>
@@ -449,7 +449,7 @@ export default function LandingPage() {
 
               {/* Business */}
               <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl bg-brand-50 border sm:border-2 border-brand-200 relative">
-                <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-600 text-white text-[8px] sm:text-xs font-bold rounded-full whitespace-nowrap">
+                <div className="absolute -top-2 sm:-top-3 start-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-600 text-white text-[8px] sm:text-xs font-bold rounded-full whitespace-nowrap">
                   {t('pricing.popular')}
                 </div>
                 <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center mt-2 sm:mt-0">
@@ -489,7 +489,7 @@ export default function LandingPage() {
                 <Button size="lg" className="px-6 sm:px-12 py-4 sm:py-6 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl shadow-xl shadow-brand-200">
                   <span className="flex items-center gap-2">
                     {t('pricing.viewPricingDetails')}
-                    {isRTL ? <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />}
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 rtl:rotate-180" />
                   </span>
                 </Button>
               </Link>
@@ -513,9 +513,8 @@ export default function LandingPage() {
               {faqs.map((faq, i) => (
                 <div
                   key={i}
-                  className={`bg-white rounded-2xl sm:rounded-3xl border-2 transition-all duration-300 overflow-hidden ${
-                    openFaq === i ? 'border-brand-500 shadow-xl shadow-brand-100' : 'border-transparent shadow-sm hover:border-surface-200'
-                  }`}
+                  className={`bg-white rounded-2xl sm:rounded-3xl border-2 transition-all duration-300 overflow-hidden ${openFaq === i ? 'border-brand-500 shadow-xl shadow-brand-100' : 'border-transparent shadow-sm hover:border-surface-200'
+                    }`}
                 >
                   <button
                     onClick={() => setOpenFaq(openFaq === i ? null : i)}
@@ -541,8 +540,8 @@ export default function LandingPage() {
 
         {/* Footer - Compact on mobile */}
         <footer className="bg-surface-900 text-white pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
-          <div className="absolute bottom-0 right-0 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-500/5 rounded-full blur-[80px] sm:blur-[120px] pointer-events-none"></div>
-          
+          <div className="absolute bottom-0 end-0 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-500/5 rounded-full blur-[80px] sm:blur-[120px] pointer-events-none"></div>
+
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-16 mb-10 sm:mb-20">
               <div className="col-span-2">
@@ -556,16 +555,16 @@ export default function LandingPage() {
                   {t('landing.footer.description')}
                 </p>
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <a 
-                    href="https://wa.me/963959858266?text=مرحباً، أريد الاستفسار عن خدمة Jawab24" 
-                    target="_blank" 
+                  <a
+                    href="https://wa.me/963959858266?text=مرحباً، أريد الاستفسار عن خدمة Jawab24"
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
                   >
                     <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hover:scale-110 transition-all" />
                   </a>
-                  <a 
-                    href="mailto:support@jawab24.com" 
+                  <a
+                    href="mailto:support@jawab24.com"
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group"
                   >
                     <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />

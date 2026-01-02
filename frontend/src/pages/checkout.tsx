@@ -3,7 +3,8 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { loadStripe } from '@stripe/stripe-js';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
+
 import { Button } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
@@ -114,14 +115,14 @@ export default function CheckoutPage() {
               {/* Plan Details */}
               <div className="border-b border-surface-200 pb-6 mb-6 text-start">
                 <h2 className="text-2xl font-bold text-surface-900 mb-2">
-                  {t(`pricing.${plan.slug}`) !== `pricing.${plan.slug}`
-                    ? t(`pricing.${plan.slug}`)
-                    : (t(`plans.${plan.slug}.name`) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name`) : plan.name)}
+                  {t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
+                    ? t(`pricing.${plan.slug}` as TranslationKey)
+                    : (t(`plans.${plan.slug}.name` as TranslationKey) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name` as TranslationKey) : plan.name)}
                 </h2>
                 <p className="text-surface-600 mb-4">
-                  {t(`pricing.${plan.slug}Desc`) !== `pricing.${plan.slug}Desc`
-                    ? t(`pricing.${plan.slug}Desc`)
-                    : (t(`plans.${plan.slug}.description`) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description`) : plan.description)}
+                  {t(`pricing.${plan.slug}Desc` as TranslationKey) !== `pricing.${plan.slug}Desc`
+                    ? t(`pricing.${plan.slug}Desc` as TranslationKey)
+                    : (t(`plans.${plan.slug}.description` as TranslationKey) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description` as TranslationKey) : plan.description)}
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-bold text-brand-600">

@@ -5,7 +5,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSpinner } from '@/components/ui';
 import { plansApi, subscriptionApi } from '@/lib/api';
 import { extractArrayData, extractObjectData } from '@/lib/api-utils';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { Check, X, Zap, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
@@ -21,19 +21,19 @@ function PlanCard({
   isCurrentPlan: boolean;
   onSelect: () => void;
   loading: boolean;
-  t: (key: string, params?: Record<string, string | number>) => string;
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
 
   // Translate plan names and descriptions based on slug with fallbacks
-  const planName = t(`pricing.${plan.slug}`) !== `pricing.${plan.slug}`
-    ? t(`pricing.${plan.slug}`)
-    : (t(`plans.${plan.slug}.name`) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name`) : plan.name);
+  const planName = t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
+    ? t(`pricing.${plan.slug}` as TranslationKey)
+    : (t(`plans.${plan.slug}.name` as TranslationKey) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name` as TranslationKey) : plan.name);
 
-  const planDescription = t(`pricing.${plan.slug}Desc`) !== `pricing.${plan.slug}Desc`
-    ? t(`pricing.${plan.slug}Desc`)
-    : (t(`plans.${plan.slug}.description`) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description`) : plan.description);
+  const planDescription = t(`pricing.${plan.slug}Desc` as TranslationKey) !== `pricing.${plan.slug}Desc`
+    ? t(`pricing.${plan.slug}Desc` as TranslationKey)
+    : (t(`plans.${plan.slug}.description` as TranslationKey) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description` as TranslationKey) : plan.description);
 
   // Format price
   const formatPrice = (price: number) => {
@@ -291,10 +291,10 @@ export default function PricingPage() {
             <div className="flex items-center gap-2">
               <Crown className="w-4 h-4 text-brand-600" />
               <span className="text-sm font-bold text-brand-700">
-                {t(`pricing.${usage.subscription.plan.slug}`) !== `pricing.${usage.subscription.plan.slug}`
-                  ? t(`pricing.${usage.subscription.plan.slug}`)
-                  : (t(`plans.${usage.subscription.plan.slug}.name`) !== `plans.${usage.subscription.plan.slug}.name`
-                    ? t(`plans.${usage.subscription.plan.slug}.name`)
+                {t(`pricing.${usage.subscription.plan.slug}` as TranslationKey) !== `pricing.${usage.subscription.plan.slug}`
+                  ? t(`pricing.${usage.subscription.plan.slug}` as TranslationKey)
+                  : (t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey) !== `plans.${usage.subscription.plan.slug}.name`
+                    ? t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey)
                     : usage.subscription.plan.name)}
               </span>
             </div>

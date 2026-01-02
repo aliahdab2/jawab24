@@ -3,25 +3,25 @@ import en from './en.json';
 
 export type Language = 'ar' | 'en';
 
-// Flat key translations - O(1) lookup performance
-export const translations: Record<Language, Record<string, string>> = {
-  ar,
-  en
+// Define the shape of our dictionary based on English
+export type TranslationDictionary = typeof en;
+export type TranslationKey = keyof TranslationDictionary;
+
+// Strict typing for the translations object
+export const translations: Record<Language, TranslationDictionary> = {
+  ar: ar as TranslationDictionary,
+  en,
 };
 
-export type TranslationKeys = keyof typeof ar;
-
-// Create translation function with direct O(1) lookup
+// Create translation function with strict key typing
 export function createT(lang: Language) {
   const dict = translations[lang];
-  
-  return function t(key: string, params?: Record<string, string | number>): string {
-    // Direct lookup - no traversal needed (flat keys)
-    const translation = dict[key] ?? key;
-    
+
+  return function t(key: TranslationKey, params?: Record<string, string | number>): string {
+    const translation = dict[key] || key;
+
     if (!params) return translation;
-    
-    // Replace {param} with actual values
+
     return Object.entries(params).reduce(
       (str, [k, value]) => str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(value)),
       translation

@@ -1,6 +1,8 @@
 import { useRouter } from 'next/router';
 import { useUIStore } from '@/lib/store';
-import { createT, Language } from './translations';
+import { createT, Language, TranslationKey } from './translations';
+
+export { type TranslationKey };
 
 // React hook for translations - uses Next.js router locale
 export function useTranslation() {
