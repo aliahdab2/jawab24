@@ -12,7 +12,7 @@ export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const { locale } = router;
   const setLanguage = useUIStore((state) => state.setLanguage);
-  
+
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -22,15 +22,30 @@ export default function App({ Component, pageProps }: AppProps) {
     },
   }));
 
-  // Sync Next.js locale with our language store
+  // Sync Next.js locale with our language store and handle redirects
+  const hasHydrated = useUIStore((state) => state._hasHydrated);
+
   useEffect(() => {
-    if (locale && (locale === 'ar' || locale === 'en')) {
-      setLanguage(locale as Language);
-      // Update document direction and language
-      document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
-      document.documentElement.lang = locale;
+    if (!locale || !hasHydrated) return;
+
+    const storedLang = useUIStore.getState().language;
+    const isDefaultLocale = locale === 'ar';
+
+    // If we are on the default locale (ar) but user prefers 'en', redirect
+    if (isDefaultLocale && storedLang === 'en') {
+      router.replace(router.pathname, router.asPath, { locale: 'en' });
+      return;
     }
-  }, [locale, setLanguage]);
+
+    // If we are on a non-default locale (en), trust the URL and update store
+    if (!isDefaultLocale && storedLang !== locale) {
+      setLanguage(locale as Language);
+    }
+
+    // Update document direction and language
+    document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = locale;
+  }, [locale, hasHydrated, router, setLanguage]);
 
   return (
     <QueryClientProvider client={queryClient}>

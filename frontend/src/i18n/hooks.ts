@@ -6,16 +6,18 @@ import { createT, Language } from './translations';
 export function useTranslation() {
   const router = useRouter();
   const storeLanguage = useUIStore((state) => state.language);
-  
+
   // Use router locale if available, fallback to store
   const language = (router.locale as Language) || storeLanguage;
   const t = createT(language);
-  
+
   // Function to change language via Next.js routing
   const setLanguage = (newLang: Language) => {
+    // Update store explicitly before navigation to support our redirect logic
+    useUIStore.getState().setLanguage(newLang);
     router.push(router.pathname, router.asPath, { locale: newLang });
   };
-  
+
   return { t, language, setLanguage };
 }
 
@@ -23,12 +25,13 @@ export function useTranslation() {
 export function useLanguage() {
   const router = useRouter();
   const storeLanguage = useUIStore((state) => state.language);
-  
+
   const language = (router.locale as Language) || storeLanguage;
-  
+
   const setLanguage = (newLang: Language) => {
+    useUIStore.getState().setLanguage(newLang);
     router.push(router.pathname, router.asPath, { locale: newLang });
   };
-  
+
   return { language, setLanguage };
 }

@@ -58,9 +58,11 @@ export const useAuthStore = create<AuthState>()(
 interface UIState {
   sidebarOpen: boolean;
   language: Language;
+  _hasHydrated: boolean;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setLanguage: (lang: Language) => void;
+  setHasHydrated: (state: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -68,14 +70,19 @@ export const useUIStore = create<UIState>()(
     (set) => ({
       sidebarOpen: true,
       language: 'ar' as Language, // Arabic is default
+      _hasHydrated: false,
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setLanguage: (lang) => set({ language: lang }),
+      setHasHydrated: (state) => set({ _hasHydrated: state }),
     }),
     {
       name: 'ui-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ language: state.language }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );
