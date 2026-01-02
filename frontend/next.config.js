@@ -9,7 +9,6 @@ const nextConfig = {
   i18n: {
     locales: ['ar', 'en'],      // Supported languages
     defaultLocale: 'ar',         // Arabic is default
-    localeDetection: true,       // Auto-detect browser language
   },
 }
 
