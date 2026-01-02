@@ -497,9 +497,10 @@ export default function LandingPage() {
             <div className="text-center">
               <Link href="/pricing">
                 <Button size="lg" className="px-6 sm:px-12 py-4 sm:py-6 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl shadow-xl shadow-brand-200">
-                  {t('pricing.viewPricingDetails')}
-                  <span className="ltr:block rtl:hidden"><ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" /></span>
-                  <span className="rtl:block ltr:hidden"><ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /></span>
+                  <span className="flex items-center gap-2">
+                    {t('pricing.viewPricingDetails')}
+                    {isRTL ? <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  </span>
                 </Button>
               </Link>
               <p className="text-xs sm:text-sm text-surface-400 mt-3 sm:mt-4">
