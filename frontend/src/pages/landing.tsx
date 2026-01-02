@@ -378,10 +378,9 @@ export default function LandingPage() {
                 </div>
                 <div className="text-center lg:text-start">
                   <Link href="/login" className="inline-block mt-6 sm:mt-12">
-                    <Button size="lg" className="rounded-xl sm:rounded-2xl px-6 sm:px-10 py-4 sm:py-7 text-base sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
+                    <Button size="lg" className="rounded-xl sm:rounded-2xl px-6 sm:px-10 py-4 sm:py-7 text-base sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12 flex items-center gap-2">
                       {t('landing.howItWorks.cta')}
-                      <span className="ltr:inline-flex rtl:hidden"><ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" /></span>
-                      <span className="rtl:inline-flex ltr:hidden"><ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /></span>
+                      {isRTL ? <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />}
                     </Button>
                   </Link>
                 </div>
