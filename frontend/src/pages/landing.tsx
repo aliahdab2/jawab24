@@ -185,7 +185,7 @@ export default function LandingPage() {
             <div className="grid grid-cols-2 sm:grid-cols-2 items-center gap-3 sm:gap-8 lg:gap-12">
               {/* Hero Illustration - Phone Mockup with Floating Icons */}
               <div className="relative animate-slide-up order-1 sm:order-2 flex justify-center">
-                <div className="relative mx-auto w-full max-w-[130px] min-[375px]:max-w-[150px] sm:max-w-[220px] lg:max-w-[280px]">
+                <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
                   {/* Glowing Background - More Vibrant like your image */}
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
                   
@@ -223,12 +223,12 @@ export default function LandingPage() {
                               <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-surface-600" />
                             </div>
                             <div className="bg-white rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1.5 sm:px-3 sm:py-2 shadow-sm border border-brand-50 max-w-[85%]">
-                              <p className="text-[9px] sm:text-[10px] text-surface-700 font-medium leading-tight">{t('landing.hero.chatQuery')}</p>
+                              <p className="text-[10px] sm:text-[11px] text-surface-700 font-medium leading-tight">{t('landing.hero.chatQuery')}</p>
                             </div>
                           </div>
                           <div className="flex items-end gap-1 sm:gap-1.5 justify-end rtl:flex-row-reverse rtl:justify-start animate-slide-up animation-delay-500">
                             <div className="bg-brand-500 rounded-xl sm:rounded-2xl rounded-br-none rtl:rounded-br-xl sm:rtl:rounded-br-2xl rtl:rounded-bl-none px-2 py-1.5 sm:px-3 sm:py-2 shadow-lg shadow-brand-500/20 max-w-[85%]">
-                              <p className="text-[9px] sm:text-[10px] text-white font-bold leading-tight">{t('landing.hero.chatResponse')}</p>
+                              <p className="text-[10px] sm:text-[11px] text-white font-bold leading-tight">{t('landing.hero.chatResponse')}</p>
                             </div>
                             <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0 shadow-sm">
                               <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-brand-500" />
