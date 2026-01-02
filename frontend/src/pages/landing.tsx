@@ -314,7 +314,7 @@ export default function LandingPage() {
         </section>
 
         {/* Stats Section - Compact on mobile */}
-        <section className="py-8 sm:py-16 bg-surface-900 relative w-full">
+        <section className="py-8 sm:py-16 bg-surface-900 relative -mx-3 sm:mx-0 w-screen sm:w-auto">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent"></div>
           <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32">
             {statsList.map((stat, i) => (
