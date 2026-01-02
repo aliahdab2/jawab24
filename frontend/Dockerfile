@@ -44,4 +44,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3001 || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node_modules/.bin/next", "start", "-p", "3001"]
+CMD ["npm", "run", "start"]
