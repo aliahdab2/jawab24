@@ -316,14 +316,16 @@ export default function LandingPage() {
         {/* Stats Section - Compact on mobile */}
         <section className="py-8 sm:py-16 bg-surface-900 relative">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent"></div>
-          <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 relative z-10">
-            <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32">
-              {statsList.map((stat, i) => (
-                <div key={i} className="text-center group">
-                  <div className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-2 sm:mb-3 group-hover:scale-110 transition-transform duration-500">{stat.value}</div>
-                  <div className="text-brand-300 font-bold uppercase tracking-widest text-xs sm:text-sm lg:text-base">{stat.label}</div>
-                </div>
-              ))}
+          <div className="w-full px-3 sm:px-6 lg:px-8 relative z-10">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32">
+                {statsList.map((stat, i) => (
+                  <div key={i} className="text-center group">
+                    <div className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-2 sm:mb-3 group-hover:scale-110 transition-transform duration-500">{stat.value}</div>
+                    <div className="text-brand-300 font-bold uppercase tracking-widest text-xs sm:text-sm lg:text-base">{stat.label}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
