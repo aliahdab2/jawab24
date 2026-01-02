@@ -45,7 +45,12 @@ export default function LoginPage() {
     // Add them back after Facebook approves your app
     const scope = encodeURIComponent('pages_show_list,pages_read_engagement,pages_messaging');
     
-    const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
+    // Get the redirect URL from query params (e.g., /checkout?planId=xxx)
+    const returnUrl = router.query.redirect as string || '/dashboard';
+    // Encode the return URL in the state parameter so we can use it after OAuth
+    const state = encodeURIComponent(returnUrl);
+    
+    const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
     
     window.location.href = facebookAuthUrl;
   };

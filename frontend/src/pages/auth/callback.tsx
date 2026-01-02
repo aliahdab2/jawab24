@@ -10,7 +10,7 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      const { code, error: fbError } = router.query;
+      const { code, error: fbError, state } = router.query;
 
       if (fbError) {
         setError('Facebook login was cancelled or failed.');
@@ -44,8 +44,11 @@ export default function AuthCallback() {
         // Store auth data including FB token
         setAuth(data.user, data.token, data.fbAccessToken);
         
-        // Redirect to dashboard
-        router.push('/dashboard');
+        // Redirect to the original destination (from state param) or dashboard
+        const returnUrl = state ? decodeURIComponent(state as string) : '/dashboard';
+        // Validate the URL is a relative path (security)
+        const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
+        router.push(safeUrl);
       } catch (err) {
         console.error('Auth error:', err);
         setError(err instanceof Error ? err.message : 'Authentication failed');

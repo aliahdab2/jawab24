@@ -260,7 +260,8 @@ export default function PricingPage() {
   
   const handleSelectPlan = async (planId: string) => {
     if (!isAuthenticated) {
-      router.push('/login');
+      // Redirect to login with return URL to come back to checkout
+      router.push(`/login?redirect=${encodeURIComponent(`/checkout?planId=${planId}`)}`);
       return;
     }
     
