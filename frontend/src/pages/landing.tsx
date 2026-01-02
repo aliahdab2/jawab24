@@ -181,11 +181,11 @@ export default function LandingPage() {
           <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
 
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-5 sm:grid-cols-2 items-center gap-4 sm:gap-8 lg:gap-12">
+          <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 items-center gap-6 sm:gap-8 lg:gap-12">
               {/* Hero Illustration - Phone Mockup with Floating Icons */}
-              <div className="relative animate-slide-up col-span-2 sm:col-span-1 order-1 sm:order-2">
-                <div className="relative mx-auto max-w-[180px] sm:max-w-[220px] lg:max-w-[280px]">
+              <div className="relative animate-slide-up order-1 sm:order-2 flex justify-center">
+                <div className="relative mx-auto w-full max-w-[160px] min-[375px]:max-w-[180px] sm:max-w-[220px] lg:max-w-[280px]">
                   {/* Glowing Background - More Vibrant like your image */}
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
                   
@@ -269,9 +269,9 @@ export default function LandingPage() {
               </div>
 
               {/* Text Content */}
-              <div className="text-start col-span-3 sm:col-span-1 order-2 sm:order-1">
+              <div className="text-center sm:text-start order-2 sm:order-1">
                 {/* Heading */}
-                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-snug sm:leading-[1.15] tracking-tight animate-slide-up">
+                <h1 className="text-2xl min-[375px]:text-3xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-tight tracking-tight animate-slide-up">
                   {t('landing.hero.title1')}
                   <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-2">
                     {t('landing.hero.title2')}
@@ -279,19 +279,19 @@ export default function LandingPage() {
                 </h1>
 
                 {/* Description */}
-                <p className="text-base sm:text-lg lg:text-xl text-surface-600 mb-6 sm:mb-12 max-w-xl mx-auto lg:mx-0 leading-relaxed animate-slide-up animation-delay-100">
+                <p className="text-sm min-[375px]:text-base sm:text-lg lg:text-xl text-surface-600 mb-6 sm:mb-12 max-w-xl mx-auto sm:mx-0 leading-relaxed animate-slide-up animation-delay-100">
                   {t('landing.hero.description')}
                 </p>
 
                 {/* CTA Buttons */}
-                <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-6 sm:mb-12 animate-slide-up animation-delay-200">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center sm:justify-start gap-3 sm:gap-4 mb-6 sm:mb-12 animate-slide-up animation-delay-200 px-2 sm:px-0">
                   <Link href="/login" className="w-full sm:w-auto">
-                    <Button size="lg" className="w-full sm:w-auto min-w-[200px] sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-4 sm:py-5 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                    <Button size="lg" className="w-full sm:w-auto sm:min-w-[220px] justify-center shadow-2xl shadow-brand-500/40 px-4 sm:px-8 py-3.5 sm:py-5 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl transition-transform hover:scale-105 active:scale-95 whitespace-nowrap">
                       {t('landing.hero.cta1')}
                     </Button>
                   </Link>
                   <Link href="/pricing" className="w-full sm:w-auto">
-                    <Button variant="secondary" size="lg" className="w-full sm:w-auto min-w-[200px] sm:min-w-[240px] justify-center px-6 sm:px-8 py-4 sm:py-5 text-base sm:text-lg font-bold rounded-xl sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
+                    <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[220px] justify-center px-4 sm:px-8 py-3.5 sm:py-5 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg whitespace-nowrap">
                       {t('landing.hero.cta2')}
                     </Button>
                   </Link>
