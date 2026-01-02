@@ -209,11 +209,11 @@ export default function LandingPage() {
                         </div>
                         
                         {/* Robot Avatar - Subtler Colors with Pulse Animation */}
-                        <div className="flex flex-col items-center justify-center mb-3 sm:mb-6 mt-0.5 sm:mt-2">
-                          <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-1 sm:mb-2 animate-float-pulse border border-brand-50">
-                            <Bot className="w-6 h-6 sm:w-10 sm:h-10 text-brand-500" />
+                        <div className="flex flex-col items-center justify-center mb-2 sm:mb-6 mt-0.5 sm:mt-2">
+                          <div className="w-8 h-8 sm:w-16 sm:h-16 rounded-xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-1 sm:mb-2 animate-float-pulse border border-brand-50">
+                            <Bot className="w-5 h-5 sm:w-10 sm:h-10 text-brand-500" />
                           </div>
-                          <span className="font-display font-bold text-[9px] sm:text-xs text-brand-600">jawab24.com</span>
+                          <span className="font-display font-bold text-[8px] sm:text-xs text-brand-600">jawab24.com</span>
                         </div>
                         
                         {/* Chat Bubbles - Brand Colors */}
