@@ -43,4 +43,14 @@ export const config = {
         // Always use gpt-4o-mini for cost efficiency - not configurable by users
         model: 'gpt-4o-mini',
     },
+
+    // Stripe Payment
+    stripe: {
+        secretKey: process.env.STRIPE_SECRET_KEY || '',
+        publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+        webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+    },
+
+    // Frontend URL
+    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
 };

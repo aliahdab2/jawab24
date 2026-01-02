@@ -17,12 +17,30 @@ import instagramRoutes from './routes/instagram';
 import versionRoutes from './routes/version';
 import plansRoutes from './routes/plans';
 import subscriptionsRoutes from './routes/subscriptions';
+import paymentRoutes from './routes/payment';
 
 dotenv.config();
 
 const server = fastify({
     logger: true,
+    bodyLimit: 10485760, // 10MB
 });
+
+// Add rawBody support for Stripe webhooks
+server.addContentTypeParser(
+    'application/json',
+    { parseAs: 'buffer' },
+    (req, body, done) => {
+        try {
+            (req as any).rawBody = body;
+            const json = JSON.parse(body.toString('utf8'));
+            done(null, json);
+        } catch (err: any) {
+            err.statusCode = 400;
+            done(err, undefined);
+        }
+    }
+);
 
 const start = async () => {
     try {
@@ -46,6 +64,7 @@ const start = async () => {
         await server.register(instagramRoutes);
         await server.register(plansRoutes, { prefix: '/api/plans' });
         await server.register(subscriptionsRoutes, { prefix: '/api/subscription' });
+        await server.register(paymentRoutes, { prefix: '/api/payment' });
 
         const port = parseInt(process.env.PORT || '3000', 10);
         const host = '0.0.0.0';

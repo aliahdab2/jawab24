@@ -19,7 +19,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "zustand": "^4.4.7",
-    "@jawab24/shared": "*"
+    "@stripe/stripe-js": "^2.4.0"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",

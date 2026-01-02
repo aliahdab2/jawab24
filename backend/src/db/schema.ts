@@ -266,6 +266,7 @@ export const plans = pgTable('plans', {
     price: integer('price').notNull().default(0), // Price in cents (500 = $5.00)
     currency: varchar('currency', { length: 3 }).default('USD'),
     interval: varchar('interval', { length: 20 }).default('month'), // 'month', 'year'
+    stripePriceId: varchar('stripe_price_id', { length: 255 }), // Stripe Price ID (e.g., price_xxxxx)
     
     // Limits
     maxPages: integer('max_pages').default(1),
@@ -316,9 +317,12 @@ export const subscriptions = pgTable('subscriptions', {
     currentPeriodStart: timestamp('current_period_start').defaultNow(),
     currentPeriodEnd: timestamp('current_period_end'),
     
-    // Payment info (for future payment integration)
-    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe, PayPal, etc.
+    // Payment info (for Stripe integration)
+    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID
     paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual'
+    stripeCustomerId: varchar('stripe_customer_id', { length: 255 }), // Stripe Customer ID
+    stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }), // For tracking
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false), // Cancel at period end flag
     
     // Cancellation
     canceledAt: timestamp('canceled_at'),

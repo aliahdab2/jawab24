@@ -28,7 +28,7 @@
     "ioredis": "^5.8.2",
     "postgres": "^3.4.3",
     "zod": "^3.22.4",
-    "@jawab24/shared": "*"
+    "stripe": "^14.11.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
