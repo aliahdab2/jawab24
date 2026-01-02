@@ -287,15 +287,21 @@ jobs:
           # Clean up any existing test container
           docker rm -f backend-test 2>/dev/null || true
           
-          # Start backend with minimal config
+          # Start backend with all required env vars for smoke test
           # SKIP_MIGRATIONS=true skips DB connection at startup
           # This tests that code loads without import/require errors
           docker run -d --name backend-test \
             -e DATABASE_URL=postgres://test:test@localhost:5432/test \
-            -e JWT_SECRET=test_secret \
+            -e JWT_SECRET=this_is_a_test_jwt_secret_that_is_at_least_32_chars_long \
             -e NODE_ENV=production \
             -e PORT=3000 \
             -e SKIP_MIGRATIONS=true \
+            -e FACEBOOK_APP_ID=test_app_id \
+            -e FACEBOOK_APP_SECRET=test_app_secret \
+            -e FACEBOOK_REDIRECT_URI=http://localhost:3001/auth/callback \
+            -e FACEBOOK_WEBHOOK_VERIFY_TOKEN=test_webhook_token \
+            -e REDIS_HOST=localhost \
+            -e REDIS_PORT=6379 \
             jawab24-backend:test
           
           # Wait a moment for startup
