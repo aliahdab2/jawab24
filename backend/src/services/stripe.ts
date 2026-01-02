@@ -1,14 +1,13 @@
 import Stripe from 'stripe';
 import { config } from '../config';
 
-if (!config.stripe?.secretKey) {
-    throw new Error('STRIPE_SECRET_KEY is required in environment variables');
-}
-
-export const stripe = new Stripe(config.stripe.secretKey, {
-    apiVersion: '2024-12-18.acacia',
-    typescript: true,
-});
+// Initialize Stripe only if keys are provided (optional for preview)
+export const stripe = config.stripe?.secretKey 
+    ? new Stripe(config.stripe.secretKey, {
+        apiVersion: '2024-12-18.acacia',
+        typescript: true,
+    })
+    : null;
 
 export class StripeService {
     /**
@@ -22,6 +21,10 @@ export class StripeService {
         successUrl: string,
         cancelUrl: string
     ): Promise<Stripe.Checkout.Session> {
+        if (!stripe) {
+            throw new Error('Stripe is not configured. Please add STRIPE_SECRET_KEY to environment variables.');
+        }
+        
         const session = await stripe.checkout.sessions.create({
             customer_email: userEmail,
             client_reference_id: userId,
