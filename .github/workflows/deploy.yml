@@ -183,9 +183,11 @@ jobs:
               export $(grep -v '^#' ./env/frontend.env | xargs)
             fi
             
-            # Build images
-            docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build --parallel
-            echo "✅ Images built"
+            # Build images with --no-cache to ensure fresh code is used
+            # This is critical because Docker layer caching can skip COPY commands
+            # if package.json hasn't changed, resulting in stale frontend/backend code
+            docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build --no-cache --parallel
+            echo "✅ Images built (fresh, no cache)"
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
