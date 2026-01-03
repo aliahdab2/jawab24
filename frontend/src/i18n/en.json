@@ -645,5 +645,6 @@
   "dataDeletion.backToHome": "Back to Jawab24",
   "profile.emailRequired": "Please provide your email address to continue. We'll use it for account notifications and receipts.",
   "profile.emailAddress": "Email Address",
-  "profile.privacyNote": "We respect your privacy. Your email will only be used for account-related communications."
+  "profile.privacyNote": "We respect your privacy. Your email will only be used for account-related communications.",
+  "common.saving": "Saving..."
 }
