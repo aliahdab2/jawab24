@@ -311,8 +311,8 @@ export default function PricingPage() {
           </div>
         )}
 
-        {/* Plans Grid - Responsive: 1 col mobile, 2 col small, 3 col tablet+ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-4 md:gap-6 pb-8 items-stretch max-w-6xl mx-auto px-4 sm:px-6 md:px-6 lg:px-8 pt-4 md:pt-4">
+        {/* Plans Grid - Responsive grid based on count */}
+        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0 pt-2 md:pt-4`}>
           {activePlans.map((plan) => (
             <PlanCard
               key={plan.id}
