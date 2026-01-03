@@ -160,6 +160,49 @@ describe('Payment Controller', () => {
             expect(mockReply.send).toHaveBeenCalledWith({ error: 'Plan ID is required' });
         });
 
+        it('should return 404 if user not found', async () => {
+            const mockDb = vi.mocked(db);
+            mockDb.select.mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValueOnce([]), // User not found
+                }),
+            } as any);
+
+            await paymentController.createCheckoutSession(
+                mockRequest as FastifyRequest,
+                mockReply as FastifyReply
+            );
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'User not found' });
+        });
+
+        it('should return 400 with EMAIL_REQUIRED code if user has no email', async () => {
+            const mockUserNoEmail = {
+                id: 'user_123',
+                email: null, // No email!
+            };
+
+            const mockDb = vi.mocked(db);
+            mockDb.select.mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValueOnce([mockUserNoEmail]),
+                }),
+            } as any);
+
+            await paymentController.createCheckoutSession(
+                mockRequest as FastifyRequest,
+                mockReply as FastifyReply
+            );
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith({
+                error: 'Email required',
+                message: 'Please add your email address to complete the purchase',
+                code: 'EMAIL_REQUIRED',
+            });
+        });
+
         it('should return 404 if plan not found', async () => {
             const mockUser = { id: 'user_123', email: 'test@example.com' };
             

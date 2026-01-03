@@ -40,8 +40,16 @@ export class PaymentController {
 
             // Get user
             const [user] = await db.select().from(users).where(eq(users.id, userId));
-            if (!user || !user.email) {
-                return reply.status(404).send({ error: 'User not found or email missing' });
+            if (!user) {
+                return reply.status(404).send({ error: 'User not found' });
+            }
+            
+            if (!user.email) {
+                return reply.status(400).send({ 
+                    error: 'Email required',
+                    message: 'Please add your email address to complete the purchase',
+                    code: 'EMAIL_REQUIRED'
+                });
             }
 
             // Get plan

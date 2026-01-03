@@ -59,6 +59,15 @@ export default function AuthCallback() {
       // Store auth data including FB token
       setAuthRef.current(data.user, data.token, data.fbAccessToken);
       
+      // Check if user has email - if not, redirect to complete profile
+      if (!data.user.email) {
+        // Store the intended destination in query param
+        const returnUrl = state ? decodeURIComponent(state as string) : '/dashboard';
+        const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
+        routerRef.current.push(`/complete-profile?redirect=${encodeURIComponent(safeUrl)}`);
+        return;
+      }
+      
       // Redirect to the original destination (from state param) or dashboard
       const returnUrl = state ? decodeURIComponent(state as string) : '/dashboard';
       // Validate the URL is a relative path (security)

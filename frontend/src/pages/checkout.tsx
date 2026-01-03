@@ -65,7 +65,16 @@ export default function CheckoutPage() {
       window.location.href = url;
     } catch (err: any) {
       console.error('Checkout error:', err);
-      setError(err.response?.data?.error || t('checkout.errorInitiateCheckout'));
+      
+      // Handle specific error cases
+      const errorData = err.response?.data;
+      if (errorData?.code === 'EMAIL_REQUIRED') {
+        // Email is missing - redirect to complete profile then back to checkout
+        router.push(`/complete-profile?redirect=/checkout?planId=${planId}`);
+        return;
+      }
+      
+      setError(errorData?.error || errorData?.message || t('checkout.errorInitiateCheckout'));
       setLoading(false);
     }
   };

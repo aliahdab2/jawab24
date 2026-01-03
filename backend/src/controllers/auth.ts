@@ -4,6 +4,9 @@ import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
 import { AuthRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 export class AuthController {
     /**
@@ -68,9 +71,76 @@ export class AuthController {
             if (!user) {
                 return reply.status(404).send({ error: 'User not found' });
             }
-            return reply.send(user);
+            return reply.send({
+                id: user.id,
+                facebookId: user.facebookId,
+                name: user.name,
+                email: user.email,
+                hasEmail: !!user.email,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+            });
         } catch (error) {
             request.log.error({ err: error }, 'Get user failed');
+            return reply.status(500).send({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * Update user profile
+     * PATCH /auth/profile
+     */
+    async updateProfile(request: AuthenticatedRequest, reply: FastifyReply) {
+        const userId = request.user?.userId;
+
+        if (!userId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const { email, name } = request.body as { email?: string; name?: string };
+
+        if (!email && !name) {
+            return reply.status(400).send({ error: 'No fields to update' });
+        }
+
+        try {
+            // Validate email format if provided
+            if (email) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    return reply.status(400).send({ error: 'Invalid email format' });
+                }
+            }
+
+            // Update user
+            const updateData: { email?: string; name?: string; updatedAt: Date } = {
+                updatedAt: new Date(),
+            };
+            if (email !== undefined) updateData.email = email;
+            if (name !== undefined) updateData.name = name;
+
+            await db.update(users)
+                .set(updateData)
+                .where(eq(users.id, userId));
+
+            // Fetch updated user
+            const [user] = await db.select().from(users).where(eq(users.id, userId));
+            
+            if (!user) {
+                return reply.status(404).send({ error: 'User not found' });
+            }
+
+            return reply.send({
+                id: user.id,
+                facebookId: user.facebookId,
+                name: user.name,
+                email: user.email,
+                hasEmail: !!user.email,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+            });
+        } catch (error) {
+            request.log.error({ err: error }, 'Update profile failed');
             return reply.status(500).send({ error: 'Internal Server Error' });
         }
     }

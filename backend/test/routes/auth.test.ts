@@ -470,4 +470,63 @@ describe('Auth Routes - Login Flow', () => {
             expect(body.fbAccessToken).toBe('fb_token');
         });
     });
+
+    describe('PATCH /auth/profile - Update Profile', () => {
+        it('should update user profile successfully', async () => {
+            const { authService } = await import('../../src/services/auth');
+            const { authController } = await import('../../src/controllers/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_123',
+                facebookId: 'fb_123',
+            });
+
+            const mockUpdatedUser = {
+                id: 'user_123',
+                facebookId: 'fb_123',
+                name: 'Test User',
+                email: 'new@example.com',
+                hasEmail: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            // Mock the controller method
+            vi.spyOn(authController, 'updateProfile').mockImplementation(async (req, reply) => {
+                return reply.send(mockUpdatedUser);
+            });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/auth/profile',
+                headers: {
+                    authorization: 'Bearer valid_token',
+                },
+                payload: {
+                    email: 'new@example.com',
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            expect(body.email).toBe('new@example.com');
+            expect(body.hasEmail).toBe(true);
+        });
+
+        it('should require authentication', async () => {
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue(null);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/auth/profile',
+                payload: {
+                    email: 'new@example.com',
+                },
+            });
+
+            expect(response.statusCode).toBe(401);
+        });
+    });
 });

@@ -8,5 +8,6 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     // Protected routes
     fastify.get('/auth/me', { preHandler: [authenticate] }, authController.getMe);
+    fastify.patch('/auth/profile', { preHandler: [authenticate] }, authController.updateProfile);
 }
 
