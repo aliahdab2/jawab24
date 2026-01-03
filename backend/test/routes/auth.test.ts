@@ -2,6 +2,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
 import authRoutes from '../../src/routes/auth';
 
+// Mock database
+vi.mock('../../src/db', () => ({
+    db: {
+        select: vi.fn(),
+        update: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/db/schema', () => ({
+    users: { id: 'id', email: 'email', name: 'name', updatedAt: 'updated_at' },
+}));
+
+vi.mock('drizzle-orm', () => ({
+    eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+}));
+
 // Mock services
 vi.mock('../../src/services/facebook', () => ({
     facebookService: {
@@ -474,27 +490,30 @@ describe('Auth Routes - Login Flow', () => {
     describe('PATCH /auth/profile - Update Profile', () => {
         it('should update user profile successfully', async () => {
             const { authService } = await import('../../src/services/auth');
-            const { authController } = await import('../../src/controllers/auth');
+            const { db } = await import('../../src/db');
 
             vi.mocked(authService.verifyToken).mockReturnValue({
                 userId: 'user_123',
                 facebookId: 'fb_123',
             });
 
-            const mockUpdatedUser = {
+            // Mock update chain
+            const mockWhere = vi.fn().mockResolvedValue(undefined);
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            // Mock select chain for fetching updated user
+            const updatedUser = {
                 id: 'user_123',
                 facebookId: 'fb_123',
                 name: 'Test User',
                 email: 'new@example.com',
-                hasEmail: true,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
-
-            // Mock the controller method
-            vi.spyOn(authController, 'updateProfile').mockImplementation(async (req, reply) => {
-                return reply.send(mockUpdatedUser);
-            });
+            const mockSelectWhere = vi.fn().mockResolvedValue([updatedUser]);
+            const mockFrom = vi.fn().mockReturnValue({ where: mockSelectWhere });
+            vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
             const response = await app.inject({
                 method: 'PATCH',
