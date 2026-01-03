@@ -643,9 +643,15 @@
   "dataDeletion.dataRetentionTitle": "Data Retention",
   "dataDeletion.dataRetentionText": "After deletion, your data will be permanently removed from our servers within 90 days. Some data may be retained in encrypted backups for a limited period for legal compliance.",
   "dataDeletion.backToHome": "Back to Jawab24",
+  "profile.title": "Complete Your Profile",
   "profile.emailRequired": "Please provide your email address to continue. We'll use it for account notifications and receipts.",
   "profile.emailAddress": "Email Address",
+  "profile.emailPlaceholder": "your@email.com",
   "profile.privacyNote": "We respect your privacy. Your email will only be used for account-related communications.",
+  "profile.complete": "Profile Complete!",
+  "profile.redirecting": "Redirecting you now...",
+  "profile.invalidEmail": "Please enter a valid email address",
+  "profile.saveFailed": "Failed to save email. Please try again.",
   "common.saving": "Saving...",
   "common.continue": "Continue"
 }

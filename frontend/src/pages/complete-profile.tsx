@@ -9,7 +9,8 @@ import { useAuthStore } from '@/lib/store';
 
 export default function CompleteProfilePage() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const isRTL = language === 'ar';
   const { user, setAuth } = useAuthStore();
   
   const [email, setEmail] = useState('');
@@ -29,7 +30,7 @@ export default function CompleteProfilePage() {
     
     // Validate email
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address');
+      setError(t('profile.invalidEmail'));
       return;
     }
 
@@ -58,23 +59,23 @@ export default function CompleteProfilePage() {
       
     } catch (err: any) {
       console.error('Save email error:', err);
-      setError(err.response?.data?.error || 'Failed to save email. Please try again.');
+      setError(err.response?.data?.error || t('profile.saveFailed'));
       setSaving(false);
     }
   };
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4" dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-8 h-8 text-green-600" />
           </div>
           <h2 className="text-2xl font-bold text-surface-900 mb-2">
-            Profile Complete!
+            {t('profile.complete')}
           </h2>
           <p className="text-surface-600">
-            Redirecting you now...
+            {t('profile.redirecting')}
           </p>
         </div>
       </div>
@@ -84,35 +85,36 @@ export default function CompleteProfilePage() {
   return (
     <>
       <Head>
-        <title>Complete Your Profile - Jawab24</title>
+        <title>{t('profile.title')} - Jawab24</title>
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4" dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Mail className="w-8 h-8 text-brand-600" />
             </div>
             <h1 className="text-3xl font-bold text-surface-900 mb-2">
-              {'Complete Your Profile'}
+              {t('profile.title')}
             </h1>
             <p className="text-surface-600">
-              {t('profile.emailRequired') || 'Please provide your email address to continue. We\'ll use it for account notifications and receipts.'}
+              {t('profile.emailRequired')}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-surface-700 mb-2">
-                {t('profile.emailAddress') || 'Email Address'}
+              <label htmlFor="email" className={`block text-sm font-medium text-surface-700 mb-2 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {t('profile.emailAddress')}
               </label>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="w-full px-4 py-3 border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                placeholder={t('profile.emailPlaceholder')}
+                className={`w-full px-4 py-3 border border-surface-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent ${isRTL ? 'text-right' : 'text-left'}`}
+                dir="ltr"
                 disabled={saving}
                 required
                 autoFocus
@@ -121,7 +123,7 @@ export default function CompleteProfilePage() {
 
             {error && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-800">{error}</p>
+                <p className={`text-sm text-red-800 ${isRTL ? 'text-right' : 'text-left'}`}>{error}</p>
               </div>
             )}
 
@@ -133,18 +135,18 @@ export default function CompleteProfilePage() {
             >
               {saving ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                  {t('common.saving') || 'Saving...'}
+                  <Loader2 className={`w-5 h-5 animate-spin ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                  {t('common.saving')}
                 </>
               ) : (
-                t('common.continue') || 'Continue'
+                t('common.continue')
               )}
             </Button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-xs text-surface-500">
-              {t('profile.privacyNote') || 'We respect your privacy. Your email will only be used for account-related communications.'}
+              {t('profile.privacyNote')}
             </p>
           </div>
         </div>
