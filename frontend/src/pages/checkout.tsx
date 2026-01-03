@@ -16,22 +16,25 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<any>(null);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
+    // Prevent re-fetching if already loaded or errored
+    if (plan || fetchError || !planId) return;
+    
     const fetchPlan = async () => {
       try {
         const response = await publicApi.get(`/plans/${planId}`);
         setPlan(response.data.data || response.data);
       } catch (err) {
         console.error('Failed to fetch plan:', err);
+        setFetchError(true);
         setError(t('checkout.errorLoadPlan'));
       }
     };
 
-    if (planId) {
-      fetchPlan();
-    }
-  }, [planId, t]);
+    fetchPlan();
+  }, [planId, plan, fetchError]); // Removed `t` - it causes infinite loop
 
   const handleCheckout = async () => {
     if (!planId) return;
