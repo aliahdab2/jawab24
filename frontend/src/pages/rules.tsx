@@ -17,7 +17,7 @@ import {
 import type { Rule, Template } from '@jawab24/shared';
 
 export default function RulesPage() {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { token } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);

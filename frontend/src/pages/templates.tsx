@@ -17,7 +17,7 @@ import {
 import type { Template } from '@jawab24/shared';
 
 export default function TemplatesPage() {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { token } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);

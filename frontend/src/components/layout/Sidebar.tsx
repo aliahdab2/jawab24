@@ -29,7 +29,7 @@ export function Sidebar() {
   const router = useRouter();
   const { logout, user } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
 
   const handleLogout = () => {
     logout();

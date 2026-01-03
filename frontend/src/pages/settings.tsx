@@ -58,7 +58,6 @@ export default function SettingsPage() {
   const { t, language } = useTranslation();
   const { setLanguage } = useLanguage();
   const { token } = useAuthStore();
-  const isRTL = language === 'ar';
 
   // Show/hide advanced settings
   const [showAdvanced, setShowAdvanced] = useState(false);
