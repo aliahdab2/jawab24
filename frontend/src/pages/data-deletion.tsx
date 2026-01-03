@@ -104,7 +104,7 @@ export default function DataDeletion() {
           </div>
 
           <div className="mt-8 pt-8 border-t border-surface-100">
-            <Link href="/" className="text-brand-600 hover:text-brand-700 font-bold inline-flex items-center gap-2 transition-colors">
+            <Link href="/landing" className="text-brand-600 hover:text-brand-700 font-bold inline-flex items-center gap-2 transition-colors">
               <ArrowLeft className="w-5 h-5 transition-transform rtl:rotate-180" />
               {t('dataDeletion.backToHome')}
             </Link>

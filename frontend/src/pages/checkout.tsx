@@ -88,7 +88,7 @@ export default function CheckoutPage() {
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
-            <Link href="/" className="inline-flex items-center gap-2 text-brand-600 font-bold text-2xl mb-4">
+            <Link href="/landing" className="inline-flex items-center gap-2 text-brand-600 font-bold text-2xl mb-4">
               Jawab24
             </Link>
             <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2">

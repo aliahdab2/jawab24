@@ -39,7 +39,7 @@ export function Sidebar() {
   return (
     <aside
       className={clsx(
-        'fixed top-0 h-full bg-surface-900 text-white transition-all duration-500 z-40 shadow-2xl',
+        'fixed top-0 h-full bg-surface-900 text-white transition-all duration-500 z-40 shadow-2xl group/sidebar',
         sidebarOpen ? 'w-64' : 'w-20'
       )}
       style={{
@@ -47,32 +47,46 @@ export function Sidebar() {
         background: 'linear-gradient(180deg, #0F172A 0%, #1E293B 100%)'
       }}
     >
+      {/* Toggle Button - Floating on the edge */}
+      <button
+        onClick={toggleSidebar}
+        className={clsx(
+          "absolute top-6 z-50 flex items-center justify-center w-8 h-8 rounded-full bg-surface-800 border border-white/10 text-surface-400 hover:text-white hover:bg-brand-600 transition-all shadow-lg cursor-pointer",
+          "rtl:left-0 rtl:-translate-x-1/2",
+          "ltr:right-0 ltr:translate-x-1/2",
+          "opacity-0 group-hover/sidebar:opacity-100 focus:opacity-100 transition-opacity duration-300" // Only show on hover for cleaner look? Or always? Let's keep it always visible for now but maybe subtle.
+        )}
+        aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+      >
+        {sidebarOpen ? (
+          <>
+            <ChevronRight className="w-4 h-4 rtl:block ltr:hidden" />
+            <ChevronLeft className="w-4 h-4 ltr:block rtl:hidden" />
+          </>
+        ) : (
+          <>
+            <ChevronLeft className="w-4 h-4 rtl:block ltr:hidden" />
+            <ChevronRight className="w-4 h-4 ltr:block rtl:hidden" />
+          </>
+        )}
+      </button>
+
       {/* Logo */}
-      <div className="h-20 flex items-center justify-between px-4 border-b border-white/5">
+      <div className={clsx(
+        "h-20 flex items-center px-4 border-b border-white/5 transition-all duration-300",
+        sidebarOpen ? "justify-start gap-3" : "justify-center"
+      )}>
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-11 h-11 rounded-[1.1rem] bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
+          <div className="w-11 h-11 rounded-[1.1rem] bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform flex-shrink-0">
             <MessageCircle className="w-6 h-6 text-white fill-white" />
           </div>
-          {sidebarOpen && (
-            <span className="font-display font-bold text-xl tracking-tight">Jawab24</span>
-          )}
+          <span className={clsx(
+            "font-display font-bold text-xl tracking-tight whitespace-nowrap transition-all duration-300 origin-left rtl:origin-right",
+            sidebarOpen ? "opacity-100 scale-100" : "opacity-0 scale-0 w-0 overflow-hidden"
+          )}>
+            Jawab24
+          </span>
         </Link>
-        <button
-          onClick={toggleSidebar}
-          className="p-2 rounded-xl hover:bg-white/5 transition-all text-surface-400 hover:text-white"
-        >
-          {sidebarOpen ? (
-            <>
-              <span className="rtl:block ltr:hidden"><ChevronRight className="w-5 h-5" /></span>
-              <span className="ltr:block rtl:hidden"><ChevronLeft className="w-5 h-5" /></span>
-            </>
-          ) : (
-            <>
-              <span className="rtl:block ltr:hidden"><ChevronLeft className="w-5 h-5" /></span>
-              <span className="ltr:block rtl:hidden"><ChevronRight className="w-5 h-5" /></span>
-            </>
-          )}
-        </button>
       </div>
 
       {/* Navigation */}
@@ -87,7 +101,8 @@ export function Sidebar() {
                 'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group relative',
                 isActive
                   ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20'
-                  : 'text-surface-400 hover:bg-white/5 hover:text-white'
+                  : 'text-surface-400 hover:bg-white/5 hover:text-white',
+                !sidebarOpen && 'justify-center'
               )}
             >
               <item.icon className={clsx(
@@ -97,7 +112,10 @@ export function Sidebar() {
               {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
 
               {isActive && (
-                <div className="absolute inset-y-2 start-0 w-1 bg-white rounded-full"></div>
+                <div className={clsx(
+                  "absolute inset-y-2 w-1 bg-white rounded-full transition-all",
+                  sidebarOpen ? "start-0" : "start-1 h-1 top-1/2 -translate-y-1/2 w-1 rounded-full" // Small dot when collapsed? Or just hide it?
+                )}></div>
               )}
             </Link>
           );
@@ -119,7 +137,10 @@ export function Sidebar() {
         )}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-surface-400 hover:bg-red-500 hover:text-white transition-all duration-300 group"
+          className={clsx(
+            "w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-surface-400 hover:bg-red-500 hover:text-white transition-all duration-300 group",
+            !sidebarOpen && "justify-center"
+          )}
         >
           <LogOut className="w-5 h-5 flex-shrink-0 group-hover:-translate-x-1 transition-transform" />
           {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('nav.logout' as TranslationKey)}</span>}

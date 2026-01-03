@@ -87,7 +87,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {/* Mobile header - Clean version for public pages */}
         {isCleanLayout ? (
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 z-40 border-b border-surface-100 shadow-sm">
-            <Link href="/" className="flex items-center gap-2 group">
+            <Link href="/landing" className="flex items-center gap-2 group">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-md shadow-brand-500/20 group-hover:rotate-6 transition-transform">
                 <MessageCircle className="w-4 h-4 text-white fill-white" />
               </div>

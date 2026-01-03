@@ -82,7 +82,7 @@ describe('Payment Controller', () => {
         beforeEach(() => {
             mockRequest = {
                 body: { planId: 'plan_123' },
-                user: { id: 'user_123', email: 'test@example.com' },
+                user: { userId: 'user_123', facebookId: 'fb_123' },
                 log: { error: vi.fn() },
             };
         });
