@@ -80,8 +80,16 @@ const start = async () => {
         server.addHook('onRequest', requestIdMiddleware);
 
         // Register plugins
+        // CORS: Environment-based origin configuration
+        // - Production: Only allow FRONTEND_URL (required in production)
+        // - Development: Allow localhost ports
+        const isProduction = process.env.NODE_ENV === 'production';
+        const allowedOrigins = isProduction
+            ? (process.env.FRONTEND_URL || 'https://jawab24.com')
+            : ['http://localhost:3000', 'http://localhost:3001'];
+        
         await server.register(cors, {
-            origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+            origin: allowedOrigins,
             credentials: true,
         });
         
