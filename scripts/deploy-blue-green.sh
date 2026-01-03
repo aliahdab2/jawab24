@@ -129,19 +129,41 @@ switch_traffic() {
 
 upstream backend_active {
     server jawab24-backend-$new_env:3000;
+    keepalive 32;
 }
 
 upstream frontend_active {
     server jawab24-frontend-$new_env:3001;
+    keepalive 32;
 }
 
 upstream ai_worker_active {
     server jawab24-ai-worker-$new_env:3002;
+    keepalive 16;
 }
 EOF
     
-    # Reload nginx
+    # Test nginx config before reloading
+    if ! docker exec jawab24-nginx nginx -t > /dev/null 2>&1; then
+        error "❌ Nginx config test failed!"
+        return 1
+    fi
+    
+    # Graceful reload (zero-downtime)
+    # This tells nginx to:
+    # 1. Keep old workers handling existing requests
+    # 2. Start new workers with new config
+    # 3. Gradually shut down old workers as requests complete
     docker exec jawab24-nginx nginx -s reload
+    
+    # Wait for reload to complete
+    sleep 1
+    
+    # Verify nginx is still running
+    if ! docker exec jawab24-nginx nginx -v > /dev/null 2>&1; then
+        error "❌ Nginx is not running after reload!"
+        return 1
+    fi
     
     # Save active environment
     echo "$new_env" > "$DEPLOY_PATH/.active-env"
@@ -215,12 +237,23 @@ main() {
     # Step 3: Switch traffic
     switch_traffic "$DEPLOY_ENV"
     
-    # Step 4: Verify via nginx
-    sleep 2
-    if curl -sf http://localhost/api/health > /dev/null 2>&1; then
-        log "✅ Traffic switch verified - API responding"
+    # Step 4: Verify via nginx (multiple checks for reliability)
+    log "Verifying traffic switch..."
+    VERIFY_SUCCESS=0
+    for i in {1..5}; do
+        sleep 1
+        if curl -sf http://localhost/api/health > /dev/null 2>&1 && \
+           curl -sf http://localhost/ > /dev/null 2>&1; then
+            VERIFY_SUCCESS=1
+            break
+        fi
+        log "Retry $i/5..."
+    done
+    
+    if [ $VERIFY_SUCCESS -eq 1 ]; then
+        log "✅ Traffic switch verified - services responding"
     else
-        error "❌ Traffic switch verification failed!"
+        error "❌ Traffic switch verification failed after 5 attempts!"
         warn "Rolling back to $ACTIVE_ENV..."
         switch_traffic "$ACTIVE_ENV"
         exit 1
