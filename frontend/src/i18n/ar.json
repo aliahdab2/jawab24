@@ -649,9 +649,11 @@
   "profile.emailRequired": "يرجى إدخال بريدك الإلكتروني للمتابعة. سنستخدمه فقط لإشعارات الحساب والفواتير.",
   "profile.emailAddress": "البريد الإلكتروني",
   "profile.emailPlaceholder": "بريدك@example.com",
-  "profile.privacyNote": "نحترم خصوصيتك. سيتم استخدام بريدك الإلكتروني فقط لأغراض متعلقة بالحساب.",
+  "profile.privacyNote": "خصوصيتك محمية",
   "profile.complete": "تم إكمال الملف الشخصي!",
   "profile.redirecting": "جاري التحويل الآن...",
   "profile.invalidEmail": "يرجى إدخال بريد إلكتروني صالح",
-  "profile.saveFailed": "فشل حفظ البريد الإلكتروني. يرجى المحاولة مرة أخرى."
+  "profile.saveFailed": "فشل حفظ البريد الإلكتروني. يرجى المحاولة مرة أخرى.",
+  "profile.encrypted": "تشفير آمن",
+  "profile.neverShared": "لن نشارك بريدك"
 }

@@ -647,11 +647,13 @@
   "profile.emailRequired": "Please provide your email address to continue. We'll use it for account notifications and receipts.",
   "profile.emailAddress": "Email Address",
   "profile.emailPlaceholder": "your@email.com",
-  "profile.privacyNote": "We respect your privacy. Your email will only be used for account-related communications.",
+  "profile.privacyNote": "Your privacy is protected",
   "profile.complete": "Profile Complete!",
   "profile.redirecting": "Redirecting you now...",
   "profile.invalidEmail": "Please enter a valid email address",
   "profile.saveFailed": "Failed to save email. Please try again.",
+  "profile.encrypted": "Encrypted",
+  "profile.neverShared": "Never shared",
   "common.saving": "Saving...",
   "common.continue": "Continue"
 }
