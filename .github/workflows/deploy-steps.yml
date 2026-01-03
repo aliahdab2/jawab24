@@ -1,0 +1,105 @@
+name: Deployment Steps
+
+on:
+  workflow_call:
+    inputs:
+      server_host:
+        required: true
+        type: string
+      server_user:
+        required: true
+        type: string
+      deploy_path:
+        required: true
+        type: string
+    secrets:
+      server_ssh_key:
+        required: true
+
+jobs:
+  backup:
+    name: 🔐 Backup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.server_host }}
+          username: ${{ inputs.server_user }}
+          key: ${{ secrets.server_ssh_key }}
+          command_timeout: 5m
+          script: |
+            cd ${{ inputs.deploy_path }}
+            echo "📸 Creating backup point..."
+            echo "$(git rev-parse HEAD)" > .last_successful_deploy
+            [ -f .active-env ] && cp .active-env .last_active_env
+            echo "✅ Backup: $(cat .last_successful_deploy)"
+
+  pull-code:
+    name: 📥 Pull Code
+    needs: backup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.server_host }}
+          username: ${{ inputs.server_user }}
+          key: ${{ secrets.server_ssh_key }}
+          command_timeout: 5m
+          script: |
+            cd ${{ inputs.deploy_path }}
+            echo "📥 Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+            git rev-parse HEAD > VERSION
+            date -u '+%Y-%m-%dT%H:%M:%SZ' > .deploy-time
+            echo "✅ Code updated to: $(git rev-parse --short HEAD)"
+
+  migrations:
+    name: 🗄️ Migrations
+    needs: pull-code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.server_host }}
+          username: ${{ inputs.server_user }}
+          key: ${{ secrets.server_ssh_key }}
+          command_timeout: 10m
+          script: |
+            cd ${{ inputs.deploy_path }}
+            echo "🗄️  Running database migrations..."
+            docker-compose up -d postgres
+            sleep 5
+            mkdir -p .migrations
+            
+            for migration in backend/drizzle/*.sql; do
+              [ -f "$migration" ] || continue
+              MIGRATION_NAME=$(basename "$migration")
+              if [ ! -f ".migrations/$MIGRATION_NAME.done" ]; then
+                echo "   📦 Applying: $MIGRATION_NAME"
+                docker cp "$migration" jawab24-postgres:/tmp/migration.sql
+                docker exec jawab24-postgres psql -U postgres -d jawab24 -f /tmp/migration.sql 2>&1 && \
+                  echo "   ✅ Applied: $MIGRATION_NAME" || \
+                  echo "   ⚠️  Already applied (tables exist)"
+                touch ".migrations/$MIGRATION_NAME.done"
+                docker exec jawab24-postgres rm -f /tmp/migration.sql
+              else
+                echo "   ⏭️  Already applied: $MIGRATION_NAME"
+              fi
+            done
+            echo "✅ Migrations complete"
+
+  blue-green:
+    name: 🔄 Blue-Green Switch
+    needs: migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.server_host }}
+          username: ${{ inputs.server_user }}
+          key: ${{ secrets.server_ssh_key }}
+          command_timeout: 20m
+          script: |
+            cd ${{ inputs.deploy_path }}
+            bash scripts/deploy-blue-green.sh deploy

@@ -1,0 +1,149 @@
+name: Post-Deployment Smoke Tests
+
+on:
+  workflow_call:
+    inputs:
+      server_host:
+        required: true
+        type: string
+      server_user:
+        required: true
+        type: string
+      deploy_path:
+        required: true
+        type: string
+      skip_health_check:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      server_ssh_key:
+        required: true
+    outputs:
+      tests_passed:
+        description: 'Whether all smoke tests passed'
+        value: ${{ jobs.smoke-tests.outputs.passed }}
+
+jobs:
+  smoke-tests:
+    name: Run Smoke Tests
+    runs-on: ubuntu-latest
+    outputs:
+      passed: ${{ steps.verify.outputs.passed }}
+    
+    steps:
+      - name: 🏥 Comprehensive Smoke Tests
+        id: verify
+        if: ${{ !inputs.skip_health_check }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.server_host }}
+          username: ${{ inputs.server_user }}
+          key: ${{ secrets.server_ssh_key }}
+          command_timeout: 5m
+          script: |
+            cd ${{ inputs.deploy_path }}
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🏥 COMPREHENSIVE DEPLOYMENT VERIFICATION"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            FAILED=0
+            
+            # Test 1: Backend Health
+            echo ""
+            echo "🔍 Test 1/6: Backend Health Check..."
+            for i in {1..10}; do
+              if curl -sf http://localhost/api/health > /dev/null 2>&1; then
+                echo "   ✅ Backend API responding (attempt $i)"
+                break
+              elif [ $i -eq 10 ]; then
+                echo "   ❌ Backend not responding after 10 attempts"
+                FAILED=1
+              else
+                echo "   ⏳ Retrying... ($i/10)"
+                sleep 2
+              fi
+            done
+            
+            # Test 2: Frontend Health
+            echo ""
+            echo "🔍 Test 2/6: Frontend Availability..."
+            for i in {1..10}; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/)
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "   ✅ Frontend serving pages (HTTP $HTTP_CODE)"
+                break
+              elif [ $i -eq 10 ]; then
+                echo "   ❌ Frontend not available (HTTP $HTTP_CODE)"
+                FAILED=1
+              else
+                echo "   ⏳ Retrying... ($i/10)"
+                sleep 2
+              fi
+            done
+            
+            # Test 3: Database Connectivity
+            echo ""
+            echo "🔍 Test 3/6: Database Connectivity..."
+            HEALTH_JSON=$(curl -sf http://localhost/api/health)
+            if echo "$HEALTH_JSON" | grep -q '"database":"up"'; then
+              echo "   ✅ Database connected"
+            else
+              echo "   ❌ Database connection failed"
+              echo "   Response: $HEALTH_JSON"
+              FAILED=1
+            fi
+            
+            # Test 4: Critical API Endpoints
+            echo ""
+            echo "🔍 Test 4/6: Critical API Endpoints..."
+            
+            # Test /api/plans (public endpoint)
+            if curl -sf http://localhost/api/plans > /dev/null 2>&1; then
+              echo "   ✅ GET /api/plans - OK"
+            else
+              echo "   ❌ GET /api/plans - FAILED"
+              FAILED=1
+            fi
+            
+            # Test 5: HTTPS/SSL
+            echo ""
+            echo "🔍 Test 5/6: HTTPS/SSL Certificate..."
+            if curl -sf https://jawab24.com/api/health > /dev/null 2>&1; then
+              echo "   ✅ HTTPS working"
+            else
+              echo "   ❌ HTTPS not working"
+              FAILED=1
+            fi
+            
+            # Test 6: Container Health Status
+            echo ""
+            echo "🔍 Test 6/6: Container Health Status..."
+            ACTIVE_ENV=$(cat .active-env)
+            
+            UNHEALTHY=$(docker ps --format "{{.Names}}\t{{.Status}}" | grep "$ACTIVE_ENV" | grep -v "healthy" | wc -l)
+            if [ "$UNHEALTHY" -eq 0 ]; then
+              echo "   ✅ All active containers healthy"
+            else
+              echo "   ❌ Some containers unhealthy:"
+              docker ps --format "table {{.Names}}\t{{.Status}}" | grep "$ACTIVE_ENV"
+              FAILED=1
+            fi
+            
+            # Final verdict
+            echo ""
+            if [ $FAILED -eq 0 ]; then
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "✅ ALL SMOKE TESTS PASSED"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "Active: $(cat .active-env)"
+              git rev-parse HEAD > .last_successful_deploy
+              echo "passed=true" >> $GITHUB_OUTPUT
+            else
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              echo "❌ SMOKE TESTS FAILED"
+              echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+              exit 1
+            fi

@@ -1,0 +1,88 @@
+name: Pre-Deployment Validation
+
+on:
+  workflow_call:
+    inputs:
+      server_host:
+        required: true
+        type: string
+      server_user:
+        required: true
+        type: string
+      deploy_path:
+        required: true
+        type: string
+    secrets:
+      server_ssh_key:
+        required: true
+    outputs:
+      validation_passed:
+        description: 'Whether validation passed'
+        value: ${{ jobs.validate.outputs.passed }}
+
+jobs:
+  validate:
+    name: Validate Environment
+    runs-on: ubuntu-latest
+    outputs:
+      passed: ${{ steps.check.outputs.passed }}
+    
+    steps:
+      - name: 🔍 Pre-Deployment Validation
+        id: check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.server_host }}
+          username: ${{ inputs.server_user }}
+          key: ${{ secrets.server_ssh_key }}
+          command_timeout: 2m
+          script: |
+            cd ${{ inputs.deploy_path }}
+            
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🔍 PRE-DEPLOYMENT VALIDATION"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Check 1: Environment variables
+            echo ""
+            echo "📋 Check 1/3: Environment Variables..."
+            if [ -f scripts/check-env.sh ]; then
+              if bash scripts/check-env.sh; then
+                echo "   ✅ All required env vars present"
+              else
+                echo "   ❌ Environment validation failed!"
+                exit 1
+              fi
+            else
+              echo "   ⚠️  check-env.sh not found, skipping validation"
+            fi
+            
+            # Check 2: Database connectivity
+            echo ""
+            echo "📋 Check 2/3: Database Connectivity..."
+            if docker exec jawab24-backend wget -q -O- http://localhost:3000/health 2>/dev/null | grep -q "database.*up"; then
+              echo "   ✅ Database reachable from current backend"
+            else
+              echo "   ❌ Cannot connect to database!"
+              echo "   This will cause deployment to fail"
+              exit 1
+            fi
+            
+            # Check 3: Disk space
+            echo ""
+            echo "📋 Check 3/3: Disk Space..."
+            DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+            if [ "$DISK_USAGE" -lt 90 ]; then
+              echo "   ✅ Sufficient disk space ($DISK_USAGE% used)"
+            else
+              echo "   ⚠️  Disk usage high: $DISK_USAGE%"
+              echo "   Cleaning up old Docker images..."
+              docker system prune -af --filter "until=48h" 2>/dev/null || true
+              
+              NEW_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+              echo "   📊 Disk usage after cleanup: $NEW_USAGE%"
+            fi
+            
+            echo ""
+            echo "✅ Pre-deployment validation passed"
+            echo "passed=true" >> $GITHUB_OUTPUT

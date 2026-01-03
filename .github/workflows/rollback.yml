@@ -1,0 +1,80 @@
+name: Rollback Deployment
+
+on:
+  workflow_call:
+    inputs:
+      server_host:
+        required: true
+        type: string
+      server_user:
+        required: true
+        type: string
+      deploy_path:
+        required: true
+        type: string
+    secrets:
+      server_ssh_key:
+        required: true
+
+jobs:
+  rollback:
+    name: Rollback to Previous Version
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🔄 Execute Rollback
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ inputs.server_host }}
+          username: ${{ inputs.server_user }}
+          key: ${{ secrets.server_ssh_key }}
+          command_timeout: 5m
+          script: |
+            cd ${{ inputs.deploy_path }}
+            
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🔄 ROLLING BACK DEPLOYMENT"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            if [ -f .last_active_env ]; then
+              ROLLBACK_ENV=$(cat .last_active_env)
+              echo "Rolling back to: $ROLLBACK_ENV"
+              
+              # Update upstream to rollback environment
+              cat > ./nginx/upstream.conf << EOF
+            # Rollback to: $ROLLBACK_ENV
+            # Rolled back at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            
+            upstream backend_active {
+                server jawab24-backend-$ROLLBACK_ENV:3000;
+                keepalive 32;
+            }
+            
+            upstream frontend_active {
+                server jawab24-frontend-$ROLLBACK_ENV:3001;
+                keepalive 32;
+            }
+            
+            upstream ai_worker_active {
+                server jawab24-ai-worker-$ROLLBACK_ENV:3002;
+                keepalive 16;
+            }
+            EOF
+              
+              # Test and reload nginx
+              if docker exec jawab24-nginx nginx -t; then
+                docker exec jawab24-nginx nginx -s reload
+                echo "$ROLLBACK_ENV" > .active-env
+                echo "✅ Rolled back to $ROLLBACK_ENV"
+              else
+                echo "❌ Nginx config test failed during rollback!"
+                exit 1
+              fi
+            else
+              echo "⚠️ No previous environment to rollback to"
+              echo "Manual intervention required"
+              exit 1
+            fi
+            
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

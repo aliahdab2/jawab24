@@ -71,14 +71,51 @@ jobs:
             cd ${{ env.DEPLOY_PATH }}
             
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🔍 VALIDATING ENVIRONMENT VARIABLES"
+            echo "🔍 PRE-DEPLOYMENT VALIDATION"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
+            # Check 1: Environment variables
+            echo ""
+            echo "📋 Check 1/3: Environment Variables..."
             if [ -f scripts/check-env.sh ]; then
-              bash scripts/check-env.sh
+              if bash scripts/check-env.sh; then
+                echo "   ✅ All required env vars present"
+              else
+                echo "   ❌ Environment validation failed!"
+                exit 1
+              fi
             else
-              echo "⚠️  check-env.sh not found, skipping validation"
+              echo "   ⚠️  check-env.sh not found, skipping validation"
             fi
+            
+            # Check 2: Database connectivity
+            echo ""
+            echo "📋 Check 2/3: Database Connectivity..."
+            if docker exec jawab24-backend wget -q -O- http://localhost:3000/health 2>/dev/null | grep -q "database.*up"; then
+              echo "   ✅ Database reachable from current backend"
+            else
+              echo "   ❌ Cannot connect to database!"
+              echo "   This will cause deployment to fail"
+              exit 1
+            fi
+            
+            # Check 3: Disk space
+            echo ""
+            echo "📋 Check 3/3: Disk Space..."
+            DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+            if [ "$DISK_USAGE" -lt 90 ]; then
+              echo "   ✅ Sufficient disk space ($DISK_USAGE% used)"
+            else
+              echo "   ⚠️  Disk usage high: $DISK_USAGE%"
+              echo "   Cleaning up old Docker images..."
+              docker system prune -af --filter "until=48h" 2>/dev/null || true
+              
+              NEW_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+              echo "   📊 Disk usage after cleanup: $NEW_USAGE%"
+            fi
+            
+            echo ""
+            echo "✅ Pre-deployment validation passed"
             
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -361,23 +398,91 @@ jobs:
             
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "🏥 VERIFYING DEPLOYMENT"
+            echo "🏥 COMPREHENSIVE DEPLOYMENT VERIFICATION"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
             FAILED=0
             
-            # Verify via public endpoint
+            # Test 1: Backend Health
             echo ""
-            echo "🔍 Testing public endpoints..."
-            
-            for i in 1 2 3 4 5; do
+            echo "🔍 Test 1/6: Backend Health Check..."
+            for i in {1..10}; do
               if curl -sf http://localhost/api/health > /dev/null 2>&1; then
-                echo "   ✅ API responding"
+                echo "   ✅ Backend API responding (attempt $i)"
                 break
-              elif [ $i -eq 5 ]; then
-                echo "   ❌ API not responding"
+              elif [ $i -eq 10 ]; then
+                echo "   ❌ Backend not responding after 10 attempts"
                 FAILED=1
               else
+                echo "   ⏳ Retrying... ($i/10)"
+                sleep 2
+              fi
+            done
+            
+            # Test 2: Frontend Health
+            echo ""
+            echo "🔍 Test 2/6: Frontend Availability..."
+            for i in {1..10}; do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/)
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "   ✅ Frontend serving pages (HTTP $HTTP_CODE)"
+                break
+              elif [ $i -eq 10 ]; then
+                echo "   ❌ Frontend not available (HTTP $HTTP_CODE)"
+                FAILED=1
+              else
+                echo "   ⏳ Retrying... ($i/10)"
+                sleep 2
+              fi
+            done
+            
+            # Test 3: Database Connectivity
+            echo ""
+            echo "🔍 Test 3/6: Database Connectivity..."
+            HEALTH_JSON=$(curl -sf http://localhost/api/health)
+            if echo "$HEALTH_JSON" | grep -q '"database":"up"'; then
+              echo "   ✅ Database connected"
+            else
+              echo "   ❌ Database connection failed"
+              echo "   Response: $HEALTH_JSON"
+              FAILED=1
+            fi
+            
+            # Test 4: Critical API Endpoints
+            echo ""
+            echo "🔍 Test 4/6: Critical API Endpoints..."
+            
+            # Test /api/plans (public endpoint)
+            if curl -sf http://localhost/api/plans > /dev/null 2>&1; then
+              echo "   ✅ GET /api/plans - OK"
+            else
+              echo "   ❌ GET /api/plans - FAILED"
+              FAILED=1
+            fi
+            
+            # Test 5: HTTPS/SSL
+            echo ""
+            echo "🔍 Test 5/6: HTTPS/SSL Certificate..."
+            if curl -sf https://jawab24.com/api/health > /dev/null 2>&1; then
+              echo "   ✅ HTTPS working"
+            else
+              echo "   ❌ HTTPS not working"
+              FAILED=1
+            fi
+            
+            # Test 6: Container Health Status
+            echo ""
+            echo "🔍 Test 6/6: Container Health Status..."
+            ACTIVE_ENV=$(cat .active-env)
+            
+            UNHEALTHY=$(docker ps --format "{{.Names}}\t{{.Status}}" | grep "$ACTIVE_ENV" | grep -v "healthy" | wc -l)
+            if [ "$UNHEALTHY" -eq 0 ]; then
+              echo "   ✅ All active containers healthy"
+            else
+              echo "   ❌ Some containers unhealthy:"
+              docker ps --format "table {{.Names}}\t{{.Status}}" | grep "$ACTIVE_ENV"
+              FAILED=1
+            fi
                 sleep 2
               fi
             done
@@ -466,6 +571,21 @@ jobs:
           echo "🌐 Website: https://jawab24.com"
           echo "📊 Dashboard: https://jawab24.com/dashboard"
           echo "🔧 API: https://jawab24.com/api/health"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo "👤 Deployed by: ${{ github.actor }}"
+          echo "⏰ Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      
+      - name: ❌ Deployment Failed - Send Alert
+        if: failure()
+        run: |
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "❌ DEPLOYMENT FAILED"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🔄 Automatic rollback triggered"
+          echo "📝 Check logs for details"
+          echo "🔗 Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   deploy-skipped:

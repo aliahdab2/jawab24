@@ -1,0 +1,157 @@
+name: Deploy to Production
+
+on:
+  workflow_run:
+    workflows: ["CI - Test & Build"]
+    types: [completed]
+    branches: [main]
+  
+  workflow_dispatch:
+    inputs:
+      skip_health_check:
+        description: 'Skip health checks after deployment'
+        required: false
+        default: 'false'
+        type: boolean
+      force_deploy:
+        description: 'Force deploy even if CI is running (use with caution)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  SERVER_HOST: 91.99.95.196
+  SERVER_USER: root
+  DEPLOY_PATH: /var/www/jawab24
+
+jobs:
+  # Deployment Info
+  info:
+    name: 📋 Deployment Info
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    steps:
+      - run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🚀 JAWAB24 BLUE-GREEN DEPLOYMENT"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📅 Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "🔀 Branch: ${{ github.ref_name }}"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo "👤 Actor: ${{ github.actor }}"
+          echo "🖥️  Server: ${{ env.SERVER_HOST }}"
+          echo "🔄 Strategy: Blue-Green (Zero Downtime)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  # Step 1: Pre-deployment validation
+  validate:
+    name: 🔍 Pre-Deployment Checks
+    needs: info
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    uses: ./.github/workflows/validate-deployment.yml
+    with:
+      server_host: 91.99.95.196
+      deploy_path: /var/www/jawab24
+    secrets:
+      server_ssh_key: ${{ secrets.SERVER_SSH_KEY }}
+
+  # Step 2: Validate Migrations
+  validate-migrations:
+    name: 🔍 Validate Migrations
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: |
+          npm ci --workspace=jawab24-backend --ignore-scripts
+          cd backend && npx ts-node scripts/validate-migrations.ts
+
+  # Step 3: Deploy (backup, pull code, migrations, blue-green)
+  deploy:
+    name: 🚀 Deploy
+    needs: [validate, validate-migrations]
+    uses: ./.github/workflows/deploy-steps.yml
+    with:
+      server_host: 91.99.95.196
+      server_user: root
+      deploy_path: /var/www/jawab24
+    secrets:
+      server_ssh_key: ${{ secrets.SERVER_SSH_KEY }}
+
+  # Step 4: Post-deployment smoke tests
+  smoke-tests:
+    name: 🏥 Smoke Tests
+    needs: deploy
+    uses: ./.github/workflows/smoke-tests.yml
+    with:
+      server_host: 91.99.95.196
+      server_user: root
+      deploy_path: /var/www/jawab24
+      skip_health_check: ${{ github.event.inputs.skip_health_check == 'true' }}
+    secrets:
+      server_ssh_key: ${{ secrets.SERVER_SSH_KEY }}
+
+  # Step 5: Rollback on failure
+  rollback:
+    name: 🔄 Rollback
+    needs: [deploy, smoke-tests]
+    if: failure()
+    uses: ./.github/workflows/rollback.yml
+    with:
+      server_host: 91.99.95.196
+      server_user: root
+      deploy_path: /var/www/jawab24
+    secrets:
+      server_ssh_key: ${{ secrets.SERVER_SSH_KEY }}
+
+  # Summary
+  summary:
+    name: 📊 Deployment Summary
+    needs: [info, validate, validate-migrations, deploy, smoke-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: ✅ Success Summary
+        if: ${{ needs.smoke-tests.result == 'success' }}
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🎉 DEPLOYMENT SUCCESSFUL"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🌐 Website: https://jawab24.com"
+          echo "📊 Dashboard: https://jawab24.com/dashboard"
+          echo "🔧 API: https://jawab24.com/api/health"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      
+      - name: ❌ Failure Summary
+        if: ${{ needs.smoke-tests.result == 'failure' }}
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "❌ DEPLOYMENT FAILED - ROLLBACK EXECUTED"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🔗 Logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          exit 1
+
+  # Skip deployment if CI failed
+  deploy-skipped:
+    name: ⏭️ CI Failed - Skip Deploy
+    runs-on: ubuntu-latest
+    # Only skip if triggered by workflow_run and CI failed
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}
+    
+    steps:
+      - name: Skip deployment
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "⏭️  DEPLOYMENT SKIPPED"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "❌ CI tests failed - deployment cancelled"
+          echo "📝 Please fix failing tests before deploying"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          exit 1
+
