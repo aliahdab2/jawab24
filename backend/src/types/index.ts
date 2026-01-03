@@ -1,74 +1,11 @@
 // Re-export from organized type files
 export * from './common';
 export * from './logger';
+export * from './auth';
+export * from './facebook';
 export * from './instagram';
 export * from './settings';
 export * from './payment';
-
-// User types
-export interface User {
-    id: string;
-    facebookId: string;
-    name: string | null;
-    email: string | null;
-    createdAt: Date | null;
-    updatedAt: Date | null;
-}
-
-// JWT payload
-export interface JWTPayload {
-    userId: string;
-    facebookId: string;
-    iat?: number;
-    exp?: number;
-}
-
-// Facebook API responses
-export interface FacebookTokenResponse {
-    access_token: string;
-    token_type: string;
-    expires_in?: number;
-}
-
-export interface FacebookUserProfile {
-    id: string;
-    name: string;
-    email?: string;
-}
-
-export interface FacebookPage {
-    id: string;
-    name: string;
-    access_token: string;
-    category?: string;
-    tasks?: string[];
-}
-
-export interface FacebookPagesResponse {
-    data: FacebookPage[];
-    paging?: {
-        cursors?: {
-            before: string;
-            after: string;
-        };
-    };
-}
-
-// Request/Response types
-export interface AuthRequest {
-    code: string;
-}
-
-export interface AuthResponse {
-    token: string;
-    fbAccessToken: string;
-    user: {
-        id: string;
-        name: string;
-        email?: string;
-        facebookId: string;
-    };
-}
 
 // Rule Types
 export interface Rule {
