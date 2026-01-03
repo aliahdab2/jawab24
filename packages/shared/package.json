@@ -5,7 +5,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "lint": "echo 'No lint configured for shared package'"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
