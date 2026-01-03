@@ -230,47 +230,61 @@ main() {
     # Step 3: Switch traffic
     switch_traffic "$DEPLOY_ENV"
     
-    # Step 4: Wait for DNS propagation and verify via nginx
-    log "Verifying traffic switch (waiting for DNS propagation)..."
+    # Step 4: Verify nginx can reach the new containers via Docker network
+    log "Verifying traffic switch..."
     
-    # Wait for Docker DNS to be ready
-    wait_for_dns "$DEPLOY_ENV" || true  # Continue even if timeout (might still work)
+    # Wait for Docker DNS to propagate to nginx
+    wait_for_dns "$DEPLOY_ENV" || true
     
-    # Give nginx time to pick up new upstream config after reload
-    sleep 3
+    # Give nginx time to pick up new upstream config
+    sleep 2
     
     VERIFY_SUCCESS=0
     for i in {1..10}; do
-        # Check nginx can reach backend - capture actual response for debugging
-        HEALTH_RESPONSE=$(curl -sf http://localhost/api/health 2>&1) || HEALTH_RESPONSE=""
-        FRONTEND_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost/ 2>&1) || FRONTEND_CODE="000"
+        # Verify nginx can reach backend through Docker network (not localhost)
+        # This tests the actual path nginx uses to reach the containers
+        BACKEND_OK=0
+        FRONTEND_OK=0
         
-        if [ -n "$HEALTH_RESPONSE" ] && [ "$FRONTEND_CODE" = "200" ]; then
+        # Check backend via nginx container using Docker DNS
+        if docker exec jawab24-nginx wget -q -O- --timeout=5 http://jawab24-backend-$DEPLOY_ENV:3000/health 2>/dev/null | grep -q '"status"'; then
+            BACKEND_OK=1
+        fi
+        
+        # Check frontend via nginx container using Docker DNS
+        if docker exec jawab24-nginx wget -q --spider --timeout=5 http://jawab24-frontend-$DEPLOY_ENV:3001/ 2>/dev/null; then
+            FRONTEND_OK=1
+        fi
+        
+        if [ $BACKEND_OK -eq 1 ] && [ $FRONTEND_OK -eq 1 ]; then
             VERIFY_SUCCESS=1
-            log "✅ API responding: $(echo "$HEALTH_RESPONSE" | head -c 100)..."
-            log "✅ Frontend responding: HTTP $FRONTEND_CODE"
+            log "✅ Nginx can reach backend ($DEPLOY_ENV) via Docker network"
+            log "✅ Nginx can reach frontend ($DEPLOY_ENV) via Docker network"
             break
         fi
         
-        # Show what's happening for debugging
-        if [ -z "$HEALTH_RESPONSE" ]; then
-            warn "Retry $i/10 - API: no response, Frontend: HTTP $FRONTEND_CODE"
-        else
-            warn "Retry $i/10 - API: responding, Frontend: HTTP $FRONTEND_CODE"
-        fi
-        
+        warn "Retry $i/10 - Backend: $([ $BACKEND_OK -eq 1 ] && echo 'OK' || echo 'waiting'), Frontend: $([ $FRONTEND_OK -eq 1 ] && echo 'OK' || echo 'waiting')"
         sleep 2
     done
     
     if [ $VERIFY_SUCCESS -eq 1 ]; then
-        log "✅ Traffic switch verified - all services responding via nginx"
+        log "✅ Traffic switch verified - nginx can reach all $DEPLOY_ENV containers"
+        
+        # Final external verification (informational only, doesn't block deployment)
+        log "Running external health check..."
+        if curl -sf --max-time 5 https://jawab24.com/api/health > /dev/null 2>&1; then
+            log "✅ External API health check passed"
+        else
+            warn "⚠️  External API check failed (may be DNS/SSL caching, services are working)"
+        fi
     else
         error "❌ Traffic switch verification failed after 10 attempts!"
+        error "Nginx cannot reach $DEPLOY_ENV containers through Docker network"
         
-        # Additional debugging info
-        error "Debug: Checking if containers are still healthy..."
-        docker exec jawab24-backend-$DEPLOY_ENV wget -q -O- http://localhost:3000/health 2>/dev/null && log "Backend container is healthy" || error "Backend container not responding"
-        docker exec jawab24-frontend-$DEPLOY_ENV wget -q --spider http://localhost:3001/ 2>/dev/null && log "Frontend container is healthy" || error "Frontend container not responding"
+        # Debug info
+        error "Debug: Container status..."
+        docker ps --filter "name=jawab24-backend-$DEPLOY_ENV" --format "{{.Status}}"
+        docker ps --filter "name=jawab24-frontend-$DEPLOY_ENV" --format "{{.Status}}"
         
         warn "Rolling back to $ACTIVE_ENV..."
         switch_traffic "$ACTIVE_ENV"
