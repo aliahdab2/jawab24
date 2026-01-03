@@ -11,6 +11,10 @@ set -e
 DEPLOY_PATH="${DEPLOY_PATH:-/var/www/jawab24}"
 cd "$DEPLOY_PATH"
 
+# Get git info for versioning
+export GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+export GIT_COMMIT_SHORT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -169,14 +173,22 @@ deploy_env() {
     local env=$1
     log "Deploying to $env environment..."
     
+    # Write version info files
+    log "📝 Writing version info..."
+    echo "$GIT_COMMIT" > VERSION
+    date -u '+%Y-%m-%dT%H:%M:%SZ' > .deploy-time
+    log "   Version: $GIT_COMMIT_SHORT"
+    
     # Load frontend env vars
     if [ -f ./env/frontend.env ]; then
         export $(grep -v '^#' ./env/frontend.env | xargs)
     fi
     
-    # Build images (quiet mode, no cache - only show errors and final summary)
-    log "📦 Building Docker images..."
-    if docker-compose -f docker-compose.yml -f docker-compose.$env.yml build --parallel --quiet --no-cache 2>&1; then
+    # Build images with no cache - show full output for visibility
+    # Pass GIT_COMMIT as build arg for versioning
+    log "📦 Building Docker images (no-cache, this may take 2-5 minutes)..."
+    log "   Building: backend, frontend, ai-worker..."
+    if GIT_COMMIT="$GIT_COMMIT" docker-compose -f docker-compose.yml -f docker-compose.$env.yml build --parallel --no-cache --build-arg GIT_COMMIT="$GIT_COMMIT"; then
         log "✅ Images built successfully"
     else
         error "❌ Image build failed!"

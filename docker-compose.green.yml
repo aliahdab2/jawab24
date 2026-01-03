@@ -7,12 +7,15 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        - GIT_COMMIT=${GIT_COMMIT:-unknown}
     restart: unless-stopped
     env_file:
       - ./env/backend.env
     environment:
       - NODE_ENV=production
       - DEPLOY_ENV=green
+      - GIT_COMMIT=${GIT_COMMIT:-unknown}
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379
       - AI_SERVICE_URL=http://ai-worker-green:3002

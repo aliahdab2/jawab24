@@ -13,11 +13,13 @@ import {
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
+import { useVersion } from '@/lib/useVersion';
 import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
   const { t, language, setLanguage } = useTranslation();
+  const { displayVersion } = useVersion();
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -227,7 +229,7 @@ export default function LoginPage() {
             <div className="text-xs font-bold text-surface-400 uppercase tracking-widest">
               © {new Date().getFullYear()} Jawab24
             </div>
-            <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">v2.4.0</span>
+            <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">v{displayVersion}</span>
           </div>
         </div>
       </div>
