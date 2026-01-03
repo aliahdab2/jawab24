@@ -36,6 +36,7 @@ export class AuthController {
                 name: fbProfile.name,
                 hasEmail: !!fbProfile.email 
             }, 'Facebook login - profile received');
+            console.log('DEBUG Facebook profile:', { id: fbProfile.id, name: fbProfile.name, hasEmail: !!fbProfile.email });
 
             // 3. Find or create user in our DB
             const user = await authService.findOrCreateUser(

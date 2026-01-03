@@ -49,14 +49,14 @@ export class FacebookService {
             });
 
             // Debug: Log what Facebook returns
-            this.logger.info({ 
+            this.logger.info('Facebook profile received', { 
                 facebookProfile: {
                     id: response.data.id,
                     name: response.data.name,
                     hasEmail: !!response.data.email,
                     email: response.data.email ? '***' : 'NOT_PROVIDED'
                 }
-            }, 'Facebook profile received');
+            });
 
             return response.data;
         } catch (error) {
