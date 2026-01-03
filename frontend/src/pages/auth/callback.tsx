@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
 import { PageSpinner } from '@/components/ui';
@@ -8,67 +8,74 @@ export default function AuthCallback() {
   const { setAuth } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const authAttemptedRef = useRef(false);
+  
+  // Use ref for router to avoid dependency issues
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  
+  // Memoize setAuth to ensure stable reference
+  const setAuthRef = useRef(setAuth);
+  setAuthRef.current = setAuth;
+
+  const handleCallback = useCallback(async () => {
+    // Prevent multiple auth attempts
+    if (authAttemptedRef.current) return;
+    
+    const { code, error: fbError, state } = routerRef.current.query;
+
+    if (fbError) {
+      authAttemptedRef.current = true;
+      setError('Facebook login was cancelled or failed.');
+      setTimeout(() => routerRef.current.push('/login'), 3000);
+      return;
+    }
+
+    if (!code || typeof code !== 'string') {
+      // Wait for query params to be available
+      return;
+    }
+
+    // Mark as attempted before making the API call
+    authAttemptedRef.current = true;
+
+    try {
+      // Exchange code for token via our backend
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+      const response = await fetch(`${apiUrl}/auth/facebook`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Authentication failed');
+      }
+
+      const data = await response.json();
+      
+      // Store auth data including FB token
+      setAuthRef.current(data.user, data.token, data.fbAccessToken);
+      
+      // Redirect to the original destination (from state param) or dashboard
+      const returnUrl = state ? decodeURIComponent(state as string) : '/dashboard';
+      // Validate the URL is a relative path (security)
+      const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
+      routerRef.current.push(safeUrl);
+    } catch (err) {
+      console.error('Auth error:', err);
+      setError(err instanceof Error ? err.message : 'Authentication failed');
+      setTimeout(() => routerRef.current.push('/login'), 3000);
+    }
+  }, []);
 
   useEffect(() => {
-    const handleCallback = async () => {
-      // Prevent multiple auth attempts
-      if (authAttemptedRef.current) return;
-      
-      const { code, error: fbError, state } = router.query;
-
-      if (fbError) {
-        authAttemptedRef.current = true;
-        setError('Facebook login was cancelled or failed.');
-        setTimeout(() => router.push('/login'), 3000);
-        return;
-      }
-
-      if (!code || typeof code !== 'string') {
-        // Wait for query params to be available
-        return;
-      }
-
-      // Mark as attempted before making the API call
-      authAttemptedRef.current = true;
-
-      try {
-        // Exchange code for token via our backend
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-        const response = await fetch(`${apiUrl}/auth/facebook`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ code }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.message || 'Authentication failed');
-        }
-
-        const data = await response.json();
-        
-        // Store auth data including FB token
-        setAuth(data.user, data.token, data.fbAccessToken);
-        
-        // Redirect to the original destination (from state param) or dashboard
-        const returnUrl = state ? decodeURIComponent(state as string) : '/dashboard';
-        // Validate the URL is a relative path (security)
-        const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
-        router.push(safeUrl);
-      } catch (err) {
-        console.error('Auth error:', err);
-        setError(err instanceof Error ? err.message : 'Authentication failed');
-        setTimeout(() => router.push('/login'), 3000);
-      }
-    };
-
     if (router.isReady) {
       handleCallback();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router.isReady, router.query]);
+  }, [router.isReady, router.query, handleCallback]);
 
   if (error) {
     return (

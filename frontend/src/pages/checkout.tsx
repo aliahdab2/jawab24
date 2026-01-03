@@ -17,6 +17,9 @@ export default function CheckoutPage() {
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<any>(null);
   const [fetchError, setFetchError] = useState(false);
+  
+  // Extract translated string before useEffect to avoid dependency on t
+  const errorLoadPlanMessage = t('checkout.errorLoadPlan');
 
   useEffect(() => {
     // Prevent re-fetching if already loaded or errored
@@ -29,12 +32,12 @@ export default function CheckoutPage() {
       } catch (err) {
         console.error('Failed to fetch plan:', err);
         setFetchError(true);
-        setError(t('checkout.errorLoadPlan'));
+        setError(errorLoadPlanMessage);
       }
     };
 
     fetchPlan();
-  }, [planId, plan, fetchError]); // Removed `t` - it causes infinite loop
+  }, [planId, plan, fetchError, errorLoadPlanMessage]);
 
   const handleCheckout = async () => {
     if (!planId) return;

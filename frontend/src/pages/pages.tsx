@@ -57,14 +57,44 @@ export default function PagesPage() {
 
   // Auto-sync if no pages found after initial load (only once)
   const syncAttemptedRef = useRef(false);
+  
+  // Create a stable reference to handleSync
+  const handleSyncRef = useRef<(() => Promise<void>) | null>(null);
+
+  const handleSync = useCallback(async () => {
+    if (!token || !fbToken) {
+      console.error('No tokens available for sync');
+      return;
+    }
+
+    try {
+      setSyncing(true);
+      // Call sync endpoint with user's FB token
+      await axios.post(`${apiUrl}/pages/sync`,
+        { accessToken: fbToken },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Refresh list
+      await fetchPages();
+
+    } catch (error) {
+      console.error('Sync failed:', error);
+    } finally {
+      setSyncing(false);
+    }
+  }, [token, fbToken, apiUrl, fetchPages]);
+  
+  // Keep ref updated
+  handleSyncRef.current = handleSync;
+  
   useEffect(() => {
     if (!loading && pages.length === 0 && fbToken && token && !syncing && !syncAttemptedRef.current) {
       // Auto-sync pages from Facebook (only attempt once)
       syncAttemptedRef.current = true;
-      handleSync();
+      handleSyncRef.current?.();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, pages.length, fbToken, token]);
+  }, [loading, pages.length, fbToken, token, syncing]);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
     // Optimistic update
@@ -103,30 +133,6 @@ export default function PagesPage() {
       setPages(pages.map(page =>
         page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
       ));
-    }
-  };
-
-  const handleSync = async () => {
-    if (!token || !fbToken) {
-      console.error('No tokens available for sync');
-      return;
-    }
-
-    try {
-      setSyncing(true);
-      // Call sync endpoint with user's FB token
-      await axios.post(`${apiUrl}/pages/sync`,
-        { accessToken: fbToken },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      // Refresh list
-      await fetchPages();
-
-    } catch (error) {
-      console.error('Sync failed:', error);
-    } finally {
-      setSyncing(false);
     }
   };
 

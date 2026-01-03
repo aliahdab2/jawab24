@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Toggle, PageHeader, PageSpinner } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -58,6 +58,10 @@ export default function SettingsPage() {
   const { t, language } = useTranslation();
   const { setLanguage } = useLanguage();
   const { token } = useAuthStore();
+  
+  // Use ref for setLanguage to avoid dependency issues
+  const setLanguageRef = useRef(setLanguage);
+  setLanguageRef.current = setLanguage;
 
   // Show/hide advanced settings
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -124,10 +128,9 @@ export default function SettingsPage() {
   // Sync dashboard language with app language (only when dashboardLanguage changes)
   useEffect(() => {
     if (settings.dashboardLanguage && settings.dashboardLanguage !== language) {
-      setLanguage(settings.dashboardLanguage as 'ar' | 'en');
+      setLanguageRef.current(settings.dashboardLanguage as 'ar' | 'en');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.dashboardLanguage]); // Only trigger when dashboardLanguage changes, not on every render
+  }, [settings.dashboardLanguage, language]);
 
   const handleSave = async () => {
     if (!token) return;

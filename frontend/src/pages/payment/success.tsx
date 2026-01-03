@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -12,6 +12,11 @@ export default function PaymentSuccessPage() {
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
   const [countdown, setCountdown] = useState(5);
+  
+  // Use ref for router to avoid dependency issues
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  const redirectedRef = useRef(false);
 
   useEffect(() => {
     if (!session_id) return;
@@ -19,8 +24,9 @@ export default function PaymentSuccessPage() {
     // Countdown redirect to dashboard
     const interval = setInterval(() => {
       setCountdown((prev) => {
-        if (prev <= 1) {
-          router.push('/dashboard');
+        if (prev <= 1 && !redirectedRef.current) {
+          redirectedRef.current = true;
+          routerRef.current.push('/dashboard');
           return 0;
         }
         return prev - 1;
@@ -28,7 +34,7 @@ export default function PaymentSuccessPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [session_id, router]);
+  }, [session_id]);
 
   return (
     <>

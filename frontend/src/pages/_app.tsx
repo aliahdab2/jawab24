@@ -3,7 +3,7 @@ import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useUIStore } from '@/lib/store';
 import type { Language } from '@/i18n';
@@ -11,7 +11,16 @@ import type { Language } from '@/i18n';
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const { locale } = router;
-  const setLanguage = useUIStore((state) => state.setLanguage);
+  
+  // Use ref for router to avoid dependency issues
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  
+  // Memoize setLanguage to ensure stable reference
+  const setLanguageStore = useUIStore((state) => state.setLanguage);
+  const setLanguage = useCallback((lang: Language) => {
+    setLanguageStore(lang);
+  }, [setLanguageStore]);
 
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
@@ -33,7 +42,7 @@ export default function App({ Component, pageProps }: AppProps) {
 
     // If we are on the default locale (ar) but user prefers 'en', redirect
     if (isDefaultLocale && storedLang === 'en') {
-      router.replace(router.pathname, router.asPath, { locale: 'en' });
+      routerRef.current.replace(routerRef.current.pathname, routerRef.current.asPath, { locale: 'en' });
       return;
     }
 
@@ -45,7 +54,7 @@ export default function App({ Component, pageProps }: AppProps) {
     // Update document direction and language
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = locale;
-  }, [locale, hasHydrated, router, setLanguage]);
+  }, [locale, hasHydrated, setLanguage]);
 
   return (
     <QueryClientProvider client={queryClient}>

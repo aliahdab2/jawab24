@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
@@ -9,6 +9,11 @@ export default function Home() {
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
+  
+  // Use ref for router to avoid dependency issues
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  const redirectedRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -24,15 +29,17 @@ export default function Home() {
 
   useEffect(() => {
     // Wait for both mounting and hydration before redirecting
-    if (mounted && _hasHydrated) {
+    // Only redirect once to prevent loops
+    if (mounted && _hasHydrated && !redirectedRef.current) {
+      redirectedRef.current = true;
       if (isAuthenticated) {
-        router.push('/dashboard');
+        routerRef.current.push('/dashboard');
       } else {
         // Redirect to landing page for unauthenticated users
-        router.push('/landing');
+        routerRef.current.push('/landing');
       }
     }
-  }, [isAuthenticated, _hasHydrated, mounted, router]);
+  }, [isAuthenticated, _hasHydrated, mounted]);
 
   // Show a loading state while waiting
   return (
