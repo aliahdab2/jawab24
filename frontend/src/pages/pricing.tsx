@@ -13,12 +13,14 @@ import type { Plan, UsageSummary } from '@jawab24/shared';
 function PlanCard({
   plan,
   isCurrentPlan,
+  hasActiveSubscription,
   onSelect,
   loading,
   t,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
+  hasActiveSubscription: boolean;
   onSelect: () => void;
   loading: boolean;
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
@@ -98,7 +100,8 @@ function PlanCard({
             <span className="text-surface-500 text-sm font-medium">{t('pricing.perMonth')}</span>
           )}
         </div>
-        {plan.trialDays > 0 && (
+        {/* Only show trial badge if user doesn't have an active subscription */}
+        {plan.trialDays > 0 && !hasActiveSubscription && (
           <div className="inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
             <Zap className="w-3 h-3" />
             {t('pricing.trialDays', { days: plan.trialDays })}
@@ -149,9 +152,11 @@ function PlanCard({
         >
           {isCurrentPlan
             ? t('pricing.currentPlan')
-            : (isFree || plan.trialDays > 0)
-              ? t('pricing.startTrial')
-              : t('pricing.upgrade')
+            : hasActiveSubscription
+              ? t('pricing.upgrade')
+              : (isFree || plan.trialDays > 0)
+                ? t('pricing.startTrial')
+                : t('pricing.upgrade')
           }
         </Button>
         {isFree && (
@@ -261,6 +266,7 @@ export default function PricingPage() {
   }
 
   const currentPlanId = usage?.subscription?.plan?.id;
+  const hasActiveSubscription = Boolean(currentPlanId);
 
   // Filter out inactive plans
   const activePlans = plans.filter(p => p.slug !== 'free' || p.isActive !== false);
@@ -312,6 +318,7 @@ export default function PricingPage() {
               key={plan.id}
               plan={plan}
               isCurrentPlan={plan.id === currentPlanId}
+              hasActiveSubscription={hasActiveSubscription}
               onSelect={() => handleSelectPlan(plan.id)}
               loading={changingPlan === plan.id}
               t={t}
