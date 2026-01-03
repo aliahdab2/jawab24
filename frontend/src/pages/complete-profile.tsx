@@ -214,7 +214,7 @@ export default function CompleteProfilePage() {
                   required
                   autoFocus
                   autoComplete="email"
-                  aria-invalid={showEmailError}
+                  aria-invalid={showEmailError ? 'true' : undefined}
                   aria-describedby={showEmailError ? 'email-error' : undefined}
                 />
                 
