@@ -75,7 +75,7 @@ export default function AuthCallback() {
     if (router.isReady) {
       handleCallback();
     }
-  }, [router.isReady, router.query, handleCallback]);
+  }, [router.isReady, handleCallback]);
 
   if (error) {
     return (
