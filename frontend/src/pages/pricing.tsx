@@ -70,47 +70,48 @@ function PlanCard({
         </div>
       )}
 
-      <div className="text-center mb-3 pt-4 px-3">
-        <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'bg-slate-100 text-slate-600' :
+      <div className="text-center mb-2 md:mb-3 pt-2 md:pt-4 px-1 md:px-3">
+        <div className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 mx-auto mb-1 md:mb-3 rounded-lg md:rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'bg-slate-100 text-slate-600' :
           plan.slug === 'starter' ? 'bg-blue-100 text-blue-600' :
             plan.slug === 'business' ? 'bg-brand-100 text-brand-600' :
               'bg-amber-100 text-amber-600'
           }`}>
           {plan.slug === 'free' || plan.slug === 'starter' ? (
-            <Zap className="w-5 h-5 md:w-6 md:h-6" />
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
           ) : plan.slug === 'pro' ? (
-            <Crown className="w-5 h-5 md:w-6 md:h-6" />
+            <Crown className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
           ) : (
-            <Sparkles className="w-5 h-5 md:w-6 md:h-6" />
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
           )}
         </div>
-        <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight mb-1">{planName}</h3>
+        <h3 className="text-sm sm:text-base md:text-xl font-bold text-surface-900 tracking-tight mb-0.5 md:mb-1">{planName}</h3>
         {planDescription && (
-          <p className="text-xs md:text-sm text-surface-500 leading-relaxed min-h-[32px] px-2">{planDescription}</p>
+          <p className="text-[10px] sm:text-xs md:text-sm text-surface-500 leading-snug md:leading-relaxed min-h-[24px] md:min-h-[32px] px-0.5 md:px-2 hidden sm:block">{planDescription}</p>
         )}
       </div>
 
       {/* Price */}
-      <div className="text-center mb-4 py-3 bg-surface-50/50 rounded-xl mx-3">
-        <div className="flex items-baseline justify-center gap-1">
-          <span className="text-3xl md:text-4xl font-extrabold text-surface-900">
+      <div className="text-center mb-2 md:mb-4 py-2 md:py-3 bg-surface-50/50 rounded-lg md:rounded-xl mx-1 md:mx-3">
+        <div className="flex items-baseline justify-center gap-0.5 md:gap-1">
+          <span className="text-xl sm:text-2xl md:text-4xl font-extrabold text-surface-900">
             {isFree ? '$0' : formatPrice(plan.price)}
           </span>
           {!isFree && (
-            <span className="text-surface-500 text-sm font-medium">{t('pricing.perMonth')}</span>
+            <span className="text-surface-500 text-[10px] sm:text-xs md:text-sm font-medium">{t('pricing.perMonth')}</span>
           )}
         </div>
         {/* Only show trial badge if user doesn't have an active subscription */}
         {plan.trialDays > 0 && !hasActiveSubscription && (
-          <div className="inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
-            <Zap className="w-3 h-3" />
-            {t('pricing.trialDays', { days: plan.trialDays })}
+          <div className="inline-flex items-center gap-1 md:gap-1.5 bg-brand-100 text-brand-700 text-[9px] sm:text-[10px] md:text-xs font-semibold mt-1 md:mt-3 px-1.5 sm:px-2 md:px-3 py-0.5 md:py-1 rounded-full">
+            <Zap className="w-2.5 h-2.5 md:w-3 md:h-3" />
+            <span className="hidden sm:inline">{t('pricing.trialDays', { days: plan.trialDays })}</span>
+            <span className="sm:hidden">{plan.trialDays}d</span>
           </div>
         )}
       </div>
 
-      {/* Features */}
-      <div className="space-y-1 px-3 flex-1">
+      {/* Features - Hidden on very small mobile, compact on larger mobile */}
+      <div className="space-y-0.5 md:space-y-1 px-1 md:px-3 flex-1 hidden sm:block">
         <FeatureRow
           included={true}
           text={t('pricing.featurePages' as TranslationKey, { count: (plan.maxPages === null ? t('pricing.unlimited' as TranslationKey) : plan.maxPages) as string | number })}
@@ -141,13 +142,13 @@ function PlanCard({
       </div>
 
       {/* CTA */}
-      <div className="mt-auto pt-3 px-3 pb-1">
+      <div className="mt-auto pt-1 md:pt-3 px-1 md:px-3 pb-1">
         <Button
           onClick={onSelect}
           loading={loading}
           disabled={isCurrentPlan}
           variant={isPopular ? 'primary' : 'secondary'}
-          className={`w-full py-3 text-sm font-bold rounded-xl transition-all duration-300 ${isPopular ? 'shadow-lg shadow-brand-200 hover:shadow-brand-300' : ''
+          className={`w-full py-1.5 sm:py-2 md:py-3 text-[10px] sm:text-xs md:text-sm font-bold rounded-lg md:rounded-xl transition-all duration-300 ${isPopular ? 'shadow-lg shadow-brand-200 hover:shadow-brand-300' : ''
             }`}
         >
           {isCurrentPlan
@@ -311,8 +312,8 @@ export default function PricingPage() {
           </div>
         )}
 
-        {/* Plans Grid - Mobile: 1 column, Tablet+: 3 columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 pb-8 items-stretch max-w-6xl mx-auto px-4 md:px-6 lg:px-8 pt-2 md:pt-4">
+        {/* Plans Grid - Always 3 columns like landing page */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-6 pb-8 items-stretch max-w-6xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 pt-2 md:pt-4">
           {activePlans.map((plan) => (
             <PlanCard
               key={plan.id}

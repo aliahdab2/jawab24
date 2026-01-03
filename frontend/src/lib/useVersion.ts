@@ -8,11 +8,14 @@ export interface VersionInfo {
 }
 
 // Fallback version when API is unavailable
-const FALLBACK_VERSION = '2.4.0';
+const FALLBACK_VERSION = 'unknown';
 
 export function useVersion() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Prioritize semantic version from build env, then API git commit, then fallback
+  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || FALLBACK_VERSION;
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -33,8 +36,8 @@ export function useVersion() {
     fetchVersion();
   }, []);
 
-  // Return shortVersion or fallback
-  const displayVersion = versionInfo?.shortVersion || FALLBACK_VERSION;
+  // If appVersion is not 'unknown', use it, otherwise use API's shortVersion or fallback
+  const displayVersion = appVersion !== FALLBACK_VERSION ? appVersion : (versionInfo?.shortVersion || FALLBACK_VERSION);
   const environment = versionInfo?.environment || 'unknown';
 
   return {

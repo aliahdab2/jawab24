@@ -47,6 +47,7 @@ services:
       args:
         - NEXT_PUBLIC_FB_APP_ID=${NEXT_PUBLIC_FB_APP_ID:-}
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://jawab24.com/api}
+        - SEMANTIC_VERSION=${SEMANTIC_VERSION:-untagged}
     restart: unless-stopped
     env_file:
       - ./env/frontend.env
