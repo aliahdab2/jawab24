@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  MessageSquare, 
-  Settings, 
+import {
+  LayoutDashboard,
+  FileText,
+  MessageSquare,
+  Settings,
   LogOut,
   MessageCircle,
   ChevronLeft,
@@ -12,7 +12,7 @@ import {
   CreditCard
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import clsx from 'clsx';
 
 // Simple navigation - Templates & Rules are in Settings > Advanced
@@ -38,12 +38,12 @@ export function Sidebar() {
   };
 
   return (
-    <aside 
+    <aside
       className={clsx(
         'fixed top-0 h-full bg-surface-900 text-white transition-all duration-500 z-40 shadow-2xl',
         sidebarOpen ? 'w-64' : 'w-20'
       )}
-      style={{ 
+      style={{
         insetInlineStart: 0,
         background: 'linear-gradient(180deg, #0F172A 0%, #1E293B 100%)'
       }}
@@ -58,7 +58,7 @@ export function Sidebar() {
             <span className="font-display font-bold text-xl tracking-tight">Jawab24</span>
           )}
         </Link>
-        <button 
+        <button
           onClick={toggleSidebar}
           className="p-2 rounded-xl hover:bg-white/5 transition-all text-surface-400 hover:text-white"
         >
@@ -86,8 +86,8 @@ export function Sidebar() {
               href={item.href}
               className={clsx(
                 'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group relative',
-                isActive 
-                  ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20' 
+                isActive
+                  ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20'
                   : 'text-surface-400 hover:bg-white/5 hover:text-white'
               )}
             >
@@ -95,8 +95,8 @@ export function Sidebar() {
                 "w-5 h-5 flex-shrink-0 transition-transform group-hover:scale-110",
                 isActive ? "text-white" : "text-surface-500 group-hover:text-brand-400"
               )} />
-              {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key)}</span>}
-              
+              {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
+
               {isActive && (
                 <div className="absolute inset-y-2 start-0 w-1 bg-white rounded-full"></div>
               )}
@@ -123,7 +123,7 @@ export function Sidebar() {
           className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-surface-400 hover:bg-red-500 hover:text-white transition-all duration-300 group"
         >
           <LogOut className="w-5 h-5 flex-shrink-0 group-hover:-translate-x-1 transition-transform" />
-          {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('nav.logout')}</span>}
+          {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('nav.logout' as TranslationKey)}</span>}
         </button>
       </div>
     </aside>
