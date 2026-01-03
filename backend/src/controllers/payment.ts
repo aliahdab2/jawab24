@@ -62,14 +62,46 @@ export class PaymentController {
                 return reply.status(400).send({ error: 'Plan does not have a Stripe Price ID configured' });
             }
 
-            // Create checkout session
+            // Check if user already has an active/trialing subscription
+            const existingSubscriptions = await db
+                .select({
+                    id: subscriptions.id,
+                    status: subscriptions.status,
+                    planId: subscriptions.planId,
+                    externalSubscriptionId: subscriptions.externalSubscriptionId,
+                })
+                .from(subscriptions)
+                .where(eq(subscriptions.userId, userId));
+
+            const activeSubscription = existingSubscriptions.find(
+                s => s.status === 'active' || s.status === 'trialing'
+            );
+
+            // Determine trial days:
+            // - No trial if user already has ANY paid subscription (upgrading/downgrading)
+            // - Use plan's trial_days only for completely new users
+            let trialDays = 0;
+            if (!activeSubscription && plan.trialDays && plan.trialDays > 0) {
+                // New user on a plan with trial - give them the trial
+                trialDays = plan.trialDays;
+                request.log.info({ userId, planId, trialDays }, 'New user eligible for trial');
+            } else if (activeSubscription) {
+                // Existing subscriber - no trial (upgrade/downgrade)
+                request.log.info(
+                    { userId, planId, existingPlanId: activeSubscription.planId },
+                    'Existing subscriber - no trial on plan change'
+                );
+            }
+
+            // Create checkout session with appropriate trial
             const session = await stripeService.createCheckoutSession(
                 userId,
                 user.email,
                 planId,
                 plan.stripePriceId,
                 successUrl || `${config.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-                cancelUrl || `${config.frontendUrl}/payment/cancel`
+                cancelUrl || `${config.frontendUrl}/payment/cancel`,
+                trialDays
             );
 
             return reply.send({
@@ -313,7 +345,51 @@ export class PaymentController {
         // Get subscription details from Stripe
         const stripeSubscription = await stripeService.getSubscription(stripeSubscriptionId);
 
-        // Create or update subscription in database
+        // Cancel any existing active/trialing subscriptions for this user
+        // This ensures only one subscription per user (upgrade/downgrade replaces old one)
+        const existingSubscriptions = await db
+            .select({
+                id: subscriptions.id,
+                status: subscriptions.status,
+                externalSubscriptionId: subscriptions.externalSubscriptionId,
+            })
+            .from(subscriptions)
+            .where(eq(subscriptions.userId, userId));
+
+        for (const oldSub of existingSubscriptions) {
+            if (oldSub.status === 'active' || oldSub.status === 'trialing') {
+                // Cancel in Stripe if it has an external ID (and it's not the new subscription)
+                if (oldSub.externalSubscriptionId && oldSub.externalSubscriptionId !== stripeSubscription.id) {
+                    try {
+                        await stripeService.cancelSubscriptionImmediately(oldSub.externalSubscriptionId);
+                        request.log.info(
+                            { oldSubscriptionId: oldSub.externalSubscriptionId },
+                            'Canceled old Stripe subscription'
+                        );
+                    } catch (err) {
+                        request.log.warn(
+                            { err, oldSubscriptionId: oldSub.externalSubscriptionId },
+                            'Failed to cancel old Stripe subscription (may already be canceled)'
+                        );
+                    }
+                }
+                
+                // Mark as canceled in database
+                await db
+                    .update(subscriptions)
+                    .set({
+                        status: 'canceled',
+                        canceledAt: new Date(),
+                        cancelReason: 'Replaced by new subscription',
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(subscriptions.id, oldSub.id));
+                
+                request.log.info({ oldSubscriptionId: oldSub.id }, 'Marked old subscription as canceled');
+            }
+        }
+
+        // Create new subscription in database
         await db.insert(subscriptions).values({
             userId,
             planId,
@@ -329,7 +405,7 @@ export class PaymentController {
                 : null,
         });
 
-        request.log.info({ userId, subscriptionId: stripeSubscription.id }, 'Subscription created');
+        request.log.info({ userId, subscriptionId: stripeSubscription.id, planId }, 'New subscription created');
     }
 
     /**

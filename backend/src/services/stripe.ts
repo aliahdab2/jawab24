@@ -12,6 +12,7 @@ export const stripe = config.stripe?.secretKey
 export class StripeService {
     /**
      * Create a Stripe Checkout Session for subscription
+     * @param trialDays - Number of trial days (0 = no trial, only for new users on eligible plans)
      */
     async createCheckoutSession(
         userId: string,
@@ -19,10 +20,24 @@ export class StripeService {
         planId: string,
         priceId: string,
         successUrl: string,
-        cancelUrl: string
+        cancelUrl: string,
+        trialDays: number = 0
     ): Promise<Stripe.Checkout.Session> {
         if (!stripe) {
             throw new Error('Stripe is not configured. Please add STRIPE_SECRET_KEY to environment variables.');
+        }
+        
+        // Build subscription data - only include trial if trialDays > 0
+        const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
+            metadata: {
+                userId,
+                planId,
+            },
+        };
+        
+        // Only add trial period if explicitly requested (new users on eligible plans)
+        if (trialDays > 0) {
+            subscriptionData.trial_period_days = trialDays;
         }
         
         const session = await stripe.checkout.sessions.create({
@@ -38,13 +53,7 @@ export class StripeService {
             ],
             success_url: successUrl,
             cancel_url: cancelUrl,
-            subscription_data: {
-                metadata: {
-                    userId,
-                    planId,
-                },
-                trial_period_days: 7, // 7-day free trial
-            },
+            subscription_data: subscriptionData,
             metadata: {
                 userId,
                 planId,
@@ -75,7 +84,7 @@ export class StripeService {
     }
 
     /**
-     * Cancel a subscription at period end
+     * Cancel a subscription at period end (user-initiated cancellation)
      */
     async cancelSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
         if (!stripe) {
@@ -84,6 +93,16 @@ export class StripeService {
         return stripe.subscriptions.update(subscriptionId, {
             cancel_at_period_end: true,
         });
+    }
+
+    /**
+     * Cancel a subscription immediately (for plan changes/upgrades)
+     */
+    async cancelSubscriptionImmediately(subscriptionId: string): Promise<Stripe.Subscription> {
+        if (!stripe) {
+            throw new Error('Stripe is not configured.');
+        }
+        return stripe.subscriptions.cancel(subscriptionId);
     }
 
     /**
