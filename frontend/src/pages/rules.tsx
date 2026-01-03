@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
-import { 
-  Zap, 
+import {
+  Zap,
   Plus,
   Edit,
   Trash2,
@@ -42,7 +42,7 @@ export default function RulesPage() {
         axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${apiUrl}/templates`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
-      
+
       // Sort rules by priority
       const sortedRules = rulesRes.data.sort((a: Rule, b: Rule) => (a.priority ?? 0) - (b.priority ?? 0));
       setRules(sortedRules);
@@ -86,13 +86,13 @@ export default function RulesPage() {
 
     try {
       if (editingRule) {
-        const response = await axios.put(`${apiUrl}/rules/${editingRule.id}`, 
+        const response = await axios.put(`${apiUrl}/rules/${editingRule.id}`,
           ruleData,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setRules(rules.map(r => r.id === editingRule.id ? response.data : r));
       } else {
-        const response = await axios.post(`${apiUrl}/rules`, 
+        const response = await axios.post(`${apiUrl}/rules`,
           ruleData,
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -109,7 +109,7 @@ export default function RulesPage() {
     setRules(rules.map(r => r.id === id ? { ...r, active } : r));
 
     try {
-      await axios.patch(`${apiUrl}/rules/${id}`, 
+      await axios.patch(`${apiUrl}/rules/${id}`,
         { active },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -141,51 +141,51 @@ export default function RulesPage() {
 
     const newRules = [...rules];
     const swapIndex = direction === 'up' ? index - 1 : index + 1;
-    
+
     // Swap priorities locally
     const tempPriority = newRules[index].priority;
     newRules[index].priority = newRules[swapIndex].priority;
     newRules[swapIndex].priority = tempPriority;
-    
+
     // Swap elements
     [newRules[index], newRules[swapIndex]] = [newRules[swapIndex], newRules[index]];
-    
+
     setRules(newRules);
 
     // Update backend (ideally use a reorder endpoint, but loop updates for now)
     try {
-       // This is race-condition prone but okay for MVP. Better to have a bulk update or reorder endpoint.
-       // I'll just update the two modified rules.
-       await Promise.all([
-           axios.put(`${apiUrl}/rules/${newRules[index].id}`, { priority: newRules[index].priority }, { headers: { Authorization: `Bearer ${token}` } }),
-           axios.put(`${apiUrl}/rules/${newRules[swapIndex].id}`, { priority: newRules[swapIndex].priority }, { headers: { Authorization: `Bearer ${token}` } })
-       ]);
+      // This is race-condition prone but okay for MVP. Better to have a bulk update or reorder endpoint.
+      // I'll just update the two modified rules.
+      await Promise.all([
+        axios.put(`${apiUrl}/rules/${newRules[index].id}`, { priority: newRules[index].priority }, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.put(`${apiUrl}/rules/${newRules[swapIndex].id}`, { priority: newRules[swapIndex].priority }, { headers: { Authorization: `Bearer ${token}` } })
+      ]);
     } catch (error) {
-        console.error("Failed to update priority", error);
-        fetchData(); // Revert by re-fetching
+      console.error("Failed to update priority", error);
+      fetchData(); // Revert by re-fetching
     }
   };
 
   const getTemplateName = (id: string | null) => {
-      if (!id) return t('common.unknown');
-      return templates.find(t => t.id === id)?.name || t('common.unknown');
+    if (!id) return t('common.unknown');
+    return templates.find(t => t.id === id)?.name || t('common.unknown');
   };
 
   if (loading && rules.length === 0) {
-      return (
-        <DashboardLayout title={t('rules.title')}>
-          <div className="flex items-center justify-center h-64">
-            <PageSpinner />
-          </div>
-        </DashboardLayout>
-      );
+    return (
+      <DashboardLayout title={t('rules.title')}>
+        <div className="flex items-center justify-center h-64">
+          <PageSpinner />
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (
     <DashboardLayout title={t('rules.title')}>
       {/* Header */}
-      <PageHeader 
-        title={t('rules.title')} 
+      <PageHeader
+        title={t('rules.title')}
         description={t('rules.description')}
         action={
           <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
@@ -196,7 +196,7 @@ export default function RulesPage() {
 
       {/* Info Card */}
       <Card className="mb-8 border-none shadow-lg shadow-brand-100/50 bg-gradient-to-r from-brand-50 to-white overflow-hidden relative">
-        <div className="absolute -right-8 -top-8 w-32 h-32 bg-brand-100 rounded-full opacity-50 blur-2xl"></div>
+        <div className="absolute -end-8 -top-8 w-32 h-32 bg-brand-100 rounded-full opacity-50 blur-2xl"></div>
         <div className="relative z-10 flex items-start gap-4">
           <div className="w-12 h-12 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0 shadow-inner">
             <Zap className="w-6 h-6" />
@@ -214,7 +214,7 @@ export default function RulesPage() {
       {rules.length > 0 ? (
         <div className="space-y-6 pb-12">
           {rules.map((rule, i) => (
-            <Card 
+            <Card
               key={rule.id}
               hover
               className={`animate-slide-up border-none shadow-lg shadow-surface-200/50 flex flex-col h-full rounded-2xl overflow-hidden group ${!rule.active ? 'opacity-75' : ''}`}
@@ -224,9 +224,9 @@ export default function RulesPage() {
                 {/* Priority & Reorder Controls */}
                 <div className="bg-surface-50 border-b lg:border-b-0 lg:border-e border-surface-100 p-4 lg:p-6 flex lg:flex-col items-center justify-between lg:justify-center gap-4">
                   <div className="flex lg:flex-col items-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handlePriorityChange(rule.id, 'up')}
                       disabled={i === 0}
                       className="text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm"
@@ -236,9 +236,9 @@ export default function RulesPage() {
                     <div className="w-10 h-10 rounded-xl bg-white border border-surface-200 shadow-sm flex items-center justify-center">
                       <span className="text-lg font-bold text-surface-900">{rule.priority}</span>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handlePriorityChange(rule.id, 'down')}
                       disabled={i === rules.length - 1}
                       className="text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm"
@@ -247,8 +247,8 @@ export default function RulesPage() {
                     </Button>
                   </div>
                   <div className="lg:hidden">
-                    <Toggle 
-                      enabled={rule.active ?? false} 
+                    <Toggle
+                      enabled={rule.active ?? false}
                       onChange={(active) => handleToggle(rule.id, active)}
                       size="sm"
                     />
@@ -263,8 +263,8 @@ export default function RulesPage() {
                       <div className={`w-2 h-2 rounded-full ${rule.active ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
                     </div>
                     <div className="hidden lg:block">
-                      <Toggle 
-                        enabled={rule.active ?? false} 
+                      <Toggle
+                        enabled={rule.active ?? false}
                         onChange={(active) => handleToggle(rule.id, active)}
                         size="sm"
                       />
@@ -303,18 +303,18 @@ export default function RulesPage() {
 
                 {/* Actions Footer / Side */}
                 <div className="bg-surface-50 lg:bg-white border-t lg:border-t-0 lg:border-s border-surface-100 p-4 lg:p-6 flex lg:flex-col items-center justify-end lg:justify-center gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleOpenModal(rule)}
                     className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
                   >
                     <Edit className="w-4 h-4" />
                     <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('common.edit')}</span>
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleDelete(rule.id)}
                     className="text-surface-400 hover:text-red-600 hover:bg-red-50 flex items-center gap-2"
                   >
@@ -359,15 +359,15 @@ export default function RulesPage() {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           />
-          
+
           <Input
             label={t('rules.condition')}
-            placeholder="price, cost, how much, سعر"
+            placeholder={t('rules.keywordsPlaceholder' as TranslationKey)}
             value={formData.keywords}
             onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
             helperText={t('templates.variablesDesc')}
           />
-          
+
           <div>
             <label className="label">{t('templates.title')}</label>
             <select
