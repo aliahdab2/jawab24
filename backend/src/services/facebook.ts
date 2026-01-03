@@ -48,16 +48,6 @@ export class FacebookService {
                 },
             });
 
-            // Debug: Log what Facebook returns
-            this.logger.info('Facebook profile received', { 
-                facebookProfile: {
-                    id: response.data.id,
-                    name: response.data.name,
-                    hasEmail: !!response.data.email,
-                    email: response.data.email ? '***' : 'NOT_PROVIDED'
-                }
-            });
-
             return response.data;
         } catch (error) {
             if (axios.isAxiosError(error)) {
