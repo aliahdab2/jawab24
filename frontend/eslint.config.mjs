@@ -13,8 +13,8 @@ const compat = new FlatCompat({
 
 /** @type {import('eslint').Linter.Config[]} */
 const eslintConfig = [
-    // Extend Next.js recommended config
-    ...compat.extends('next/core-web-vitals'),
+    // Extend Next.js recommended config (includes TypeScript and React plugins)
+    ...compat.extends('next/core-web-vitals', 'next/typescript'),
     
     // Global ignores
     {
@@ -40,20 +40,24 @@ const eslintConfig = [
             'react/no-unescaped-entities': 'off',
             'react-hooks/exhaustive-deps': 'warn',
             
-            // TypeScript - handled by TS compiler
-            '@typescript-eslint/no-unused-vars': ['warn', { 
-                argsIgnorePattern: '^_',
-                varsIgnorePattern: '^_',
-            }],
-            '@typescript-eslint/no-explicit-any': 'off',
-            
             // General best practices
             'no-console': ['warn', { allow: ['warn', 'error'] }],
             'prefer-const': 'error',
             'no-unused-vars': 'off',
         },
     },
+    
+    // TypeScript specific overrides
+    {
+        files: ['**/*.{ts,tsx}'],
+        rules: {
+            '@typescript-eslint/no-unused-vars': ['warn', { 
+                argsIgnorePattern: '^_',
+                varsIgnorePattern: '^_',
+            }],
+            '@typescript-eslint/no-explicit-any': 'off',
+        },
+    },
 ];
 
 export default eslintConfig;
-

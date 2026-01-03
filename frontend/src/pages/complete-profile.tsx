@@ -26,8 +26,8 @@ export default function CompleteProfilePage() {
 
   // Check if email is valid
   const isEmailValid = EMAIL_REGEX.test(email);
-  const showEmailError = emailTouched && email && !isEmailValid;
-  const showEmailSuccess = emailTouched && email && isEmailValid;
+  const showEmailError = emailTouched && email.length > 0 && !isEmailValid;
+  const showEmailSuccess = emailTouched && email.length > 0 && isEmailValid;
 
   // Wait for hydration and check if user needs this page
   useEffect(() => {
@@ -260,7 +260,7 @@ export default function CompleteProfilePage() {
               type="submit"
               size="lg"
               className="w-full transition-all duration-200 hover:shadow-lg"
-              disabled={saving || !email || showEmailError}
+              disabled={saving || email.length === 0 || showEmailError}
             >
               {saving ? (
                 <span className="flex items-center justify-center gap-2">
