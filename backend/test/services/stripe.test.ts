@@ -16,6 +16,7 @@ const mockStripeInstance = {
     subscriptions: {
         retrieve: vi.fn(),
         update: vi.fn(),
+        cancel: vi.fn(),
     },
     billingPortal: {
         sessions: {
@@ -47,7 +48,7 @@ describe('Stripe Service', () => {
     });
 
     describe('createCheckoutSession', () => {
-        it('should create a checkout session with correct parameters', async () => {
+        it('should create a checkout session without trial (default)', async () => {
             const mockSession = {
                 id: 'cs_test_123',
                 url: 'https://checkout.stripe.com/pay/cs_test_123',
@@ -70,6 +71,7 @@ describe('Stripe Service', () => {
                 'price_123',
                 'https://example.com/success?session_id={CHECKOUT_SESSION_ID}',
                 'https://example.com/cancel'
+                // No trialDays = default 0 = no trial
             );
 
             expect(mockStripeInstance.checkout.sessions.create).toHaveBeenCalledWith({
@@ -90,7 +92,7 @@ describe('Stripe Service', () => {
                         userId: 'user_123',
                         planId: 'plan_456',
                     },
-                    trial_period_days: 7,
+                    // No trial_period_days when trialDays=0
                 },
                 metadata: {
                     userId: 'user_123',
@@ -99,6 +101,60 @@ describe('Stripe Service', () => {
             });
 
             expect(session).toEqual(mockSession);
+        });
+
+        it('should create a checkout session with trial period from plan', async () => {
+            const mockSession = {
+                id: 'cs_test_with_trial',
+                url: 'https://checkout.stripe.com/pay/cs_test_with_trial',
+            };
+
+            mockStripeInstance.checkout.sessions.create.mockResolvedValue(mockSession);
+
+            const { stripeService } = await import('../../src/services/stripe');
+
+            await stripeService.createCheckoutSession(
+                'user_123',
+                'test@example.com',
+                'plan_456',
+                'price_123',
+                'https://example.com/success',
+                'https://example.com/cancel',
+                30 // 30 days trial from plan
+            );
+
+            expect(mockStripeInstance.checkout.sessions.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    subscription_data: expect.objectContaining({
+                        trial_period_days: 30,
+                    }),
+                })
+            );
+        });
+
+        it('should skip trial for existing paid subscribers (trialDays=0)', async () => {
+            const mockSession = {
+                id: 'cs_upgrade',
+                url: 'https://checkout.stripe.com/pay/cs_upgrade',
+            };
+
+            mockStripeInstance.checkout.sessions.create.mockResolvedValue(mockSession);
+
+            const { stripeService } = await import('../../src/services/stripe');
+
+            await stripeService.createCheckoutSession(
+                'user_123',
+                'test@example.com',
+                'plan_456',
+                'price_123',
+                'https://example.com/success',
+                'https://example.com/cancel',
+                0 // No trial for upgrade
+            );
+
+            // Verify trial_period_days is NOT in the subscription_data
+            const calledWith = mockStripeInstance.checkout.sessions.create.mock.calls[0][0];
+            expect(calledWith.subscription_data.trial_period_days).toBeUndefined();
         });
 
         it('should handle Stripe API errors', async () => {
@@ -177,7 +233,7 @@ describe('Stripe Service', () => {
             expect(customer).toEqual(mockCustomer);
         });
 
-        it('should cancel subscription', async () => {
+        it('should cancel subscription at period end', async () => {
             const mockSubscription = {
                 id: 'sub_123',
                 cancel_at_period_end: true,
@@ -193,6 +249,22 @@ describe('Stripe Service', () => {
                 cancel_at_period_end: true,
             });
             expect(subscription.cancel_at_period_end).toBe(true);
+        });
+
+        it('should cancel subscription immediately for plan upgrades', async () => {
+            const mockCanceledSubscription = {
+                id: 'sub_old',
+                status: 'canceled',
+            };
+
+            mockStripeInstance.subscriptions.cancel.mockResolvedValue(mockCanceledSubscription);
+
+            const { stripeService } = await import('../../src/services/stripe');
+
+            const subscription = await stripeService.cancelSubscriptionImmediately('sub_old');
+
+            expect(mockStripeInstance.subscriptions.cancel).toHaveBeenCalledWith('sub_old');
+            expect(subscription.status).toBe('canceled');
         });
     });
 });

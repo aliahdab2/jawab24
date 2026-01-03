@@ -8,6 +8,7 @@ vi.mock('../../src/services/stripe', () => ({
         createCheckoutSession: vi.fn(),
         verifyWebhookSignature: vi.fn(),
         getSubscription: vi.fn(),
+        cancelSubscriptionImmediately: vi.fn(),
     },
 }));
 
@@ -97,6 +98,7 @@ describe('Payment Controller', () => {
                 id: 'plan_123',
                 name: 'Business',
                 stripePriceId: 'price_123',
+                trialDays: 0, // Business plan has no trial
             };
 
             const mockSession = {
@@ -104,15 +106,24 @@ describe('Payment Controller', () => {
                 url: 'https://checkout.stripe.com/pay/cs_test_123',
             };
 
-            // Mock db.select().from(users).where() to return user
+            // Mock db.select() for user, plan, and existing subscriptions
             const mockDb = vi.mocked(db);
-            mockDb.select.mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn()
-                        .mockResolvedValueOnce([mockUser]) // First call for user
-                        .mockResolvedValueOnce([mockPlan]), // Second call for plan
-                }),
-            } as any);
+            mockDb.select
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([mockUser]),
+                    }),
+                } as any)
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([mockPlan]),
+                    }),
+                } as any)
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([]), // No existing subscriptions
+                    }),
+                } as any);
 
             vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
 
@@ -127,7 +138,8 @@ describe('Payment Controller', () => {
                 'plan_123',
                 'price_123',
                 expect.stringContaining('/payment/success?session_id='),
-                expect.stringContaining('/payment/cancel')
+                expect.stringContaining('/payment/cancel'),
+                0 // No trial for Business plan
             );
 
             expect(mockReply.send).toHaveBeenCalledWith({
@@ -314,6 +326,12 @@ describe('Payment Controller', () => {
             } as any);
 
             const mockDb = vi.mocked(db);
+            // Mock select for existing subscriptions lookup
+            mockDb.select.mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]), // No existing subscriptions
+                }),
+            } as any);
             mockDb.insert.mockReturnValue({
                 values: vi.fn().mockResolvedValue([]),
             } as any);
@@ -344,7 +362,7 @@ describe('Payment Controller', () => {
         });
 
         it('should return 400 for invalid signature', async () => {
-            vi.mocked(stripeService.verifyWebhookSignature).mockImplementation(() => {
+            vi.mocked(stripeService.verifyWebhookSignature).mockImplementationOnce(() => {
                 throw new Error('Invalid signature');
             });
 
@@ -364,6 +382,7 @@ describe('Payment Controller', () => {
                 type: 'invoice.payment_succeeded',
                 data: {
                     object: {
+                        id: 'inv_123',
                         customer: 'cus_123',
                         subscription: 'sub_123',
                     } as any,
@@ -375,7 +394,9 @@ describe('Payment Controller', () => {
             const mockDb = vi.mocked(db);
             mockDb.update.mockReturnValue({
                 set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([]),
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([{ id: 'sub_db_123' }]),
+                    }),
                 }),
             } as any);
 
@@ -404,6 +425,166 @@ describe('Payment Controller', () => {
             expect(mockRequest.log?.info).toHaveBeenCalledWith('Webhook received: unknown.event.type');
             expect(mockRequest.log?.info).toHaveBeenCalledWith({ eventType: 'unknown.event.type' }, 'Unhandled webhook event type');
             expect(mockReply.send).toHaveBeenCalledWith({ received: true });
+        });
+
+        it('should handle customer.subscription.created event', async () => {
+            const mockEvent: Partial<Stripe.Event> = {
+                type: 'customer.subscription.created',
+                data: {
+                    object: {
+                        id: 'sub_new_123',
+                        status: 'active',
+                        customer: 'cus_123',
+                        current_period_start: 1640000000,
+                        current_period_end: 1642678400,
+                    } as any,
+                },
+            };
+
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+
+            const mockDb = vi.mocked(db);
+            // Mock finding existing subscription
+            mockDb.select.mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{ id: 'sub_db_123', status: 'trialing' }]),
+                    }),
+                }),
+            } as any);
+            mockDb.update.mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{ id: 'sub_db_123' }]),
+                }),
+            } as any);
+
+            await paymentController.handleWebhook(
+                mockRequest as FastifyRequest,
+                mockReply as FastifyReply
+            );
+
+            expect(mockRequest.log?.info).toHaveBeenCalledWith('Webhook received: customer.subscription.created');
+            expect(mockReply.send).toHaveBeenCalledWith({ received: true });
+        });
+    });
+
+    describe('createCheckoutSession with trial logic', () => {
+        beforeEach(() => {
+            mockRequest = {
+                body: { planId: 'plan_business' },
+                user: { userId: 'user_123', facebookId: 'fb_123' },
+                log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+            };
+        });
+
+        it('should skip trial for existing subscriber (upgrade)', async () => {
+            const mockUser = { id: 'user_123', email: 'test@example.com' };
+            const mockPlan = { id: 'plan_business', name: 'Business', stripePriceId: 'price_biz', trialDays: 0 };
+            const mockExistingSubscription = {
+                id: 'sub_old',
+                status: 'active',
+                planId: 'plan_starter',
+                externalSubscriptionId: 'sub_ext_old',
+            };
+
+            const mockDb = vi.mocked(db);
+            
+            // Mock user lookup
+            mockDb.select
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([mockUser]),
+                    }),
+                } as any)
+                // Mock plan lookup
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([mockPlan]),
+                    }),
+                } as any)
+                // Mock existing subscriptions lookup
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([mockExistingSubscription]),
+                    }),
+                } as any);
+
+            const mockSession = { id: 'cs_test', url: 'https://checkout.stripe.com/cs_test' };
+            vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
+
+            await paymentController.createCheckoutSession(
+                mockRequest as FastifyRequest,
+                mockReply as FastifyReply
+            );
+
+            // Verify createCheckoutSession was called with trialDays=0 (no trial)
+            expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+                'user_123',
+                'test@example.com',
+                'plan_business',
+                'price_biz',
+                expect.any(String),
+                expect.any(String),
+                0 // No trial for existing subscriber
+            );
+
+            // Verify logging indicates existing subscriber
+            expect(mockRequest.log?.info).toHaveBeenCalledWith(
+                expect.objectContaining({ existingPlanId: 'plan_starter' }),
+                'Existing subscriber - no trial on plan change'
+            );
+        });
+
+        it('should give trial to new user on eligible plan', async () => {
+            const mockUser = { id: 'user_new', email: 'new@example.com' };
+            const mockPlan = { id: 'plan_starter', name: 'Starter', stripePriceId: 'price_start', trialDays: 30 };
+
+            const mockDb = vi.mocked(db);
+            
+            mockRequest.user = { userId: 'user_new', facebookId: 'fb_new' };
+            mockRequest.body = { planId: 'plan_starter' };
+            
+            mockDb.select
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([mockUser]),
+                    }),
+                } as any)
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([mockPlan]),
+                    }),
+                } as any)
+                // No existing subscriptions
+                .mockReturnValueOnce({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([]),
+                    }),
+                } as any);
+
+            const mockSession = { id: 'cs_trial', url: 'https://checkout.stripe.com/cs_trial' };
+            vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
+
+            await paymentController.createCheckoutSession(
+                mockRequest as FastifyRequest,
+                mockReply as FastifyReply
+            );
+
+            // Verify trial days passed correctly
+            expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+                'user_new',
+                'new@example.com',
+                'plan_starter',
+                'price_start',
+                expect.any(String),
+                expect.any(String),
+                30 // 30 day trial from plan
+            );
+
+            expect(mockRequest.log?.info).toHaveBeenCalledWith(
+                expect.objectContaining({ trialDays: 30 }),
+                'New user eligible for trial'
+            );
         });
     });
 });
