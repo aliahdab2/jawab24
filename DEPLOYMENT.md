@@ -52,6 +52,16 @@ We use **Blue-Green Deployment** for zero-downtime updates:
 3. **Switch traffic** - Update Nginx to point to the new environment
 4. **Keep old environment** - For instant rollback if needed
 
+### Versioning (tags-first)
+- Semantic version is taken from the latest git tag (`git describe --tags --abbrev=0`), fallback `untagged`.
+- Deploy script injects both `SEMANTIC_VERSION` and `GIT_COMMIT` into images; frontend shows the tag, backend `/api/version` exposes the commit.
+- Release/tag flow:
+  ```bash
+  git tag -a v2.4.1 -m "Release v2.4.1"
+  git push --tags
+  ./scripts/deploy-blue-green.sh deploy
+  ```
+
 ### Benefits
 
 | Feature | Benefit |
