@@ -1,11 +1,12 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════
-# JAWAB24 LOCAL DEPLOYMENT SCRIPT
+# JAWAB24 LOCAL CI/CD SCRIPT
 # ═══════════════════════════════════════════════════════════════════
-# This script deploys to production without GitHub Actions
-# It replicates the same blue-green deployment as CI/CD
+# This script runs the full CI/CD pipeline locally without GitHub Actions
+# It replicates the same checks and blue-green deployment as CI/CD
 #
 # Usage: ./scripts/deploy-local.sh
+#        ./scripts/deploy-local.sh --skip-tests  # Skip CI tests
 # ═══════════════════════════════════════════════════════════════════
 
 set -e
@@ -14,6 +15,17 @@ set -e
 SERVER_HOST="91.99.95.196"
 SERVER_USER="root"
 DEPLOY_PATH="/var/www/jawab24"
+SKIP_TESTS=false
+
+# Parse arguments
+for arg in "$@"; do
+    case $arg in
+        --skip-tests)
+            SKIP_TESTS=true
+            shift
+            ;;
+    esac
+done
 
 # Colors
 RED='\033[0;31m'
@@ -21,24 +33,31 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m'
 
+# Track time
+START_TIME=$(date +%s)
+
 echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}🚀 JAWAB24 LOCAL DEPLOYMENT${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}${BOLD}🚀 JAWAB24 LOCAL CI/CD PIPELINE${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "📅 Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 echo -e "🖥️  Server: ${SERVER_HOST}"
 echo -e "📁 Path: ${DEPLOY_PATH}"
 echo -e "🔄 Strategy: Blue-Green (Zero Downtime)"
+if [ "$SKIP_TESTS" = true ]; then
+    echo -e "⚠️  Tests: ${YELLOW}SKIPPED${NC}"
+fi
 echo ""
 
 # ═══════════════════════════════════════════════════════════════════
-# Step 1: Run local tests first
+# Pre-flight Checks
 # ═══════════════════════════════════════════════════════════════════
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}📋 STEP 1: Pre-flight Checks${NC}"
+echo -e "${YELLOW}📋 PRE-FLIGHT CHECKS${NC}"
 echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 # Check if there are uncommitted changes
@@ -49,6 +68,97 @@ if [[ -n $(git status -s) ]]; then
     exit 1
 fi
 echo -e "${GREEN}✅ No uncommitted changes${NC}"
+
+# Check Node version
+NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
+if [ "$NODE_VERSION" -lt 20 ]; then
+    echo -e "${YELLOW}⚠️  Node version is v$(node --version)${NC}"
+    echo -e "Switching to Node 20..."
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    nvm use 20 || {
+        echo -e "${RED}❌ Failed to switch to Node 20${NC}"
+        echo -e "Please run: nvm install 20 && nvm use 20"
+        exit 1
+    }
+fi
+echo -e "${GREEN}✅ Node version: $(node --version)${NC}"
+
+# ═══════════════════════════════════════════════════════════════════
+# CI CHECKS (Same as GitHub Actions)
+# ═══════════════════════════════════════════════════════════════════
+if [ "$SKIP_TESTS" = false ]; then
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}${BOLD}🧪 RUNNING CI CHECKS${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+    # Step 1: Build shared package
+    echo ""
+    echo -e "${CYAN}1️⃣  Building shared package...${NC}"
+    npm run build --workspace=@jawab24/shared > /dev/null 2>&1
+    echo -e "${GREEN}   ✅ Shared package built${NC}"
+
+    # Step 2: Backend lint
+    echo ""
+    echo -e "${CYAN}2️⃣  Backend lint...${NC}"
+    npm run lint --workspace=jawab24-backend > /dev/null 2>&1
+    echo -e "${GREEN}   ✅ Backend lint passed${NC}"
+
+    # Step 3: Backend tests
+    echo ""
+    echo -e "${CYAN}3️⃣  Backend tests...${NC}"
+    BACKEND_RESULT=$(npm test --workspace=jawab24-backend -- --run 2>&1)
+    BACKEND_TESTS=$(echo "$BACKEND_RESULT" | grep -oP 'Tests\s+\d+ passed' | grep -oP '\d+' || echo "0")
+    echo -e "${GREEN}   ✅ Backend tests passed (${BACKEND_TESTS} tests)${NC}"
+
+    # Step 4: Backend build
+    echo ""
+    echo -e "${CYAN}4️⃣  Backend build...${NC}"
+    npm run build --workspace=jawab24-backend > /dev/null 2>&1
+    echo -e "${GREEN}   ✅ Backend build successful${NC}"
+
+    # Step 5: AI Worker build
+    echo ""
+    echo -e "${CYAN}5️⃣  AI Worker build...${NC}"
+    npm run build --workspace=jawab24-ai-worker > /dev/null 2>&1
+    echo -e "${GREEN}   ✅ AI Worker build successful${NC}"
+
+    # Step 6: Frontend lint
+    echo ""
+    echo -e "${CYAN}6️⃣  Frontend lint...${NC}"
+    npm run lint --workspace=jawab24-frontend > /dev/null 2>&1
+    echo -e "${GREEN}   ✅ Frontend lint passed${NC}"
+
+    # Step 7: Frontend tests
+    echo ""
+    echo -e "${CYAN}7️⃣  Frontend tests...${NC}"
+    FRONTEND_RESULT=$(npm test --workspace=jawab24-frontend -- --run 2>&1)
+    FRONTEND_TESTS=$(echo "$FRONTEND_RESULT" | grep -oP 'Tests\s+\d+ passed' | grep -oP '\d+' || echo "0")
+    echo -e "${GREEN}   ✅ Frontend tests passed (${FRONTEND_TESTS} tests)${NC}"
+
+    # Step 8: Frontend build
+    echo ""
+    echo -e "${CYAN}8️⃣  Frontend build...${NC}"
+    NEXT_PUBLIC_API_URL=https://jawab24.com/api npm run build --workspace=jawab24-frontend > /dev/null 2>&1
+    echo -e "${GREEN}   ✅ Frontend build successful${NC}"
+
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}✅ ALL CI CHECKS PASSED${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "   Backend tests:  ${BACKEND_TESTS}"
+    echo -e "   Frontend tests: ${FRONTEND_TESTS}"
+    echo -e "   Total tests:    $((BACKEND_TESTS + FRONTEND_TESTS))"
+fi
+
+# ═══════════════════════════════════════════════════════════════════
+# SSH Pre-flight
+# ═══════════════════════════════════════════════════════════════════
+echo ""
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}🔐 SSH CONNECTION CHECK${NC}"
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 # Check SSH key exists
 if [ ! -f ~/.ssh/id_rsa ] && [ ! -f ~/.ssh/id_ed25519 ]; then
@@ -68,12 +178,12 @@ fi
 echo -e "${GREEN}✅ SSH connection successful${NC}"
 
 # ═══════════════════════════════════════════════════════════════════
-# Step 2: Confirm deployment
+# Confirm Deployment
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}⚠️  CONFIRM DEPLOYMENT${NC}"
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}${BOLD}⚠️  CONFIRM DEPLOYMENT${NC}"
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "Current commit: ${CYAN}$(git rev-parse --short HEAD)${NC}"
 echo -e "Branch: ${CYAN}$(git branch --show-current)${NC}"
@@ -285,13 +395,21 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 ENDSSH
 
+# Calculate elapsed time
+END_TIME=$(date +%s)
+ELAPSED=$((END_TIME - START_TIME))
+MINUTES=$((ELAPSED / 60))
+SECONDS=$((ELAPSED % 60))
+
 echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}🎉 DEPLOYMENT COMPLETE!${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}🎉 CI/CD PIPELINE COMPLETE!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "🌐 Website: https://jawab24.com"
+echo -e "⏱️  Total time: ${MINUTES}m ${SECONDS}s"
+echo ""
+echo -e "🌐 Website:   https://jawab24.com"
 echo -e "📊 Dashboard: https://jawab24.com/dashboard"
-echo -e "🔧 API: https://jawab24.com/api/health"
+echo -e "🔧 API:       https://jawab24.com/api/health"
 echo ""
 
