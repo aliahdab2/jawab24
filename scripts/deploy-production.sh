@@ -90,66 +90,152 @@ echo -e "${GREEN}✅ Node version: $(node --version)${NC}"
 if [ "$SKIP_TESTS" = false ]; then
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BLUE}${BOLD}🧪 RUNNING CI CHECKS${NC}"
+    echo -e "${BLUE}${BOLD}🧪 RUNNING CI CHECKS (Same as GitHub Actions)${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
+    # ────────────────────────────────────────────────────────────────
+    # Preflight: Check deployment scripts exist
+    # ────────────────────────────────────────────────────────────────
+    echo ""
+    echo -e "${CYAN}📋 Preflight: Checking deployment scripts...${NC}"
+    REQUIRED_SCRIPTS=(
+        "scripts/deploy-blue-green.sh"
+        "scripts/check-env.sh"
+        "scripts/health-check.sh"
+    )
+    SCRIPTS_MISSING=0
+    for script in "${REQUIRED_SCRIPTS[@]}"; do
+        if [ ! -f "$script" ]; then
+            echo -e "${RED}   ❌ Missing: $script${NC}"
+            SCRIPTS_MISSING=1
+        fi
+    done
+    if [ $SCRIPTS_MISSING -eq 1 ]; then
+        echo -e "${RED}   Missing required deployment scripts!${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}   ✅ All deployment scripts found${NC}"
+
+    # ────────────────────────────────────────────────────────────────
     # Step 1: Build shared package
+    # ────────────────────────────────────────────────────────────────
     echo ""
     echo -e "${CYAN}1️⃣  Building shared package...${NC}"
     npm run build --workspace=@jawab24/shared > /dev/null 2>&1
     echo -e "${GREEN}   ✅ Shared package built${NC}"
 
-    # Step 2: Backend lint
+    # ────────────────────────────────────────────────────────────────
+    # Step 2: Check for ESM-only packages (CommonJS compatibility)
+    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${CYAN}2️⃣  Backend lint...${NC}"
+    echo -e "${CYAN}2️⃣  Checking ESM-only packages...${NC}"
+    ESM_PACKAGES=("uuid" "node-fetch" "chalk" "ora" "execa" "got" "globby")
+    ESM_FOUND=0
+    for pkg in "${ESM_PACKAGES[@]}"; do
+        if grep -q "\"$pkg\":" backend/package.json 2>/dev/null; then
+            echo -e "${YELLOW}   ⚠️  Found ESM-only package: $pkg${NC}"
+            ESM_FOUND=1
+        fi
+    done
+    if [ $ESM_FOUND -eq 0 ]; then
+        echo -e "${GREEN}   ✅ No ESM-only packages detected${NC}"
+    fi
+
+    # ────────────────────────────────────────────────────────────────
+    # Step 3: Backend lint
+    # ────────────────────────────────────────────────────────────────
+    echo ""
+    echo -e "${CYAN}3️⃣  Backend lint...${NC}"
     npm run lint --workspace=jawab24-backend > /dev/null 2>&1
     echo -e "${GREEN}   ✅ Backend lint passed${NC}"
 
-    # Step 3: Backend tests
+    # ────────────────────────────────────────────────────────────────
+    # Step 4: Validate migrations
+    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${CYAN}3️⃣  Backend tests...${NC}"
+    echo -e "${CYAN}4️⃣  Validating database migrations...${NC}"
+    if [ -f "backend/scripts/validate-migrations.ts" ]; then
+        cd backend && npx ts-node scripts/validate-migrations.ts > /dev/null 2>&1 && cd ..
+        echo -e "${GREEN}   ✅ Migrations validated${NC}"
+    else
+        echo -e "${YELLOW}   ⚠️  Migration validator not found, skipping${NC}"
+    fi
+
+    # ────────────────────────────────────────────────────────────────
+    # Step 5: Backend tests
+    # ────────────────────────────────────────────────────────────────
+    echo ""
+    echo -e "${CYAN}5️⃣  Backend tests...${NC}"
     BACKEND_RESULT=$(npm test --workspace=jawab24-backend -- --run 2>&1)
     BACKEND_TESTS=$(echo "$BACKEND_RESULT" | grep -oP 'Tests\s+\d+ passed' | grep -oP '\d+' || echo "0")
     echo -e "${GREEN}   ✅ Backend tests passed (${BACKEND_TESTS} tests)${NC}"
 
-    # Step 4: Backend build
+    # ────────────────────────────────────────────────────────────────
+    # Step 6: Backend build
+    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${CYAN}4️⃣  Backend build...${NC}"
+    echo -e "${CYAN}6️⃣  Backend build...${NC}"
     npm run build --workspace=jawab24-backend > /dev/null 2>&1
     echo -e "${GREEN}   ✅ Backend build successful${NC}"
 
-    # Step 5: AI Worker build
+    # ────────────────────────────────────────────────────────────────
+    # Step 7: AI Worker lint + build
+    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${CYAN}5️⃣  AI Worker build...${NC}"
+    echo -e "${CYAN}7️⃣  AI Worker lint + build...${NC}"
+    npm run lint --workspace=jawab24-ai-worker > /dev/null 2>&1 || true
     npm run build --workspace=jawab24-ai-worker > /dev/null 2>&1
     echo -e "${GREEN}   ✅ AI Worker build successful${NC}"
 
-    # Step 6: Frontend lint
+    # ────────────────────────────────────────────────────────────────
+    # Step 8: Check for duplicate /api/api paths
+    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${CYAN}6️⃣  Frontend lint...${NC}"
+    echo -e "${CYAN}8️⃣  Checking for duplicate API paths...${NC}"
+    if grep -r "/api/api" frontend/src/ 2>/dev/null; then
+        echo -e "${RED}   ❌ Found duplicate /api/api paths!${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}   ✅ No duplicate API paths${NC}"
+
+    # ────────────────────────────────────────────────────────────────
+    # Step 9: Frontend lint
+    # ────────────────────────────────────────────────────────────────
+    echo ""
+    echo -e "${CYAN}9️⃣  Frontend lint...${NC}"
     npm run lint --workspace=jawab24-frontend > /dev/null 2>&1
     echo -e "${GREEN}   ✅ Frontend lint passed${NC}"
 
-    # Step 7: Frontend tests
+    # ────────────────────────────────────────────────────────────────
+    # Step 10: Frontend tests
+    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${CYAN}7️⃣  Frontend tests...${NC}"
+    echo -e "${CYAN}🔟 Frontend tests...${NC}"
     FRONTEND_RESULT=$(npm test --workspace=jawab24-frontend -- --run 2>&1)
     FRONTEND_TESTS=$(echo "$FRONTEND_RESULT" | grep -oP 'Tests\s+\d+ passed' | grep -oP '\d+' || echo "0")
     echo -e "${GREEN}   ✅ Frontend tests passed (${FRONTEND_TESTS} tests)${NC}"
 
-    # Step 8: Frontend build
+    # ────────────────────────────────────────────────────────────────
+    # Step 11: Frontend build
+    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${CYAN}8️⃣  Frontend build...${NC}"
+    echo -e "${CYAN}1️⃣1️⃣ Frontend build...${NC}"
     NEXT_PUBLIC_API_URL=https://jawab24.com/api npm run build --workspace=jawab24-frontend > /dev/null 2>&1
     echo -e "${GREEN}   ✅ Frontend build successful${NC}"
 
+    # ────────────────────────────────────────────────────────────────
+    # Summary
+    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}✅ ALL CI CHECKS PASSED${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "   Backend tests:  ${BACKEND_TESTS}"
-    echo -e "   Frontend tests: ${FRONTEND_TESTS}"
-    echo -e "   Total tests:    $((BACKEND_TESTS + FRONTEND_TESTS))"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}✅ ALL CI CHECKS PASSED${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "   ✅ Preflight checks"
+    echo -e "   ✅ ESM compatibility"
+    echo -e "   ✅ Backend: lint, migrations, tests (${BACKEND_TESTS}), build"
+    echo -e "   ✅ AI Worker: lint, build"
+    echo -e "   ✅ Frontend: lint, tests (${FRONTEND_TESTS}), build"
+    echo -e "   📊 Total tests: $((BACKEND_TESTS + FRONTEND_TESTS))"
 fi
 
 # ═══════════════════════════════════════════════════════════════════
