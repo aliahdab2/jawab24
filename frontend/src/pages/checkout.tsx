@@ -6,7 +6,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 
 import { Button } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
-import axios from 'axios';
+import { api, publicApi } from '@/lib/api';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -20,7 +20,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     const fetchPlan = async () => {
       try {
-        const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/plans/${planId}`);
+        const response = await publicApi.get(`/plans/${planId}`);
         setPlan(response.data.data || response.data);
       } catch (err) {
         console.error('Failed to fetch plan:', err);
@@ -46,20 +46,12 @@ export default function CheckoutPage() {
         return;
       }
 
-      // Create checkout session
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/payment/create-checkout-session`,
-        {
-          planId,
-          successUrl: `${window.location.origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancelUrl: `${window.location.origin}/payment/cancel`,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      // Create checkout session (uses authenticated api client)
+      const response = await api.post('/payment/create-checkout-session', {
+        planId,
+        successUrl: `${window.location.origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${window.location.origin}/payment/cancel`,
+      });
 
       const { url } = response.data;
 
