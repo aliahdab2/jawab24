@@ -248,6 +248,13 @@ export class PaymentController {
                     );
                     break;
 
+                case 'customer.subscription.created':
+                    await this.handleSubscriptionCreated(
+                        event.data.object as Stripe.Subscription,
+                        request
+                    );
+                    break;
+
                 case 'customer.subscription.updated':
                     await this.handleSubscriptionUpdated(
                         event.data.object as Stripe.Subscription,
@@ -326,13 +333,60 @@ export class PaymentController {
     }
 
     /**
+     * Handle subscription created - backup handler in case checkout event missed it
+     */
+    private async handleSubscriptionCreated(
+        stripeSubscription: Stripe.Subscription,
+        request: FastifyRequest
+    ) {
+        // Check if subscription already exists
+        const existing = await db
+            .select({ id: subscriptions.id, status: subscriptions.status })
+            .from(subscriptions)
+            .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id))
+            .limit(1);
+
+        if (existing.length > 0) {
+            // Subscription exists, update status if needed
+            const currentStatus = existing[0].status;
+            const newStatus = stripeSubscription.status;
+            
+            // If subscription is active in Stripe but not in DB, update it
+            if (newStatus === 'active' && currentStatus !== 'active') {
+                await db
+                    .update(subscriptions)
+                    .set({
+                        status: 'active',
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(subscriptions.id, existing[0].id));
+                
+                request.log.info(
+                    { subscriptionId: stripeSubscription.id, oldStatus: currentStatus },
+                    'Subscription status corrected to active'
+                );
+            } else {
+                request.log.info(
+                    { subscriptionId: stripeSubscription.id, status: currentStatus },
+                    'Subscription already exists'
+                );
+            }
+        } else {
+            request.log.warn(
+                { subscriptionId: stripeSubscription.id },
+                'Subscription created event received but no matching DB record found'
+            );
+        }
+    }
+
+    /**
      * Handle subscription updated
      */
     private async handleSubscriptionUpdated(
         stripeSubscription: Stripe.Subscription,
         request: FastifyRequest
     ) {
-        await db
+        const result = await db
             .update(subscriptions)
             .set({
                 status: stripeSubscription.status,
@@ -341,9 +395,14 @@ export class PaymentController {
                 cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
                 updatedAt: new Date(),
             })
-            .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id));
+            .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id))
+            .returning({ id: subscriptions.id });
 
-        request.log.info({ subscriptionId: stripeSubscription.id }, 'Subscription updated');
+        if (result.length > 0) {
+            request.log.info({ subscriptionId: stripeSubscription.id, status: stripeSubscription.status }, 'Subscription updated');
+        } else {
+            request.log.warn({ subscriptionId: stripeSubscription.id }, 'Subscription update - no matching record found');
+        }
     }
 
     /**
@@ -372,19 +431,49 @@ export class PaymentController {
         const stripeSubscriptionId = invoice.subscription as string;
 
         if (!stripeSubscriptionId) {
+            request.log.warn({ invoiceId: invoice.id }, 'Invoice has no subscription ID');
             return;
         }
 
-        // Update subscription status
-        await db
-            .update(subscriptions)
-            .set({
-                status: 'active',
-                updatedAt: new Date(),
-            })
-            .where(eq(subscriptions.externalSubscriptionId, stripeSubscriptionId));
+        // Update subscription status with retry logic for race conditions
+        let retries = 3;
+        let updated = false;
 
-        request.log.info({ subscriptionId: stripeSubscriptionId }, 'Payment succeeded');
+        while (retries > 0 && !updated) {
+            const result = await db
+                .update(subscriptions)
+                .set({
+                    status: 'active',
+                    updatedAt: new Date(),
+                })
+                .where(eq(subscriptions.externalSubscriptionId, stripeSubscriptionId))
+                .returning({ id: subscriptions.id });
+
+            if (result.length > 0) {
+                updated = true;
+                request.log.info(
+                    { subscriptionId: stripeSubscriptionId, dbId: result[0].id },
+                    'Payment succeeded - subscription activated'
+                );
+            } else {
+                retries--;
+                if (retries > 0) {
+                    request.log.warn(
+                        { subscriptionId: stripeSubscriptionId, retriesLeft: retries },
+                        'Subscription not found, retrying...'
+                    );
+                    // Wait 500ms before retry (subscription might still be inserting)
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        }
+
+        if (!updated) {
+            request.log.error(
+                { subscriptionId: stripeSubscriptionId },
+                'Failed to activate subscription - not found after retries'
+            );
+        }
     }
 
     /**
