@@ -1,38 +1,27 @@
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import {
   MessageCircle,
   Facebook,
   ArrowRight,
-  ArrowLeft,
-  MessageSquare,
   Zap,
-  Globe,
-  Shield,
   Clock,
   Star,
-  Check,
   ChevronDown,
-  ChevronUp,
   Sparkles,
   Bot,
   Languages,
-  BarChart3,
   BookOpen,
-  Users,
   Instagram,
   Crown,
   Smartphone,
-  CheckCircle2,
   Mail
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
 
 export default function LandingPage() {
-  const router = useRouter();
   const { t, language, setLanguage } = useTranslation();
   const isRTL = language === 'ar';
   const [openFaq, setOpenFaq] = useState<number | null>(null);

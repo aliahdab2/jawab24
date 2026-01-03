@@ -1,4 +1,3 @@
-import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslation } from '@/i18n';
@@ -6,7 +5,6 @@ import { Button } from '@/components/ui';
 import { XCircle } from 'lucide-react';
 
 export default function PaymentCancelPage() {
-  const router = useRouter();
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
 

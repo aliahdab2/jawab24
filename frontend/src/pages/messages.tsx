@@ -6,7 +6,6 @@ import axios from 'axios';
 import {
   MessageCircle,
   Search,
-  Reply,
   Bot,
   Clock,
   CheckCircle,

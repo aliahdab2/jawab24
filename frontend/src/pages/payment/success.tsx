@@ -4,7 +4,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 
 export default function PaymentSuccessPage() {
   const router = useRouter();

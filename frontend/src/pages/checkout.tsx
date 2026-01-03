@@ -2,14 +2,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { loadStripe } from '@stripe/stripe-js';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
 import { Button } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
 
 export default function CheckoutPage() {
   const router = useRouter();

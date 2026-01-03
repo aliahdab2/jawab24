@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardHeader, Badge, PageHeader, PageSpinner, Button } from '@/components/ui';
+import { Card, Badge, PageHeader, PageSpinner, Button } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
@@ -13,7 +13,6 @@ import {
   Clock,
   FileText,
   Sparkles,
-  AlertTriangle,
   Crown,
   ChevronRight
 } from 'lucide-react';

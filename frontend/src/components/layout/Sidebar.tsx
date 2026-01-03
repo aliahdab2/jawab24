@@ -30,7 +30,6 @@ export function Sidebar() {
   const { logout, user } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
 
   const handleLogout = () => {
     logout();

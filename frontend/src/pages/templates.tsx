@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
@@ -18,7 +18,6 @@ import type { Template } from '@jawab24/shared';
 
 export default function TemplatesPage() {
   const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
   const { token } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);

@@ -4,18 +4,12 @@ import { useRouter } from 'next/router';
 import {
   Facebook,
   MessageCircle,
-  CheckCircle2,
   Zap,
   ShieldCheck,
-  ArrowLeft,
-  ArrowRight,
   Sparkles,
-  Lock,
   MessageSquare,
   Bot,
-  Star,
-  Smartphone,
-  CheckCircle
+  Star
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';

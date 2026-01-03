@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Input, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
@@ -12,14 +12,12 @@ import {
   ArrowUp,
   ArrowDown,
   Tag,
-  BookTemplate,
-  ChevronRight
+  BookTemplate
 } from 'lucide-react';
 import type { Rule, Template } from '@jawab24/shared';
 
 export default function RulesPage() {
   const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
   const { token } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);

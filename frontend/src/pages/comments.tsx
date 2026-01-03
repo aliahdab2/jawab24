@@ -17,7 +17,7 @@ import {
   ExternalLink,
   Globe
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslation } from '@/i18n';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import type { Comment } from '@jawab24/shared';
@@ -33,7 +33,6 @@ export default function CommentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [exporting, setExporting] = useState(false);
-  const isRTL = language === 'ar';
 
   // Helper component for stats
   const StatCard = ({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) => (

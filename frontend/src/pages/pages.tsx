@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Toggle, Badge, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import {
   FileText,
   RefreshCw,
   ExternalLink,
-  MessageSquare,
-  TrendingUp,
   BookOpen,
   X,
   Save,

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, PageSpinner } from '@/components/ui';
 import { plansApi, subscriptionApi } from '@/lib/api';
 import { extractArrayData, extractObjectData } from '@/lib/api-utils';
 import { useTranslation, type TranslationKey } from '@/i18n';
