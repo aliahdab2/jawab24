@@ -48,14 +48,42 @@ health_check() {
     
     log "Running health checks for $env environment..."
     
-    # Check backend
+    # Wait for containers to be fully up
+    sleep 3
+    
+    # Check backend via nginx (more realistic than docker exec)
+    # Temporarily update upstream to point to the new env for testing
+    local original_upstream=$(cat "$DEPLOY_PATH/nginx/upstream.conf")
+    
+    cat > "$DEPLOY_PATH/nginx/upstream.conf" << EOF
+# TESTING: Temporarily pointing to $env for health check
+upstream backend_active {
+    server jawab24-backend-$env:3000;
+}
+upstream frontend_active {
+    server jawab24-frontend-$env:3001;
+}
+upstream ai_worker_active {
+    server jawab24-ai-worker-$env:3002;
+}
+EOF
+    
+    docker exec jawab24-nginx nginx -s reload 2>/dev/null || warn "Could not reload nginx for health check"
+    
+    # Check backend health
     while [ $attempt -le $max_attempts ]; do
-        if docker exec jawab24-backend-$env wget -q --spider http://127.0.0.1:3000/health 2>/dev/null; then
-            log "✅ Backend ($env) is healthy"
-            break
+        if curl -sf http://localhost/api/health > /dev/null 2>&1; then
+            local health_status=$(curl -s http://localhost/api/health | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+            if [ "$health_status" = "healthy" ] || [ "$health_status" = "degraded" ]; then
+                log "✅ Backend ($env) is healthy (status: $health_status)"
+                break
+            fi
         fi
         if [ $attempt -eq $max_attempts ]; then
             error "❌ Backend ($env) health check failed after $max_attempts attempts"
+            # Restore original upstream
+            echo "$original_upstream" > "$DEPLOY_PATH/nginx/upstream.conf"
+            docker exec jawab24-nginx nginx -s reload 2>/dev/null
             return 1
         fi
         warn "⏳ Waiting for backend ($env)... attempt $attempt/$max_attempts"
@@ -66,18 +94,25 @@ health_check() {
     # Check frontend
     attempt=1
     while [ $attempt -le $max_attempts ]; do
-        if docker exec jawab24-frontend-$env wget -q --spider http://127.0.0.1:3001 2>/dev/null; then
+        if curl -sf http://localhost/ > /dev/null 2>&1; then
             log "✅ Frontend ($env) is healthy"
             break
         fi
         if [ $attempt -eq $max_attempts ]; then
             error "❌ Frontend ($env) health check failed after $max_attempts attempts"
+            # Restore original upstream
+            echo "$original_upstream" > "$DEPLOY_PATH/nginx/upstream.conf"
+            docker exec jawab24-nginx nginx -s reload 2>/dev/null
             return 1
         fi
         warn "⏳ Waiting for frontend ($env)... attempt $attempt/$max_attempts"
         sleep 2
         ((attempt++))
     done
+    
+    # Restore original upstream before returning
+    echo "$original_upstream" > "$DEPLOY_PATH/nginx/upstream.conf"
+    docker exec jawab24-nginx nginx -s reload 2>/dev/null
     
     return 0
 }
@@ -148,6 +183,17 @@ main() {
     log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     log "🚀 BLUE-GREEN DEPLOYMENT"
     log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    # Step 0: Validate environment variables before starting
+    log "Step 0: Validating environment variables..."
+    if [ -f "$DEPLOY_PATH/scripts/check-env.sh" ]; then
+        if ! bash "$DEPLOY_PATH/scripts/check-env.sh"; then
+            error "❌ Environment validation failed! Fix missing variables before deploying."
+            exit 1
+        fi
+    else
+        warn "⚠️  check-env.sh not found, skipping validation"
+    fi
     
     ACTIVE_ENV=$(get_active_env)
     DEPLOY_ENV=$(get_inactive_env)

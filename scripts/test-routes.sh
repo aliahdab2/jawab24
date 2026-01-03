@@ -60,7 +60,24 @@ test_route "GET" "/auth/callback" "404" "GET /auth/callback"
 echo ""
 echo "❤️ Health Check"
 echo "---------------"
-test_route "GET" "/health" "404" "GET /health"
+# Health check must return 200 OK and valid JSON
+status=$(curl -s -o /tmp/health-response.txt -w "%{http_code}" "$BASE_URL/api/health")
+if [ "$status" == "200" ]; then
+    # Also verify it's valid JSON and contains expected fields
+    if cat /tmp/health-response.txt | grep -q '"status"' && cat /tmp/health-response.txt | grep -q '"uptime"'; then
+        echo "✅ GET /health - Status: $status (valid response)"
+        ((PASSED++))
+    else
+        echo "❌ GET /health - Status: $status but response is not valid JSON"
+        echo "Response: $(cat /tmp/health-response.txt)"
+        ((FAILED++))
+    fi
+else
+    echo "❌ GET /health - Got $status (expected 200)"
+    echo "Response: $(cat /tmp/health-response.txt)"
+    ((FAILED++))
+fi
+rm -f /tmp/health-response.txt
 
 echo ""
 echo "================================"

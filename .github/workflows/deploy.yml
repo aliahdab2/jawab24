@@ -59,6 +59,28 @@ jobs:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: package-lock.json
+      
+      - name: 🔍 Validate Environment Variables
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 2m
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+            
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🔍 VALIDATING ENVIRONMENT VARIABLES"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            if [ -f scripts/check-env.sh ]; then
+              bash scripts/check-env.sh
+            else
+              echo "⚠️  check-env.sh not found, skipping validation"
+            fi
+            
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: 🔍 Validate Migrations
         run: |

@@ -58,7 +58,6 @@ services:
       - ./env/backend.env
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/autoreply
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379
       - AI_SERVICE_URL=http://ai-worker:3002
