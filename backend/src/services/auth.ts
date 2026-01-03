@@ -171,6 +171,7 @@ export class AuthService {
             user: {
                 id: user.id,
                 name: user.name || '',
+                email: user.email || undefined,
                 facebookId: user.facebookId,
             },
         };

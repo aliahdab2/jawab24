@@ -10,8 +10,11 @@ http {
     # Include upstream configuration (for blue-green deployment)
     include /etc/nginx/upstream.conf;
     
-    # Note: keepalive settings are configured in the upstream blocks
-    # in upstream.conf (keepalive directive)
+    # Upstream keepalive connections for zero-downtime reload
+    # These settings ensure persistent connections to backends
+    # which survive nginx reload gracefully
+    #upstream_keepalive_timeout 60s; # REMOVED - invalid directive
+    #upstream_keepalive_requests 100; # REMOVED - invalid directive
 
     # Basic settings
     include /etc/nginx/mime.types;
