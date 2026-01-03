@@ -1,4 +1,4 @@
-name: CI - Test & Build
+name: CI Pipeline
 
 on:
   push:
@@ -11,10 +11,10 @@ env:
 
 jobs:
   # ==========================================
-  # Pre-flight Checks (CRITICAL)
+  # Step 1: Verify secrets and scripts exist
   # ==========================================
   preflight:
-    name: Pre-flight - Critical Checks
+    name: "1️⃣ Verify Secrets"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -79,10 +79,10 @@ jobs:
           echo "✅ All deployment scripts found"
 
   # ==========================================
-  # Setup & Install (Cache)
+  # Step 2: Install all dependencies
   # ==========================================
   setup:
-    name: Setup & Install
+    name: "2️⃣ Install Dependencies"
     runs-on: ubuntu-latest
     needs: preflight
     steps:
@@ -100,10 +100,10 @@ jobs:
         run: npm ci
 
   # ==========================================
-  # Backend Tests & Build
+  # Step 3: Test and build backend
   # ==========================================
   backend:
-    name: Backend - Test & Build
+    name: "3️⃣ Test Backend"
     runs-on: ubuntu-latest
     needs: setup
     
@@ -231,10 +231,10 @@ jobs:
           retention-days: 1
 
   # ==========================================
-  # AI Worker Tests & Build
+  # Step 4: Test and build AI worker
   # ==========================================
   ai-worker:
-    name: AI Worker - Test & Build
+    name: "4️⃣ Test AI Worker"
     runs-on: ubuntu-latest
     needs: setup
 
@@ -269,10 +269,10 @@ jobs:
           retention-days: 1
 
   # ==========================================
-  # Frontend Tests & Build
+  # Step 5: Test and build frontend
   # ==========================================
   frontend:
-    name: Frontend - Test & Build
+    name: "5️⃣ Test Frontend"
     runs-on: ubuntu-latest
     needs: setup
 
@@ -336,10 +336,10 @@ jobs:
           retention-days: 1
 
   # ==========================================
-  # Docker Build & Smoke Test
+  # Step 6: Build and test Docker images
   # ==========================================
   docker:
-    name: Docker - Build & Test Images
+    name: "6️⃣ Build Docker Images"
     runs-on: ubuntu-latest
     needs: [backend, ai-worker, frontend]
 
@@ -483,10 +483,10 @@ jobs:
           fi
 
   # ==========================================
-  # Summary
+  # Step 7: Final status check
   # ==========================================
-  ci-success:
-    name: CI Summary
+  ci-summary:
+    name: "7️⃣ Ready to Deploy?"
     runs-on: ubuntu-latest
     needs: [preflight, backend, ai-worker, frontend, docker]
     if: always()

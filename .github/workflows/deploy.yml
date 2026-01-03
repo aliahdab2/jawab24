@@ -1,9 +1,9 @@
-name: Deploy to Production
+name: Deploy
 
 on:
   # Only trigger AFTER CI workflow completes successfully
   workflow_run:
-    workflows: ["CI - Test & Build"]
+    workflows: ["CI Pipeline"]
     types:
       - completed
     branches: [main]
@@ -29,7 +29,7 @@ env:
 
 jobs:
   deploy:
-    name: 🚀 Deploy (Zero Downtime)
+    name: "🚀 Deploying to Server"
     runs-on: ubuntu-latest
     # Deploy ONLY when:
     # 1. Manual trigger (workflow_dispatch)
@@ -574,9 +574,9 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   deploy-skipped:
-    name: ⏭️ CI Failed - Skip Deploy
+    name: "⏸️ Deploy Skipped (CI Failed)"
     runs-on: ubuntu-latest
-    # Only skip if triggered by workflow_run and CI failed
+    # Only runs if CI failed - otherwise this job is skipped entirely
     if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' }}
     
     steps:
