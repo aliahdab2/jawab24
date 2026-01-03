@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, desc } from 'drizzle-orm';
+import { eq, and, gte, lte } from 'drizzle-orm';
 import { db } from '../db';
 import { subscriptions, plans, usage, usageLogs, pages, templates, rules } from '../db/schema';
 import { plansService } from './plans';
@@ -277,7 +277,7 @@ export const subscriptionsService = {
      */
     async incrementAiReplies(userId: string, count: number = 1): Promise<void> {
         const now = new Date();
-        const today = now.toISOString().split('T')[0];
+        const _today = now.toISOString().split('T')[0];
         
         // Get current usage period
         const currentUsage = await this.getCurrentUsage(userId);
@@ -314,10 +314,13 @@ export const subscriptionsService = {
     async incrementTemplateReplies(userId: string, count: number = 1): Promise<void> {
         const now = new Date();
         
+        // Get current usage to increment properly
+        const currentUsage = await this.getCurrentUsage(userId);
+        
         await db
             .update(usage)
             .set({
-                templateRepliesCount: count, // This should be incremented properly
+                templateRepliesCount: (currentUsage?.templateRepliesCount || 0) + count,
                 updatedAt: new Date(),
             })
             .where(

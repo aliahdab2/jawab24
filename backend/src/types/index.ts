@@ -1,3 +1,10 @@
+// Re-export from organized type files
+export * from './common';
+export * from './logger';
+export * from './instagram';
+export * from './settings';
+export * from './payment';
+
 // User types
 export interface User {
     id: string;
@@ -83,7 +90,7 @@ export interface CreateRuleDTO {
     active?: boolean;
 }
 
-export interface UpdateRuleDTO extends Partial<CreateRuleDTO> {}
+export type UpdateRuleDTO = Partial<CreateRuleDTO>;
 
 // Template Types
 export interface Template {
@@ -104,7 +111,7 @@ export interface CreateTemplateDTO {
     active?: boolean;
 }
 
-export interface UpdateTemplateDTO extends Partial<CreateTemplateDTO> {}
+export type UpdateTemplateDTO = Partial<CreateTemplateDTO>;
 
 // Conversation Message for AI context
 export interface ConversationMessage {

@@ -1,11 +1,12 @@
 import { db } from '../db';
 import { pages } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-import { CreatePageDTO, UpdatePageDTO } from '../types';
+import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger } from '../types';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 
 export class PagesService {
+    private logger: Logger = noopLogger;
     /**
      * Create a new page
      */
@@ -28,7 +29,7 @@ export class PagesService {
      * Get all pages for a user
      */
     async getPages(userId: string) {
-        return await db
+        return db
             .select()
             .from(pages)
             .where(eq(pages.userId, userId))
@@ -102,26 +103,25 @@ export class PagesService {
 
     /**
      * Sync pages from Facebook (and linked Instagram accounts)
+     * @param userId - The user ID to sync pages for
+     * @param userAccessToken - Facebook user access token
+     * @param logger - Optional logger for tracking sync progress
      */
-    async syncFromFacebook(userId: string, userAccessToken: string) {
-        console.log(`[Pages] Starting sync for user ${userId}`);
+    async syncFromFacebook(userId: string, userAccessToken: string, logger: Logger = noopLogger) {
+        logger.info(`[Pages] Starting sync for user ${userId}`);
         
         const fbPages = await facebookService.getUserPages(userAccessToken);
         const syncedPages = [];
 
         if (!fbPages.data || fbPages.data.length === 0) {
-            console.log('[Pages] No pages returned from Facebook API');
-            console.log('[Pages] This could mean:');
-            console.log('  - User is not an admin of any Facebook pages');
-            console.log('  - pages_show_list permission not granted');
-            console.log('  - Facebook App is in development mode and user is not a tester');
+            logger.info('[Pages] No pages returned from Facebook API');
             return [];
         }
 
-        console.log(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
+        logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
 
         for (const fbPage of fbPages.data) {
-            console.log(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
+            logger.info(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
             
             // Try to fetch linked Instagram account
             let instagramAccountId: string | null = null;
@@ -135,10 +135,10 @@ export class PagesService {
                 if (igAccount) {
                     instagramAccountId = igAccount.id;
                     instagramUsername = igAccount.username;
-                    console.log(`[Pages] Found linked Instagram: @${instagramUsername}`);
+                    logger.info(`[Pages] Found linked Instagram: @${instagramUsername}`);
                 }
-            } catch (error) {
-                console.log(`[Pages] Could not fetch Instagram account (may not be linked): ${error}`);
+            } catch {
+                logger.info(`[Pages] Could not fetch Instagram account (may not be linked)`);
             }
             
             // Check if page already exists
@@ -146,7 +146,7 @@ export class PagesService {
             
             if (existingPage) {
                 // Update existing page
-                console.log(`[Pages] Updating existing page: ${fbPage.name}`);
+                logger.info(`[Pages] Updating existing page: ${fbPage.name}`);
                 const updated = await db
                     .update(pages)
                     .set({
@@ -161,7 +161,7 @@ export class PagesService {
                 syncedPages.push(updated[0]);
             } else {
                 // Create new page
-                console.log(`[Pages] Creating new page: ${fbPage.name}`);
+                logger.info(`[Pages] Creating new page: ${fbPage.name}`);
                 const [created] = await db
                     .insert(pages)
                     .values({
@@ -179,7 +179,7 @@ export class PagesService {
             }
         }
 
-        console.log(`[Pages] Sync complete. ${syncedPages.length} pages synced.`);
+        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced.`);
         return syncedPages;
     }
 

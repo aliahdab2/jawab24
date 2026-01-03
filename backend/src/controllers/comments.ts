@@ -9,7 +9,11 @@ export class CommentsController {
      * GET /comments
      */
     async getAll(request: FastifyRequest<{ Querystring: { replied?: string; limit?: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { replied, limit } = request.query;
         
         try {
@@ -35,7 +39,11 @@ export class CommentsController {
      * GET /comments/inbox
      */
     async getInbox(request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const limit = request.query.limit ? parseInt(request.query.limit, 10) : 50;
         
         try {
@@ -130,7 +138,11 @@ export class CommentsController {
      * GET /comments/stats
      */
     async getStats(request: FastifyRequest, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         
         try {
             const stats = await commentsService.getStats(userId);

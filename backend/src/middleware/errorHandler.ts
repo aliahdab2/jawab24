@@ -1,5 +1,5 @@
 import { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
-import { AppError } from '../utils/errors';
+import { AppError, ValidationError } from '../utils/errors';
 
 /**
  * Global Error Handler for Fastify
@@ -13,19 +13,22 @@ export function errorHandler(
     // Log error
     request.log.error({
         err: error,
-        requestId: (request as any).id,
+        requestId: request.id,
         url: request.url,
         method: request.method,
     }, 'Request error');
 
     // Handle custom AppError
     if (error instanceof AppError) {
-        return reply.status(error.statusCode).send({
+        const response: Record<string, unknown> = {
             error: true,
             message: error.message,
             code: error.code,
-            ...(( error as any).details && { details: (error as any).details }),
-        });
+        };
+        if (error instanceof ValidationError && error.details) {
+            response.details = error.details;
+        }
+        return reply.status(error.statusCode).send(response);
     }
 
     // Handle Fastify validation errors
@@ -40,10 +43,11 @@ export function errorHandler(
 
     // Handle other Fastify errors
     if ((error as FastifyError).statusCode) {
-        return reply.status((error as FastifyError).statusCode!).send({
+        const fastifyError = error as FastifyError;
+        return reply.status(fastifyError.statusCode ?? 500).send({
             error: true,
             message: error.message,
-            code: (error as any).code || 'ERROR',
+            code: fastifyError.code || 'ERROR',
         });
     }
 

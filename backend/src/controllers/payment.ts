@@ -5,6 +5,17 @@ import { subscriptions, users, plans } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { config } from '../config';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
+import type Stripe from 'stripe';
+
+// Extend FastifyRequest to include rawBody for Stripe webhooks
+interface WebhookRequest extends FastifyRequest {
+    rawBody?: Buffer;
+}
+
+// Type for authenticated requests
+interface AuthenticatedRequest extends FastifyRequest {
+    user?: { id: string; userId: string };
+}
 
 export class PaymentController {
     /**
@@ -16,7 +27,7 @@ export class PaymentController {
         reply: FastifyReply
     ) {
         try {
-            const userId = (request as any).user?.id;
+            const userId = (request as AuthenticatedRequest).user?.id;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -69,7 +80,7 @@ export class PaymentController {
      */
     async getSubscriptionStatus(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request as any).user?.id;
+            const userId = (request as AuthenticatedRequest).user?.id;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -96,13 +107,17 @@ export class PaymentController {
                 return reply.status(404).send({ error: 'No subscription found' });
             }
 
+            if (!subscription.currentPeriodStart || !subscription.currentPeriodEnd) {
+                return reply.status(500).send({ error: 'Invalid subscription period data' });
+            }
+
             const response: SubscriptionStatus = {
                 id: subscription.id,
-                status: subscription.status as any,
+                status: subscription.status as SubscriptionStatus['status'],
                 planId: subscription.planId,
                 planName: subscription.planName,
-                currentPeriodStart: subscription.currentPeriodStart!,
-                currentPeriodEnd: subscription.currentPeriodEnd!,
+                currentPeriodStart: subscription.currentPeriodStart,
+                currentPeriodEnd: subscription.currentPeriodEnd,
                 cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
                 trialEndsAt: subscription.trialEndsAt || undefined,
             };
@@ -120,7 +135,7 @@ export class PaymentController {
      */
     async cancelSubscription(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request as any).user?.id;
+            const userId = (request as AuthenticatedRequest).user?.id;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -161,7 +176,7 @@ export class PaymentController {
      */
     async createBillingPortalSession(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request as any).user?.id;
+            const userId = (request as AuthenticatedRequest).user?.id;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -202,7 +217,7 @@ export class PaymentController {
             }
 
             // Get raw body - Fastify stores it in rawBody when configured
-            const rawBody = (request as any).rawBody as Buffer;
+            const rawBody = (request as WebhookRequest).rawBody;
             if (!rawBody) {
                 return reply.status(400).send({ error: 'Missing raw body' });
             }
@@ -219,27 +234,42 @@ export class PaymentController {
             // Handle different event types
             switch (event.type) {
                 case 'checkout.session.completed':
-                    await this.handleCheckoutComplete(event.data.object as any);
+                    await this.handleCheckoutComplete(
+                        event.data.object as Stripe.Checkout.Session,
+                        request
+                    );
                     break;
 
                 case 'customer.subscription.updated':
-                    await this.handleSubscriptionUpdated(event.data.object as any);
+                    await this.handleSubscriptionUpdated(
+                        event.data.object as Stripe.Subscription,
+                        request
+                    );
                     break;
 
                 case 'customer.subscription.deleted':
-                    await this.handleSubscriptionDeleted(event.data.object as any);
+                    await this.handleSubscriptionDeleted(
+                        event.data.object as Stripe.Subscription,
+                        request
+                    );
                     break;
 
                 case 'invoice.payment_succeeded':
-                    await this.handlePaymentSucceeded(event.data.object as any);
+                    await this.handlePaymentSucceeded(
+                        event.data.object as Stripe.Invoice,
+                        request
+                    );
                     break;
 
                 case 'invoice.payment_failed':
-                    await this.handlePaymentFailed(event.data.object as any);
+                    await this.handlePaymentFailed(
+                        event.data.object as Stripe.Invoice,
+                        request
+                    );
                     break;
 
                 default:
-                    request.log.info(`Unhandled event type: ${event.type}`);
+                    request.log.info({ eventType: event.type }, 'Unhandled webhook event type');
             }
 
             return reply.send({ received: true });
@@ -252,13 +282,16 @@ export class PaymentController {
     /**
      * Handle successful checkout session
      */
-    private async handleCheckoutComplete(session: any) {
+    private async handleCheckoutComplete(
+        session: Stripe.Checkout.Session,
+        request: FastifyRequest
+    ) {
         const userId = session.client_reference_id || session.metadata?.userId;
         const planId = session.metadata?.planId;
-        const stripeSubscriptionId = session.subscription;
+        const stripeSubscriptionId = session.subscription as string;
 
         if (!userId || !planId) {
-            console.error('Missing userId or planId in checkout session');
+            request.log.error({ session: session.id }, 'Missing userId or planId in checkout session');
             return;
         }
 
@@ -269,7 +302,7 @@ export class PaymentController {
         await db.insert(subscriptions).values({
             userId,
             planId,
-            status: stripeSubscription.status as any,
+            status: stripeSubscription.status,
             externalSubscriptionId: stripeSubscription.id,
             paymentMethod: 'stripe',
             stripeCustomerId: stripeSubscription.customer as string,
@@ -281,13 +314,16 @@ export class PaymentController {
                 : null,
         });
 
-        console.log(`Subscription created for user ${userId}`);
+        request.log.info({ userId, subscriptionId: stripeSubscription.id }, 'Subscription created');
     }
 
     /**
      * Handle subscription updated
      */
-    private async handleSubscriptionUpdated(stripeSubscription: any) {
+    private async handleSubscriptionUpdated(
+        stripeSubscription: Stripe.Subscription,
+        request: FastifyRequest
+    ) {
         await db
             .update(subscriptions)
             .set({
@@ -299,13 +335,16 @@ export class PaymentController {
             })
             .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id));
 
-        console.log(`Subscription updated: ${stripeSubscription.id}`);
+        request.log.info({ subscriptionId: stripeSubscription.id }, 'Subscription updated');
     }
 
     /**
      * Handle subscription deleted
      */
-    private async handleSubscriptionDeleted(stripeSubscription: any) {
+    private async handleSubscriptionDeleted(
+        stripeSubscription: Stripe.Subscription,
+        request: FastifyRequest
+    ) {
         await db
             .update(subscriptions)
             .set({
@@ -315,14 +354,14 @@ export class PaymentController {
             })
             .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id));
 
-        console.log(`Subscription canceled: ${stripeSubscription.id}`);
+        request.log.info({ subscriptionId: stripeSubscription.id }, 'Subscription canceled');
     }
 
     /**
      * Handle successful payment
      */
-    private async handlePaymentSucceeded(invoice: any) {
-        const stripeSubscriptionId = invoice.subscription;
+    private async handlePaymentSucceeded(invoice: Stripe.Invoice, request: FastifyRequest) {
+        const stripeSubscriptionId = invoice.subscription as string;
 
         if (!stripeSubscriptionId) {
             return;
@@ -337,14 +376,14 @@ export class PaymentController {
             })
             .where(eq(subscriptions.externalSubscriptionId, stripeSubscriptionId));
 
-        console.log(`Payment succeeded for subscription: ${stripeSubscriptionId}`);
+        request.log.info({ subscriptionId: stripeSubscriptionId }, 'Payment succeeded');
     }
 
     /**
      * Handle failed payment
      */
-    private async handlePaymentFailed(invoice: any) {
-        const stripeSubscriptionId = invoice.subscription;
+    private async handlePaymentFailed(invoice: Stripe.Invoice, request: FastifyRequest) {
+        const stripeSubscriptionId = invoice.subscription as string;
 
         if (!stripeSubscriptionId) {
             return;
@@ -359,7 +398,7 @@ export class PaymentController {
             })
             .where(eq(subscriptions.externalSubscriptionId, stripeSubscriptionId));
 
-        console.log(`Payment failed for subscription: ${stripeSubscriptionId}`);
+        request.log.info({ subscriptionId: stripeSubscriptionId }, 'Payment failed');
     }
 }
 

@@ -1,42 +1,10 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { settings } from '../db/schema';
+import { UserSettings, UpdateSettingsDTO } from '../types';
 
-export interface UserSettings {
-    id: string;
-    userId: string;
-    dashboardLanguage: string;
-    defaultReplyLanguage: string;
-    supportedLanguages: string[];
-    autoDetectLanguage: boolean;
-    aiEnabled: boolean;
-    aiModel: string;
-    commentsAutoReply: boolean;
-    messagesAutoReply: boolean;
-    businessHoursOnly: boolean;
-    businessHoursStart: string;
-    businessHoursEnd: string;
-    awayMessage: string | null;
-    greetingMessage: string | null;
-    replyDelay: number;
-}
-
-export interface UpdateSettingsDTO {
-    dashboardLanguage?: string;
-    defaultReplyLanguage?: string;
-    supportedLanguages?: string[];
-    autoDetectLanguage?: boolean;
-    aiEnabled?: boolean;
-    aiModel?: string;
-    commentsAutoReply?: boolean;
-    messagesAutoReply?: boolean;
-    businessHoursOnly?: boolean;
-    businessHoursStart?: string;
-    businessHoursEnd?: string;
-    awayMessage?: string | null;
-    greetingMessage?: string | null;
-    replyDelay?: number;
-}
+// Re-export for backward compatibility
+export type { UserSettings, UpdateSettingsDTO };
 
 export class SettingsService {
     /**
@@ -157,10 +125,10 @@ export class SettingsService {
     /**
      * Map database record to UserSettings interface
      */
-    private mapToUserSettings(record: any): UserSettings {
+    private mapToUserSettings(record: typeof settings.$inferSelect): UserSettings {
         return {
             id: record.id,
-            userId: record.userId,
+            userId: record.userId ?? '',
             dashboardLanguage: record.dashboardLanguage || 'ar',
             defaultReplyLanguage: record.defaultReplyLanguage || 'ar',
             supportedLanguages: record.supportedLanguages || ['en', 'ar'],
@@ -172,8 +140,8 @@ export class SettingsService {
             businessHoursOnly: record.businessHoursOnly ?? false,
             businessHoursStart: record.businessHoursStart || '09:00',
             businessHoursEnd: record.businessHoursEnd || '18:00',
-            awayMessage: record.awayMessage,
-            greetingMessage: record.greetingMessage,
+            awayMessage: record.awayMessage ?? null,
+            greetingMessage: record.greetingMessage ?? null,
             replyDelay: record.replyDelay ?? 0,
         };
     }

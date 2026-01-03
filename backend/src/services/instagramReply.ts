@@ -5,24 +5,16 @@ import { instagramService } from './instagram';
 import { db } from '../db';
 import { instagramMedia, instagramComments, messages } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-
-export interface InstagramReplyResult {
-    success: boolean;
-    commentId: string;
-    replyText?: string;
-    replyMethod?: 'template' | 'ai' | 'manual';
-    error?: string;
-}
-
-export interface InstagramMessageResult {
-    success: boolean;
-    messageId: string;
-    replyText?: string;
-    replyMethod?: 'template' | 'ai' | 'manual';
-    error?: string;
-}
+import { Logger, noopLogger, InstagramReplyResult, InstagramMessageResult } from '../types';
 
 export class InstagramReplyService {
+    private logger: Logger = noopLogger;
+
+    /** Set logger for this service instance */
+    setLogger(logger: Logger): void {
+        this.logger = logger;
+    }
+
     /**
      * Process an incoming Instagram comment and generate a reply
      */
@@ -45,8 +37,14 @@ export class InstagramReplyService {
                 return { success: false, commentId: instagramCommentId, error: 'Instagram auto-reply disabled for this page' };
             }
 
+            // Ensure page has an associated user
+            if (!page.userId) {
+                return { success: false, commentId: instagramCommentId, error: 'Page has no associated user' };
+            }
+            const pageUserId = page.userId;
+
             // 2. Check user settings for comments auto-reply
-            const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(page.userId!);
+            const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(pageUserId);
             if (!isCommentsEnabled) {
                 // Store the comment but don't reply
                 await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
@@ -74,13 +72,13 @@ export class InstagramReplyService {
             const comment = await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
 
             // 6. Get reply delay
-            const replyDelay = await settingsService.getReplyDelay(page.userId!);
+            const replyDelay = await settingsService.getReplyDelay(pageUserId);
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }
 
             // 7. Generate AI reply
-            const userSettings = await settingsService.getSettings(page.userId!);
+            const userSettings = await settingsService.getSettings(pageUserId);
             let replyText: string | null = null;
             let replyMethod: 'ai' | 'template' = 'ai';
 
@@ -110,7 +108,7 @@ export class InstagramReplyService {
                     page.accessToken
                 );
             } catch (error) {
-                console.error('[Instagram] Failed to post reply:', error);
+                this.logger.error('[Instagram] Failed to post reply', { error: String(error) });
                 return { 
                     success: false, 
                     commentId: comment.id, 
@@ -138,7 +136,10 @@ export class InstagramReplyService {
             };
 
         } catch (error) {
-            console.error('[Instagram] Error processing comment:', error);
+            this.logger.error('[Instagram] Error processing comment', { 
+                instagramCommentId,
+                error: error instanceof Error ? error.message : String(error) 
+            });
             return {
                 success: false,
                 commentId: instagramCommentId,
@@ -167,8 +168,14 @@ export class InstagramReplyService {
                 return { success: false, messageId, error: 'Instagram auto-reply disabled for this page' };
             }
 
+            // Ensure page has an associated user
+            if (!page.userId) {
+                return { success: false, messageId, error: 'Page has no associated user' };
+            }
+            const msgPageUserId = page.userId;
+
             // 2. Check user settings for messages auto-reply
-            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(page.userId!);
+            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(msgPageUserId);
 
             // 3. Store the incoming message
             const storedMessage = await this.storeMessage(
@@ -180,7 +187,7 @@ export class InstagramReplyService {
 
             if (!isMessagesEnabled) {
                 // Send away message if configured
-                const awayMessage = await settingsService.getAwayMessage(page.userId!);
+                const awayMessage = await settingsService.getAwayMessage(msgPageUserId);
                 if (awayMessage) {
                     try {
                         await instagramService.sendDirectMessage(
@@ -190,7 +197,7 @@ export class InstagramReplyService {
                             page.accessToken
                         );
                     } catch {
-                        console.log('[Instagram] Failed to send away message - may not be able to message this user');
+                        this.logger.debug('[Instagram] Failed to send away message - may not be able to message this user');
                     }
                 }
                 return { success: false, messageId, error: 'Messages auto-reply disabled' };
@@ -202,13 +209,13 @@ export class InstagramReplyService {
             }
 
             // 5. Get reply delay
-            const replyDelay = await settingsService.getReplyDelay(page.userId!);
+            const replyDelay = await settingsService.getReplyDelay(msgPageUserId);
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }
 
             // 6. Generate AI reply
-            const userSettings = await settingsService.getSettings(page.userId!);
+            const userSettings = await settingsService.getSettings(msgPageUserId);
             let replyText: string | null = null;
             const replyMethod: 'ai' | 'template' = 'ai';
 
@@ -245,7 +252,7 @@ export class InstagramReplyService {
                     page.accessToken
                 );
             } catch (error) {
-                console.error('[Instagram] Failed to send DM reply:', error);
+                this.logger.error('[Instagram] Failed to send DM reply', { error: String(error) });
                 return { 
                     success: false, 
                     messageId, 
@@ -273,7 +280,10 @@ export class InstagramReplyService {
             };
 
         } catch (error) {
-            console.error('[Instagram] Error processing message:', error);
+            this.logger.error('[Instagram] Error processing message', { 
+                messageId,
+                error: error instanceof Error ? error.message : String(error) 
+            });
             return {
                 success: false,
                 messageId,

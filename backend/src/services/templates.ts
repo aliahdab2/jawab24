@@ -26,7 +26,7 @@ export class TemplatesService {
      * Get all templates for a user
      */
     async getTemplates(userId: string) {
-        return await db
+        return db
             .select()
             .from(templates)
             .where(eq(templates.userId, userId))

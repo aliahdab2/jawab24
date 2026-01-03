@@ -3,6 +3,7 @@ import { authService } from '../services/auth';
 import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
 import { AuthRequest } from '../types';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 export class AuthController {
     /**
@@ -35,7 +36,7 @@ export class AuthController {
 
             // 5. Auto-sync pages from Facebook (non-blocking)
             pagesService.syncFromFacebook(user.id, accessToken).catch((err) => {
-                request.log.error('Auto-sync pages failed:', err);
+                request.log.error({ err }, 'Auto-sync pages failed');
             });
 
             // 6. Return response
@@ -43,7 +44,7 @@ export class AuthController {
             return reply.send(response);
 
         } catch (error) {
-            request.log.error(error);
+            request.log.error({ err: error }, 'Facebook login failed');
             return reply.status(401).send({
                 error: 'Authentication failed',
                 message: error instanceof Error ? error.message : 'Unknown error'
@@ -55,8 +56,7 @@ export class AuthController {
      * Get current user
      * GET /auth/me
      */
-    async getMe(request: FastifyRequest, reply: FastifyReply) {
-        // @ts-ignore - user is attached by middleware
+    async getMe(request: AuthenticatedRequest, reply: FastifyReply) {
         const userId = request.user?.userId;
 
         if (!userId) {
@@ -70,7 +70,7 @@ export class AuthController {
             }
             return reply.send(user);
         } catch (error) {
-            request.log.error(error);
+            request.log.error({ err: error }, 'Get user failed');
             return reply.status(500).send({ error: 'Internal Server Error' });
         }
     }

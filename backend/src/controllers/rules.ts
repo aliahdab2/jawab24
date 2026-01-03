@@ -10,7 +10,11 @@ export class RulesController {
      * POST /rules
      */
     async create(request: FastifyRequest<{ Body: CreateRuleDTO }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         
         try {
             // Check rule limit before creating
@@ -36,7 +40,11 @@ export class RulesController {
      * GET /rules
      */
     async getAll(request: FastifyRequest, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         
         try {
             const rules = await rulesService.getRules(userId);
@@ -52,7 +60,11 @@ export class RulesController {
      * GET /rules/:id
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {
@@ -72,7 +84,11 @@ export class RulesController {
      * PUT /rules/:id
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdateRuleDTO }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {
@@ -92,7 +108,11 @@ export class RulesController {
      * DELETE /rules/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {

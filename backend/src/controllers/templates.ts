@@ -10,7 +10,11 @@ export class TemplatesController {
      * POST /templates
      */
     async create(request: FastifyRequest<{ Body: CreateTemplateDTO }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         
         try {
             // Check template limit before creating
@@ -36,7 +40,11 @@ export class TemplatesController {
      * GET /templates
      */
     async getAll(request: FastifyRequest, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         
         try {
             const templates = await templatesService.getTemplates(userId);
@@ -52,7 +60,11 @@ export class TemplatesController {
      * GET /templates/:id
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {
@@ -72,7 +84,11 @@ export class TemplatesController {
      * PUT /templates/:id
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdateTemplateDTO }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {
@@ -92,7 +108,11 @@ export class TemplatesController {
      * DELETE /templates/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {

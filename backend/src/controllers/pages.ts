@@ -10,7 +10,11 @@ export class PagesController {
      * POST /pages
      */
     async create(request: FastifyRequest<{ Body: CreatePageDTO }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         
         try {
             // Check page limit before creating
@@ -36,7 +40,11 @@ export class PagesController {
      * GET /pages
      */
     async getAll(request: FastifyRequest, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         
         try {
             const pages = await pagesService.getPages(userId);
@@ -52,7 +60,11 @@ export class PagesController {
      * GET /pages/:id
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {
@@ -72,7 +84,11 @@ export class PagesController {
      * PUT /pages/:id
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdatePageDTO }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {
@@ -92,7 +108,11 @@ export class PagesController {
      * DELETE /pages/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         
         try {
@@ -109,7 +129,11 @@ export class PagesController {
      * PATCH /pages/:id/auto-reply
      */
     async toggleAutoReply(request: FastifyRequest<{ Params: { id: string }; Body: { enabled: boolean } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         const { enabled } = request.body;
         
@@ -130,7 +154,11 @@ export class PagesController {
      * POST /pages/sync
      */
     async sync(request: FastifyRequest<{ Body: { accessToken: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { accessToken } = request.body;
         
         if (!accessToken) {

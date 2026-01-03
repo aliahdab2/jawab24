@@ -18,10 +18,12 @@ export class AppError extends Error {
 }
 
 export class ValidationError extends AppError {
-    constructor(message: string, details?: any) {
+    public readonly details?: Array<{ path: string; message: string }>;
+    
+    constructor(message: string, details?: Array<{ path: string; message: string }>) {
         super(message, 400, 'VALIDATION_ERROR');
         if (details) {
-            (this as any).details = details;
+            this.details = details;
         }
     }
 }

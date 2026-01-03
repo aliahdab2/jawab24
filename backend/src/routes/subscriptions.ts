@@ -22,7 +22,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription - Get current user's subscription
          */
         protectedRoutes.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
-            const { userId } = (request as AuthenticatedRequest).user!;
+            const user = (request as AuthenticatedRequest).user;
+            if (!user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+            const { userId } = user;
             
             try {
                 const subscription = await subscriptionsService.getUserSubscription(userId);
@@ -51,7 +55,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/usage - Get current usage summary
          */
         protectedRoutes.get('/usage', async (request: FastifyRequest, reply: FastifyReply) => {
-            const { userId } = (request as AuthenticatedRequest).user!;
+            const user = (request as AuthenticatedRequest).user;
+            if (!user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+            const { userId } = user;
             
             try {
                 const usage = await subscriptionsService.getUsageSummary(userId);
@@ -80,7 +88,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/ai - Check AI reply limits
          */
         protectedRoutes.get('/limits/ai', async (request: FastifyRequest, reply: FastifyReply) => {
-            const { userId } = (request as AuthenticatedRequest).user!;
+            const user = (request as AuthenticatedRequest).user;
+            if (!user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+            const { userId } = user;
             
             try {
                 const result = await subscriptionsService.canUseAiReplies(userId);
@@ -102,7 +114,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/pages - Check page limits
          */
         protectedRoutes.get('/limits/pages', async (request: FastifyRequest, reply: FastifyReply) => {
-            const { userId } = (request as AuthenticatedRequest).user!;
+            const user = (request as AuthenticatedRequest).user;
+            if (!user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+            const { userId } = user;
             
             try {
                 const result = await subscriptionsService.canAddPage(userId);
@@ -124,7 +140,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/templates - Check template limits
          */
         protectedRoutes.get('/limits/templates', async (request: FastifyRequest, reply: FastifyReply) => {
-            const { userId } = (request as AuthenticatedRequest).user!;
+            const user = (request as AuthenticatedRequest).user;
+            if (!user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+            const { userId } = user;
             
             try {
                 const result = await subscriptionsService.canAddTemplate(userId);
@@ -146,7 +166,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/rules - Check rule limits
          */
         protectedRoutes.get('/limits/rules', async (request: FastifyRequest, reply: FastifyReply) => {
-            const { userId } = (request as AuthenticatedRequest).user!;
+            const user = (request as AuthenticatedRequest).user;
+            if (!user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+            const { userId } = user;
             
             try {
                 const result = await subscriptionsService.canAddRule(userId);
@@ -170,7 +194,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         protectedRoutes.post<{ Body: ChangePlanBody }>(
             '/change-plan',
             async (request, reply) => {
-                const { userId } = (request as AuthenticatedRequest).user!;
+                const user = (request as AuthenticatedRequest).user;
+                if (!user) {
+                    return reply.status(401).send({ error: 'Unauthorized' });
+                }
+                const { userId } = user;
                 const { planId } = request.body;
                 
                 try {
@@ -211,7 +239,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         protectedRoutes.post<{ Body: CancelBody }>(
             '/cancel',
             async (request, reply) => {
-                const { userId } = (request as AuthenticatedRequest).user!;
+                const user = (request as AuthenticatedRequest).user;
+                if (!user) {
+                    return reply.status(401).send({ error: 'Unauthorized' });
+                }
+                const { userId } = user;
                 
                 try {
                     const subscription = await subscriptionsService.cancelSubscription(
@@ -245,7 +277,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * POST /subscription/pause - Pause subscription
          */
         protectedRoutes.post('/pause', async (request: FastifyRequest, reply: FastifyReply) => {
-            const { userId } = (request as AuthenticatedRequest).user!;
+            const user = (request as AuthenticatedRequest).user;
+            if (!user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+            const { userId } = user;
             
             try {
                 const subscription = await subscriptionsService.pauseSubscription(userId);
@@ -275,7 +311,11 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * POST /subscription/resume - Resume subscription
          */
         protectedRoutes.post('/resume', async (request: FastifyRequest, reply: FastifyReply) => {
-            const { userId } = (request as AuthenticatedRequest).user!;
+            const user = (request as AuthenticatedRequest).user;
+            if (!user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+            const { userId } = user;
             
             try {
                 const subscription = await subscriptionsService.resumeSubscription(userId);

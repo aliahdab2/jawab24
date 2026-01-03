@@ -81,13 +81,42 @@ const start = async () => {
         await server.register(cors);
 
         await server.listen({ port: config.port, host: '0.0.0.0' });
-        console.log(`AI Worker listening on http://0.0.0.0:${config.port}`);
-        console.log(`OpenAI configured: ${openaiService.isConfigured()}`);
+        server.log.info(`AI Worker listening on http://0.0.0.0:${config.port}`);
+        server.log.info(`OpenAI configured: ${openaiService.isConfigured()}`);
     } catch (err) {
         server.log.error(err);
         process.exit(1);
     }
 };
+
+// Graceful shutdown handling
+const gracefulShutdown = async (signal: string) => {
+    server.log.info(`${signal} received, closing AI worker gracefully...`);
+    
+    try {
+        await server.close();
+        server.log.info('AI Worker closed successfully');
+        process.exit(0);
+    } catch (err) {
+        server.log.error(err, 'Error during shutdown');
+        process.exit(1);
+    }
+};
+
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+    server.log.error(error, 'Uncaught Exception');
+    gracefulShutdown('UNCAUGHT_EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    server.log.error({ reason, promise }, 'Unhandled Rejection');
+    gracefulShutdown('UNHANDLED_REJECTION');
+});
 
 start();
 

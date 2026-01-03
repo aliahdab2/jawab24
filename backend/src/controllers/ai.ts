@@ -1,7 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { aiService } from '../services/ai';
 import { AiGenerateRequest } from '../types';
-import { AuthenticatedRequest } from '../middleware/auth';
 
 export class AiController {
     /**

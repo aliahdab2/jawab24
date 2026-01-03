@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { comments, posts, pages } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 
 export class CommentsService {
@@ -27,7 +27,7 @@ export class CommentsService {
      * Get all comments for a post
      */
     async getCommentsByPost(postId: string) {
-        return await db
+        return db
             .select()
             .from(comments)
             .where(eq(comments.postId, postId))
@@ -71,7 +71,7 @@ export class CommentsService {
             query = query.limit(options.limit);
         }
 
-        return await query;
+        return query;
     }
 
     /**

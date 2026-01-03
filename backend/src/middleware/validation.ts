@@ -2,6 +2,11 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { ValidationError } from '../utils/errors';
 
+// Extended ValidationError with details
+interface ValidationErrorWithDetails extends ValidationError {
+    details?: Array<{ path: string; message: string }>;
+}
+
 /**
  * Middleware factory to validate request body using Zod schema
  */
@@ -17,12 +22,12 @@ export function validateBody<T extends z.ZodType>(schema: T) {
                         path: err.path.join('.'),
                         message: err.message,
                     }))
-                );
+                ) as ValidationErrorWithDetails;
                 return reply.status(400).send({
                     error: true,
                     message: validationError.message,
                     code: 'VALIDATION_ERROR',
-                    details: (validationError as any).details,
+                    details: validationError.details,
                 });
             }
             throw error;

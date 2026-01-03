@@ -1,7 +1,7 @@
 import { db } from '../db';
 import { rules, templates } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-import { Rule, CreateRuleDTO, UpdateRuleDTO } from '../types';
+import { CreateRuleDTO, UpdateRuleDTO } from '../types';
 
 export class RulesService {
     /**
@@ -27,7 +27,7 @@ export class RulesService {
      * Get all rules for a user
      */
     async getRules(userId: string) {
-        return await db
+        return db
             .select({
                 id: rules.id,
                 name: rules.name,

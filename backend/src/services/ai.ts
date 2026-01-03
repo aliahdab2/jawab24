@@ -4,9 +4,16 @@ import { db } from '../db';
 import { aiCache } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { config } from '../config';
-import { AiGenerateRequest, AiGenerateResponse } from '../types';
+import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 
 export class AiService {
+    private logger: Logger = noopLogger;
+
+    /** Set logger for this service instance */
+    setLogger(logger: Logger): void {
+        this.logger = logger;
+    }
+
     /**
      * Generate a hash for a comment to use as cache key
      */
@@ -125,7 +132,9 @@ export class AiService {
                 model: config.ai.model,
             };
         } catch (error) {
-            console.error('AI Service error:', error);
+            this.logger.error('AI Service error', { 
+                error: error instanceof Error ? error.message : String(error) 
+            });
             
             // Return fallback response
             return {

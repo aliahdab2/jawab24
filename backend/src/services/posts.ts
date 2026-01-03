@@ -1,10 +1,17 @@
 import { db } from '../db';
 import { posts, pages } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
-import { CreatePostDTO, UpdatePostDTO } from '../types';
+import { eq, desc } from 'drizzle-orm';
+import { CreatePostDTO, UpdatePostDTO, Logger, noopLogger } from '../types';
 import { facebookService } from './facebook';
 
 export class PostsService {
+    private logger: Logger = noopLogger;
+
+    /** Set logger for this service instance */
+    setLogger(logger: Logger): void {
+        this.logger = logger;
+    }
+
     /**
      * Create a new post
      */
@@ -27,7 +34,7 @@ export class PostsService {
      * Get all posts for a page
      */
     async getPostsByPage(pageId: string) {
-        return await db
+        return db
             .select()
             .from(posts)
             .where(eq(posts.pageId, pageId))
@@ -38,7 +45,7 @@ export class PostsService {
      * Get all posts for a user (across all their pages)
      */
     async getPostsByUser(userId: string) {
-        return await db
+        return db
             .select({
                 id: posts.id,
                 pageId: posts.pageId,
@@ -133,8 +140,8 @@ export class PostsService {
             if (!existing.message && pageAccessToken) {
                 const postContent = await facebookService.getPostContent(facebookPostId, pageAccessToken);
                 if (postContent) {
-                    console.log(`[Posts] Updating post ${facebookPostId} with fetched content`);
-                    return await this.updatePost(existing.id, { message: postContent });
+                    this.logger.info('[Posts] Updating post with fetched content', { facebookPostId });
+                    return this.updatePost(existing.id, { message: postContent });
                 }
             }
             return existing;
@@ -143,11 +150,11 @@ export class PostsService {
         // Try to fetch post content from Facebook if not provided
         let postMessage = message;
         if (!postMessage && pageAccessToken) {
-            console.log(`[Posts] Fetching content for new post ${facebookPostId}`);
+            this.logger.debug('[Posts] Fetching content for new post', { facebookPostId });
             postMessage = await facebookService.getPostContent(facebookPostId, pageAccessToken) || undefined;
         }
 
-        return await this.createPost({
+        return this.createPost({
             pageId,
             facebookPostId,
             message: postMessage,

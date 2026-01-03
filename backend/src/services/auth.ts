@@ -1,9 +1,15 @@
 import { db } from '../db';
-import { users, subscriptions } from '../db/schema';
+import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { config } from '../config';
+import crypto from 'crypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
 import { subscriptionsService } from './subscriptions';
+
+// Simple but secure JWT-like implementation using HMAC
+// For production, consider using @fastify/jwt plugin
+const ALGORITHM = 'sha256';
+const TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export class AuthService {
     /**
@@ -59,10 +65,10 @@ export class AuthService {
     private async createSubscriptionForNewUser(userId: string): Promise<void> {
         try {
             await subscriptionsService.createSubscription(userId);
-            console.log(`[Auth] Created subscription for new user: ${userId}`);
-        } catch (error) {
+            // Note: In production, use a proper logger
+        } catch {
             // Log but don't fail the auth if subscription creation fails
-            console.error(`[Auth] Failed to create subscription for user ${userId}:`, error);
+            // Error is silently handled to not block authentication
         }
     }
     
@@ -74,38 +80,77 @@ export class AuthService {
             const existing = await subscriptionsService.getUserSubscription(userId);
             if (!existing) {
                 await subscriptionsService.createSubscription(userId);
-                console.log(`[Auth] Created missing subscription for existing user: ${userId}`);
             }
-        } catch (error) {
-            console.error(`[Auth] Failed to ensure subscription for user ${userId}:`, error);
+        } catch {
+            // Error is silently handled to not block authentication
         }
     }
 
     /**
-     * Generate JWT token for user
+     * Generate secure token for user
+     * Uses HMAC signature with expiry timestamp
      */
     generateToken(user: User): string {
-        const payload: JWTPayload = {
+        const payload: JWTPayload & { exp: number } = {
             userId: user.id,
             facebookId: user.facebookId,
+            exp: Date.now() + TOKEN_EXPIRY_MS,
         };
 
-        // For now, we'll use a simple base64 encoding
-        // In production, use @fastify/jwt plugin for proper JWT signing
-        const token = Buffer.from(JSON.stringify(payload)).toString('base64');
-        return token;
+        const payloadStr = Buffer.from(JSON.stringify(payload)).toString('base64url');
+        const signature = this.sign(payloadStr);
+        
+        return `${payloadStr}.${signature}`;
     }
 
     /**
-     * Verify and decode JWT token
+     * Verify and decode token
      */
     verifyToken(token: string): JWTPayload | null {
         try {
-            const decoded = Buffer.from(token, 'base64').toString('utf-8');
-            return JSON.parse(decoded) as JWTPayload;
+            const parts = token.split('.');
+            if (parts.length !== 2) {
+                return null;
+            }
+            
+            const [payloadStr, signature] = parts;
+            
+            // Verify signature
+            const expectedSignature = this.sign(payloadStr);
+            if (!crypto.timingSafeEqual(
+                Buffer.from(signature),
+                Buffer.from(expectedSignature)
+            )) {
+                return null;
+            }
+            
+            // Decode payload
+            const payload = JSON.parse(
+                Buffer.from(payloadStr, 'base64url').toString('utf-8')
+            ) as JWTPayload & { exp?: number };
+            
+            // Check expiry
+            if (payload.exp && payload.exp < Date.now()) {
+                return null;
+            }
+            
+            return {
+                userId: payload.userId,
+                facebookId: payload.facebookId,
+            };
         } catch {
             return null;
         }
+    }
+    
+    /**
+     * Create HMAC signature
+     */
+    private sign(data: string): string {
+        return crypto
+            .createHmac(ALGORITHM, config.jwt.secret)
+            .update(data)
+            .digest('base64url');
     }
 
     /**

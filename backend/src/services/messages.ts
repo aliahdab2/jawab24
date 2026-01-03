@@ -1,4 +1,4 @@
-import { eq, desc, and, sql, asc } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages } from '../db/schema';
 import { ConversationMessage } from '../types';
@@ -253,16 +253,16 @@ export class MessagesService {
     /**
      * Map database record to Message interface
      */
-    private mapToMessage(record: any): Message {
+    private mapToMessage(record: typeof messages.$inferSelect): Message {
         return {
             id: record.id,
-            pageId: record.pageId,
+            pageId: record.pageId ?? '',
             facebookMessageId: record.facebookMessageId,
             senderId: record.senderId,
-            senderName: record.senderName,
+            senderName: record.senderName ?? null,
             message: record.message,
             direction: record.direction as 'incoming' | 'outgoing',
-            replied: record.replied,
+            replied: record.replied ?? false,
             replyText: record.replyText,
             replyMethod: record.replyMethod as 'template' | 'ai' | 'manual' | null,
             createdTime: record.createdTime,

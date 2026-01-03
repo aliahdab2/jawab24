@@ -1,10 +1,18 @@
 import axios from 'axios';
 import { config } from '../config';
-import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse } from '../types';
+import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, Logger } from '../types';
+import { noopLogger } from '../types';
 
 const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v18.0';
 
 export class FacebookService {
+    private logger: Logger = noopLogger;
+
+    /** Set logger for this service instance */
+    setLogger(logger: Logger): void {
+        this.logger = logger;
+    }
+
     /**
      * Exchange OAuth code for access token
      */
@@ -54,7 +62,7 @@ export class FacebookService {
      */
     async getUserPages(accessToken: string): Promise<FacebookPagesResponse> {
         try {
-            console.log('[Facebook] Fetching user pages...');
+            this.logger.debug('[Facebook] Fetching user pages');
             const response = await axios.get<FacebookPagesResponse>(`${FACEBOOK_GRAPH_API}/me/accounts`, {
                 params: {
                     access_token: accessToken,
@@ -62,15 +70,18 @@ export class FacebookService {
                 },
             });
 
-            console.log(`[Facebook] Found ${response.data.data?.length || 0} pages`);
+            const pageCount = response.data.data?.length || 0;
+            this.logger.info('[Facebook] Found pages', { count: pageCount });
             if (response.data.data?.length) {
-                console.log('[Facebook] Pages:', response.data.data.map(p => p.name).join(', '));
+                this.logger.debug('[Facebook] Page names', { pages: response.data.data.map(p => p.name) });
             }
 
             return response.data;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                console.error('[Facebook] API Error:', error.response?.data);
+                this.logger.error('[Facebook] API Error fetching pages', { 
+                    error: error.response?.data?.error?.message || error.message 
+                });
                 throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
             }
             throw error;
@@ -126,7 +137,7 @@ export class FacebookService {
      */
     async getPostContent(postId: string, pageAccessToken: string): Promise<string | null> {
         try {
-            console.log(`[Facebook] Fetching post content for ${postId}`);
+            this.logger.debug('[Facebook] Fetching post content', { postId });
             const response = await axios.get(`${FACEBOOK_GRAPH_API}/${postId}`, {
                 params: {
                     fields: 'message,story,created_time',
@@ -135,11 +146,18 @@ export class FacebookService {
             });
 
             const message = response.data.message || response.data.story || null;
-            console.log(`[Facebook] Post content: ${message ? message.substring(0, 100) + '...' : '(no content)'}`);
+            this.logger.debug('[Facebook] Post content fetched', { 
+                postId, 
+                hasContent: !!message,
+                contentPreview: message ? message.substring(0, 50) : null
+            });
             return message;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                console.error('[Facebook] Error fetching post:', error.response?.data);
+                this.logger.error('[Facebook] Error fetching post', { 
+                    postId, 
+                    error: error.response?.data?.error?.message || error.message 
+                });
                 // Don't throw - just return null if we can't fetch the post
                 return null;
             }
@@ -165,7 +183,10 @@ export class FacebookService {
             return response.data;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                console.error('[Facebook] Error fetching comment:', error.response?.data);
+                this.logger.error('[Facebook] Error fetching comment', { 
+                    commentId, 
+                    error: error.response?.data?.error?.message || error.message 
+                });
                 return null;
             }
             return null;

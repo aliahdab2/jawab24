@@ -1,14 +1,15 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { paymentController } from '../controllers/payment';
 import { authenticate } from '../middleware/auth';
+import { CreateCheckoutSessionRequest } from '../types/payment';
 
 export default async function paymentRoutes(fastify: FastifyInstance) {
     // Create Stripe Checkout Session
-    fastify.post(
+    fastify.post<{ Body: CreateCheckoutSessionRequest }>(
         '/create-checkout-session',
         { preHandler: [authenticate] },
-        async (request: FastifyRequest, reply: FastifyReply) => {
-            return paymentController.createCheckoutSession(request as any, reply);
+        async (request, reply) => {
+            return paymentController.createCheckoutSession(request, reply);
         }
     );
 

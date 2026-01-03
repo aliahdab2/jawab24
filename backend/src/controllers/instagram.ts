@@ -4,7 +4,7 @@ import { pagesService } from '../services/pages';
 import { instagramService } from '../services/instagram';
 import { db } from '../db';
 import { instagramMedia, instagramComments } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 
 export class InstagramController {
     /**
@@ -15,7 +15,11 @@ export class InstagramController {
         request: FastifyRequest<{ Params: { pageId: string } }>, 
         reply: FastifyReply
     ) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { pageId } = request.params;
 
         try {
@@ -54,7 +58,11 @@ export class InstagramController {
         request: FastifyRequest<{ Params: { mediaId: string } }>, 
         reply: FastifyReply
     ) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { mediaId } = request.params;
 
         try {
@@ -69,7 +77,11 @@ export class InstagramController {
             }
 
             // Verify page ownership
-            const page = await pagesService.getPage(userId, mediaItem[0].pageId!);
+            const pageId = mediaItem[0].pageId;
+            if (!pageId) {
+                return reply.status(404).send({ error: 'Media has no associated page' });
+            }
+            const page = await pagesService.getPage(userId, pageId);
             if (!page) {
                 return reply.status(403).send({ error: 'Access denied' });
             }
@@ -99,7 +111,11 @@ export class InstagramController {
         }>, 
         reply: FastifyReply
     ) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { commentId } = request.params;
         const { message } = request.body;
 
@@ -119,17 +135,25 @@ export class InstagramController {
             }
 
             // Get media to get page access
+            const commentMediaId = comment[0].mediaId;
+            if (!commentMediaId) {
+                return reply.status(404).send({ error: 'Comment has no associated media' });
+            }
             const media = await db
                 .select()
                 .from(instagramMedia)
-                .where(eq(instagramMedia.id, comment[0].mediaId!));
+                .where(eq(instagramMedia.id, commentMediaId));
 
             if (!media[0]) {
                 return reply.status(404).send({ error: 'Media not found' });
             }
 
             // Verify page ownership and get access token
-            const page = await pagesService.getPage(userId, media[0].pageId!);
+            const mediaPageId = media[0].pageId;
+            if (!mediaPageId) {
+                return reply.status(404).send({ error: 'Media has no associated page' });
+            }
+            const page = await pagesService.getPage(userId, mediaPageId);
             if (!page) {
                 return reply.status(403).send({ error: 'Access denied' });
             }
@@ -179,7 +203,11 @@ export class InstagramController {
         }>, 
         reply: FastifyReply
     ) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { id } = request.params;
         const { enabled } = request.body;
 
@@ -203,7 +231,11 @@ export class InstagramController {
         request: FastifyRequest<{ Params: { pageId: string } }>, 
         reply: FastifyReply
     ) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { pageId } = request.params;
 
         try {

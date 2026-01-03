@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { instagramController } from '../controllers/instagram';
 import { authenticate } from '../middleware/auth';
 

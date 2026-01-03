@@ -6,9 +6,14 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/autoreply';
-console.log('DB Connection String:', connectionString);
+// Note: Connection string contains credentials - never log in production
 
-
-// Disable prefetch as it is not supported for "Transaction" pool mode
-export const client = postgres(connectionString, { prepare: false });
+// Configure connection pool for production
+const isProduction = process.env.NODE_ENV === 'production';
+export const client = postgres(connectionString, { 
+    prepare: false, // Required for "Transaction" pool mode
+    max: isProduction ? 20 : 5, // Connection pool size
+    idle_timeout: 20, // Close idle connections after 20 seconds
+    connect_timeout: 10, // Timeout for new connections
+});
 export const db = drizzle(client, { schema });

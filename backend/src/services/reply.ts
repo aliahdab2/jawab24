@@ -9,27 +9,18 @@ import { facebookService } from './facebook';
 import { settingsService } from './settings';
 import { messagesService } from './messages';
 import { subscriptionsService } from './subscriptions';
-import { config } from '../config';
+import { Logger, noopLogger, ReplyResult, MessageResult } from '../types';
 
 const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v18.0';
 
-export interface ReplyResult {
-    success: boolean;
-    commentId: string;
-    replyText?: string;
-    replyMethod?: 'template' | 'ai' | 'manual';
-    error?: string;
-}
-
-export interface MessageResult {
-    success: boolean;
-    messageId: string; // Facebook Message ID (mid)
-    replyText?: string;
-    replyMethod?: 'template' | 'ai' | 'manual';
-    error?: string;
-}
-
 export class ReplyService {
+    private logger: Logger = noopLogger;
+
+    /** Set logger for this service instance */
+    setLogger(logger: Logger): void {
+        this.logger = logger;
+    }
+
     /**
      * Process an incoming private message
      */
@@ -50,8 +41,14 @@ export class ReplyService {
                 return { success: false, messageId, error: 'Auto-reply disabled for this page' };
             }
 
+            // Ensure page has an associated user
+            if (!page.userId) {
+                return { success: false, messageId, error: 'Page has no associated user' };
+            }
+            const userId = page.userId;
+
             // 2. Check user settings for messages auto-reply
-            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(page.userId!);
+            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(userId);
             
             // Store the incoming message regardless of auto-reply status
             const { message: storedMessage, isNew } = await messagesService.findOrCreateFromWebhook(
@@ -63,7 +60,7 @@ export class ReplyService {
 
             if (!isMessagesEnabled) {
                 // Send away message if configured
-                const awayMessage = await settingsService.getAwayMessage(page.userId!);
+                const awayMessage = await settingsService.getAwayMessage(userId);
                 if (awayMessage && isNew) {
                     await facebookService.sendPrivateMessage(
                         page.accessToken,
@@ -81,20 +78,20 @@ export class ReplyService {
             }
 
             // 3. Get reply delay
-            const replyDelay = await settingsService.getReplyDelay(page.userId!);
+            const replyDelay = await settingsService.getReplyDelay(userId);
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }
 
             // 4. Try to find a matching rule
-            const matchingRule = await rulesService.findMatchingRule(page.userId!, messageText);
+            const matchingRule = await rulesService.findMatchingRule(userId, messageText);
 
             let replyText: string | null = null;
             let replyMethod: 'template' | 'ai' = 'ai';
 
             // 5. If rule found with template, use template
             if (matchingRule && matchingRule.templateId) {
-                const template = await templatesService.getTemplate(page.userId!, matchingRule.templateId);
+                const template = await templatesService.getTemplate(userId, matchingRule.templateId);
                 
                 if (template && template.translations) {
                     const translations = template.translations as Record<string, string>;
@@ -105,12 +102,12 @@ export class ReplyService {
             }
 
             // 6. If no template reply, use AI with conversation context
-            const userSettings = await settingsService.getSettings(page.userId!);
+            const userSettings = await settingsService.getSettings(userId);
             if (!replyText && userSettings.aiEnabled) {
                 // Check AI usage limits before generating reply
-                const limitCheck = await subscriptionsService.canUseAiReplies(page.userId!);
+                const limitCheck = await subscriptionsService.canUseAiReplies(userId);
                 if (!limitCheck.allowed) {
-                    console.log(`[Reply] AI limit reached for user: ${limitCheck.reason}`);
+                    this.logger.info('[Reply] AI limit reached for user', { reason: limitCheck.reason });
                     // Fall back to a generic message when limit is reached
                     replyText = 'Thank you for your message! We will get back to you soon.';
                     replyMethod = 'template';
@@ -134,7 +131,7 @@ export class ReplyService {
                     replyMethod = 'ai';
                     
                     // Track AI usage
-                    await subscriptionsService.incrementAiReplies(page.userId!);
+                    await subscriptionsService.incrementAiReplies(userId);
                 }
             }
 
@@ -162,7 +159,10 @@ export class ReplyService {
             };
 
         } catch (error) {
-            console.error('Error processing message:', error);
+            this.logger.error('Error processing message', { 
+                messageId,
+                error: error instanceof Error ? error.message : String(error) 
+            });
             return {
                 success: false,
                 messageId,
@@ -201,8 +201,14 @@ export class ReplyService {
                 return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this page' };
             }
 
+            // Ensure page has an associated user
+            if (!page.userId) {
+                return { success: false, commentId: facebookCommentId, error: 'Page has no associated user' };
+            }
+            const pageUserId = page.userId;
+
             // 2. Check user settings for comments auto-reply
-            const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(page.userId!);
+            const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(pageUserId);
             
             // 3. Find or create the post (WITHOUT fetching content yet - we'll do it lazily)
             let post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined);
@@ -231,13 +237,13 @@ export class ReplyService {
             }
 
             // 5. Get reply delay
-            const replyDelay = await settingsService.getReplyDelay(page.userId!);
+            const replyDelay = await settingsService.getReplyDelay(pageUserId);
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }
 
             // 6. Try to find a matching rule FIRST (no need for post content)
-            const matchingRule = await rulesService.findMatchingRule(page.userId!, commentMessage);
+            const matchingRule = await rulesService.findMatchingRule(pageUserId, commentMessage);
 
             let replyText: string | null = null;
             let replyMethod: 'template' | 'ai' = 'ai';
@@ -245,7 +251,7 @@ export class ReplyService {
 
             // 7. If rule found with template, use template (NO API CALL NEEDED!)
             if (matchingRule && matchingRule.templateId) {
-                const template = await templatesService.getTemplate(page.userId!, matchingRule.templateId);
+                const template = await templatesService.getTemplate(pageUserId, matchingRule.templateId);
                 
                 if (template && template.translations) {
                     // Try to get translation based on detected language or default to English
@@ -253,24 +259,24 @@ export class ReplyService {
                     replyText = translations['en'] || translations['ar'] || Object.values(translations)[0];
                     replyMethod = 'template';
                     templateId = template.id;
-                    console.log(`[Reply] Using template "${template.name}" - no API call for post content needed`);
+                    this.logger.debug('[Reply] Using template - no API call for post content needed', { templateName: template.name });
                 }
             }
 
             // 8. If no template reply, use AI with knowledge base (check user settings)
-            const userSettings = await settingsService.getSettings(page.userId!);
+            const userSettings = await settingsService.getSettings(pageUserId);
             if (!replyText && userSettings.aiEnabled) {
                 // Check AI usage limits before generating reply
-                const limitCheck = await subscriptionsService.canUseAiReplies(page.userId!);
+                const limitCheck = await subscriptionsService.canUseAiReplies(pageUserId);
                 if (!limitCheck.allowed) {
-                    console.log(`[Reply] AI limit reached for user: ${limitCheck.reason}`);
+                    this.logger.info('[Reply] AI limit reached for user', { reason: limitCheck.reason });
                     // Fall back to a generic message when limit is reached
                     replyText = 'Thank you for your comment!';
                     replyMethod = 'template';
                 } else {
                     // NOW we need post content - fetch it lazily
                     if (!post.message) {
-                        console.log(`[Reply] AI enabled, fetching post content for context...`);
+                        this.logger.debug('[Reply] AI enabled, fetching post content for context');
                         post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined, page.accessToken);
                     }
                     
@@ -286,7 +292,7 @@ export class ReplyService {
                     replyMethod = 'ai';
                     
                     // Track AI usage
-                    await subscriptionsService.incrementAiReplies(page.userId!);
+                    await subscriptionsService.incrementAiReplies(pageUserId);
                 }
             }
 
@@ -294,7 +300,7 @@ export class ReplyService {
             if (!replyText) {
                 replyText = 'Thank you for your comment!';
                 replyMethod = 'template';
-                console.log(`[Reply] Using fallback reply - no API call for post content needed`);
+                this.logger.debug('[Reply] Using fallback reply - no API call for post content needed');
             }
 
             // 10. Post reply to Facebook
@@ -329,7 +335,10 @@ export class ReplyService {
             };
 
         } catch (error) {
-            console.error('Error processing comment:', error);
+            this.logger.error('Error processing comment', { 
+                facebookCommentId,
+                error: error instanceof Error ? error.message : String(error) 
+            });
             return {
                 success: false,
                 commentId: facebookCommentId,
@@ -360,7 +369,10 @@ export class ReplyService {
             );
             return true;
         } catch (error) {
-            console.error('Failed to post reply to Facebook:', error);
+            this.logger.error('Failed to post reply to Facebook', { 
+                commentId,
+                error: error instanceof Error ? error.message : String(error) 
+            });
             return false;
         }
     }

@@ -71,7 +71,7 @@ export class StripeService {
         if (!stripe) {
             throw new Error('Stripe is not configured.');
         }
-        return await stripe.subscriptions.retrieve(subscriptionId);
+        return stripe.subscriptions.retrieve(subscriptionId);
     }
 
     /**
@@ -81,7 +81,7 @@ export class StripeService {
         if (!stripe) {
             throw new Error('Stripe is not configured.');
         }
-        return await stripe.subscriptions.update(subscriptionId, {
+        return stripe.subscriptions.update(subscriptionId, {
             cancel_at_period_end: true,
         });
     }
@@ -93,7 +93,7 @@ export class StripeService {
         if (!stripe) {
             throw new Error('Stripe is not configured.');
         }
-        return await stripe.subscriptions.update(subscriptionId, {
+        return stripe.subscriptions.update(subscriptionId, {
             cancel_at_period_end: false,
         });
     }
@@ -108,7 +108,7 @@ export class StripeService {
         if (!stripe) {
             throw new Error('Stripe is not configured.');
         }
-        return await stripe.billingPortal.sessions.create({
+        return stripe.billingPortal.sessions.create({
             customer: customerId,
             return_url: returnUrl,
         });

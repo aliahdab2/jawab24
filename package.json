@@ -14,16 +14,27 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "lint": "npm run lint --workspaces",
+    "lint:fix": "npm run lint:fix --workspaces --if-present",
     "test": "npm run test --workspaces",
+    "type-check": "npm run type-check --workspaces --if-present",
     "pre-deploy": "./scripts/pre-deploy-check.sh",
-    "check:esm": "grep -E '\"(uuid|node-fetch|chalk|ora|execa|got|globby)\":' backend/package.json && echo '⚠️  ESM-only packages found!' || echo '✅ No ESM-only packages'"
+    "check:esm": "grep -E '\"(uuid|node-fetch|chalk|ora|execa|got|globby)\":' backend/package.json && echo '⚠️  ESM-only packages found!' || echo '✅ No ESM-only packages'",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2"
+  },
+  "lint-staged": {
+    "backend/src/**/*.ts": [
+      "bash -c 'cd backend && npx eslint --fix \"$@\"' --",
+      "bash -c 'cd backend && npx tsc --noEmit'"
+    ],
+    "ai-worker/src/**/*.ts": [
+      "bash -c 'cd ai-worker && npx eslint --fix \"$@\"' --"
+    ],
+    "frontend/src/**/*.{ts,tsx}": [
+      "bash -c 'cd frontend && npx eslint --fix \"$@\"' --"
+    ]
   }
 }
-
-
-
-
-
-
-
-

@@ -4,10 +4,11 @@
   "description": "Jawab24 Backend API",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "npm run lint && npm run type-check && tsc",
     "start": "node dist/index.js",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
     "type-check": "tsc --noEmit",
     "db:generate": "drizzle-kit generate:pg",
     "db:push": "drizzle-kit push:pg",
@@ -15,7 +16,8 @@
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check:pg",
     "db:validate": "ts-node scripts/validate-migrations.ts",
-    "test": "vitest"
+    "test": "vitest",
+    "precommit": "npm run lint && npm run type-check"
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",

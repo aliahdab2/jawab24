@@ -1,6 +1,11 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { messagesService } from '../services/messages';
 
+/** Authenticated request with user info */
+interface AuthenticatedRequest extends FastifyRequest {
+    user: { id: string };
+}
+
 export class MessagesController {
     /**
      * Get all messages
@@ -8,12 +13,12 @@ export class MessagesController {
      */
     async getAll(request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) {
         try {
-            const userId = (request as any).user.id;
+            const userId = (request as AuthenticatedRequest).user.id;
             const limit = request.query.limit ? parseInt(request.query.limit) : 50;
             const messages = await messagesService.getMessages(userId, limit);
             return reply.send(messages);
         } catch (error) {
-            console.error('Error getting messages:', error);
+            request.log.error({ error: String(error) }, 'Error getting messages');
             return reply.status(500).send({ error: 'Failed to get messages' });
         }
     }
@@ -24,11 +29,11 @@ export class MessagesController {
      */
     async getStats(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request as any).user.id;
+            const userId = (request as AuthenticatedRequest).user.id;
             const stats = await messagesService.getStats(userId);
             return reply.send(stats);
         } catch (error) {
-            console.error('Error getting message stats:', error);
+            request.log.error({ error: String(error) }, 'Error getting message stats');
             return reply.status(500).send({ error: 'Failed to get message stats' });
         }
     }
@@ -53,7 +58,7 @@ export class MessagesController {
             const messages = await messagesService.getConversation(pageId, senderId, limit);
             return reply.send(messages);
         } catch (error) {
-            console.error('Error getting conversation:', error);
+            request.log.error({ error: String(error) }, 'Error getting conversation');
             return reply.status(500).send({ error: 'Failed to get conversation' });
         }
     }

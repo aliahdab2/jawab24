@@ -1,7 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { postsService } from '../services/posts';
 import { pagesService } from '../services/pages';
-import { CreatePostDTO, UpdatePostDTO } from '../types';
+import { UpdatePostDTO } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 
 export class PostsController {
@@ -10,7 +10,11 @@ export class PostsController {
      * GET /posts
      */
     async getAll(request: FastifyRequest, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         
         try {
             const posts = await postsService.getPostsByUser(userId);
@@ -26,7 +30,11 @@ export class PostsController {
      * GET /pages/:pageId/posts
      */
     async getByPage(request: FastifyRequest<{ Params: { pageId: string } }>, reply: FastifyReply) {
-        const { userId } = (request as AuthenticatedRequest).user!;
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { userId } = user;
         const { pageId } = request.params;
         
         try {

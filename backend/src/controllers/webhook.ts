@@ -2,11 +2,21 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
 import { replyService } from '../services/reply';
 import { instagramReplyService } from '../services/instagramReply';
+import { Logger, noopLogger, createRequestLogger } from '../types';
+
+/** Messaging event from Facebook/Instagram webhook */
+interface MessagingEvent {
+    sender?: { id: string };
+    message?: {
+        mid: string;
+        text?: string;
+    };
+}
 
 interface WebhookEntry {
     id: string;
     time: number;
-    messaging?: any[];
+    messaging?: MessagingEvent[];
     changes?: WebhookChange[];
 }
 
@@ -40,18 +50,31 @@ interface WebhookBody {
 }
 
 export class WebhookController {
+    private logger: Logger = noopLogger;
+
+    /** Set logger for the current request context */
+    private setLogger(request: FastifyRequest): void {
+        this.logger = createRequestLogger(request.log);
+    }
+
+    /** Get logger */
+    private log(): Logger {
+        return this.logger;
+    }
+
     /**
      * Verify webhook token (Facebook challenge)
      * GET /webhook
      */
-    async verifyWebhook(request: FastifyRequest<{ Querystring: { 'hub.mode': string; 'hub.verify_token': string; 'hub.challenge': string } }>, reply: FastifyReply) {
+    async verifyWebhook(request: FastifyRequest<{ Querystring: { 'hub.mode'?: string; 'hub.verify_token'?: string; 'hub.challenge'?: string } }>, reply: FastifyReply) {
+        this.setLogger(request);
         const mode = request.query['hub.mode'];
         const token = request.query['hub.verify_token'];
         const challenge = request.query['hub.challenge'];
 
         if (mode && token) {
             if (mode === 'subscribe' && token === config.facebook.webhookVerifyToken) {
-                console.log('WEBHOOK_VERIFIED');
+                this.log().info('Webhook verified successfully');
                 return reply.status(200).send(challenge);
             } else {
                 return reply.status(403).send('Verification token mismatch');
@@ -65,28 +88,29 @@ export class WebhookController {
      * POST /webhook
      */
     async handleWebhook(request: FastifyRequest, reply: FastifyReply) {
+        this.setLogger(request);
         const body = request.body as WebhookBody;
 
-        // Log the webhook for debugging
-        console.log('Received webhook:', JSON.stringify(body, null, 2));
+        // Log the webhook for debugging (only in debug level)
+        this.log().debug('Received webhook', { object: body.object, entryCount: body.entry?.length });
 
         if (body.object === 'page') {
             // Process Facebook webhooks asynchronously
             this.processWebhookAsync(body.entry).catch(err => {
-                console.error('Error processing Facebook webhook:', err);
+                this.log().error('Error processing Facebook webhook', { error: String(err) });
             });
 
             return reply.status(200).send('EVENT_RECEIVED');
         } else if (body.object === 'instagram') {
             // Process Instagram webhooks asynchronously
             this.processInstagramWebhookAsync(body.entry).catch(err => {
-                console.error('Error processing Instagram webhook:', err);
+                this.log().error('Error processing Instagram webhook', { error: String(err) });
             });
 
             return reply.status(200).send('EVENT_RECEIVED');
         } else {
             // Return a '404 Not Found' if event is not from a page or instagram subscription
-            console.log(`Unknown webhook object type: ${body.object}`);
+            this.log().info('Unknown webhook object type', { objectType: body.object });
             return reply.status(404).send();
         }
     }
@@ -120,12 +144,12 @@ export class WebhookController {
     /**
      * Process a messaging event
      */
-    private async processMessage(pageId: string, event: any) {
+    private async processMessage(pageId: string, event: MessagingEvent) {
         const senderId = event.sender?.id;
         const messageText = event.message?.text;
         const messageId = event.message?.mid;
 
-        if (!senderId || !messageText) {
+        if (!senderId || !messageText || !messageId) {
             return;
         }
 
@@ -135,7 +159,7 @@ export class WebhookController {
         // Since we don't have the page's own ID easily available here without lookup, 
         // we assume the event is from a user.
 
-        console.log(`Processing message from ${senderId}: ${messageText}`);
+        this.log().info('Processing message', { senderId, messageId, textLength: messageText.length });
 
         try {
             const result = await replyService.processMessage(
@@ -146,12 +170,12 @@ export class WebhookController {
             );
 
             if (result.success) {
-                console.log(`Successfully replied to message ${messageId}`);
+                this.log().info('Successfully replied to message', { messageId });
             } else {
-                console.log(`Failed to reply to message ${messageId}: ${result.error}`);
+                this.log().info('Failed to reply to message', { messageId, error: result.error });
             }
         } catch (error) {
-            console.error(`Error processing message ${messageId}:`, error);
+            this.log().error('Error processing message', { messageId, error: String(error) });
         }
     }
 
@@ -159,7 +183,11 @@ export class WebhookController {
      * Process a single change event
      */
     private async processChange(pageId: string, change: WebhookChange) {
-        console.log(`Processing change: ${change.field} - ${change.value.item} - ${change.value.verb}`);
+        this.log().debug('Processing change', { 
+            field: change.field, 
+            item: change.value.item, 
+            verb: change.value.verb 
+        });
 
         // Only process feed changes
         if (change.field !== 'feed') {
@@ -175,7 +203,7 @@ export class WebhookController {
 
         // Could also handle new posts here if needed
         if (value.item === 'post' && value.verb === 'add') {
-            console.log('New post detected:', value.post_id);
+            this.log().info('New post detected', { postId: value.post_id });
             // Posts are handled when comments come in
         }
     }
@@ -187,17 +215,17 @@ export class WebhookController {
         const { comment_id, post_id, message, from } = value;
 
         if (!comment_id || !post_id || !message) {
-            console.log('Missing required fields for comment processing');
+            this.log().debug('Missing required fields for comment processing', { comment_id, post_id, hasMessage: !!message });
             return;
         }
 
         // Don't reply to our own comments (page's comments)
         if (from?.id === pageId) {
-            console.log('Skipping own comment');
+            this.log().debug('Skipping own comment', { comment_id });
             return;
         }
 
-        console.log(`Processing new comment: ${comment_id} on post ${post_id}`);
+        this.log().info('Processing new comment', { comment_id, post_id });
 
         try {
             const result = await replyService.processComment(
@@ -210,12 +238,12 @@ export class WebhookController {
             );
 
             if (result.success) {
-                console.log(`Successfully replied to comment ${comment_id} with method: ${result.replyMethod}`);
+                this.log().info('Successfully replied to comment', { comment_id, replyMethod: result.replyMethod });
             } else {
-                console.log(`Failed to reply to comment ${comment_id}: ${result.error}`);
+                this.log().info('Failed to reply to comment', { comment_id, error: result.error });
             }
         } catch (error) {
-            console.error(`Error processing comment ${comment_id}:`, error);
+            this.log().error('Error processing comment', { comment_id, error: String(error) });
         }
     }
 
@@ -250,7 +278,7 @@ export class WebhookController {
      * Process an Instagram change event
      */
     private async processInstagramChange(instagramAccountId: string, change: WebhookChange) {
-        console.log(`[Instagram] Processing change: ${change.field}`);
+        this.log().debug('[Instagram] Processing change', { field: change.field });
 
         // Handle comments on Instagram media
         if (change.field === 'comments') {
@@ -259,7 +287,7 @@ export class WebhookController {
 
         // Handle mentions
         if (change.field === 'mentions') {
-            console.log('[Instagram] Mention received - not processing for now');
+            this.log().debug('[Instagram] Mention received - not processing for now');
         }
     }
 
@@ -273,17 +301,17 @@ export class WebhookController {
         const from = value.from;
 
         if (!commentId || !commentText || !mediaId) {
-            console.log('[Instagram] Missing required fields for comment processing');
+            this.log().debug('[Instagram] Missing required fields for comment processing', { commentId, mediaId, hasText: !!commentText });
             return;
         }
 
         // Don't reply to our own comments
         if (from?.id === instagramAccountId) {
-            console.log('[Instagram] Skipping own comment');
+            this.log().debug('[Instagram] Skipping own comment', { commentId });
             return;
         }
 
-        console.log(`[Instagram] Processing new comment: ${commentId} on media ${mediaId}`);
+        this.log().info('[Instagram] Processing new comment', { commentId, mediaId });
 
         try {
             const result = await instagramReplyService.processComment(
@@ -296,28 +324,28 @@ export class WebhookController {
             );
 
             if (result.success) {
-                console.log(`[Instagram] Successfully replied to comment ${commentId}`);
+                this.log().info('[Instagram] Successfully replied to comment', { commentId });
             } else {
-                console.log(`[Instagram] Failed to reply to comment ${commentId}: ${result.error}`);
+                this.log().info('[Instagram] Failed to reply to comment', { commentId, error: result.error });
             }
         } catch (error) {
-            console.error(`[Instagram] Error processing comment ${commentId}:`, error);
+            this.log().error('[Instagram] Error processing comment', { commentId, error: String(error) });
         }
     }
 
     /**
      * Process an Instagram DM
      */
-    private async processInstagramMessage(instagramAccountId: string, event: any) {
+    private async processInstagramMessage(instagramAccountId: string, event: MessagingEvent) {
         const senderId = event.sender?.id;
         const messageText = event.message?.text;
         const messageId = event.message?.mid;
 
-        if (!senderId || !messageText) {
+        if (!senderId || !messageText || !messageId) {
             return;
         }
 
-        console.log(`[Instagram] Processing message from ${senderId}: ${messageText}`);
+        this.log().info('[Instagram] Processing message', { senderId, messageId, textLength: messageText.length });
 
         try {
             const result = await instagramReplyService.processMessage(
@@ -328,12 +356,12 @@ export class WebhookController {
             );
 
             if (result.success) {
-                console.log(`[Instagram] Successfully replied to message ${messageId}`);
+                this.log().info('[Instagram] Successfully replied to message', { messageId });
             } else {
-                console.log(`[Instagram] Failed to reply to message ${messageId}: ${result.error}`);
+                this.log().info('[Instagram] Failed to reply to message', { messageId, error: result.error });
             }
         } catch (error) {
-            console.error(`[Instagram] Error processing message ${messageId}:`, error);
+            this.log().error('[Instagram] Error processing message', { messageId, error: String(error) });
         }
     }
 }

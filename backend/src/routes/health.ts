@@ -2,6 +2,8 @@ import { FastifyPluginAsync } from 'fastify';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
 import { config } from '../config';
+import { runAllCleanupTasks, getAiCacheStats } from '../utils/cleanup';
+import { createRequestLogger } from '../types';
 
 const startTime = Date.now();
 
@@ -52,7 +54,7 @@ function checkAI(): ServiceStatus {
     return { status: 'not_configured', message: 'AI service disabled' };
 }
 
-const healthRoutes: FastifyPluginAsync = async (fastify, opts) => {
+const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
     /**
      * Comprehensive health check
      * GET /health
@@ -102,6 +104,60 @@ const healthRoutes: FastifyPluginAsync = async (fastify, opts) => {
         }
         
         return reply.status(503).send({ status: 'not_ready', reason: 'Database unavailable' });
+    });
+
+    /**
+     * Database cleanup endpoint
+     * POST /health/cleanup
+     * Requires a secret token for security
+     */
+    fastify.post<{ Headers: { 'x-cleanup-token'?: string } }>('/health/cleanup', async (request, reply) => {
+        // Simple token-based auth for cleanup endpoint
+        const cleanupToken = process.env.CLEANUP_SECRET_TOKEN;
+        const providedToken = request.headers['x-cleanup-token'];
+        
+        if (!cleanupToken) {
+            return reply.status(503).send({ error: 'Cleanup not configured. Set CLEANUP_SECRET_TOKEN environment variable.' });
+        }
+        
+        if (providedToken !== cleanupToken) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        
+        try {
+            // Pass Fastify logger for proper structured logging
+            const logger = createRequestLogger(request.log);
+            
+            const results = await runAllCleanupTasks(undefined, logger);
+            const cacheStats = await getAiCacheStats();
+            
+            return reply.send({
+                success: true,
+                timestamp: new Date().toISOString(),
+                results,
+                cacheStats,
+            });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ 
+                error: 'Cleanup failed',
+                message: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
+    });
+
+    /**
+     * Get AI cache statistics
+     * GET /health/cache-stats
+     */
+    fastify.get('/health/cache-stats', async (request, reply) => {
+        try {
+            const stats = await getAiCacheStats();
+            return reply.send(stats);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to get cache stats' });
+        }
     });
 };
 
