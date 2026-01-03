@@ -40,6 +40,23 @@ get_inactive_env() {
     fi
 }
 
+# Wait for Docker DNS to resolve container names in nginx
+wait_for_dns() {
+    local env=$1
+    local max_wait=10
+    log "Waiting for Docker DNS to resolve $env containers..."
+    for i in $(seq 1 $max_wait); do
+        if docker exec jawab24-nginx getent hosts jawab24-backend-$env > /dev/null 2>&1; then
+            log "✅ DNS resolution ready for $env"
+            return 0
+        fi
+        warn "⏳ DNS not ready yet... attempt $i/$max_wait"
+        sleep 1
+    done
+    warn "⚠️  DNS resolution may not be fully ready"
+    return 1
+}
+
 # Health check function - checks containers directly to avoid nginx redirect issues
 health_check() {
     local env=$1
@@ -213,23 +230,48 @@ main() {
     # Step 3: Switch traffic
     switch_traffic "$DEPLOY_ENV"
     
-    # Step 4: Verify via nginx (multiple checks for reliability)
-    log "Verifying traffic switch..."
+    # Step 4: Wait for DNS propagation and verify via nginx
+    log "Verifying traffic switch (waiting for DNS propagation)..."
+    
+    # Wait for Docker DNS to be ready
+    wait_for_dns "$DEPLOY_ENV" || true  # Continue even if timeout (might still work)
+    
+    # Give nginx time to pick up new upstream config after reload
+    sleep 3
+    
     VERIFY_SUCCESS=0
-    for i in {1..5}; do
-        sleep 1
-        if curl -sf http://localhost/api/health > /dev/null 2>&1 && \
-           curl -sf http://localhost/ > /dev/null 2>&1; then
+    for i in {1..10}; do
+        # Check nginx can reach backend - capture actual response for debugging
+        HEALTH_RESPONSE=$(curl -sf http://localhost/api/health 2>&1) || HEALTH_RESPONSE=""
+        FRONTEND_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost/ 2>&1) || FRONTEND_CODE="000"
+        
+        if [ -n "$HEALTH_RESPONSE" ] && [ "$FRONTEND_CODE" = "200" ]; then
             VERIFY_SUCCESS=1
+            log "✅ API responding: $(echo "$HEALTH_RESPONSE" | head -c 100)..."
+            log "✅ Frontend responding: HTTP $FRONTEND_CODE"
             break
         fi
-        log "Retry $i/5..."
+        
+        # Show what's happening for debugging
+        if [ -z "$HEALTH_RESPONSE" ]; then
+            warn "Retry $i/10 - API: no response, Frontend: HTTP $FRONTEND_CODE"
+        else
+            warn "Retry $i/10 - API: responding, Frontend: HTTP $FRONTEND_CODE"
+        fi
+        
+        sleep 2
     done
     
     if [ $VERIFY_SUCCESS -eq 1 ]; then
-        log "✅ Traffic switch verified - services responding"
+        log "✅ Traffic switch verified - all services responding via nginx"
     else
-        error "❌ Traffic switch verification failed after 5 attempts!"
+        error "❌ Traffic switch verification failed after 10 attempts!"
+        
+        # Additional debugging info
+        error "Debug: Checking if containers are still healthy..."
+        docker exec jawab24-backend-$DEPLOY_ENV wget -q -O- http://localhost:3000/health 2>/dev/null && log "Backend container is healthy" || error "Backend container not responding"
+        docker exec jawab24-frontend-$DEPLOY_ENV wget -q --spider http://localhost:3001/ 2>/dev/null && log "Frontend container is healthy" || error "Frontend container not responding"
+        
         warn "Rolling back to $ACTIVE_ENV..."
         switch_traffic "$ACTIVE_ENV"
         exit 1
