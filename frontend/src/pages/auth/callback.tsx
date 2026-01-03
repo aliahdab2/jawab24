@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
 import { PageSpinner } from '@/components/ui';
@@ -7,12 +7,17 @@ export default function AuthCallback() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
+  const authAttemptedRef = useRef(false);
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Prevent multiple auth attempts
+      if (authAttemptedRef.current) return;
+      
       const { code, error: fbError, state } = router.query;
 
       if (fbError) {
+        authAttemptedRef.current = true;
         setError('Facebook login was cancelled or failed.');
         setTimeout(() => router.push('/login'), 3000);
         return;
@@ -22,6 +27,9 @@ export default function AuthCallback() {
         // Wait for query params to be available
         return;
       }
+
+      // Mark as attempted before making the API call
+      authAttemptedRef.current = true;
 
       try {
         // Exchange code for token via our backend
@@ -59,7 +67,8 @@ export default function AuthCallback() {
     if (router.isReady) {
       handleCallback();
     }
-  }, [router.isReady, router.query, setAuth, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady, router.query]);
 
   if (error) {
     return (
