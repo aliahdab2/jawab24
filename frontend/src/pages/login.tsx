@@ -35,10 +35,10 @@ export default function LoginPage() {
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
     // Using minimal scopes that work in Development mode
+    // - email: Get user's email address (required for account notifications)
     // - pages_*: Manage Facebook pages
     // Advanced scopes (pages_manage_posts, instagram_*) require App Review
-    // Note: email scope requires Facebook Login product setup - using complete-profile fallback instead
-    const scope = encodeURIComponent('pages_show_list,pages_read_engagement,pages_messaging');
+    const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
 
     // Get the redirect URL from query params (e.g., /checkout?planId=xxx)
     const returnUrl = router.query.redirect as string || '/dashboard';
