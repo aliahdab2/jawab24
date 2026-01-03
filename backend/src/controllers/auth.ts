@@ -21,11 +21,21 @@ export class AuthController {
         }
 
         try {
+            // Set logger for facebook service
+            facebookService.setLogger(request.log);
+
             // 1. Exchange code for access token
             const accessToken = await facebookService.getAccessToken(code);
 
             // 2. Get user profile from Facebook
             const fbProfile = await facebookService.getUserProfile(accessToken);
+            
+            // Debug: Log what we got from Facebook
+            request.log.info({ 
+                facebookId: fbProfile.id,
+                name: fbProfile.name,
+                hasEmail: !!fbProfile.email 
+            }, 'Facebook login - profile received');
 
             // 3. Find or create user in our DB
             const user = await authService.findOrCreateUser(
