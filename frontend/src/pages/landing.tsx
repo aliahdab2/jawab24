@@ -590,14 +590,9 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="pt-6 sm:pt-12 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6">
-              <div className="text-surface-500 font-bold text-xs sm:text-sm tracking-widest uppercase text-center sm:text-start">
+            <div className="pt-6 sm:pt-12 border-t border-white/10 flex items-center justify-center">
+              <div className="text-surface-500 font-bold text-xs sm:text-sm tracking-widest uppercase text-center">
                 © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
-              </div>
-              <div className="flex items-center gap-2 text-surface-500 text-[10px] sm:text-xs font-bold uppercase tracking-widest">
-                <span>{t('landing.footer.madeWith')}</span>
-                <span className="text-red-500 text-sm">❤️</span>
-                <span>{t('landing.footer.inSyria')}</span>
               </div>
             </div>
           </div>
