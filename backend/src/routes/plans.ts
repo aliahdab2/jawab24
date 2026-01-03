@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { plansService } from '../services/plans';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
-import { CreatePlanSchema, UpdatePlanSchema, UUIDSchema, validateSchema, formatValidationErrors } from '../utils/validation';
+import { CreatePlanSchema, UpdatePlanSchema, UUIDSchema, validateSchema } from '../utils/validation';
 
 interface PlanParams {
     planId: string;

@@ -6,7 +6,6 @@
  */
 
 // Unicode ranges for different scripts
-const ARABIC_RANGE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 const HEBREW_RANGE = /[\u0590-\u05FF]/;
 const CYRILLIC_RANGE = /[\u0400-\u04FF]/;
 const CJK_RANGE = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
@@ -22,7 +21,6 @@ const SPANISH_CHARS = /[áéíóúüñÁÉÍÓÚÜÑ¿¡]/;
 const TURKISH_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
 
 // Common words for additional context
-const ARABIC_COMMON = ['في', 'من', 'على', 'إلى', 'هل', 'ما', 'كيف', 'مرحبا', 'شكرا', 'أهلا', 'السلام'];
 const ENGLISH_COMMON = ['the', 'is', 'are', 'and', 'or', 'but', 'with', 'for', 'from', 'have', 'has', 'been'];
 const SWEDISH_COMMON = ['och', 'det', 'att', 'som', 'på', 'är', 'av', 'för', 'med', 'har'];
 
