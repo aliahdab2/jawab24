@@ -1,21 +1,101 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import Fastify, { FastifyInstance } from 'fastify';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fastify, { FastifyInstance } from 'fastify';
 import authRoutes from '../../src/routes/auth';
 
-describe('Auth Routes', () => {
+// Mock services
+vi.mock('../../src/services/facebook', () => ({
+    facebookService: {
+        getAccessToken: vi.fn(),
+        getUserProfile: vi.fn(),
+        setLogger: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/auth', () => ({
+    authService: {
+        findOrCreateUser: vi.fn(),
+        generateToken: vi.fn(),
+        createAuthResponse: vi.fn(),
+        verifyToken: vi.fn(),
+        getUserById: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/pages', () => ({
+    pagesService: {
+        syncFromFacebook: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+describe('Auth Routes - Login Flow', () => {
     let app: FastifyInstance;
 
-    beforeAll(async () => {
-        app = Fastify();
-        await app.register(authRoutes);
+    beforeEach(async () => {
+        app = fastify();
+        app.register(authRoutes);
         await app.ready();
+        vi.clearAllMocks();
     });
 
-    afterAll(async () => {
-        await app.close();
-    });
+    describe('POST /auth/facebook - Facebook Login', () => {
+        it('should successfully login with valid Facebook code', async () => {
+            // Import mocked services
+            const { facebookService } = await import('../../src/services/facebook');
+            const { authService } = await import('../../src/services/auth');
 
-    describe('POST /auth/facebook', () => {
+            // Setup mocks
+            vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_access_token_123');
+            vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+                id: 'fb_user_123',
+                name: 'John Doe',
+                email: 'john@example.com',
+            });
+            vi.mocked(authService.findOrCreateUser).mockResolvedValue({
+                id: 'user_uuid_123',
+                facebookId: 'fb_user_123',
+                name: 'John Doe',
+                email: 'john@example.com',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            vi.mocked(authService.generateToken).mockReturnValue('jwt_token_123');
+            vi.mocked(authService.createAuthResponse).mockReturnValue({
+                token: 'jwt_token_123',
+                fbAccessToken: 'fb_access_token_123',
+                user: {
+                    id: 'user_uuid_123',
+                    name: 'John Doe',
+                    facebookId: 'fb_user_123',
+                },
+            });
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: {
+                    code: 'facebook_auth_code_xyz',
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            
+            expect(body.token).toBe('jwt_token_123');
+            expect(body.fbAccessToken).toBe('fb_access_token_123');
+            expect(body.user.id).toBe('user_uuid_123');
+            expect(body.user.name).toBe('John Doe');
+            expect(body.user.facebookId).toBe('fb_user_123');
+
+            // Verify service calls
+            expect(facebookService.getAccessToken).toHaveBeenCalledWith('facebook_auth_code_xyz');
+            expect(facebookService.getUserProfile).toHaveBeenCalledWith('fb_access_token_123');
+            expect(authService.findOrCreateUser).toHaveBeenCalledWith(
+                'fb_user_123',
+                'John Doe',
+                'john@example.com'
+            );
+        });
+
         it('should return 400 if code is missing', async () => {
             const response = await app.inject({
                 method: 'POST',
@@ -28,29 +108,366 @@ describe('Auth Routes', () => {
             expect(body.error).toBe('Authorization code is required');
         });
 
-        it('should accept POST requests with code', async () => {
-            // This will fail at Facebook API level, but route should accept the request
+        it('should return 401 if Facebook returns invalid code', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+
+            vi.mocked(facebookService.getAccessToken).mockRejectedValue(
+                new Error('Facebook API error: Invalid authorization code')
+            );
+
             const response = await app.inject({
                 method: 'POST',
                 url: '/auth/facebook',
-                payload: { code: 'test-code' },
+                payload: {
+                    code: 'invalid_code',
+                },
             });
 
-            // Should not be 404 (route exists)
-            expect(response.statusCode).not.toBe(404);
-            // Will be 401 because Facebook will reject the fake code
-            expect([401, 500]).toContain(response.statusCode);
+            expect(response.statusCode).toBe(401);
+            const body = JSON.parse(response.body);
+            expect(body.error).toBe('Authentication failed');
+            expect(body.message).toContain('Invalid authorization code');
+        });
+
+        it('should handle Facebook API rate limit errors', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+
+            vi.mocked(facebookService.getAccessToken).mockRejectedValue(
+                new Error('Facebook API error: Rate limit exceeded')
+            );
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: {
+                    code: 'valid_code',
+                },
+            });
+
+            expect(response.statusCode).toBe(401);
+            const body = JSON.parse(response.body);
+            expect(body.error).toBe('Authentication failed');
+        });
+
+        it('should create new user on first login', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
+            vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+                id: 'new_fb_user',
+                name: 'Jane Smith',
+                email: 'jane@example.com',
+            });
+            vi.mocked(authService.findOrCreateUser).mockResolvedValue({
+                id: 'new_user_uuid',
+                facebookId: 'new_fb_user',
+                name: 'Jane Smith',
+                email: 'jane@example.com',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            vi.mocked(authService.generateToken).mockReturnValue('new_jwt_token');
+            vi.mocked(authService.createAuthResponse).mockReturnValue({
+                token: 'new_jwt_token',
+                fbAccessToken: 'fb_token',
+                user: {
+                    id: 'new_user_uuid',
+                    name: 'Jane Smith',
+                    facebookId: 'new_fb_user',
+                },
+            });
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: {
+                    code: 'new_user_code',
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            expect(body.user.name).toBe('Jane Smith');
+            expect(authService.findOrCreateUser).toHaveBeenCalled();
+        });
+
+        it('should trigger page sync after successful login', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+            const { authService } = await import('../../src/services/auth');
+            const { pagesService } = await import('../../src/services/pages');
+
+            vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
+            vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+                id: 'fb_123',
+                name: 'Test User',
+            });
+            vi.mocked(authService.findOrCreateUser).mockResolvedValue({
+                id: 'user_123',
+                facebookId: 'fb_123',
+                name: 'Test User',
+                email: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            vi.mocked(authService.generateToken).mockReturnValue('jwt');
+            vi.mocked(authService.createAuthResponse).mockReturnValue({
+                token: 'jwt',
+                fbAccessToken: 'fb_token',
+                user: {
+                    id: 'user_123',
+                    name: 'Test User',
+                    facebookId: 'fb_123',
+                },
+            });
+
+            await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: { code: 'test_code' },
+            });
+
+            // Page sync is called async, give it a moment
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('user_123', 'fb_token');
+        });
+
+        it('should handle login without email (privacy setting)', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
+            vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+                id: 'fb_no_email',
+                name: 'Private User',
+                // email is undefined
+            });
+            vi.mocked(authService.findOrCreateUser).mockResolvedValue({
+                id: 'user_no_email',
+                facebookId: 'fb_no_email',
+                name: 'Private User',
+                email: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            vi.mocked(authService.generateToken).mockReturnValue('jwt_no_email');
+            vi.mocked(authService.createAuthResponse).mockReturnValue({
+                token: 'jwt_no_email',
+                fbAccessToken: 'fb_token',
+                user: {
+                    id: 'user_no_email',
+                    name: 'Private User',
+                    facebookId: 'fb_no_email',
+                },
+            });
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: { code: 'code_no_email' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            expect(body.user.name).toBe('Private User');
+            expect(authService.findOrCreateUser).toHaveBeenCalledWith(
+                'fb_no_email',
+                'Private User',
+                undefined
+            );
         });
     });
 
-    describe('GET /auth/me', () => {
-        it('should return 401 without authentication', async () => {
+    describe('GET /auth/me - Get Current User', () => {
+        it('should return current user with valid token', async () => {
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_123',
+                facebookId: 'fb_123',
+            });
+            vi.mocked(authService.getUserById).mockResolvedValue({
+                id: 'user_123',
+                facebookId: 'fb_123',
+                name: 'Current User',
+                email: 'current@example.com',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/auth/me',
+                headers: {
+                    authorization: 'Bearer valid_jwt_token',
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            expect(body.id).toBe('user_123');
+            expect(body.name).toBe('Current User');
+        });
+
+        it('should return 401 without auth token', async () => {
             const response = await app.inject({
                 method: 'GET',
                 url: '/auth/me',
             });
 
             expect(response.statusCode).toBe(401);
+        });
+
+        it('should return 401 with invalid token', async () => {
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue(null);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/auth/me',
+                headers: {
+                    authorization: 'Bearer invalid_token',
+                },
+            });
+
+            expect(response.statusCode).toBe(401);
+        });
+
+        it('should return 404 if user not found in database', async () => {
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'deleted_user',
+                facebookId: 'fb_deleted',
+            });
+            vi.mocked(authService.getUserById).mockResolvedValue(null);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/auth/me',
+                headers: {
+                    authorization: 'Bearer valid_but_orphaned_token',
+                },
+            });
+
+            expect(response.statusCode).toBe(404);
+            const body = JSON.parse(response.body);
+            expect(body.error).toBe('User not found');
+        });
+    });
+
+    describe('Login Flow - End to End', () => {
+        it('should complete full login flow: code → token → authenticated request', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+            const { authService } = await import('../../src/services/auth');
+
+            // Step 1: Login with Facebook code
+            vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_access_token');
+            vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+                id: 'fb_e2e_user',
+                name: 'E2E Test User',
+                email: 'e2e@test.com',
+            });
+            vi.mocked(authService.findOrCreateUser).mockResolvedValue({
+                id: 'e2e_user_id',
+                facebookId: 'fb_e2e_user',
+                name: 'E2E Test User',
+                email: 'e2e@test.com',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            vi.mocked(authService.generateToken).mockReturnValue('e2e_jwt_token');
+            vi.mocked(authService.createAuthResponse).mockReturnValue({
+                token: 'e2e_jwt_token',
+                fbAccessToken: 'fb_access_token',
+                user: {
+                    id: 'e2e_user_id',
+                    name: 'E2E Test User',
+                    facebookId: 'fb_e2e_user',
+                },
+            });
+
+            const loginResponse = await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: { code: 'e2e_code' },
+            });
+
+            expect(loginResponse.statusCode).toBe(200);
+            const loginBody = JSON.parse(loginResponse.body);
+            const token = loginBody.token;
+
+            // Step 2: Use token to access protected endpoint
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'e2e_user_id',
+                facebookId: 'fb_e2e_user',
+            });
+            vi.mocked(authService.getUserById).mockResolvedValue({
+                id: 'e2e_user_id',
+                facebookId: 'fb_e2e_user',
+                name: 'E2E Test User',
+                email: 'e2e@test.com',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+
+            const meResponse = await app.inject({
+                method: 'GET',
+                url: '/auth/me',
+                headers: {
+                    authorization: `Bearer ${token}`,
+                },
+            });
+
+            expect(meResponse.statusCode).toBe(200);
+            const meBody = JSON.parse(meResponse.body);
+            expect(meBody.id).toBe('e2e_user_id');
+            expect(meBody.name).toBe('E2E Test User');
+        });
+
+        it('should handle login with redirect to checkout page', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
+            vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+                id: 'fb_redirect_user',
+                name: 'Redirect User',
+            });
+            vi.mocked(authService.findOrCreateUser).mockResolvedValue({
+                id: 'redirect_user_id',
+                facebookId: 'fb_redirect_user',
+                name: 'Redirect User',
+                email: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            vi.mocked(authService.generateToken).mockReturnValue('redirect_jwt');
+            vi.mocked(authService.createAuthResponse).mockReturnValue({
+                token: 'redirect_jwt',
+                fbAccessToken: 'fb_token',
+                user: {
+                    id: 'redirect_user_id',
+                    name: 'Redirect User',
+                    facebookId: 'fb_redirect_user',
+                },
+            });
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: {
+                    code: 'redirect_code',
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            // Frontend should use this token and redirect to /checkout or wherever
+            expect(body.token).toBe('redirect_jwt');
+            expect(body.fbAccessToken).toBe('fb_token');
         });
     });
 });
