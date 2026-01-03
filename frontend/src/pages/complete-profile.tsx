@@ -94,7 +94,7 @@ export default function CompleteProfilePage() {
               <Mail className="w-8 h-8 text-brand-600" />
             </div>
             <h1 className="text-3xl font-bold text-surface-900 mb-2">
-              {t('profile.completeProfile') || 'Complete Your Profile'}
+              {'Complete Your Profile'}
             </h1>
             <p className="text-surface-600">
               {t('profile.emailRequired') || 'Please provide your email address to continue. We\'ll use it for account notifications and receipts.'}

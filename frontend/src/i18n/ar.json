@@ -642,5 +642,8 @@
   "dataDeletion.whatItemSettings": "جميع الإعدادات والتفضيلات",
   "dataDeletion.dataRetentionTitle": "الاحتفاظ بالبيانات",
   "dataDeletion.dataRetentionText": "بعد الحذف، سيتم إزالة بياناتك نهائياً من خوادمنا في غضون 90 يوماً. قد يتم الاحتفاظ ببعض البيانات في نسخ احتياطية مشفرة لفترة محدودة للامتثال القانوني.",
-  "dataDeletion.backToHome": "العودة إلى جواب24"
+  "dataDeletion.backToHome": "العودة إلى جواب24",
+  "profile.emailRequired": "يرجى إدخال بريدك الإلكتروني للمتابعة. سنستخدمه فقط لإشعارات الحساب والفواتير.",
+  "profile.emailAddress": "البريد الإلكتروني",
+  "profile.privacyNote": "نحترم خصوصيتك. سيتم استخدام بريدك الإلكتروني فقط لأغراض متعلقة بالحساب."
 }
