@@ -13,7 +13,6 @@ services:
     environment:
       - NODE_ENV=production
       - DEPLOY_ENV=green
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/autoreply
       - REDIS_HOST=redis
       - REDIS_URL=redis://redis:6379
       - AI_SERVICE_URL=http://ai-worker-green:3002

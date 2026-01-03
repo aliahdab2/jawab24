@@ -112,14 +112,67 @@ More details in [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## Environment variables
 
-Don't commit real credentials. Copy the `.env.example` files and fill them in:
+⚠️ **CRITICAL**: Missing or incorrect environment variables will cause production failures. The deployment pipeline validates all required variables before deploying.
 
-- `db.env` — Postgres password
-- `backend.env` — Database URL, JWT secret, Facebook app credentials
-- `ai.env` — OpenAI API key
-- `frontend.env` — Facebook App ID (public)
+### Required Variables
 
-For GitHub Actions, add `SERVER_SSH_KEY` as a repository secret.
+Copy the `.env.example` files and fill them in:
+
+#### `env/db.env` (Database)
+```bash
+POSTGRES_PASSWORD=your_secure_password_here
+POSTGRES_DB=jawab24
+```
+
+#### `env/backend.env` (Backend API)
+```bash
+# Database - MUST use postgresql:// protocol
+DATABASE_URL=postgresql://postgres:your_password@postgres:5432/jawab24
+
+# JWT - MUST be 32+ characters
+JWT_SECRET=generate_a_long_random_string_here
+
+# Facebook App Credentials (from developers.facebook.com)
+FACEBOOK_APP_ID=your_app_id
+FACEBOOK_APP_SECRET=your_app_secret
+FACEBOOK_REDIRECT_URI=https://your-domain.com/auth/callback
+FACEBOOK_WEBHOOK_VERIFY_TOKEN=your_webhook_token
+
+# Stripe (optional for payments)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Frontend URL
+FRONTEND_URL=https://your-domain.com
+```
+
+#### `env/ai.env` (AI Worker)
+```bash
+OPENAI_API_KEY=sk-proj-...
+```
+
+#### `env/frontend.env` (Frontend)
+```bash
+NEXT_PUBLIC_API_URL=https://your-domain.com/api
+NEXT_PUBLIC_FB_APP_ID=your_facebook_app_id
+```
+
+### GitHub Secrets
+
+For CI/CD, add these to **Repository Settings → Secrets → Actions**:
+
+- `SERVER_SSH_KEY` — SSH private key for deployment server
+- `FACEBOOK_APP_ID` — For build-time embedding
+
+### Validation
+
+Before deploying, run:
+```bash
+./scripts/check-env.sh
+```
+
+This validates all required variables are set correctly.
 
 ---
 
