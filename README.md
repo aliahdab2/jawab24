@@ -108,6 +108,16 @@ Push to `main` and GitHub Actions handles the rest. It uses blue-green deploymen
 
 More details in [DEPLOYMENT.md](./DEPLOYMENT.md).
 
+### Versioning (tags-first)
+- Human version comes from the latest git tag (e.g., `v2.4.1`). If no tag, shows `untagged`.
+- Deploy script passes both the tag (`SEMANTIC_VERSION`) and the commit hash (`GIT_COMMIT`) into the images.
+- Frontend displays the tag (`NEXT_PUBLIC_APP_VERSION`); backend `/api/version` still returns the commit hash for traceability.
+- Release flow: create/push an annotated tag before deploy:
+  ```bash
+  git tag -a v2.4.1 -m "Release v2.4.1"
+  git push --tags
+  ```
+
 ---
 
 ## Environment variables
