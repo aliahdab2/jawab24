@@ -40,9 +40,11 @@ function PlanCard({
     return `$${(price / 100).toFixed(0)}`;
   };
 
+  const isHighlighted = isCurrentPlan || (isPopular && !isCurrentPlan);
+
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${isPopular
+      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${isHighlighted
         ? 'ring-2 ring-brand-500 shadow-brand-100 shadow-xl md:scale-105 z-10 md:mt-4'
         : 'border-surface-200 shadow-sm'
         } ${isCurrentPlan ? 'bg-brand-50/50' : 'bg-white'}`}
@@ -108,30 +110,30 @@ function PlanCard({
       <div className="space-y-1 px-3 flex-1">
         <FeatureRow
           included={true}
-          text={t('pricing.featurePages', { count: plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages })}
-          subtext={t('pricing.facebookInstagram')}
+          text={t('pricing.featurePages' as TranslationKey, { count: (plan.maxPages === null ? t('pricing.unlimited' as TranslationKey) : plan.maxPages) as string | number })}
+          subtext={t('pricing.facebookInstagram' as TranslationKey)}
         />
 
         <FeatureRow
           included={true}
           highlight={true}
-          text={t('pricing.featureAiReplies', { count: plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString() })}
-          subtext={t('pricing.aiPowered')}
+          text={t('pricing.featureAiReplies' as TranslationKey, { count: (plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited' as TranslationKey) : plan.maxAiRepliesPerMonth.toLocaleString()) as string | number })}
+          subtext={t('pricing.aiPowered' as TranslationKey)}
         />
 
         <FeatureRow
           included={true}
-          text={t('pricing.featureTemplates', { count: plan.maxTemplates === null ? t('pricing.unlimited') : plan.maxTemplates })}
+          text={t('pricing.featureTemplates' as TranslationKey, { count: (plan.maxTemplates === null ? t('pricing.unlimited' as TranslationKey) : plan.maxTemplates) as string | number })}
         />
 
         <FeatureRow
           included={true}
-          text={t('pricing.featureRules', { count: plan.maxRules === null ? t('pricing.unlimited') : plan.maxRules })}
+          text={t('pricing.featureRules' as TranslationKey, { count: (plan.maxRules === null ? t('pricing.unlimited' as TranslationKey) : plan.maxRules) as string | number })}
         />
 
         <FeatureRow
           included={!plan.showBranding}
-          text={plan.showBranding ? t('pricing.brandingShown') : t('pricing.brandingHidden')}
+          text={t('pricing.brandingHidden' as TranslationKey)}
         />
       </div>
 
@@ -313,8 +315,8 @@ export default function PricingPage() {
           </div>
         )}
 
-        {/* Plans Grid - Centered for 3 plans */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-5xl mx-auto px-4 md:px-6 lg:px-0 pt-2 md:pt-4">
+        {/* Plans Grid - Responsive grid based on count */}
+        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0 pt-2 md:pt-4`}>
           {activePlans.map((plan) => (
             <PlanCard
               key={plan.id}
