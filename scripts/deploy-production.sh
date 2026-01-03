@@ -215,7 +215,7 @@ cd /var/www/jawab24
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "📥 Pulling latest code..."
+echo "📥 Step 1: Pulling latest code..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 git fetch origin main
 git reset --hard origin/main
@@ -225,13 +225,48 @@ echo "✅ Code updated to: $(git rev-parse --short HEAD)"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 Running Blue-Green Deployment..."
+echo "🗄️  Step 2: Running database migrations..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Ensure postgres is running
+docker-compose up -d postgres
+sleep 5
+
+# Run migrations
+mkdir -p .migrations
+MIGRATION_COUNT=0
+for migration in backend/drizzle/*.sql; do
+    if [ -f "$migration" ]; then
+        MIGRATION_NAME=$(basename "$migration")
+        if [ ! -f ".migrations/$MIGRATION_NAME.done" ]; then
+            echo "   📦 Applying: $MIGRATION_NAME"
+            docker cp "$migration" jawab24-postgres:/tmp/migration.sql
+            if docker exec jawab24-postgres psql -U postgres -d jawab24 -f /tmp/migration.sql 2>&1 | grep -v "already exists"; then
+                touch ".migrations/$MIGRATION_NAME.done"
+                echo "   ✅ Applied: $MIGRATION_NAME"
+                MIGRATION_COUNT=$((MIGRATION_COUNT + 1))
+            else
+                touch ".migrations/$MIGRATION_NAME.done"
+            fi
+            docker exec jawab24-postgres rm -f /tmp/migration.sql
+        fi
+    fi
+done
+if [ $MIGRATION_COUNT -eq 0 ]; then
+    echo "✅ No new migrations to apply"
+else
+    echo "✅ Applied $MIGRATION_COUNT migrations"
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🚀 Step 3: Running Blue-Green Deployment..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Use existing deploy-blue-green.sh script
 if [ -f "./scripts/deploy-blue-green.sh" ]; then
     chmod +x ./scripts/deploy-blue-green.sh
-    ./scripts/deploy-blue-green.sh
+    ./scripts/deploy-blue-green.sh deploy
 else
     echo "⚠️  deploy-blue-green.sh not found, using fallback..."
     
