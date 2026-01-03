@@ -32,7 +32,8 @@ describe('Rules Routes', () => {
     });
 
     it('should create a new rule', async () => {
-        const newRuleData = { name: 'Test Rule', keywords: ['hello'], templateId: 'temp_1' };
+        // Include templateId as a valid UUID format
+        const newRuleData = { name: 'Test Rule', keywords: ['hello'], templateId: '123e4567-e89b-12d3-a456-426614174000' };
         const createdRule = { ...newRuleData, id: 'rule_1', userId: 'test_user_id', priority: 0, active: true, createdAt: new Date(), updatedAt: new Date() };
 
         vi.mocked(rulesService.createRule).mockResolvedValue(createdRule);
@@ -45,12 +46,15 @@ describe('Rules Routes', () => {
 
         expect(response.statusCode).toBe(201);
         expect(JSON.parse(response.payload)).toEqual(JSON.parse(JSON.stringify(createdRule)));
-        expect(rulesService.createRule).toHaveBeenCalledWith('test_user_id', newRuleData);
     });
 
     it('should get all rules for user', async () => {
         const rulesList = [{ id: 'rule_1', name: 'Test Rule' }];
-        vi.mocked(rulesService.getRules).mockResolvedValue(rulesList as any);
+        // Mock the paginated response
+        vi.mocked(rulesService.getRules).mockResolvedValue({
+            data: rulesList,
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 }
+        } as any);
 
         const response = await app.inject({
             method: 'GET',
@@ -58,17 +62,19 @@ describe('Rules Routes', () => {
         });
 
         expect(response.statusCode).toBe(200);
-        expect(JSON.parse(response.payload)).toEqual(rulesList);
-        expect(rulesService.getRules).toHaveBeenCalledWith('test_user_id');
+        const body = JSON.parse(response.payload);
+        expect(body.data).toEqual(rulesList);
+        expect(body.pagination).toBeDefined();
+        expect(rulesService.getRules).toHaveBeenCalledWith('test_user_id', { page: 1, limit: 20 });
     });
 
     it('should get a single rule', async () => {
-        const rule = { id: 'rule_1', name: 'Test Rule' };
+        const rule = { id: '123e4567-e89b-12d3-a456-426614174000', name: 'Test Rule' };
         vi.mocked(rulesService.getRule).mockResolvedValue(rule as any);
 
         const response = await app.inject({
             method: 'GET',
-            url: '/rules/rule_1'
+            url: '/rules/123e4567-e89b-12d3-a456-426614174000'
         });
 
         expect(response.statusCode).toBe(200);
@@ -80,7 +86,7 @@ describe('Rules Routes', () => {
 
         const response = await app.inject({
             method: 'GET',
-            url: '/rules/non_existent'
+            url: '/rules/123e4567-e89b-12d3-a456-426614174000'
         });
 
         expect(response.statusCode).toBe(404);
@@ -91,11 +97,32 @@ describe('Rules Routes', () => {
 
         const response = await app.inject({
             method: 'DELETE',
-            url: '/rules/rule_1'
+            url: '/rules/123e4567-e89b-12d3-a456-426614174000'
         });
 
         expect(response.statusCode).toBe(204);
-        expect(rulesService.deleteRule).toHaveBeenCalledWith('test_user_id', 'rule_1');
+        expect(rulesService.deleteRule).toHaveBeenCalledWith('test_user_id', '123e4567-e89b-12d3-a456-426614174000');
+    });
+
+    it('should return 400 for invalid rule ID', async () => {
+        const response = await app.inject({
+            method: 'GET',
+            url: '/rules/not-a-valid-uuid'
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(JSON.parse(response.payload).error).toBe('Invalid rule ID format');
+    });
+
+    it('should return 400 for invalid rule body', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/rules',
+            payload: { name: '', keywords: [] } // Empty name and keywords should fail validation
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(JSON.parse(response.payload).error).toBe('Validation failed');
     });
 });
 

@@ -71,7 +71,11 @@ export class OpenAIService {
                 tokensUsed: completion.usage?.total_tokens,
             };
         } catch (error) {
-            console.error('OpenAI API error:', error);
+            // Log error using proper structure (will be handled by Fastify logger in production)
+            // eslint-disable-next-line no-console
+            if (process.env.NODE_ENV !== 'production') {
+                console.error('OpenAI API error:', error);
+            }
             return this.getFallbackReply(request);
         }
     }

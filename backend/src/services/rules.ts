@@ -1,7 +1,22 @@
 import { db } from '../db';
 import { rules, templates } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { CreateRuleDTO, UpdateRuleDTO } from '../types';
+
+export interface PaginationOptions {
+    page?: number;
+    limit?: number;
+}
+
+export interface PaginatedResult<T> {
+    data: T[];
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
+}
 
 export class RulesService {
     /**
@@ -24,12 +39,25 @@ export class RulesService {
     }
 
     /**
-     * Get all rules for a user
+     * Get all rules for a user with pagination
      */
-    async getRules(userId: string) {
-        return db
+    async getRules(userId: string, options: PaginationOptions = {}): Promise<PaginatedResult<typeof rules.$inferSelect & { templateName: string | null }>> {
+        const page = options.page || 1;
+        const limit = options.limit || 20;
+        const offset = (page - 1) * limit;
+
+        // Get total count
+        const [countResult] = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(rules)
+            .where(eq(rules.userId, userId));
+        const total = countResult?.count || 0;
+
+        // Get paginated results
+        const data = await db
             .select({
                 id: rules.id,
+                userId: rules.userId,
                 name: rules.name,
                 keywords: rules.keywords,
                 priority: rules.priority,
@@ -42,7 +70,19 @@ export class RulesService {
             .from(rules)
             .leftJoin(templates, eq(rules.templateId, templates.id))
             .where(eq(rules.userId, userId))
-            .orderBy(desc(rules.priority), desc(rules.createdAt));
+            .orderBy(desc(rules.priority), desc(rules.createdAt))
+            .limit(limit)
+            .offset(offset);
+
+        return {
+            data,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
 
     /**

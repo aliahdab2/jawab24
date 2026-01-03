@@ -1,5 +1,6 @@
 import fastify from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import dotenv from 'dotenv';
 import { config } from './config';
 import { openaiService, GenerateRequest } from './services/openai';
@@ -10,7 +11,7 @@ const server = fastify({
     logger: true,
 });
 
-// Health check
+// Health check (no rate limit)
 server.get('/health', async () => {
     return {
         status: 'ok',
@@ -20,7 +21,23 @@ server.get('/health', async () => {
     };
 });
 
-// Generate reply endpoint
+// Status endpoint (no rate limit)
+server.get('/status', async () => {
+    return {
+        service: 'ai-worker',
+        version: '1.0.0',
+        openai: {
+            configured: openaiService.isConfigured(),
+            model: config.openai.model,
+        },
+        config: {
+            maxTokens: config.openai.maxTokens,
+            temperature: config.openai.temperature,
+        },
+    };
+});
+
+// Generate reply endpoint with rate limiting
 server.post<{ Body: GenerateRequest }>('/generate', async (request, reply) => {
     const { comment, language, context } = request.body;
 
@@ -32,12 +49,12 @@ server.post<{ Body: GenerateRequest }>('/generate', async (request, reply) => {
         const result = await openaiService.generateReply({ comment, language, context });
         return reply.send(result);
     } catch (error) {
-        request.log.error(error);
+        request.log.error(error, 'Failed to generate reply');
         return reply.status(500).send({ error: 'Failed to generate reply' });
     }
 });
 
-// Batch generate endpoint (for future use)
+// Batch generate endpoint with rate limiting
 server.post<{ Body: { requests: GenerateRequest[] } }>('/generate/batch', async (request, reply) => {
     const { requests } = request.body;
 
@@ -55,30 +72,27 @@ server.post<{ Body: { requests: GenerateRequest[] } }>('/generate/batch', async 
         );
         return reply.send({ results });
     } catch (error) {
-        request.log.error(error);
+        request.log.error(error, 'Failed to generate batch replies');
         return reply.status(500).send({ error: 'Failed to generate replies' });
     }
 });
 
-// Status endpoint
-server.get('/status', async () => {
-    return {
-        service: 'ai-worker',
-        version: '1.0.0',
-        openai: {
-            configured: openaiService.isConfigured(),
-            model: config.openai.model,
-        },
-        config: {
-            maxTokens: config.openai.maxTokens,
-            temperature: config.openai.temperature,
-        },
-    };
-});
-
 const start = async () => {
     try {
-        await server.register(cors);
+        await server.register(cors, {
+            origin: process.env.CORS_ORIGIN || true, // Configure properly for production
+        });
+
+        // Register rate limiting
+        await server.register(rateLimit, {
+            max: 100, // 100 requests per minute per IP
+            timeWindow: '1 minute',
+            errorResponseBuilder: () => ({
+                error: 'Rate limit exceeded',
+                message: 'Too many requests. Please try again later.',
+                statusCode: 429,
+            }),
+        });
 
         await server.listen({ port: config.port, host: '0.0.0.0' });
         server.log.info(`AI Worker listening on http://0.0.0.0:${config.port}`);

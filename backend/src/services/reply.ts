@@ -9,6 +9,7 @@ import { facebookService } from './facebook';
 import { settingsService } from './settings';
 import { messagesService } from './messages';
 import { subscriptionsService } from './subscriptions';
+import { detectLanguageCode } from '../utils/language';
 import { Logger, noopLogger, ReplyResult, MessageResult } from '../types';
 
 const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v18.0';
@@ -319,12 +320,13 @@ export class ReplyService {
             }
 
             // 11. Mark comment as replied in our database
+            const detectedLanguage = detectLanguageCode(commentMessage);
             await commentsService.markAsReplied(
                 comment.id,
                 replyText,
                 replyMethod,
                 templateId,
-                'en' // TODO: detect language
+                detectedLanguage === 'unknown' ? 'en' : detectedLanguage
             );
 
             return {

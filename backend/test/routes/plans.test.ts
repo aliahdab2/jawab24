@@ -2,12 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import plansRoutes from '../../src/routes/plans';
 
+// Test UUIDs for consistent testing
+const TEST_PLAN_FREE_ID = '11111111-1111-1111-1111-111111111111';
+const TEST_PLAN_BUSINESS_ID = '22222222-2222-2222-2222-222222222222';
+const TEST_PLAN_INACTIVE_ID = '33333333-3333-3333-3333-333333333333';
+const TEST_PLAN_NEW_ID = '44444444-4444-4444-4444-444444444444';
+const NON_EXISTENT_UUID = '99999999-9999-9999-9999-999999999999';
+
 // Mock the plans service
 vi.mock('../../src/services/plans', () => ({
     plansService: {
         getActivePlans: vi.fn().mockResolvedValue([
             {
-                id: 'plan_free',
+                id: '11111111-1111-1111-1111-111111111111',
                 name: 'Free Trial',
                 slug: 'free',
                 description: 'Try Jawab24 free for 30 days',
@@ -29,7 +36,7 @@ vi.mock('../../src/services/plans', () => ({
                 sortOrder: 0,
             },
             {
-                id: 'plan_business',
+                id: '22222222-2222-2222-2222-222222222222',
                 name: 'Business',
                 slug: 'business',
                 description: 'For growing businesses',
@@ -52,13 +59,13 @@ vi.mock('../../src/services/plans', () => ({
             },
         ]),
         getAllPlans: vi.fn().mockResolvedValue([
-            { id: 'plan_free', name: 'Free', isActive: true },
-            { id: 'plan_inactive', name: 'Old Plan', isActive: false },
+            { id: '11111111-1111-1111-1111-111111111111', name: 'Free', isActive: true },
+            { id: '33333333-3333-3333-3333-333333333333', name: 'Old Plan', isActive: false },
         ]),
         getPlanById: vi.fn().mockImplementation((id) => {
-            if (id === 'plan_free') {
+            if (id === '11111111-1111-1111-1111-111111111111') {
                 return Promise.resolve({
-                    id: 'plan_free',
+                    id: '11111111-1111-1111-1111-111111111111',
                     name: 'Free Trial',
                     slug: 'free',
                     price: 0,
@@ -67,22 +74,22 @@ vi.mock('../../src/services/plans', () => ({
             return Promise.resolve(null);
         }),
         createPlan: vi.fn().mockResolvedValue({
-            id: 'new_plan_123',
+            id: '44444444-4444-4444-4444-444444444444',
             name: 'New Plan',
             slug: 'new-plan',
             price: 1000,
         }),
         updatePlan: vi.fn().mockImplementation((id, data) => {
-            if (id === 'plan_free') {
-                return Promise.resolve({ id: 'plan_free', ...data });
+            if (id === '11111111-1111-1111-1111-111111111111') {
+                return Promise.resolve({ id: '11111111-1111-1111-1111-111111111111', ...data });
             }
             return Promise.resolve(null);
         }),
         deletePlan: vi.fn().mockImplementation((id) => {
-            return Promise.resolve(id === 'plan_free');
+            return Promise.resolve(id === '11111111-1111-1111-1111-111111111111');
         }),
         setDefaultPlan: vi.fn().mockImplementation((id) => {
-            return Promise.resolve(id === 'plan_free');
+            return Promise.resolve(id === '11111111-1111-1111-1111-111111111111');
         }),
     },
 }));
@@ -93,6 +100,22 @@ vi.mock('../../src/middleware/auth', () => ({
         request.user = { userId: 'user_123', facebookId: 'fb_123' };
     }),
     AuthenticatedRequest: {},
+}));
+
+// Mock admin middleware - allow all authenticated users to be admins in tests
+vi.mock('../../src/middleware/admin', () => ({
+    requireAdmin: vi.fn(async (request, reply) => {
+        // In tests, we allow all authenticated users to pass admin check
+        if (!request.user) {
+            return reply.status(401).send({
+                error: true,
+                message: 'Authentication required',
+                code: 'AUTH_REQUIRED',
+            });
+        }
+        // Pass through - user is admin in tests
+    }),
+    isUserAdmin: vi.fn().mockResolvedValue(true),
 }));
 
 describe('Plans Routes', () => {
@@ -125,21 +148,21 @@ describe('Plans Routes', () => {
         it('should return plan by ID', async () => {
             const response = await app.inject({
                 method: 'GET',
-                url: '/api/plans/plan_free',
+                url: `/api/plans/${TEST_PLAN_FREE_ID}`,
             });
 
             expect(response.statusCode).toBe(200);
             
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
-            expect(body.data.id).toBe('plan_free');
+            expect(body.data.id).toBe(TEST_PLAN_FREE_ID);
             expect(body.data.name).toBe('Free Trial');
         });
 
         it('should return 404 for non-existent plan', async () => {
             const response = await app.inject({
                 method: 'GET',
-                url: '/api/plans/non_existent',
+                url: `/api/plans/${NON_EXISTENT_UUID}`,
             });
 
             expect(response.statusCode).toBe(404);
@@ -197,7 +220,7 @@ describe('Plans Routes', () => {
             it('should update an existing plan', async () => {
                 const response = await app.inject({
                     method: 'PUT',
-                    url: '/api/plans/admin/plan_free',
+                    url: `/api/plans/admin/${TEST_PLAN_FREE_ID}`,
                     headers: {
                         authorization: 'Bearer test_token',
                         'content-type': 'application/json',
@@ -216,7 +239,7 @@ describe('Plans Routes', () => {
             it('should return 404 for non-existent plan', async () => {
                 const response = await app.inject({
                     method: 'PUT',
-                    url: '/api/plans/admin/non_existent',
+                    url: `/api/plans/admin/${NON_EXISTENT_UUID}`,
                     headers: {
                         authorization: 'Bearer test_token',
                         'content-type': 'application/json',
@@ -234,7 +257,7 @@ describe('Plans Routes', () => {
             it('should soft delete a plan', async () => {
                 const response = await app.inject({
                     method: 'DELETE',
-                    url: '/api/plans/admin/plan_free',
+                    url: `/api/plans/admin/${TEST_PLAN_FREE_ID}`,
                     headers: {
                         authorization: 'Bearer test_token',
                     },
@@ -252,7 +275,7 @@ describe('Plans Routes', () => {
             it('should set plan as default', async () => {
                 const response = await app.inject({
                     method: 'POST',
-                    url: '/api/plans/admin/plan_free/set-default',
+                    url: `/api/plans/admin/${TEST_PLAN_FREE_ID}/set-default`,
                     headers: {
                         authorization: 'Bearer test_token',
                     },

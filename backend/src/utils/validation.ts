@@ -101,14 +101,67 @@ export const WebhookVerificationSchema = z.object({
 });
 
 // ==========================================
+// Plans (Admin)
+// ==========================================
+export const CreatePlanSchema = z.object({
+    name: z.string().min(1, 'Name is required').max(100),
+    slug: z.string().min(1, 'Slug is required').max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
+    description: z.string().max(500).optional(),
+    price: z.number().int().min(0, 'Price must be non-negative'),
+    currency: z.string().length(3).default('USD'),
+    interval: z.enum(['month', 'year']).default('month'),
+    maxPages: z.number().int().min(1).nullable().optional(),
+    maxAiRepliesPerMonth: z.number().int().min(0).nullable().optional(),
+    maxTemplates: z.number().int().min(0).nullable().optional(),
+    maxRules: z.number().int().min(0).nullable().optional(),
+    facebookEnabled: z.boolean().default(true),
+    instagramEnabled: z.boolean().default(true),
+    whatsappEnabled: z.boolean().default(false),
+    showBranding: z.boolean().default(true),
+    prioritySupport: z.boolean().default(false),
+    trialDays: z.number().int().min(0).default(0),
+    regionalPricing: z.record(z.string(), z.number()).optional(),
+    isActive: z.boolean().default(true),
+    isDefault: z.boolean().default(false),
+    sortOrder: z.number().int().default(0),
+});
+
+export const UpdatePlanSchema = CreatePlanSchema.partial();
+
+// ==========================================
 // Generic ID Validation
 // ==========================================
 export const UUIDSchema = z.string().uuid('Invalid ID format');
 
 export const PaginationSchema = z.object({
-    page: z.string().transform(Number).pipe(z.number().int().min(1)).default('1'),
-    limit: z.string().transform(Number).pipe(z.number().int().min(1).max(100)).default('20'),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+// ==========================================
+// Validation Helpers
+// ==========================================
+
+/**
+ * Format Zod validation errors for API response
+ */
+export function formatValidationErrors(errors: z.ZodError): { field: string; message: string }[] {
+    return errors.errors.map(err => ({
+        field: err.path.join('.'),
+        message: err.message,
+    }));
+}
+
+/**
+ * Validate and parse data with schema
+ */
+export function validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): { success: true; data: T } | { success: false; errors: { field: string; message: string }[] } {
+    const result = schema.safeParse(data);
+    if (result.success) {
+        return { success: true, data: result.data };
+    }
+    return { success: false, errors: formatValidationErrors(result.error) };
+}
 
 // ==========================================
 // Export Types
@@ -122,4 +175,6 @@ export type UpdatePageInput = z.infer<typeof UpdatePageSchema>;
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsSchema>;
 export type CreateCheckoutSessionInput = z.infer<typeof CreateCheckoutSessionSchema>;
 export type PaginationInput = z.infer<typeof PaginationSchema>;
+export type CreatePlanInput = z.infer<typeof CreatePlanSchema>;
+export type UpdatePlanInput = z.infer<typeof UpdatePlanSchema>;
 
