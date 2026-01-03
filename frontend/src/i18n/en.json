@@ -206,6 +206,8 @@
   "messages.msgCount": "{count} messages",
   "messages.needsHuman": "Needs Human",
   "messages.aiAutomationActive": "AI Automation Active",
+  "messages.noMessages": "No Messages Yet",
+  "messages.noMessagesDesc": "When you receive messages on your Facebook or Instagram pages, they will appear here.",
   "templates.title": "Templates",
   "templates.description": "Create and manage reply templates",
   "templates.addTemplate": "Add Template",

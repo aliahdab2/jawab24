@@ -207,6 +207,8 @@
   "messages.totalMessages": "إجمالي الرسائل",
   "messages.msgCount": "{count} رسالة",
   "messages.needsHuman": "يحتاج تدخل بشري",
+  "messages.noMessages": "لا توجد رسائل بعد",
+  "messages.noMessagesDesc": "عندما تتلقى رسائل على صفحاتك في فيسبوك أو إنستغرام، ستظهر هنا.",
   "messages.aiAutomationActive": "الردود تتم تلقائياً بواسطة الذكاء الاصطناعي",
   "templates.title": "قوالب الرد",
   "templates.description": "أنشئ وأدر قوالب الردود السريعة الخاصة بك",
