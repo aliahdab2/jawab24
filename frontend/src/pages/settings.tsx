@@ -121,11 +121,13 @@ export default function SettingsPage() {
     fetchSettings();
   }, [fetchSettings]);
 
+  // Sync dashboard language with app language (only when dashboardLanguage changes)
   useEffect(() => {
-    if (settings.dashboardLanguage !== language) {
+    if (settings.dashboardLanguage && settings.dashboardLanguage !== language) {
       setLanguage(settings.dashboardLanguage as 'ar' | 'en');
     }
-  }, [settings.dashboardLanguage, language, setLanguage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.dashboardLanguage]); // Only trigger when dashboardLanguage changes, not on every render
 
   const handleSave = async () => {
     if (!token) return;

@@ -55,10 +55,12 @@ export default function PagesPage() {
     loadPages();
   }, [fetchPages]);
 
-  // Auto-sync if no pages found after initial load
+  // Auto-sync if no pages found after initial load (only once)
+  const syncAttemptedRef = React.useRef(false);
   useEffect(() => {
-    if (!loading && pages.length === 0 && fbToken && token && !syncing) {
-      // Auto-sync pages from Facebook
+    if (!loading && pages.length === 0 && fbToken && token && !syncing && !syncAttemptedRef.current) {
+      // Auto-sync pages from Facebook (only attempt once)
+      syncAttemptedRef.current = true;
       handleSync();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
