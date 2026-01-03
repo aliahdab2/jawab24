@@ -203,13 +203,19 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}🚀 DEPLOYING TO SERVER${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
+# ═══════════════════════════════════════════════════════════════════
+# Deploy on Server (using existing deploy-blue-green.sh)
+# ═══════════════════════════════════════════════════════════════════
+echo -e "${CYAN}Connecting to server and running deployment...${NC}"
+echo ""
+
 ssh ${SERVER_USER}@${SERVER_HOST} << 'ENDSSH'
 set -e
 cd /var/www/jawab24
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "📥 STEP 1: Pulling latest code"
+echo "📥 Pulling latest code..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 git fetch origin main
 git reset --hard origin/main
@@ -219,179 +225,25 @@ echo "✅ Code updated to: $(git rev-parse --short HEAD)"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🗄️  STEP 2: Running database migrations"
+echo "🚀 Running Blue-Green Deployment..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker-compose up -d postgres
-sleep 5
 
-mkdir -p .migrations
-for migration in backend/drizzle/*.sql; do
-    if [ -f "$migration" ]; then
-        MIGRATION_NAME=$(basename "$migration")
-        if [ ! -f ".migrations/$MIGRATION_NAME.done" ]; then
-            echo "   📦 Applying: $MIGRATION_NAME"
-            docker cp "$migration" jawab24-postgres:/tmp/migration.sql
-            if docker exec jawab24-postgres psql -U postgres -d jawab24 -f /tmp/migration.sql 2>&1; then
-                touch ".migrations/$MIGRATION_NAME.done"
-                echo "   ✅ Applied: $MIGRATION_NAME"
-            else
-                echo "   ⚠️  Migration may have been applied already"
-                touch ".migrations/$MIGRATION_NAME.done"
-            fi
-            docker exec jawab24-postgres rm -f /tmp/migration.sql
-        else
-            echo "   ⏭️  Already applied: $MIGRATION_NAME"
-        fi
-    fi
-done
-echo "✅ Migrations complete"
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🔍 STEP 3: Determine deployment target"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if [ -f .active-env ]; then
-    ACTIVE_ENV=$(cat .active-env)
+# Use existing deploy-blue-green.sh script
+if [ -f "./scripts/deploy-blue-green.sh" ]; then
+    chmod +x ./scripts/deploy-blue-green.sh
+    ./scripts/deploy-blue-green.sh
 else
-    ACTIVE_ENV="blue"
-    echo "blue" > .active-env
-fi
-
-if [ "$ACTIVE_ENV" == "blue" ]; then
-    DEPLOY_ENV="green"
-else
-    DEPLOY_ENV="blue"
-fi
-
-echo "📍 Current active: $ACTIVE_ENV"
-echo "🎯 Deploying to: $DEPLOY_ENV"
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🏗️  STEP 4: Building Docker images"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if [ -f ./env/frontend.env ]; then
-    export $(grep -v '^#' ./env/frontend.env | xargs)
-fi
-
-docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build --no-cache --parallel
-echo "✅ Images built (fresh, no cache)"
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 STEP 5: Starting $DEPLOY_ENV environment"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker-compose up -d postgres redis nginx
-docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml up -d \
-    backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV
-echo "✅ $DEPLOY_ENV containers started"
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "⏳ STEP 6: Waiting for health checks"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-sleep 10
-
-# Quick container crash check
-if ! docker ps | grep -q "jawab24-backend-$DEPLOY_ENV"; then
-    echo "❌ Backend container crashed!"
-    docker logs jawab24-backend-$DEPLOY_ENV --tail 50 2>&1
-    exit 1
-fi
-echo "   ✅ Backend container is running"
-
-if ! docker ps | grep -q "jawab24-frontend-$DEPLOY_ENV"; then
-    echo "❌ Frontend container crashed!"
-    docker logs jawab24-frontend-$DEPLOY_ENV --tail 50 2>&1
-    exit 1
-fi
-echo "   ✅ Frontend container is running"
-
-# Wait for healthy status
-MAX_WAIT=60
-WAITED=0
-while [ $WAITED -lt $MAX_WAIT ]; do
-    BACKEND_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-backend-$DEPLOY_ENV 2>/dev/null || echo "starting")
-    FRONTEND_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-frontend-$DEPLOY_ENV 2>/dev/null || echo "starting")
+    echo "⚠️  deploy-blue-green.sh not found, using fallback..."
     
-    echo "   Backend: $BACKEND_HEALTH, Frontend: $FRONTEND_HEALTH"
-    
-    if [ "$BACKEND_HEALTH" == "healthy" ] && [ "$FRONTEND_HEALTH" == "healthy" ]; then
-        echo "✅ All containers healthy!"
-        break
-    fi
-    
-    if [ $WAITED -ge $MAX_WAIT ]; then
-        echo "❌ Health check timeout!"
-        docker logs jawab24-backend-$DEPLOY_ENV --tail 30 2>&1
+    # Fallback to simple deploy
+    if [ -f "./scripts/deploy.sh" ]; then
+        chmod +x ./scripts/deploy.sh
+        ./scripts/deploy.sh
+    else
+        echo "❌ No deployment script found!"
         exit 1
     fi
-    
-    sleep 5
-    WAITED=$((WAITED + 5))
-done
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🔄 STEP 7: Switching traffic to $DEPLOY_ENV"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-cat > ./nginx/upstream.conf << EOF
-# Active environment: $DEPLOY_ENV
-# Switched at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-
-upstream backend_active {
-    server jawab24-backend-$DEPLOY_ENV:3000;
-}
-
-upstream frontend_active {
-    server jawab24-frontend-$DEPLOY_ENV:3001;
-}
-
-upstream ai_worker_active {
-    server jawab24-ai-worker-$DEPLOY_ENV:3002;
-}
-EOF
-
-docker exec jawab24-nginx nginx -s reload
-echo "$DEPLOY_ENV" > .active-env
-echo "✅ Traffic switched to $DEPLOY_ENV"
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🏥 STEP 8: Verify deployment"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-sleep 2
-
-# Test backend
-if curl -sf https://jawab24.com/api/health > /dev/null 2>&1; then
-    echo "   ✅ Backend API responding"
-else
-    echo "   ❌ Backend not responding"
 fi
-
-# Test frontend
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://jawab24.com/)
-if [ "$HTTP_CODE" = "200" ]; then
-    echo "   ✅ Frontend serving pages (HTTP $HTTP_CODE)"
-else
-    echo "   ⚠️  Frontend returned HTTP $HTTP_CODE"
-fi
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🧹 STEP 9: Cleanup"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker image prune -f --filter "until=24h" 2>/dev/null || true
-echo "✅ Cleanup complete"
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🎉 DEPLOYMENT SUCCESSFUL!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Active environment: $(cat .active-env)"
-echo "Commit: $(git rev-parse --short HEAD)"
-echo "Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 ENDSSH
 
