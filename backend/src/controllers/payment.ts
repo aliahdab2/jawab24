@@ -14,7 +14,7 @@ interface WebhookRequest extends FastifyRequest {
 
 // Type for authenticated requests
 interface AuthenticatedRequest extends FastifyRequest {
-    user?: { id: string; userId: string };
+    user?: { userId: string; facebookId: string };
 }
 
 export class PaymentController {
@@ -27,7 +27,7 @@ export class PaymentController {
         reply: FastifyReply
     ) {
         try {
-            const userId = (request as AuthenticatedRequest).user?.id;
+            const userId = (request as AuthenticatedRequest).user?.userId;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -80,7 +80,7 @@ export class PaymentController {
      */
     async getSubscriptionStatus(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request as AuthenticatedRequest).user?.id;
+            const userId = (request as AuthenticatedRequest).user?.userId;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -135,7 +135,7 @@ export class PaymentController {
      */
     async cancelSubscription(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request as AuthenticatedRequest).user?.id;
+            const userId = (request as AuthenticatedRequest).user?.userId;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -176,7 +176,7 @@ export class PaymentController {
      */
     async createBillingPortalSession(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request as AuthenticatedRequest).user?.id;
+            const userId = (request as AuthenticatedRequest).user?.userId;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
