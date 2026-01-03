@@ -170,10 +170,10 @@ export default function LandingPage() {
           <div className="absolute bottom-0 end-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
           <div className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
 
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col sm:grid sm:grid-cols-2 items-center gap-6 sm:gap-8 lg:gap-12">
+          <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-2 sm:grid-cols-2 items-center gap-3 sm:gap-8 lg:gap-12">
               {/* Text Content */}
-              <div className="w-full text-center sm:text-start order-1">
+              <div className="text-start order-1">
                 {/* Heading */}
                 <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
                   {t('landing.hero.title1')}
@@ -215,7 +215,7 @@ export default function LandingPage() {
               </div>
 
               {/* Hero Illustration - Phone Mockup with Floating Icons */}
-              <div className="relative animate-slide-up order-2 flex justify-center w-full mt-6 sm:mt-0">
+              <div className="relative animate-slide-up order-2 flex justify-center">
                 <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
                   {/* Glowing Background - More Vibrant like your image */}
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
