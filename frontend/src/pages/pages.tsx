@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -56,7 +56,7 @@ export default function PagesPage() {
   }, [fetchPages]);
 
   // Auto-sync if no pages found after initial load (only once)
-  const syncAttemptedRef = React.useRef(false);
+  const syncAttemptedRef = useRef(false);
   useEffect(() => {
     if (!loading && pages.length === 0 && fbToken && token && !syncing && !syncAttemptedRef.current) {
       // Auto-sync pages from Facebook (only attempt once)
