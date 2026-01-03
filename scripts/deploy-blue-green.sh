@@ -40,7 +40,7 @@ get_inactive_env() {
     fi
 }
 
-# Health check function
+# Health check function - checks containers directly to avoid nginx redirect issues
 health_check() {
     local env=$1
     local max_attempts=30
@@ -49,31 +49,14 @@ health_check() {
     log "Running health checks for $env environment..."
     
     # Wait for containers to be fully up
-    sleep 3
+    sleep 5
     
-    # Check backend via nginx (more realistic than docker exec)
-    # Temporarily update upstream to point to the new env for testing
-    local original_upstream=$(cat "$DEPLOY_PATH/nginx/upstream.conf")
-    
-    cat > "$DEPLOY_PATH/nginx/upstream.conf" << EOF
-# TESTING: Temporarily pointing to $env for health check
-upstream backend_active {
-    server jawab24-backend-$env:3000;
-}
-upstream frontend_active {
-    server jawab24-frontend-$env:3001;
-}
-upstream ai_worker_active {
-    server jawab24-ai-worker-$env:3002;
-}
-EOF
-    
-    docker exec jawab24-nginx nginx -s reload 2>/dev/null || warn "Could not reload nginx for health check"
-    
-    # Check backend health
+    # Check backend health directly via container (avoids nginx HTTP->HTTPS redirect)
     while [ $attempt -le $max_attempts ]; do
-        if curl -sf http://localhost/api/health > /dev/null 2>&1; then
-            local health_status=$(curl -s http://localhost/api/health | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+        # Check container health directly - avoids nginx HTTP->HTTPS redirect issues
+        local health_response=$(docker exec jawab24-backend-$env wget -q -O- http://localhost:3000/health 2>/dev/null || echo "")
+        if [ -n "$health_response" ]; then
+            local health_status=$(echo "$health_response" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
             if [ "$health_status" = "healthy" ] || [ "$health_status" = "degraded" ]; then
                 log "✅ Backend ($env) is healthy (status: $health_status)"
                 break
@@ -81,9 +64,6 @@ EOF
         fi
         if [ $attempt -eq $max_attempts ]; then
             error "❌ Backend ($env) health check failed after $max_attempts attempts"
-            # Restore original upstream
-            echo "$original_upstream" > "$DEPLOY_PATH/nginx/upstream.conf"
-            docker exec jawab24-nginx nginx -s reload 2>/dev/null
             return 1
         fi
         warn "⏳ Waiting for backend ($env)... attempt $attempt/$max_attempts"
@@ -91,18 +71,16 @@ EOF
         ((attempt++))
     done
     
-    # Check frontend
+    # Check frontend health directly via container
     attempt=1
     while [ $attempt -le $max_attempts ]; do
-        if curl -sf http://localhost/ > /dev/null 2>&1; then
+        # Check if frontend responds on port 3001
+        if docker exec jawab24-frontend-$env wget -q --spider http://localhost:3001/ 2>/dev/null; then
             log "✅ Frontend ($env) is healthy"
             break
         fi
         if [ $attempt -eq $max_attempts ]; then
             error "❌ Frontend ($env) health check failed after $max_attempts attempts"
-            # Restore original upstream
-            echo "$original_upstream" > "$DEPLOY_PATH/nginx/upstream.conf"
-            docker exec jawab24-nginx nginx -s reload 2>/dev/null
             return 1
         fi
         warn "⏳ Waiting for frontend ($env)... attempt $attempt/$max_attempts"
@@ -110,10 +88,7 @@ EOF
         ((attempt++))
     done
     
-    # Restore original upstream before returning
-    echo "$original_upstream" > "$DEPLOY_PATH/nginx/upstream.conf"
-    docker exec jawab24-nginx nginx -s reload 2>/dev/null
-    
+    log "✅ All health checks passed for $env environment"
     return 0
 }
 
