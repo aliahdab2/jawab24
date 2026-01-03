@@ -15,6 +15,7 @@ set -e
 SERVER_HOST="91.99.95.196"
 SERVER_USER="root"
 DEPLOY_PATH="/var/www/jawab24"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_jawab24_deploy}"
 SKIP_TESTS=false
 
 # Parse arguments
@@ -260,12 +261,17 @@ echo -e "${GREEN}✅ SSH key found${NC}"
 
 # Test SSH connection
 echo -e "🔗 Testing SSH connection..."
-if ! ssh -o ConnectTimeout=10 -o BatchMode=yes ${SERVER_USER}@${SERVER_HOST} "echo 'connected'" > /dev/null 2>&1; then
+if [ ! -f "$SSH_KEY" ]; then
+    echo -e "${RED}❌ SSH key not found: $SSH_KEY${NC}"
+    echo -e "Set SSH_KEY environment variable or create the key."
+    exit 1
+fi
+if ! ssh -i "$SSH_KEY" -o ConnectTimeout=10 -o BatchMode=yes ${SERVER_USER}@${SERVER_HOST} "echo 'connected'" > /dev/null 2>&1; then
     echo -e "${RED}❌ Cannot connect to server!${NC}"
     echo -e "Make sure your SSH key is added to the server."
     exit 1
 fi
-echo -e "${GREEN}✅ SSH connection successful${NC}"
+echo -e "${GREEN}✅ SSH connection successful (using ${SSH_KEY})${NC}"
 
 # ═══════════════════════════════════════════════════════════════════
 # Confirm Deployment
@@ -299,7 +305,7 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${CYAN}Connecting to server and running deployment...${NC}"
 echo ""
 
-ssh ${SERVER_USER}@${SERVER_HOST} << 'ENDSSH'
+ssh -i "$SSH_KEY" ${SERVER_USER}@${SERVER_HOST} << 'ENDSSH'
 set -e
 cd /var/www/jawab24
 
