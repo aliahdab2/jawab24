@@ -3,8 +3,8 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
-import { 
-  MessageCircle, 
+import {
+  MessageCircle,
   Search,
   Reply,
   Bot,
@@ -20,7 +20,7 @@ import {
   ChevronRight,
   Sparkles
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { Message } from '@jawab24/shared';
@@ -95,29 +95,29 @@ export default function MessagesPage() {
 
   const filteredMessages = messages.filter(message => {
     const matchesSearch = message.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (message.senderName || '').toLowerCase().includes(searchQuery.toLowerCase());
-    if (filter === 'needs_attention') return matchesSearch; 
-    const matchesFilter = filter === 'all' || 
-                         (filter === 'incoming' && message.direction === 'incoming') ||
-                         (filter === 'outgoing' && message.direction === 'outgoing');
+      (message.senderName || '').toLowerCase().includes(searchQuery.toLowerCase());
+    if (filter === 'needs_attention') return matchesSearch;
+    const matchesFilter = filter === 'all' ||
+      (filter === 'incoming' && message.direction === 'incoming') ||
+      (filter === 'outgoing' && message.direction === 'outgoing');
     return matchesSearch && matchesFilter;
   });
 
   const getFilterLabel = (f: FilterType) => {
     switch (f) {
-      case 'all': return language === 'ar' ? 'الكل' : 'All';
-      case 'incoming': return language === 'ar' ? 'الواردة' : 'Incoming';
-      case 'outgoing': return language === 'ar' ? 'الصادرة' : 'Outgoing';
-      case 'needs_attention': return language === 'ar' ? 'تحتاج اهتمام' : 'Needs Attention';
+      case 'all': return t('common.all' as TranslationKey);
+      case 'incoming': return t('messages.incoming');
+      case 'outgoing': return t('messages.outgoing');
+      case 'needs_attention': return t('comments.needsAttention');
     }
   };
 
   const formatTime = (dateValue: string | Date | null | undefined) => {
     if (!dateValue) return '-';
     try {
-      return formatDistanceToNow(new Date(dateValue), { 
+      return formatDistanceToNow(new Date(dateValue), {
         addSuffix: true,
-        locale: language === 'ar' ? ar : enUS 
+        locale: language === 'ar' ? ar : enUS
       });
     } catch {
       return String(dateValue);
@@ -206,12 +206,11 @@ export default function MessagesPage() {
 
   const StatCard = ({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) => (
     <Card className="text-center p-4 border-none shadow-md shadow-surface-200/50 flex flex-col items-center">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${
-        color === 'brand' ? 'bg-brand-100 text-brand-600' :
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${color === 'brand' ? 'bg-brand-100 text-brand-600' :
         color === 'emerald' ? 'bg-emerald-100 text-emerald-600' :
-        color === 'amber' ? 'bg-amber-100 text-amber-600' :
-        'bg-red-100 text-red-600'
-      }`}>
+          color === 'amber' ? 'bg-amber-100 text-amber-600' :
+            'bg-red-100 text-red-600'
+        }`}>
         {icon}
       </div>
       <p className="text-2xl font-bold text-surface-900">{value.toLocaleString()}</p>
@@ -221,7 +220,7 @@ export default function MessagesPage() {
 
   if (loading && messages.length === 0) {
     return (
-      <DashboardLayout title={language === 'ar' ? 'الرسائل' : 'Messages'}>
+      <DashboardLayout title={t('messages.title')}>
         <div className="flex items-center justify-center h-64">
           <PageSpinner />
         </div>
@@ -230,37 +229,37 @@ export default function MessagesPage() {
   }
 
   return (
-    <DashboardLayout title={language === 'ar' ? 'الرسائل' : 'Messages'}>
+    <DashboardLayout title={t('messages.title')}>
       {/* Header */}
-      <PageHeader 
-        title={language === 'ar' ? 'الرسائل' : 'Messages'} 
-        description={language === 'ar' ? 'عرض وإدارة الرسائل الخاصة لصفحاتك' : 'View and manage private messages for your pages'} 
+      <PageHeader
+        title={t('messages.title')}
+        description={t('messages.description')}
         action={
-          <Button 
-            variant="secondary" 
-            size="sm" 
+          <Button
+            variant="secondary"
+            size="sm"
             icon={<Download className="w-4 h-4" />}
             onClick={exportToCSV}
             loading={exporting}
           >
-            {language === 'ar' ? 'تصدير CSV' : 'Export CSV'}
+            {t('comments.exportCSV')}
           </Button>
         }
       />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard title={language === 'ar' ? 'إجمالي الرسائل' : 'Total Messages'} value={stats.total} icon={<MessageCircle className="w-4 h-4" />} color="brand" />
-        <StatCard title={language === 'ar' ? 'تم الرد' : 'Replied'} value={stats.replied} icon={<CheckCircle className="w-4 h-4" />} color="emerald" />
-        <StatCard title={language === 'ar' ? 'قيد الانتظار' : 'Pending'} value={stats.pending} icon={<Clock className="w-4 h-4" />} color="amber" />
-        <StatCard title={language === 'ar' ? 'تحتاج اهتمام' : 'Needs Attention'} value={needsAttentionCount} icon={<AlertTriangle className="w-4 h-4" />} color="red" />
+        <StatCard title={t('messages.totalMessages')} value={stats.total} icon={<MessageCircle className="w-4 h-4" />} color="brand" />
+        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle className="w-4 h-4" />} color="emerald" />
+        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock className="w-4 h-4" />} color="amber" />
+        <StatCard title={t('comments.needsAttention')} value={needsAttentionCount} icon={<AlertTriangle className="w-4 h-4" />} color="red" />
       </div>
 
       {/* Filters & Search */}
       <Card className="mb-8 border-none shadow-lg shadow-surface-200/50">
         <div className="p-4 md:p-6 flex flex-col gap-6">
           <div className="relative group">
-            <Search 
+            <Search
               className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400 group-focus-within:text-brand-500 transition-colors"
               style={{ insetInlineStart: '1rem' }}
             />
@@ -278,9 +277,8 @@ export default function MessagesPage() {
                 variant={filter === f ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => setFilter(f)}
-                className={`rounded-full whitespace-nowrap px-6 transition-all duration-300 ${
-                  filter === f ? 'shadow-md shadow-brand-100' : ''
-                } ${f === 'needs_attention' && needsAttentionCount > 0 ? 'ring-2 ring-red-200' : ''}`}
+                className={`rounded-full whitespace-nowrap px-6 transition-all duration-300 ${filter === f ? 'shadow-md shadow-brand-100' : ''
+                  } ${f === 'needs_attention' && needsAttentionCount > 0 ? 'ring-2 ring-red-200' : ''}`}
               >
                 <div className="flex items-center gap-2">
                   {f === 'needs_attention' && <AlertTriangle className="w-3.5 h-3.5" />}
@@ -301,12 +299,11 @@ export default function MessagesPage() {
       {conversations.length > 0 ? (
         <div className="space-y-4 pb-12">
           {conversations.map((conv, i) => (
-            <Card 
-              key={conv.senderId} 
+            <Card
+              key={conv.senderId}
               hover
-              className={`animate-slide-up cursor-pointer border-none shadow-md hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden ${
-                conv.needsHumanAttention ? 'ring-2 ring-red-200 bg-red-50/10' : ''
-              }`}
+              className={`animate-slide-up cursor-pointer border-none shadow-md hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden ${conv.needsHumanAttention ? 'ring-2 ring-red-200 bg-red-50/10' : ''
+                }`}
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
               onClick={() => setSelectedConversation(conv)}
             >
@@ -314,13 +311,12 @@ export default function MessagesPage() {
                 <div className="flex flex-col lg:flex-row lg:items-start gap-6">
                   {/* User Avatar */}
                   <div className="flex-shrink-0 relative">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner transition-colors ${
-                      conv.needsHumanAttention ? 'bg-red-100 text-red-600' : 'bg-brand-100 text-brand-600'
-                    }`}>
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner transition-colors ${conv.needsHumanAttention ? 'bg-red-100 text-red-600' : 'bg-brand-100 text-brand-600'
+                      }`}>
                       <User className="w-7 h-7" />
                     </div>
                     {conv.needsHumanAttention && (
-                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                      <div className="absolute -top-2 -end-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                         <AlertTriangle className="w-3 h-3 text-white" />
                       </div>
                     )}
@@ -330,24 +326,26 @@ export default function MessagesPage() {
                   <div className="flex-1 min-w-0 text-start">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <span className="font-bold text-surface-900 text-lg">
-                        {conv.senderName || (language === 'ar' ? 'مستخدم' : 'User')}
+                        {conv.senderName || t('common.user' as TranslationKey)}
                       </span>
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-100 text-surface-600 text-[10px] font-bold uppercase tracking-wider">
-                        {conv.messages.length} {language === 'ar' ? 'رسالة' : 'messages'}
-                      </div>
-                      {conv.needsHumanAttention && (
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 text-[10px] font-bold uppercase tracking-wider">
-                          <AlertTriangle className="w-3 h-3" />
-                          {language === 'ar' ? 'يحتاج تدخل' : 'Needs Human'}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-bold text-surface-400 uppercase tracking-widest text-start">
+                          {t('messages.msgCount' as TranslationKey, { count: conv.messages.length })}
+                        </span>
+                        {conv.needsHumanAttention && (
+                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 text-[10px] font-bold uppercase tracking-wider">
+                            <AlertTriangle className="w-3 h-3" />
+                            {t('messages.needsHuman')}
+                          </div>
+                        )}
+                        <span className="text-surface-300">•</span>
+                        <div className="flex items-center gap-1 text-xs font-medium text-surface-400">
+                          <Clock className="w-3 h-3" />
+                          {formatTime(conv.lastMessage.createdAt)}
                         </div>
-                      )}
-                      <span className="text-surface-300">•</span>
-                      <div className="flex items-center gap-1 text-xs font-medium text-surface-400">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(conv.lastMessage.createdAt)}
                       </div>
                     </div>
-                    
+
                     {/* Last Message Preview */}
                     <div className="flex items-start gap-3 p-3 rounded-xl bg-surface-50 group-hover:bg-white transition-colors border border-transparent group-hover:border-surface-100">
                       {conv.lastMessage.direction === 'incoming' ? (
@@ -366,12 +364,12 @@ export default function MessagesPage() {
                     {conv.lastMessage.replied || conv.lastMessage.direction === 'outgoing' ? (
                       <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
                         <CheckCircle className="w-4 h-4" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">{language === 'ar' ? 'تم الرد' : 'Replied'}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider">{t('comments.replied')}</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
                         <Clock className="w-4 h-4" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">{language === 'ar' ? 'قيد الانتظار' : 'Pending'}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider">{t('comments.pending')}</span>
                       </div>
                     )}
                     <ChevronRight className={`w-5 h-5 text-surface-300 group-hover:text-brand-500 transition-all ${language === 'ar' ? 'rotate-180' : ''}`} />
@@ -385,10 +383,10 @@ export default function MessagesPage() {
         <Card className="border-none shadow-xl shadow-surface-200/50 rounded-3xl">
           <EmptyState
             icon={MessageCircle}
-            title={language === 'ar' ? 'لا توجد رسائل' : 'No messages'}
-            description={searchQuery 
-              ? t('common.noData') 
-              : (language === 'ar' ? 'ستظهر الرسائل هنا عند ورودها' : 'Messages will appear here when they arrive')
+            title={t('messages.noMessages' as TranslationKey)}
+            description={searchQuery
+              ? t('common.noData')
+              : t('messages.noMessagesDesc' as TranslationKey)
             }
           />
         </Card>
@@ -401,29 +399,28 @@ export default function MessagesPage() {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-surface-100">
               <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${
-                  selectedConversation.needsHumanAttention ? 'bg-red-100 text-red-600' : 'bg-brand-100 text-brand-600'
-                }`}>
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${selectedConversation.needsHumanAttention ? 'bg-red-100 text-red-600' : 'bg-brand-100 text-brand-600'
+                  }`}>
                   <User className="w-6 h-6" />
                 </div>
                 <div className="text-start">
                   <h2 className="text-xl font-bold text-surface-900 leading-tight">
-                    {selectedConversation.senderName || (language === 'ar' ? 'مستخدم' : 'User')}
+                    {selectedConversation.senderName || t('common.user' as TranslationKey)}
                   </h2>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] font-bold text-surface-400 uppercase tracking-widest">
-                      {selectedConversation.messages.length} {language === 'ar' ? 'رسالة' : 'messages'}
+                    <span className="text-[10px] font-bold text-surface-400 uppercase tracking-widest text-start">
+                      {t('messages.msgCount' as TranslationKey, { count: selectedConversation.messages.length })}
                     </span>
                     {selectedConversation.needsHumanAttention && (
                       <Badge variant="warning" size="sm">
                         <AlertTriangle className="w-3 h-3 mr-1" />
-                        {language === 'ar' ? 'يحتاج تدخل بشري' : 'Needs Human'}
+                        {t('messages.needsHuman')}
                       </Badge>
                     )}
                   </div>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedConversation(null)}
                 className="p-2.5 rounded-xl hover:bg-surface-100 text-surface-400 transition-colors"
               >
@@ -434,20 +431,18 @@ export default function MessagesPage() {
             {/* Modal Body - Conversation Thread */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-surface-50/50">
               {getSortedMessages(selectedConversation).map((msg) => (
-                <div 
+                <div
                   key={msg.id}
                   className={`flex flex-col ${msg.direction === 'outgoing' ? 'items-end' : 'items-start'}`}
                 >
-                  <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${
-                    msg.direction === 'outgoing' 
-                      ? 'bg-brand-600 text-white rounded-br-none' 
-                      : 'bg-white text-surface-900 rounded-bl-none border border-surface-100'
-                  }`}>
+                  <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${msg.direction === 'outgoing'
+                    ? 'bg-brand-600 text-white rounded-br-none'
+                    : 'bg-white text-surface-900 rounded-bl-none border border-surface-100'
+                    }`}>
                     <p className="text-sm leading-relaxed italic-arabic">{msg.message}</p>
                   </div>
-                  <div className={`flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter ${
-                    msg.direction === 'outgoing' ? 'text-brand-500' : 'text-surface-400'
-                  }`}>
+                  <div className={`flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter ${msg.direction === 'outgoing' ? 'text-brand-500' : 'text-surface-400'
+                    }`}>
                     <span>{formatFullTime(msg.createdAt)}</span>
                     {msg.direction === 'outgoing' && msg.replyMethod && (
                       <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-100 text-surface-600">
@@ -459,12 +454,12 @@ export default function MessagesPage() {
                         ) : msg.replyMethod === 'template' ? (
                           <>
                             <CheckCircle className="w-2.5 h-2.5" />
-                            {language === 'ar' ? 'قالب' : 'Template'}
+                            {t('dashboard.templateReply')}
                           </>
                         ) : (
                           <>
                             <UserCheck className="w-2.5 h-2.5" />
-                            {language === 'ar' ? 'يدوي' : 'Manual'}
+                            {t('common.manual' as TranslationKey)}
                           </>
                         )}
                       </div>
@@ -480,13 +475,11 @@ export default function MessagesPage() {
                 <div className="flex items-center gap-2 text-brand-600">
                   <Bot className="w-5 h-5" />
                   <span className="text-xs font-bold uppercase tracking-wider">
-                    {language === 'ar' 
-                      ? 'الردود تتم تلقائياً بواسطة الذكاء الاصطناعي' 
-                      : 'AI Automation Active'}
+                    {t('messages.aiAutomationActive')}
                   </span>
                 </div>
                 <Button variant="secondary" onClick={() => setSelectedConversation(null)} className="rounded-xl px-8">
-                  {language === 'ar' ? 'إغلاق' : 'Close'}
+                  {t('comments.close')}
                 </Button>
               </div>
             </div>

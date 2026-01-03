@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, Badge, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
-import { 
-  FileText, 
-  RefreshCw, 
+import {
+  FileText,
+  RefreshCw,
   ExternalLink,
   MessageSquare,
   TrendingUp,
@@ -35,7 +35,7 @@ export default function PagesPage() {
 
   const fetchPages = useCallback(async () => {
     if (!token) return;
-    
+
     try {
       setLoading(true);
       const response = await axios.get(`${apiUrl}/pages`, {
@@ -63,24 +63,24 @@ export default function PagesPage() {
       // Auto-sync pages from Facebook
       handleSync();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, pages.length, fbToken, token]);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
     // Optimistic update
-    setPages(pages.map(page => 
+    setPages(pages.map(page =>
       page.id === pageId ? { ...page, autoReplyEnabled: enabled } : page
     ));
 
     try {
-      await axios.patch(`${apiUrl}/pages/${pageId}/auto-reply`, 
+      await axios.patch(`${apiUrl}/pages/${pageId}/auto-reply`,
         { enabled },
         { headers: { Authorization: `Bearer ${token}` } }
       );
     } catch (error) {
       console.error('Failed to toggle auto-reply:', error);
       // Revert on error
-      setPages(pages.map(page => 
+      setPages(pages.map(page =>
         page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
       ));
     }
@@ -88,19 +88,19 @@ export default function PagesPage() {
 
   const handleInstagramToggle = async (pageId: string, enabled: boolean) => {
     // Optimistic update
-    setPages(pages.map(page => 
+    setPages(pages.map(page =>
       page.id === pageId ? { ...page, instagramAutoReplyEnabled: enabled } : page
     ));
 
     try {
-      await axios.patch(`${apiUrl}/pages/${pageId}/instagram-auto-reply`, 
+      await axios.patch(`${apiUrl}/pages/${pageId}/instagram-auto-reply`,
         { enabled },
         { headers: { Authorization: `Bearer ${token}` } }
       );
     } catch (error) {
       console.error('Failed to toggle Instagram auto-reply:', error);
       // Revert on error
-      setPages(pages.map(page => 
+      setPages(pages.map(page =>
         page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
       ));
     }
@@ -111,18 +111,18 @@ export default function PagesPage() {
       console.error('No tokens available for sync');
       return;
     }
-    
+
     try {
       setSyncing(true);
       // Call sync endpoint with user's FB token
-      await axios.post(`${apiUrl}/pages/sync`, 
+      await axios.post(`${apiUrl}/pages/sync`,
         { accessToken: fbToken },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       // Refresh list
       await fetchPages();
-      
+
     } catch (error) {
       console.error('Sync failed:', error);
     } finally {
@@ -152,20 +152,20 @@ export default function PagesPage() {
 
   const saveKnowledgeBase = async () => {
     if (!editingPage || !token) return;
-    
+
     setSaving(true);
     setSaved(false);
     try {
-      await axios.put(`${apiUrl}/pages/${editingPage.id}`, 
+      await axios.put(`${apiUrl}/pages/${editingPage.id}`,
         { knowledgeBase },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       // Update local state
-      setPages(pages.map(p => 
+      setPages(pages.map(p =>
         p.id === editingPage.id ? { ...p, knowledgeBase } : p
       ));
-      
+
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
@@ -188,8 +188,8 @@ export default function PagesPage() {
   return (
     <DashboardLayout title={t('pages.title')}>
       {/* Header */}
-      <PageHeader 
-        title={t('pages.title')} 
+      <PageHeader
+        title={t('pages.title')}
         description={t('pages.description')}
         action={
           <Button onClick={handleSync} loading={syncing} icon={<RefreshCw className="w-4 h-4" />}>
@@ -202,9 +202,9 @@ export default function PagesPage() {
       {pages.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
           {pages.map((page, i) => (
-            <Card 
-              key={page.id} 
-              hover 
+            <Card
+              key={page.id}
+              hover
               className="animate-slide-up border-none shadow-xl shadow-surface-200/50 flex flex-col h-full overflow-hidden"
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
@@ -229,11 +229,11 @@ export default function PagesPage() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="flex flex-col items-end gap-2">
-                  <a 
-                    href={`https://facebook.com/${page.facebookPageId}`} 
-                    target="_blank" 
+                  <a
+                    href={`https://facebook.com/${page.facebookPageId}`}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="p-2 rounded-xl bg-white border border-surface-200 text-surface-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-sm transition-all"
                   >
@@ -241,7 +241,7 @@ export default function PagesPage() {
                   </a>
                 </div>
               </div>
-              
+
               <div className="p-6 flex-1 flex flex-col gap-6">
                 {/* Platform Toggles */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -253,16 +253,16 @@ export default function PagesPage() {
                         </div>
                         <span className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
                       </div>
-                      <Toggle 
-                        enabled={page.autoReplyEnabled ?? false} 
-                        onChange={(enabled) => handleToggle(page.id, enabled)} 
+                      <Toggle
+                        enabled={page.autoReplyEnabled ?? false}
+                        onChange={(enabled) => handleToggle(page.id, enabled)}
                       />
                     </div>
                     <p className={`text-[10px] font-medium ${page.autoReplyEnabled ? 'text-blue-600' : 'text-surface-400'}`}>
                       {page.autoReplyEnabled ? t('common.enabled') : t('common.disabled')}
                     </p>
                   </div>
-                  
+
                   <div className={`p-4 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-100 ring-1 ring-pink-100' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-50 opacity-60 cursor-not-allowed'}`}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -272,18 +272,18 @@ export default function PagesPage() {
                         <span className={`text-sm font-bold ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
                       </div>
                       {page.instagramUsername ? (
-                        <Toggle 
-                          enabled={page.instagramAutoReplyEnabled ?? false} 
-                          onChange={(enabled) => handleInstagramToggle(page.id, enabled)} 
+                        <Toggle
+                          enabled={page.instagramAutoReplyEnabled ?? false}
+                          onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
                         />
                       ) : (
                         <div className="w-8 h-4 bg-surface-200 rounded-full"></div>
                       )}
                     </div>
                     <p className={`text-[10px] font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-600' : 'text-surface-400') : 'text-surface-300'}`}>
-                      {page.instagramUsername 
+                      {page.instagramUsername
                         ? (page.instagramAutoReplyEnabled ? t('common.enabled') : t('common.disabled'))
-                        : (language === 'ar' ? 'غير مفعل' : 'Not linked')
+                        : t('pages.notLinked')
                       }
                     </p>
                   </div>
@@ -306,13 +306,12 @@ export default function PagesPage() {
                 </div>
 
                 {/* Knowledge Base CTA - More prominent */}
-                <button 
+                <button
                   onClick={() => openKnowledgeBase(page)}
-                  className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${
-                    page.knowledgeBase 
-                      ? 'border-brand-500 bg-brand-50/30' 
-                      : 'border-dashed border-surface-300 bg-white hover:border-brand-400 hover:bg-brand-50/10'
-                  }`}
+                  className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${page.knowledgeBase
+                    ? 'border-brand-500 bg-brand-50/30'
+                    : 'border-dashed border-surface-300 bg-white hover:border-brand-400 hover:bg-brand-50/10'
+                    }`}
                 >
                   <div className="relative z-10 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -321,15 +320,15 @@ export default function PagesPage() {
                       </div>
                       <div className="text-start">
                         <p className={`text-sm font-bold ${page.knowledgeBase ? 'text-brand-900' : 'text-surface-700'}`}>
-                          {page.knowledgeBase 
-                            ? (language === 'ar' ? 'معلومات النشاط التجاري جاهزة' : 'Business Info Active')
-                            : (language === 'ar' ? 'أضف معلومات النشاط التجاري' : 'Add Business Info')
+                          {page.knowledgeBase
+                            ? t('pages.businessInfoActive')
+                            : t('pages.addBusinessInfo')
                           }
                         </p>
                         <p className="text-[10px] font-medium text-surface-500 uppercase tracking-tight mt-0.5">
-                          {page.knowledgeBase 
-                            ? (language === 'ar' ? 'انقر لتعديل المعلومات' : 'Click to edit information')
-                            : (language === 'ar' ? 'لتحسين جودة ردود الذكاء الاصطناعي' : 'To improve AI reply quality')
+                          {page.knowledgeBase
+                            ? t('pages.clickToEdit')
+                            : t('pages.improveAIQuality')
                           }
                         </p>
                       </div>
@@ -384,12 +383,12 @@ export default function PagesPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-surface-900">
-                    {language === 'ar' ? 'معلومات عملك' : 'Your Business Info'}
+                    {t('pages.businessInfo')}
                   </h2>
                   <p className="text-sm text-surface-500">{editingPage.name}</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={closeKnowledgeBase}
                 className="p-2 rounded-lg hover:bg-surface-100 text-surface-500"
               >
@@ -399,64 +398,38 @@ export default function PagesPage() {
 
             {/* Modal Body */}
             <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <p className="text-sm text-surface-600 mb-4">
-                {language === 'ar' 
-                  ? 'أضف معلومات عن عملك هنا لنتمكن من الرد على أسئلة عملائك بدقة.'
-                  : 'Add information about your business here to answer customer questions accurately.'
-                }
+              <p className="text-sm text-surface-600 mb-4 text-start">
+                {t('pages.businessInfoModalDesc')}
               </p>
-              
-              <div className="bg-surface-50 rounded-xl p-4 mb-4">
+
+              <div className="bg-surface-50 rounded-xl p-4 mb-4 text-start">
                 <p className="text-sm font-medium text-surface-700 mb-2">
-                  {language === 'ar' ? 'مثال:' : 'Example:'}
+                  {t('pages.example')}
                 </p>
                 <pre className="text-xs text-surface-500 whitespace-pre-wrap">
-{language === 'ar' 
-  ? `نحن متجر حقائب يدوية.
-
-المنتجات:
-- حقيبة كلاسيكية حمراء: 49$
-- حقيبة فاخرة زرقاء: 59$
-- محفظة صغيرة: 19$
-
-الشحن: مجاني للطلبات فوق 100$
-التوصيل: 3-5 أيام عمل
-الإرجاع: 14 يوم بدون أسئلة`
-  : `We sell handmade leather bags.
-
-Products:
-- Red Classic Bag: $49
-- Blue Premium Bag: $59
-- Mini Wallet: $19
-
-Shipping: Free for orders over $100
-Delivery: 3-5 business days
-Returns: 14 days, no questions asked`}
+                  {t('pages.businessInfoExample' as TranslationKey)}
                 </pre>
               </div>
 
               <textarea
                 className="w-full h-64 p-4 border border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900"
-                placeholder={language === 'ar' 
-                  ? 'اكتب معلومات عملك هنا...'
-                  : 'Write your business information here...'
-                }
+                placeholder={t('pages.writeBusinessInfo')}
                 value={knowledgeBase}
                 onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
                 maxLength={2000}
                 dir={language === 'ar' ? 'rtl' : 'ltr'}
               />
-              
+
               {/* Character Counter */}
               <div className="text-sm mt-2 text-end">
                 <span className={
-                  knowledgeBase.length > 1900 
-                    ? 'text-red-500 font-medium' 
-                    : knowledgeBase.length > 1500 
-                      ? 'text-amber-500' 
+                  knowledgeBase.length > 1900
+                    ? 'text-red-500 font-medium'
+                    : knowledgeBase.length > 1500
+                      ? 'text-amber-500'
                       : 'text-surface-400'
                 }>
-                  {knowledgeBase.length.toLocaleString()}/2,000 {language === 'ar' ? 'حرف' : 'characters'}
+                  {knowledgeBase.length.toLocaleString()}/2,000 {t('pages.characters')}
                 </span>
               </div>
             </div>
@@ -466,14 +439,14 @@ Returns: 14 days, no questions asked`}
               <Button variant="secondary" onClick={closeKnowledgeBase}>
                 {t('common.cancel')}
               </Button>
-              <Button 
-                onClick={saveKnowledgeBase} 
+              <Button
+                onClick={saveKnowledgeBase}
                 loading={saving}
                 icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
                 variant={saved ? 'secondary' : 'primary'}
               >
-                {saved 
-                  ? (language === 'ar' ? 'تم الحفظ!' : 'Saved!') 
+                {saved
+                  ? t('pages.savedStatus')
                   : t('common.save')
                 }
               </Button>

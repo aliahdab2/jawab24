@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardHeader, Badge, PageHeader, PageSpinner, Button } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import { subscriptionApi } from '@/lib/api';
-import { 
-  MessageSquare, 
-  Zap, 
+import {
+  MessageSquare,
+  Zap,
   Clock,
   FileText,
   Sparkles,
@@ -31,10 +31,9 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
         </span>
       </div>
       <div className="h-2 w-full bg-surface-100 rounded-full overflow-hidden">
-        <div 
-          className={`h-full rounded-full transition-all duration-1000 ${
-            percent > 90 ? 'bg-red-500' : percent > 75 ? 'bg-amber-500' : 'bg-brand-500'
-          }`}
+        <div
+          className={`h-full rounded-full transition-all duration-1000 ${percent > 90 ? 'bg-red-500' : percent > 75 ? 'bg-amber-500' : 'bg-brand-500'
+            }`}
           style={{ width: `${Math.min(percent, 100)}%` }}
         ></div>
       </div>
@@ -76,7 +75,7 @@ export default function DashboardPage() {
         axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } }),
         subscriptionApi.getUsage().catch(() => null)
       ]);
-      
+
       // Set usage data if available
       if (usageRes?.data?.data) {
         setUsage(usageRes.data.data);
@@ -130,9 +129,9 @@ export default function DashboardPage() {
   const formatTime = (dateValue: string | Date | null | undefined) => {
     if (!dateValue) return '-';
     try {
-      return formatDistanceToNow(new Date(dateValue), { 
+      return formatDistanceToNow(new Date(dateValue), {
         addSuffix: true,
-        locale: language === 'ar' ? ar : enUS 
+        locale: language === 'ar' ? ar : enUS
       });
     } catch {
       return String(dateValue);
@@ -141,26 +140,26 @@ export default function DashboardPage() {
 
   // Simplified stats - only 3 essential metrics for low-tech users
   const stats = [
-    { 
-      nameKey: 'dashboard.totalComments', 
-      value: statsData.totalComments.toLocaleString(), 
+    {
+      nameKey: 'dashboard.totalComments' as TranslationKey,
+      value: statsData.totalComments.toLocaleString(),
       icon: MessageSquare,
       color: 'brand',
-      description: language === 'ar' ? 'تعليقات صفحاتك' : 'Your page comments'
+      descriptionKey: 'dashboard.totalCommentsDesc' as TranslationKey
     },
-    { 
-      nameKey: 'dashboard.autoReplies', 
-      value: statsData.autoReplies.toLocaleString(), 
+    {
+      nameKey: 'dashboard.autoReplies' as TranslationKey,
+      value: statsData.autoReplies.toLocaleString(),
       icon: Zap,
       color: 'emerald',
-      description: language === 'ar' ? 'تم الرد عليها ✓' : 'Replied ✓'
+      descriptionKey: 'dashboard.autoRepliesDesc' as TranslationKey
     },
-    { 
-      nameKey: 'dashboard.pending', 
-      value: (statsData.totalComments - statsData.autoReplies).toLocaleString(), 
+    {
+      nameKey: 'dashboard.pending' as TranslationKey,
+      value: (statsData.totalComments - statsData.autoReplies).toLocaleString(),
       icon: Clock,
       color: 'amber',
-      description: language === 'ar' ? 'بانتظار الرد' : 'Waiting for reply'
+      descriptionKey: 'dashboard.pendingDesc' as TranslationKey
     },
   ];
 
@@ -176,53 +175,51 @@ export default function DashboardPage() {
   };
 
   if (loading) {
-      return (
-        <DashboardLayout title={t('dashboard.title')}>
-          <div className="flex items-center justify-center h-64">
-            <PageSpinner />
-          </div>
-        </DashboardLayout>
-      );
+    return (
+      <DashboardLayout title={t('dashboard.title')}>
+        <div className="flex items-center justify-center h-64">
+          <PageSpinner />
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (
     <DashboardLayout title={t('dashboard.title')}>
       {/* Onboarding Wizard for new users */}
       {showOnboarding && (
-        <OnboardingWizard 
+        <OnboardingWizard
           onComplete={handleOnboardingComplete}
           onSkip={handleOnboardingSkip}
         />
       )}
       {/* Header */}
-      <PageHeader 
-        title={t('dashboard.title')} 
-        description={t('dashboard.overview')} 
+      <PageHeader
+        title={t('dashboard.title')}
+        description={t('dashboard.overview')}
       />
 
       {/* Stats Grid - Simplified to 3 cards with more visual interest */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-12">
         {stats.map((stat, i) => (
-          <Card 
-            key={stat.nameKey} 
-            hover 
+          <Card
+            key={stat.nameKey}
+            hover
             className="animate-slide-up relative overflow-hidden group border-none shadow-xl shadow-surface-200/50 bg-white"
             style={{ animationDelay: `${i * 0.1}s` } as React.CSSProperties}
             padding="lg"
           >
             {/* Background decoration */}
-            <div className={`absolute -right-6 -bottom-6 w-32 h-32 rounded-full opacity-[0.03] transition-all duration-700 group-hover:scale-150 group-hover:opacity-[0.08] ${
-              stat.color === 'brand' ? 'bg-brand-500' :
-              stat.color === 'emerald' ? 'bg-emerald-500' :
-              'bg-amber-500'
-            }`}></div>
-            
+            <div className={`absolute -end-6 -bottom-6 w-32 h-32 rounded-full opacity-[0.03] transition-all duration-700 group-hover:scale-150 group-hover:opacity-[0.08] ${stat.color === 'brand' ? 'bg-brand-500' :
+                stat.color === 'emerald' ? 'bg-emerald-500' :
+                  'bg-amber-500'
+              }`}></div>
+
             <div className="relative z-10 flex flex-col items-center">
-              <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-6 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110 shadow-inner ${
-                stat.color === 'brand' ? 'bg-brand-50 text-brand-600 border border-brand-100/50' :
-                stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' :
-                'bg-amber-50 text-amber-600 border border-amber-100/50'
-              }`}>
+              <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-6 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110 shadow-inner ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600 border border-brand-100/50' :
+                  stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' :
+                    'bg-amber-50 text-amber-600 border border-amber-100/50'
+                }`}>
                 <stat.icon className="w-10 h-10" />
               </div>
               <p className="text-5xl font-display font-extrabold text-surface-900 mb-2 tracking-tighter">
@@ -230,7 +227,7 @@ export default function DashboardPage() {
               </p>
               <p className="text-xs font-bold text-surface-400 uppercase tracking-[0.2em]">{t(stat.nameKey)}</p>
               <div className="mt-4 px-4 py-1.5 rounded-full bg-surface-50 border border-surface-100 text-[10px] font-bold text-surface-500 uppercase tracking-widest group-hover:bg-brand-50 group-hover:text-brand-600 group-hover:border-brand-100 transition-all">
-                {stat.description}
+                {t(stat.descriptionKey)}
               </div>
             </div>
           </Card>
@@ -252,11 +249,11 @@ export default function DashboardPage() {
               </Button>
             </Link>
           </div>
-          
+
           <div className="divide-y divide-surface-100">
             {recentComments.length > 0 ? recentComments.map((comment, i) => (
-              <div 
-                key={comment.id} 
+              <div
+                key={comment.id}
                 className="px-8 py-6 hover:bg-brand-50/20 transition-all group animate-slide-up"
                 style={{ animationDelay: `${(i + 3) * 0.1}s` } as React.CSSProperties}
               >
@@ -293,12 +290,12 @@ export default function DashboardPage() {
                 </div>
               </div>
             )) : (
-                <div className="py-20 text-center">
-                    <div className="w-20 h-20 rounded-3xl bg-surface-50 flex items-center justify-center mx-auto mb-6 border border-surface-100 shadow-inner">
-                      <MessageSquare className="w-10 h-10 text-surface-200" />
-                    </div>
-                    <p className="text-lg font-bold text-surface-400 uppercase tracking-widest">{t('common.noData')}</p>
+              <div className="py-20 text-center">
+                <div className="w-20 h-20 rounded-3xl bg-surface-50 flex items-center justify-center mx-auto mb-6 border border-surface-100 shadow-inner">
+                  <MessageSquare className="w-10 h-10 text-surface-200" />
                 </div>
+                <p className="text-lg font-bold text-surface-400 uppercase tracking-widest">{t('common.noData')}</p>
+              </div>
             )}
           </div>
         </Card>
@@ -308,8 +305,8 @@ export default function DashboardPage() {
           {/* Usage & Plan Status - Now integrated as a main card */}
           {usage && (
             <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-white relative group" padding="lg">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-brand-500/10"></div>
-              
+              <div className="absolute top-0 end-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-brand-500/10"></div>
+
               <div className="flex items-center gap-5 mb-8 relative z-10">
                 <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20 transform transition-transform group-hover:rotate-6">
                   <Crown className="w-8 h-8" />
@@ -319,18 +316,18 @@ export default function DashboardPage() {
                   <h4 className="text-2xl font-display font-bold text-surface-900 truncate tracking-tight">{usage.subscription.plan.name}</h4>
                 </div>
               </div>
-              
+
               <div className="space-y-6 relative z-10">
-                <UsageProgress 
-                  label={t('subscription.aiRepliesUsed')} 
-                  used={usage.aiReplies.used} 
-                  limit={usage.aiReplies.limit} 
+                <UsageProgress
+                  label={t('subscription.aiRepliesUsed')}
+                  used={usage.aiReplies.used}
+                  limit={usage.aiReplies.limit}
                   percent={usage.aiReplies.percentUsed}
                 />
-                <UsageProgress 
-                  label={t('subscription.pagesUsed')} 
-                  used={usage.pages.used} 
-                  limit={usage.pages.limit} 
+                <UsageProgress
+                  label={t('subscription.pagesUsed')}
+                  used={usage.pages.used}
+                  limit={usage.pages.limit}
                   percent={usage.pages.limit ? (usage.pages.used / usage.pages.limit) * 100 : 0}
                 />
               </div>
@@ -365,12 +362,11 @@ export default function DashboardPage() {
               {pages.length > 0 ? pages.slice(0, 3).map((page, i) => (
                 <div key={page.id} className="flex items-center gap-5 group animate-slide-up" style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}>
                   <div className="relative">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm border ${
-                      i === 0 ? 'bg-brand-50 text-brand-600 border-brand-100' : 'bg-surface-50 text-surface-600 border-surface-100'
-                    } group-hover:scale-110 group-hover:rotate-3`}>
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm border ${i === 0 ? 'bg-brand-50 text-brand-600 border-brand-100' : 'bg-surface-50 text-surface-600 border-surface-100'
+                      } group-hover:scale-110 group-hover:rotate-3`}>
                       <FileText className="w-7 h-7" />
                     </div>
-                    <div className="absolute -top-2 -right-2 w-7 h-7 rounded-xl bg-surface-900 shadow-lg border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">
+                    <div className="absolute -top-2 -end-2 w-7 h-7 rounded-xl bg-surface-900 shadow-lg border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">
                       {i + 1}
                     </div>
                   </div>
@@ -385,9 +381,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
               )) : (
-                  <div className="py-10 text-center text-surface-400 font-bold uppercase tracking-widest text-xs">
-                      {t('common.noData')}
-                  </div>
+                <div className="py-10 text-center text-surface-400 font-bold uppercase tracking-widest text-xs">
+                  {t('common.noData')}
+                </div>
               )}
             </div>
             <div className="px-8 py-5 border-t border-surface-100 bg-surface-50/30">
@@ -399,7 +395,7 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
-      
+
       {/* Simple status message */}
       {statsData.activePages > 0 && (
         <Card className="mt-6 bg-emerald-50 border-emerald-200">
@@ -409,16 +405,10 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="font-medium">
-                {language === 'ar' 
-                  ? `✓ الردود التلقائية مفعلة على ${statsData.activePages} صفحة`
-                  : `✓ Auto-replies active on ${statsData.activePages} page${statsData.activePages > 1 ? 's' : ''}`
-                }
+                {t('dashboard.activeRepliesOn', { count: statsData.activePages })}
               </p>
               <p className="text-sm text-emerald-600">
-                {language === 'ar' 
-                  ? 'سنرد على تعليقات ورسائل عملائك تلقائياً'
-                  : "We'll auto-reply to your customers' comments and messages"
-                }
+                {t('dashboard.autoReplyNote')}
               </p>
             </div>
           </div>
