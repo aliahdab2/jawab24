@@ -147,7 +147,7 @@ EOF
     # 1. Keep old workers handling existing requests
     # 2. Start new workers with new config
     # 3. Gradually shut down old workers as requests complete
-    docker exec jawab24-nginx nginx -s reload
+    docker exec jawab24-nginx nginx -s reload 2>&1 | grep -v "http2.*deprecated" || true
     
     # Wait for reload to complete
     sleep 1
@@ -174,13 +174,18 @@ deploy_env() {
         export $(grep -v '^#' ./env/frontend.env | xargs)
     fi
     
-    # Build images
-    log "Building Docker images..."
-    docker-compose -f docker-compose.yml -f docker-compose.$env.yml build --parallel
+    # Build images (quiet mode - only show errors and final summary)
+    log "📦 Building Docker images..."
+    if docker-compose -f docker-compose.yml -f docker-compose.$env.yml build --parallel --quiet 2>&1; then
+        log "✅ Images built successfully"
+    else
+        error "❌ Image build failed!"
+        return 1
+    fi
     
-    # Start the new environment
-    log "Starting $env containers..."
-    docker-compose -f docker-compose.yml -f docker-compose.$env.yml up -d backend-$env frontend-$env ai-worker-$env
+    # Start the new environment (suppress orphan warnings)
+    log "🚀 Starting $env containers..."
+    docker-compose -f docker-compose.yml -f docker-compose.$env.yml up -d backend-$env frontend-$env ai-worker-$env 2>&1 | grep -v "orphan containers" || true
     
     log "✅ $env environment deployed"
 }

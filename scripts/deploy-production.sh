@@ -335,8 +335,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "🗄️  Step 2: Running database migrations..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Ensure postgres is running
-docker-compose up -d postgres
+# Ensure postgres is running (suppress warnings)
+docker-compose up -d postgres 2>&1 | grep -v "orphan containers" | grep -v "level=warning" || true
 sleep 5
 
 # Run migrations
