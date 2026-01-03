@@ -5,8 +5,10 @@
 # This script runs the full CI/CD pipeline locally without GitHub Actions
 # It replicates the same checks and blue-green deployment as CI/CD
 #
-# Usage: ./scripts/deploy-local.sh
-#        ./scripts/deploy-local.sh --skip-tests  # Skip CI tests
+# Usage: ./scripts/deploy-production.sh
+#        ./scripts/deploy-production.sh -y              # Skip confirmation
+#        ./scripts/deploy-production.sh --skip-tests    # Skip CI tests
+#        ./scripts/deploy-production.sh -y --skip-tests # Both
 # ═══════════════════════════════════════════════════════════════════
 
 set -e
@@ -17,12 +19,17 @@ SERVER_USER="root"
 DEPLOY_PATH="/var/www/jawab24"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_jawab24_deploy}"
 SKIP_TESTS=false
+AUTO_CONFIRM=false
 
 # Parse arguments
 for arg in "$@"; do
     case $arg in
         --skip-tests)
             SKIP_TESTS=true
+            shift
+            ;;
+        -y|--yes)
+            AUTO_CONFIRM=true
             shift
             ;;
     esac
@@ -285,10 +292,14 @@ echo -e "Current commit: ${CYAN}$(git rev-parse --short HEAD)${NC}"
 echo -e "Branch: ${CYAN}$(git branch --show-current)${NC}"
 echo -e "Message: $(git log -1 --pretty=%B | head -1)"
 echo ""
-read -p "Deploy this commit to production? (y/N): " confirm
-if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}Deployment cancelled.${NC}"
-    exit 0
+if [ "$AUTO_CONFIRM" = true ]; then
+    echo -e "${GREEN}Auto-confirmed with -y flag${NC}"
+else
+    read -p "Deploy this commit to production? (y/N): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}Deployment cancelled.${NC}"
+        exit 0
+    fi
 fi
 
 # ═══════════════════════════════════════════════════════════════════
