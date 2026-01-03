@@ -59,10 +59,10 @@ function PlanCard({
         </div>
       )}
 
-      {/* Current plan badge - using end-4 for RTL support */}
+      {/* Current plan badge - centered at top */}
       {isCurrentPlan && (
-        <div className="absolute top-4 end-4">
-          <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-green-200">
+        <div className="absolute top-4 start-0 end-0 flex justify-center">
+          <span className="bg-green-100 text-green-700 text-[10px] font-bold px-3 py-1 rounded-full border border-green-200">
             {t('pricing.currentPlan')}
           </span>
         </div>
