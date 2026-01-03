@@ -56,7 +56,8 @@ health_check() {
         # Check container health directly - avoids nginx HTTP->HTTPS redirect issues
         local health_response=$(docker exec jawab24-backend-$env wget -q -O- http://localhost:3000/health 2>/dev/null || echo "")
         if [ -n "$health_response" ]; then
-            local health_status=$(echo "$health_response" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+            # Get only the FIRST status (root level), not nested service statuses
+            local health_status=$(echo "$health_response" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
             if [ "$health_status" = "healthy" ] || [ "$health_status" = "degraded" ]; then
                 log "✅ Backend ($env) is healthy (status: $health_status)"
                 break
