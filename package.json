@@ -1,6 +1,9 @@
 {
   "name": "jawab24-root",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "workspaces": [
     "backend",
     "frontend",

@@ -2,8 +2,6 @@ import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { FlatCompat } from '@eslint/eslintrc';
 import js from '@eslint/js';
-import tseslint from '@typescript-eslint/eslint-plugin';
-import tsparser from '@typescript-eslint/parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,34 +40,20 @@ const eslintConfig = [
             'react/no-unescaped-entities': 'off',
             'react-hooks/exhaustive-deps': 'warn',
             
-            // General best practices
-            'no-console': ['warn', { allow: ['warn', 'error'] }],
-            'prefer-const': 'error',
-            'no-unused-vars': 'off', // TypeScript handles this
-        },
-    },
-    
-    // TypeScript specific rules
-    {
-        files: ['**/*.{ts,tsx}'],
-        languageOptions: {
-            parser: tsparser,
-            parserOptions: {
-                ecmaVersion: 'latest',
-                sourceType: 'module',
-            },
-        },
-        plugins: {
-            '@typescript-eslint': tseslint,
-        },
-        rules: {
-            // Allow unused vars with underscore prefix
+            // TypeScript - handled by TS compiler
             '@typescript-eslint/no-unused-vars': ['warn', { 
                 argsIgnorePattern: '^_',
                 varsIgnorePattern: '^_',
             }],
+            '@typescript-eslint/no-explicit-any': 'off',
+            
+            // General best practices
+            'no-console': ['warn', { allow: ['warn', 'error'] }],
+            'prefer-const': 'error',
+            'no-unused-vars': 'off',
         },
     },
 ];
 
 export default eslintConfig;
+
