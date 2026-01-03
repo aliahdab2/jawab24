@@ -646,5 +646,6 @@
   "profile.emailRequired": "Please provide your email address to continue. We'll use it for account notifications and receipts.",
   "profile.emailAddress": "Email Address",
   "profile.privacyNote": "We respect your privacy. Your email will only be used for account-related communications.",
-  "common.saving": "Saving..."
+  "common.saving": "Saving...",
+  "common.continue": "Continue"
 }
