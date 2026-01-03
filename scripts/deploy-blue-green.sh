@@ -174,9 +174,9 @@ deploy_env() {
         export $(grep -v '^#' ./env/frontend.env | xargs)
     fi
     
-    # Build images (quiet mode - only show errors and final summary)
+    # Build images (quiet mode, no cache - only show errors and final summary)
     log "📦 Building Docker images..."
-    if docker-compose -f docker-compose.yml -f docker-compose.$env.yml build --parallel --quiet 2>&1; then
+    if docker-compose -f docker-compose.yml -f docker-compose.$env.yml build --parallel --quiet --no-cache 2>&1; then
         log "✅ Images built successfully"
     else
         error "❌ Image build failed!"

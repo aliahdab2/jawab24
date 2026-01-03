@@ -93,7 +93,7 @@ if [ -f "./env/frontend.env" ]; then
     export $(grep -v '^#' ./env/frontend.env | xargs)
 fi
 
-docker-compose build --parallel
+docker-compose build --parallel --no-cache
 echo -e "${GREEN}✅ All containers built${NC}"
 echo ""
 
