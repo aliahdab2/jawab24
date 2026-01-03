@@ -167,7 +167,9 @@ if [ "$SKIP_TESTS" = false ]; then
     echo ""
     echo -e "${CYAN}5️⃣  Backend tests...${NC}"
     BACKEND_RESULT=$(npm test --workspace=jawab24-backend -- --run 2>&1)
-    BACKEND_TESTS=$(echo "$BACKEND_RESULT" | grep -oP 'Tests\s+\d+ passed' | grep -oP '\d+' || echo "0")
+    # Extract test count (works on both macOS and Linux)
+    BACKEND_TESTS=$(echo "$BACKEND_RESULT" | grep -o 'Tests[[:space:]]*[0-9]* passed' | grep -o '[0-9]*' | head -1 || echo "0")
+    [ -z "$BACKEND_TESTS" ] && BACKEND_TESTS="0"
     echo -e "${GREEN}   ✅ Backend tests passed (${BACKEND_TESTS} tests)${NC}"
 
     # ────────────────────────────────────────────────────────────────
@@ -212,7 +214,9 @@ if [ "$SKIP_TESTS" = false ]; then
     echo ""
     echo -e "${CYAN}🔟 Frontend tests...${NC}"
     FRONTEND_RESULT=$(npm test --workspace=jawab24-frontend -- --run 2>&1)
-    FRONTEND_TESTS=$(echo "$FRONTEND_RESULT" | grep -oP 'Tests\s+\d+ passed' | grep -oP '\d+' || echo "0")
+    # Extract test count (works on both macOS and Linux)
+    FRONTEND_TESTS=$(echo "$FRONTEND_RESULT" | grep -o 'Tests[[:space:]]*[0-9]* passed' | grep -o '[0-9]*' | head -1 || echo "0")
+    [ -z "$FRONTEND_TESTS" ] && FRONTEND_TESTS="0"
     echo -e "${GREEN}   ✅ Frontend tests passed (${FRONTEND_TESTS} tests)${NC}"
 
     # ────────────────────────────────────────────────────────────────
