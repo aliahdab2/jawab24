@@ -522,7 +522,12 @@ jobs:
             echo "AI Worker: ✅"
             echo "Frontend: ✅"
             echo "Docker: ✅"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
-            echo "🚀 Deployment will proceed automatically"
+            echo "🚀 DEPLOYMENT STARTING..."
+            echo ""
+            echo "The 'Deploy' workflow will now run automatically."
+            echo "Check the Actions tab for deployment progress."
+            echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           fi
