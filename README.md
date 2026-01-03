@@ -151,6 +151,7 @@ There are ~95 tests covering the backend. They run on every push.
 - [API Spec](./API_SPEC.md)
 - [Database Schema](./DATABASE_SCHEMA.md)
 - [Language Support](./LANGUAGE_SUPPORT.md)
+- [Technical Roadmap](./ROADMAP.md)
 
 ---
 
