@@ -98,56 +98,56 @@ export default function LoginPage() {
 
       <div className="min-h-screen bg-white flex flex-col lg:flex-row" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
-        <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-20">
+        <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}
           <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.15),transparent)]"></div>
           <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.15),transparent)]"></div>
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
 
-          <div className="relative z-10 w-full max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/10 mb-12 animate-slide-up">
+          <div className="relative z-10 w-full max-w-xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/10 mb-6 animate-slide-up">
               <Sparkles className="w-4 h-4 text-brand-400" />
-              <span className="text-sm font-bold text-brand-400 uppercase tracking-widest">
+              <span className="text-xs font-bold text-brand-400 uppercase tracking-widest">
                 {t('auth.nextGenAutoReplies')}
               </span>
             </div>
 
-            <h1 className="text-5xl lg:text-6xl font-display font-extrabold text-white mb-8 leading-tight tracking-tight animate-slide-up animation-delay-100">
+            <h1 className="text-3xl xl:text-4xl font-display font-extrabold text-white mb-4 leading-tight tracking-tight animate-slide-up animation-delay-100">
               {t('auth.startYourJourney')}
               <span className="block text-brand-500">{t('auth.smartGrowthJourney')}</span>
             </h1>
 
-            <p className="text-xl text-surface-400 mb-16 leading-relaxed font-medium animate-slide-up animation-delay-200">
+            <p className="text-base text-surface-400 mb-8 leading-relaxed font-medium animate-slide-up animation-delay-200">
               {t('auth.journeyDesc')}
             </p>
 
-            <div className="grid grid-cols-1 gap-8 animate-slide-up animation-delay-300">
+            <div className="grid grid-cols-1 gap-4 animate-slide-up animation-delay-300">
               {features.map((f, i) => (
-                <div key={i} className="flex gap-6 items-start group">
-                  <div className={`w-14 h-14 rounded-2xl ${f.bg} flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 shadow-lg`}>
-                    <f.icon className={`w-7 h-7 ${f.color}`} />
+                <div key={i} className="flex gap-4 items-start group">
+                  <div className={`w-10 h-10 rounded-xl ${f.bg} flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 shadow-lg`}>
+                    <f.icon className={`w-5 h-5 ${f.color}`} />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-2">{f.title}</h3>
-                    <p className="text-surface-400 font-medium">{f.desc}</p>
+                    <h3 className="text-base font-bold text-white mb-1">{f.title}</h3>
+                    <p className="text-sm text-surface-400 font-medium">{f.desc}</p>
                   </div>
                 </div>
               ))}
             </div>
 
             {/* Testimonial Snippet */}
-            <div className="mt-20 p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-sm animate-slide-up animation-delay-500">
-              <div className="flex gap-1 mb-4">
-                {[1, 2, 3, 4, 5].map(s => <Star key={s} className="w-4 h-4 text-amber-400 fill-amber-400" />)}
+            <div className="mt-8 p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm animate-slide-up animation-delay-500">
+              <div className="flex gap-1 mb-2">
+                {[1, 2, 3, 4, 5].map(s => <Star key={s} className="w-3 h-3 text-amber-400 fill-amber-400" />)}
               </div>
-              <p className="text-white font-medium italic mb-4">
+              <p className="text-sm text-white font-medium italic mb-3">
                 "{t('auth.testimonialQuote')}"
               </p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white font-bold text-xs">MA</div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center text-white font-bold text-xs">MA</div>
                 <div>
-                  <div className="text-white font-bold text-sm">Mohammed A.</div>
-                  <div className="text-surface-500 text-xs font-bold uppercase tracking-widest">{t('auth.testimonialAuthor')}</div>
+                  <div className="text-white font-bold text-xs">Mohammed A.</div>
+                  <div className="text-surface-500 text-[10px] font-bold uppercase tracking-widest">{t('auth.testimonialAuthor')}</div>
                 </div>
               </div>
             </div>
@@ -158,12 +158,12 @@ export default function LoginPage() {
         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
           {/* Mobile Nav */}
           <div className="flex items-center justify-between p-6 lg:p-12">
-            <div className="flex items-center gap-3 group">
+            <Link href="/" className="flex items-center gap-3 group">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
                 <MessageCircle className="w-5 h-5 text-white fill-white" />
               </div>
               <span className="font-display font-bold text-xl text-surface-900 tracking-tight">Jawab24</span>
-            </div>
+            </Link>
             <button
               onClick={toggleLanguage}
               className="px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"

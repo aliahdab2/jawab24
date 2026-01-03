@@ -74,10 +74,13 @@ describe('Auth Service', () => {
             };
 
             const token = service.generateToken(user);
-            const decoded = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
+            // Token format is now: base64url(payload).signature
+            const [payloadStr] = token.split('.');
+            const decoded = JSON.parse(Buffer.from(payloadStr, 'base64url').toString('utf-8'));
 
             expect(decoded.userId).toBe('user_123');
             expect(decoded.facebookId).toBe('fb_456');
+            expect(decoded.exp).toBeDefined(); // Token now includes expiration
         });
     });
 

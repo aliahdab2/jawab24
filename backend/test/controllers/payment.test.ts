@@ -359,7 +359,7 @@ describe('Payment Controller', () => {
             );
 
             expect(mockRequest.log?.info).toHaveBeenCalledWith('Webhook received: unknown.event.type');
-            expect(mockRequest.log?.info).toHaveBeenCalledWith('Unhandled event type: unknown.event.type');
+            expect(mockRequest.log?.info).toHaveBeenCalledWith({ eventType: 'unknown.event.type' }, 'Unhandled webhook event type');
             expect(mockReply.send).toHaveBeenCalledWith({ received: true });
         });
     });

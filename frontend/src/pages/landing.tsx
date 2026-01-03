@@ -449,7 +449,7 @@ export default function LandingPage() {
 
               {/* Business */}
               <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl bg-brand-50 border sm:border-2 border-brand-200 relative">
-                <div className="absolute -top-2 sm:-top-3 start-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-600 text-white text-[8px] sm:text-xs font-bold rounded-full whitespace-nowrap">
+                <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-600 text-white text-[8px] sm:text-xs font-bold rounded-full whitespace-nowrap">
                   {t('pricing.popular')}
                 </div>
                 <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center mt-2 sm:mt-0">
