@@ -51,8 +51,8 @@ export function Sidebar() {
       {/* Logo */}
       <div className="h-20 flex items-center justify-between px-4 border-b border-white/5">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
-            <MessageCircle className="w-6 h-6 text-white" />
+          <div className="w-11 h-11 rounded-[1.1rem] bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
+            <MessageCircle className="w-6 h-6 text-white fill-white" />
           </div>
           {sidebarOpen && (
             <span className="font-display font-bold text-xl tracking-tight">Jawab24</span>

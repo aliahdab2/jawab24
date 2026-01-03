@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { 
-  Facebook, 
-  MessageCircle, 
-  CheckCircle2, 
-  Zap, 
-  ShieldCheck, 
-  ArrowLeft, 
-  ArrowRight, 
+import {
+  Facebook,
+  MessageCircle,
+  CheckCircle2,
+  Zap,
+  ShieldCheck,
+  ArrowLeft,
+  ArrowRight,
   Sparkles,
   Lock,
   MessageSquare,
@@ -36,7 +36,7 @@ export default function LoginPage() {
 
   const handleFacebookLogin = () => {
     setLoading(true);
-    
+
     // Build Facebook OAuth URL
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
@@ -44,14 +44,14 @@ export default function LoginPage() {
     // Advanced scopes (pages_manage_posts, pages_manage_engagement, instagram_*) require App Review
     // Add them back after Facebook approves your app
     const scope = encodeURIComponent('pages_show_list,pages_read_engagement,pages_messaging');
-    
+
     // Get the redirect URL from query params (e.g., /checkout?planId=xxx)
     const returnUrl = router.query.redirect as string || '/dashboard';
     // Encode the return URL in the state parameter so we can use it after OAuth
     const state = encodeURIComponent(returnUrl);
-    
+
     const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
-    
+
     window.location.href = facebookAuthUrl;
   };
 
@@ -138,7 +138,7 @@ export default function LoginPage() {
             {/* Testimonial Snippet */}
             <div className="mt-20 p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-sm animate-slide-up animation-delay-500">
               <div className="flex gap-1 mb-4">
-                {[1,2,3,4,5].map(s => <Star key={s} className="w-4 h-4 text-amber-400 fill-amber-400" />)}
+                {[1, 2, 3, 4, 5].map(s => <Star key={s} className="w-4 h-4 text-amber-400 fill-amber-400" />)}
               </div>
               <p className="text-white font-medium italic mb-4">
                 "{t('auth.testimonialQuote')}"
@@ -159,8 +159,8 @@ export default function LoginPage() {
           {/* Mobile Nav */}
           <div className="flex items-center justify-between p-6 lg:p-12">
             <div className="flex items-center gap-3 group">
-              <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
-                <MessageCircle className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
+                <MessageCircle className="w-5 h-5 text-white fill-white" />
               </div>
               <span className="font-display font-bold text-xl text-surface-900 tracking-tight">Jawab24</span>
             </div>

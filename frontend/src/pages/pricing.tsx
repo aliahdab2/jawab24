@@ -49,11 +49,11 @@ function PlanCard({
         : 'border-surface-200 shadow-sm'
         } ${isCurrentPlan ? 'bg-brand-50/50' : 'bg-white'}`}
     >
-      {/* Popular badge - using start-1/2 for RTL support */}
+      {/* Popular badge - High-contrast premium look */}
       {isPopular && (
-        <div className="absolute -top-3 start-1/2 -translate-x-1/2 z-20">
-          <span className="bg-gradient-to-r from-brand-600 to-violet-600 text-white text-xs font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg whitespace-nowrap">
-            <Sparkles className="w-3.5 h-3.5" />
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
+          <span className="bg-gradient-to-r from-indigo-600 via-brand-600 to-brand-500 text-white text-[10px] md:text-xs font-extrabold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-xl shadow-brand-500/20 border border-white/20 whitespace-nowrap uppercase tracking-wider">
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
             {t('pricing.popular')}
           </span>
         </div>
@@ -277,16 +277,6 @@ export default function PricingPage() {
         <meta property="og:url" content="https://jawab24.com/pricing" />
       </Head>
       <DashboardLayout title={t('pricing.title')} isPublic={true}>
-        {/* Simple Header */}
-        <div className="text-center mb-6 md:mb-8">
-          <h1 className="text-xl md:text-2xl font-display font-bold text-surface-900 mb-2">
-            {t('pricing.title')}
-          </h1>
-          <p className="text-surface-500 text-xs md:text-sm max-w-md mx-auto">
-            {t('pricing.choosePlan')}
-          </p>
-        </div>
-
         {/* Usage Summary if subscribed - Inline */}
         {usage && (
           <div className="flex flex-wrap items-center justify-center gap-4 mb-6 p-3 bg-brand-50 rounded-xl border border-brand-100">

@@ -17,12 +17,17 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, title, isPublic = false }: DashboardLayoutProps) {
   const router = useRouter();
-  const { t, language } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
   const isRTL = language === 'ar';
   const { isAuthenticated, _hasHydrated } = useAuthStore();
   const { sidebarOpen } = useUIStore();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const toggleLanguage = () => {
+    const newLang = language === 'ar' ? 'en' : 'ar';
+    setLanguage(newLang);
+  };
 
   const pageTitle = title || t('dashboard.title');
 
@@ -78,31 +83,39 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             <Sidebar />
           </div>
         )}
-        
+
         {/* Mobile header - Clean version for public pages */}
         {isCleanLayout ? (
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 z-40 border-b border-surface-100 shadow-sm">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-md shadow-brand-500/20">
-                <MessageCircle className="w-4 h-4 text-white" />
+            <Link href="/" className="flex items-center gap-2 group">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-md shadow-brand-500/20 group-hover:rotate-6 transition-transform">
+                <MessageCircle className="w-4 h-4 text-white fill-white" />
               </div>
               <span className="font-display font-bold text-lg tracking-tight text-surface-900">Jawab24</span>
             </Link>
-            <Link href={isAuthenticated ? '/dashboard' : '/login'}>
-              <button className="text-sm font-bold text-brand-600 hover:text-brand-700 bg-brand-50 px-4 py-2 rounded-xl transition-all">
-                {isAuthenticated ? t('nav.dashboard') : t('auth.login')}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleLanguage}
+                className="px-3 py-1.5 text-xs font-bold text-surface-600 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-all"
+              >
+                {language === 'ar' ? 'English' : 'العربية'}
               </button>
-            </Link>
+              <Link href={isAuthenticated ? '/dashboard' : '/login'}>
+                <button className="text-sm font-bold text-brand-600 hover:text-brand-700 bg-brand-50 px-4 py-2 rounded-xl transition-all">
+                  {isAuthenticated ? t('nav.dashboard') : t('auth.login')}
+                </button>
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="md:hidden fixed top-0 left-0 right-0 h-20 bg-surface-900 text-white flex items-center justify-between px-6 z-40 shadow-xl border-b border-white/5">
-            <Link href="/dashboard" className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
-                <MessageCircle className="w-5 h-5 text-white" />
+            <Link href="/dashboard" className="flex items-center gap-3 group">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
+                <MessageCircle className="w-5 h-5 text-white fill-white" />
               </div>
               <span className="font-display font-bold text-xl tracking-tight">Jawab24</span>
             </Link>
-            <button 
+            <button
               onClick={() => router.push('/settings')}
               className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5 shadow-inner"
             >
@@ -110,9 +123,9 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </button>
           </div>
         )}
-        
+
         {/* Main content */}
-        <main 
+        <main
           className={clsx(
             'transition-all duration-500 min-h-screen',
             isCleanLayout ? 'pt-16 md:pt-20' : 'pt-20 md:pt-0',
@@ -126,32 +139,32 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             {children}
           </div>
         </main>
-        
+
         {/* Mobile bottom navigation - hidden on clean layouts */}
         {!isCleanLayout && (
-          <nav 
+          <nav
             className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-surface-100 flex justify-around items-center h-20 px-2 z-40 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]"
           >
-            <MobileNavButton 
-              onClick={() => router.push('/dashboard')} 
+            <MobileNavButton
+              onClick={() => router.push('/dashboard')}
               icon={<LayoutDashboard className="w-5 h-5" />}
               label={t('nav.dashboard')}
               active={router.pathname === '/dashboard'}
             />
-            <MobileNavButton 
-              onClick={() => router.push('/comments')} 
+            <MobileNavButton
+              onClick={() => router.push('/comments')}
               icon={<MessageSquare className="w-5 h-5" />}
               label={t('nav.comments')}
               active={router.pathname === '/comments'}
             />
-            <MobileNavButton 
-              onClick={() => router.push('/messages')} 
+            <MobileNavButton
+              onClick={() => router.push('/messages')}
               icon={<MessageCircle className="w-5 h-5" />}
               label={t('nav.messages')}
               active={router.pathname === '/messages'}
             />
-            <MobileNavButton 
-              onClick={() => setMobileMenuOpen(true)} 
+            <MobileNavButton
+              onClick={() => setMobileMenuOpen(true)}
               icon={<MoreHorizontal className="w-5 h-5" />}
               label={t('nav.more') || 'More'}
               active={mobileMenuOpen}
@@ -162,14 +175,14 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {/* Mobile full menu overlay */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 bg-black/50 z-50" onClick={() => setMobileMenuOpen(false)}>
-            <div 
+            <div
               className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-4"
               style={{ paddingBottom: 'max(1rem, calc(1rem + env(safe-area-inset-bottom, 0px)))' }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold text-lg">{t('nav.menu') || 'Menu'}</h3>
-                <button 
+                <button
                   onClick={() => setMobileMenuOpen(false)}
                   className="p-2 rounded-full hover:bg-surface-100"
                 >
@@ -178,27 +191,27 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
               </div>
               {/* Simple navigation - Templates & Rules are in Settings */}
               <div className="grid grid-cols-3 gap-4">
-                <MobileMenuButton 
+                <MobileMenuButton
                   onClick={() => { router.push('/dashboard'); setMobileMenuOpen(false); }}
                   icon={<LayoutDashboard className="w-6 h-6" />}
                   label={t('nav.dashboard')}
                 />
-                <MobileMenuButton 
+                <MobileMenuButton
                   onClick={() => { router.push('/pages'); setMobileMenuOpen(false); }}
                   icon={<FileText className="w-6 h-6" />}
                   label={t('nav.pages')}
                 />
-                <MobileMenuButton 
+                <MobileMenuButton
                   onClick={() => { router.push('/comments'); setMobileMenuOpen(false); }}
                   icon={<MessageSquare className="w-6 h-6" />}
                   label={t('nav.comments')}
                 />
-                <MobileMenuButton 
+                <MobileMenuButton
                   onClick={() => { router.push('/messages'); setMobileMenuOpen(false); }}
                   icon={<MessageCircle className="w-6 h-6" />}
                   label={t('nav.messages')}
                 />
-                <MobileMenuButton 
+                <MobileMenuButton
                   onClick={() => { router.push('/settings'); setMobileMenuOpen(false); }}
                   icon={<Settings className="w-6 h-6" />}
                   label={t('nav.settings')}
@@ -219,15 +232,15 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
 }
 
 // Mobile nav button component
-function MobileNavButton({ onClick, icon, label, active }: { 
-  onClick: () => void; 
-  icon: React.ReactNode; 
+function MobileNavButton({ onClick, icon, label, active }: {
+  onClick: () => void;
+  icon: React.ReactNode;
   label: string;
   active?: boolean;
 }) {
   return (
-    <button 
-      onClick={onClick} 
+    <button
+      onClick={onClick}
       className={clsx(
         "flex flex-col items-center justify-center h-full px-4 transition-all duration-300 relative",
         active ? "text-brand-600" : "text-surface-400 hover:text-brand-500"
@@ -251,14 +264,14 @@ function MobileNavButton({ onClick, icon, label, active }: {
 }
 
 // Mobile menu button component
-function MobileMenuButton({ onClick, icon, label }: { 
-  onClick: () => void; 
-  icon: React.ReactNode; 
+function MobileMenuButton({ onClick, icon, label }: {
+  onClick: () => void;
+  icon: React.ReactNode;
   label: string;
 }) {
   return (
-    <button 
-      onClick={onClick} 
+    <button
+      onClick={onClick}
       className="flex flex-col items-center p-6 rounded-[2rem] bg-surface-50 border border-surface-100 hover:border-brand-200 hover:bg-brand-50/30 transition-all group"
     >
       <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-surface-100 flex items-center justify-center text-brand-600 mb-3 group-hover:scale-110 group-hover:rotate-3 transition-transform">
