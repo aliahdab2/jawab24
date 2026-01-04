@@ -174,7 +174,11 @@ if [ "$SKIP_TESTS" = false ]; then
     # ────────────────────────────────────────────────────────────────
     echo ""
     echo -e "${CYAN}5️⃣  Backend tests...${NC}"
-    BACKEND_RESULT=$(npm test --workspace=jawab24-backend -- --run 2>&1)
+    if ! BACKEND_RESULT=$(npm test --workspace=jawab24-backend -- --run 2>&1); then
+        echo -e "${RED}   ❌ Backend tests failed!${NC}"
+        echo "$BACKEND_RESULT"
+        exit 1
+    fi
     # Extract test count (works on both macOS and Linux)
     BACKEND_TESTS=$(echo "$BACKEND_RESULT" | grep -o 'Tests[[:space:]]*[0-9]* passed' | grep -o '[0-9]*' | head -1 || echo "0")
     [ -z "$BACKEND_TESTS" ] && BACKEND_TESTS="0"
