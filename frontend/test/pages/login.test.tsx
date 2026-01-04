@@ -76,7 +76,7 @@ describe('LoginPage - error handling', () => {
 
         expect(window.location.href).toContain('https://www.facebook.com/v18.0/dialog/oauth');
         expect(window.location.href).toContain('client_id=test-app-id-123');
-        expect(window.location.href).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback');
+        expect(window.location.href).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fen%2Fauth%2Fcallback');
         expect(window.location.href).toContain('scope=');
         expect(window.location.href).toContain('response_type=code');
     });
