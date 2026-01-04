@@ -1,19 +1,20 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { settingsService, UpdateSettingsDTO } from '../services/settings';
-
-/** Authenticated request with user info */
-interface AuthenticatedRequest extends FastifyRequest {
-    user: { id: string };
-}
+import { AuthenticatedRequest } from '../middleware/auth';
 
 export class SettingsController {
     /**
      * Get user settings
      * GET /settings
      */
-    async get(request: FastifyRequest, reply: FastifyReply) {
+    async get(request: AuthenticatedRequest, reply: FastifyReply) {
         try {
-            const userId = (request as AuthenticatedRequest).user.id;
+            // Safety check for user
+            if (!request.user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+
+            const userId = request.user.userId;
             const settings = await settingsService.getSettings(userId);
             return reply.send(settings);
         } catch (error) {
@@ -26,10 +27,15 @@ export class SettingsController {
      * Update user settings
      * PUT /settings
      */
-    async update(request: FastifyRequest<{ Body: UpdateSettingsDTO }>, reply: FastifyReply) {
+    async update(request: AuthenticatedRequest, reply: FastifyReply) {
         try {
-            const userId = (request as AuthenticatedRequest).user.id;
-            const updates = request.body;
+            // Safety check for user
+            if (!request.user) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+
+            const userId = request.user.userId;
+            const updates = request.body as UpdateSettingsDTO;
             const settings = await settingsService.updateSettings(userId, updates);
             return reply.send(settings);
         } catch (error) {
