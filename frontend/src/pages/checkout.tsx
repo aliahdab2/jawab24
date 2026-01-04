@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
 import { Button } from '@/components/ui';
-import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, Loader2, ArrowRight, ArrowLeft, MessageCircle } from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
 
 export default function CheckoutPage() {
@@ -17,14 +17,14 @@ export default function CheckoutPage() {
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<any>(null);
   const [fetchError, setFetchError] = useState(false);
-  
+
   // Extract translated string before useEffect to avoid dependency on t
   const errorLoadPlanMessage = t('checkout.errorLoadPlan');
 
   useEffect(() => {
     // Prevent re-fetching if already loaded or errored
     if (plan || fetchError || !planId) return;
-    
+
     const fetchPlan = async () => {
       try {
         const response = await publicApi.get(`/plans/${planId}`);
@@ -65,7 +65,7 @@ export default function CheckoutPage() {
       window.location.href = url;
     } catch (err: any) {
       console.error('Checkout error:', err);
-      
+
       // Handle specific error cases
       const errorData = err.response?.data;
       if (errorData?.code === 'EMAIL_REQUIRED') {
@@ -73,7 +73,7 @@ export default function CheckoutPage() {
         router.push(`/complete-profile?redirect=/checkout?planId=${planId}`);
         return;
       }
-      
+
       setError(errorData?.error || errorData?.message || t('checkout.errorInitiateCheckout'));
       setLoading(false);
     }
@@ -97,8 +97,13 @@ export default function CheckoutPage() {
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
-            <Link href="/landing" className="inline-flex items-center gap-2 text-brand-600 font-bold text-2xl mb-4">
-              Jawab24
+            <Link href="/landing" className="inline-flex flex-col items-center gap-2 mb-6 group">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
+                <MessageCircle className="w-7 h-7 text-white fill-white" />
+              </div>
+              <span className="font-display font-bold text-2xl tracking-tight text-surface-900 group-hover:text-brand-600 transition-colors">
+                Jawab24
+              </span>
             </Link>
             <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2">
               {t('checkout.title')}
@@ -175,10 +180,10 @@ export default function CheckoutPage() {
                     {t('checkout.processing')}
                   </>
                 ) : (
-                  <>
-                    {t('checkout.continueToPayment')}
+                  <div className="flex items-center gap-2">
+                    <span>{t('checkout.continueToPayment')}</span>
                     <ArrowRight className="w-5 h-5 transition-transform rtl:rotate-180" />
-                  </>
+                  </div>
                 )}
               </Button>
 
