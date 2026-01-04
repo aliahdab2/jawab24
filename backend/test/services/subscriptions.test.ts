@@ -99,6 +99,7 @@ vi.mock('drizzle-orm', () => ({
     gte: vi.fn((field, value) => ({ field, value, op: 'gte' })),
     lte: vi.fn((field, value) => ({ field, value, op: 'lte' })),
     desc: vi.fn((field) => ({ field, direction: 'desc' })),
+    sql: vi.fn(),
 }));
 
 describe('Subscriptions Service', () => {
@@ -249,18 +250,18 @@ describe('Subscriptions Service', () => {
         it('should calculate trial days remaining correctly', () => {
             const now = new Date();
             const trialEnd = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000); // 10 days from now
-            
+
             const daysRemaining = Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-            
+
             expect(daysRemaining).toBe(10);
         });
 
         it('should return 0 days remaining when trial is expired', () => {
             const now = new Date();
             const trialEnd = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000); // 1 day ago
-            
+
             const daysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
-            
+
             expect(daysRemaining).toBe(0);
         });
     });
@@ -270,7 +271,7 @@ describe('Subscriptions Service', () => {
             const used = 450;
             const limit = 1500;
             const percentUsed = (used / limit) * 100;
-            
+
             expect(percentUsed).toBe(30);
         });
 
@@ -278,7 +279,7 @@ describe('Subscriptions Service', () => {
             const used = 2000;
             const limit = 1500;
             const percentUsed = Math.min(100, (used / limit) * 100);
-            
+
             expect(percentUsed).toBe(100);
         });
 
@@ -286,7 +287,7 @@ describe('Subscriptions Service', () => {
             const used = 1000;
             const limit = null;
             const percentUsed = limit ? Math.min(100, (used / limit) * 100) : 0;
-            
+
             expect(percentUsed).toBe(0);
         });
     });
@@ -295,7 +296,7 @@ describe('Subscriptions Service', () => {
 describe('Subscription Status Logic', () => {
     it('should recognize valid subscription statuses', () => {
         const validStatuses = ['trialing', 'active', 'past_due', 'canceled', 'paused'];
-        
+
         validStatuses.forEach(status => {
             expect(['trialing', 'active', 'past_due', 'canceled', 'paused']).toContain(status);
         });
@@ -304,7 +305,7 @@ describe('Subscription Status Logic', () => {
     it('should identify active subscriptions', () => {
         const activeStatuses = ['trialing', 'active'];
         const inactiveStatuses = ['canceled', 'paused', 'past_due'];
-        
+
         expect(activeStatuses.includes('trialing')).toBe(true);
         expect(activeStatuses.includes('active')).toBe(true);
         expect(activeStatuses.includes('canceled')).toBe(false);

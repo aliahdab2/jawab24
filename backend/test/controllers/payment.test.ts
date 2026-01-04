@@ -57,6 +57,7 @@ vi.mock('../../src/config', () => ({
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+    sql: vi.fn(),
 }));
 
 // Import after mocking
@@ -217,7 +218,7 @@ describe('Payment Controller', () => {
 
         it('should return 404 if plan not found', async () => {
             const mockUser = { id: 'user_123', email: 'test@example.com' };
-            
+
             const mockDb = vi.mocked(db);
             mockDb.select.mockReturnValue({
                 from: vi.fn().mockReturnValue({
@@ -488,7 +489,7 @@ describe('Payment Controller', () => {
             };
 
             const mockDb = vi.mocked(db);
-            
+
             // Mock user lookup
             mockDb.select
                 .mockReturnValueOnce({
@@ -540,10 +541,10 @@ describe('Payment Controller', () => {
             const mockPlan = { id: 'plan_starter', name: 'Starter', stripePriceId: 'price_start', trialDays: 30 };
 
             const mockDb = vi.mocked(db);
-            
+
             mockRequest.user = { userId: 'user_new', facebookId: 'fb_new' };
             mockRequest.body = { planId: 'plan_starter' };
-            
+
             mockDb.select
                 .mockReturnValueOnce({
                     from: vi.fn().mockReturnValue({

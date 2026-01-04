@@ -21,6 +21,7 @@ vi.mock('../../src/db/schema', () => ({
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+    sql: vi.fn(),
 }));
 
 // Import after mocking

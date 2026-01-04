@@ -35,6 +35,7 @@ vi.mock('../../src/db/schema', () => ({
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn(),
+    sql: vi.fn(),
 }));
 
 describe('Auth Service', () => {

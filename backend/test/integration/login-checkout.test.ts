@@ -66,6 +66,7 @@ vi.mock('../../src/db/schema', () => ({
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+    sql: vi.fn(),
 }));
 
 // Mock authentication middleware
@@ -256,7 +257,7 @@ describe.skip('Integration: Login → Checkout Flow', () => {
             expect(loginResponse.statusCode).toBe(401);
             const body = JSON.parse(loginResponse.body);
             expect(body.error).toBe('Authentication failed');
-            
+
             // User should be shown error and cannot proceed to checkout
         });
 
