@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, desc } from 'drizzle-orm';
+import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { subscriptions, plans, usage, usageLogs, pages, templates, rules } from '../db/schema';
 import { plansService } from './plans';
@@ -20,7 +20,10 @@ export const subscriptionsService = {
             .from(subscriptions)
             .innerJoin(plans, eq(subscriptions.planId, plans.id))
             .where(eq(subscriptions.userId, userId))
-            .orderBy(desc(subscriptions.createdAt))
+            .orderBy(
+                sql`CASE WHEN ${subscriptions.status} IN ('active', 'trialing') THEN 1 WHEN ${subscriptions.status} = 'past_due' THEN 2 ELSE 3 END`,
+                desc(subscriptions.createdAt)
+            )
             .limit(1);
 
         if (!result[0]) return null;
