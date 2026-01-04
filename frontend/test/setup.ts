@@ -1,6 +1,12 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
+// Setup environment variables for tests
+process.env.NEXT_PUBLIC_FB_APP_ID = 'test-fb-app-id-123456';
+process.env.NEXT_PUBLIC_API_URL = 'http://localhost:4000/api';
+process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
+
+
 // Mock Next.js router
 vi.mock('next/router', () => ({
   useRouter: () => ({
