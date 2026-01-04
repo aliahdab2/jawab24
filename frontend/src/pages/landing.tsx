@@ -350,28 +350,28 @@ export default function LandingPage() {
         {/* How It Works - Optimized for mobile */}
         <section className="py-12 sm:py-20 lg:py-32 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col lg:flex-row items-center gap-8 sm:gap-12 lg:gap-20">
-              <div className="lg:w-1/2">
-                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-relaxed sm:leading-snug text-center lg:text-start">
+            <div className="flex flex-row items-center gap-3 sm:gap-12 lg:gap-20 text-start">
+              <div className="w-1/2 flex-shrink-0">
+                <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-relaxed sm:leading-snug text-start">
                   {t('landing.howItWorks.title1')}
                   <span className="block text-brand-600 mt-2 sm:mt-1">{t('landing.howItWorks.title2')}</span>
                 </h2>
                 <div className="space-y-4 sm:space-y-6 lg:space-y-10">
                   {howItWorks.map((item, i) => (
-                    <div key={i} className="flex gap-3 sm:gap-6">
-                      <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-brand-600 text-white flex items-center justify-center text-lg sm:text-2xl font-bold shadow-lg shadow-brand-200">
+                    <div key={i} className="flex flex-col sm:flex-row gap-2 sm:gap-6">
+                      <div className="flex-shrink-0 w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl bg-brand-600 text-white flex items-center justify-center text-sm sm:text-2xl font-bold shadow-lg shadow-brand-200">
                         {item.step}
                       </div>
                       <div className="text-start">
-                        <h3 className="text-base sm:text-xl font-bold text-surface-900 mb-1 sm:mb-2">{item.title}</h3>
-                        <p className="text-sm sm:text-base text-surface-600 font-medium leading-relaxed">{item.description}</p>
+                        <h3 className="text-sm sm:text-xl font-bold text-surface-900 mb-1 sm:mb-2">{item.title}</h3>
+                        <p className="text-[10px] sm:text-base text-surface-600 font-medium leading-tight sm:leading-relaxed">{item.description}</p>
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="text-center lg:text-start">
+                <div className="text-start">
                   <Link href={isAuthenticated ? "/dashboard" : "/login"} className="inline-block mt-6 sm:mt-12">
-                    <Button size="lg" className="rounded-xl sm:rounded-2xl px-6 sm:px-10 py-4 sm:py-7 text-base sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
+                    <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
                       <span className="flex items-center gap-2">
                         {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.howItWorks.cta')}
                         <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 rtl:rotate-180" />
@@ -380,15 +380,15 @@ export default function LandingPage() {
                   </Link>
                 </div>
               </div>
-              {/* Dashboard Preview - Hidden on mobile for cleaner layout */}
-              <div className="lg:w-1/2 relative hidden lg:block">
-                <div className="relative rounded-3xl overflow-hidden shadow-2xl border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700">
-                  <img src="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&q=80&w=1000" alt={t('landing.images.dashboardPreview' as TranslationKey) as string} className="w-full" />
+              {/* Dashboard Preview - Visible on mobile now */}
+              <div className="w-1/2 relative block">
+                <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-4 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700">
+                  <img src="/images/social-icons-3d.png" alt={t('landing.images.dashboardPreview' as TranslationKey) as string} className="w-full" />
                   <div className="absolute inset-0 bg-gradient-to-t from-brand-900/20 to-transparent"></div>
                 </div>
                 {/* Decorative Elements */}
-                <div className="absolute -top-10 -end-10 w-32 h-32 bg-accent-100 rounded-full -z-10 blur-2xl"></div>
-                <div className="absolute -bottom-10 -start-10 w-40 h-40 bg-brand-100 rounded-full -z-10 blur-3xl"></div>
+                <div className="absolute -top-5 sm:-top-10 -end-5 sm:-end-10 w-16 sm:w-32 h-16 sm:h-32 bg-accent-100 rounded-full -z-10 blur-xl sm:blur-2xl"></div>
+                <div className="absolute -bottom-5 sm:-bottom-10 -start-5 sm:-start-10 w-20 sm:w-40 h-20 sm:h-40 bg-brand-100 rounded-full -z-10 blur-xl sm:blur-3xl"></div>
               </div>
             </div>
           </div>
