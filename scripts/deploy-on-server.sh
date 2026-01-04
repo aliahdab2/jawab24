@@ -69,7 +69,7 @@ docker-compose up -d postgres redis nginx
 
 # Cleanup potential conflicting containers
 echo "🧹 Cleaning up any existing containers for $DEPLOY_ENV..."
-docker rm -f jawab24-backend-$DEPLOY_ENV jawab24-frontend-$DEPLOY_ENV jawab24-ai-worker-$DEPLOY_ENV 2>/dev/null || true
+docker rm -f jawab24-backend-$DEPLOY_ENV jawab24-frontend-$DEPLOY_ENV jawab24-ai-worker-$DEPLOY_ENV jawab24-backend jawab24-frontend jawab24-ai-worker 2>/dev/null || true
 
 # Start new environment
 docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml up -d \
