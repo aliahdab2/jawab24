@@ -2,7 +2,7 @@ import Stripe from 'stripe';
 import { config } from '../config';
 
 // Initialize Stripe only if keys are provided (optional for preview)
-export const stripe = config.stripe?.secretKey 
+export const stripe = config.stripe?.secretKey
     ? new Stripe(config.stripe.secretKey, {
         apiVersion: '2023-10-16',
         typescript: true,
@@ -26,7 +26,7 @@ export class StripeService {
         if (!stripe) {
             throw new Error('Stripe is not configured. Please add STRIPE_SECRET_KEY to environment variables.');
         }
-        
+
         // Build subscription data - only include trial if trialDays > 0
         const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
             metadata: {
@@ -34,17 +34,18 @@ export class StripeService {
                 planId,
             },
         };
-        
+
         // Only add trial period if explicitly requested (new users on eligible plans)
         if (trialDays > 0) {
             subscriptionData.trial_period_days = trialDays;
         }
-        
+
         const session = await stripe.checkout.sessions.create({
             customer_email: userEmail,
             client_reference_id: userId,
             payment_method_types: ['card'],
             mode: 'subscription',
+            payment_method_collection: 'if_required',
             line_items: [
                 {
                     price: priceId,

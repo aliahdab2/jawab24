@@ -17,6 +17,7 @@ function PlanCard({
   onSelect,
   loading,
   t,
+  currentPlanPrice,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
@@ -24,6 +25,7 @@ function PlanCard({
   onSelect: () => void;
   loading: boolean;
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+  currentPlanPrice: number;
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
@@ -153,10 +155,12 @@ function PlanCard({
           {isCurrentPlan
             ? t('pricing.currentPlan')
             : hasActiveSubscription
-              ? t('pricing.upgrade')
-              : (isFree || plan.trialDays > 0)
-                ? t('pricing.startTrial')
-                : t('pricing.upgrade')
+              ? (plan.price > currentPlanPrice ? t('pricing.upgrade') : t('pricing.downgrade'))
+              : (isFree)
+                ? t('pricing.getStarted')
+                : (plan.trialDays > 0)
+                  ? t('pricing.startTrial')
+                  : t('pricing.subscribe')
           }
         </Button>
         {isFree && (
@@ -323,6 +327,7 @@ export default function PricingPage() {
               hasActiveSubscription={hasActiveSubscription}
               onSelect={() => handleSelectPlan(plan.id)}
               loading={changingPlan === plan.id}
+              currentPlanPrice={activePlans.find(p => p.id === currentPlanId)?.price || 0}
               t={t}
             />
           ))}

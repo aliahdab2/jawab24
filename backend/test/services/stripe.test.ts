@@ -79,6 +79,7 @@ describe('Stripe Service', () => {
                 client_reference_id: 'user_123',
                 payment_method_types: ['card'],
                 mode: 'subscription',
+                payment_method_collection: 'if_required',
                 line_items: [
                     {
                         price: 'price_123',
