@@ -138,6 +138,7 @@ export class SettingsService {
             commentReplyMode: (record.commentReplyMode as 'public' | 'private') || 'public',
             commentsAutoReply: record.commentsAutoReply ?? true,
             messagesAutoReply: record.messagesAutoReply ?? true,
+            dualReplyConfig: (record.dualReplyConfig as Record<string, string>) || {},
             businessHoursOnly: record.businessHoursOnly ?? false,
             businessHoursStart: record.businessHoursStart || '09:00',
             businessHoursEnd: record.businessHoursEnd || '18:00',

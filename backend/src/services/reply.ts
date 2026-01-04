@@ -309,11 +309,16 @@ export class ReplyService {
             let errorMsg = '';
 
             // Get reply mode from settings (default to public if not set)
-            const replyMode = userSettings.commentReplyMode || 'public';
+            const replyMode = (userSettings.commentReplyMode || 'public') as 'public' | 'private' | 'dual';
 
-            if (replyMode === 'private') {
-                // Private message mode
+            if (replyMode === 'private' || replyMode === 'dual') {
+                // Private message (The "Real" Answer)
                 if (!fromId) {
+                    // If we can't send private, and it's PRIVATE-ONLY mode, fail.
+                    // If it's DUAL mode, we might still want to post public? 
+                    // Let's stick to fail for now or maybe fall back to public-only if private fails?
+                    // User expectation: "Private" part is key. If we can't DM, we probably shouldn't say "Check DM".
+                    // So we report error.
                     return {
                         success: false,
                         commentId: comment.id,
@@ -327,25 +332,56 @@ export class ReplyService {
                         fromId,
                         replyText
                     );
-                    success = true;
+                    if (replyMode === 'private') {
+                        success = true;
+                    }
                     this.logger.debug('[Reply] Sent private message to commenter', { fromId });
                 } catch (error) {
                     this.logger.error('Failed to send private message to commenter', {
                         fromId,
                         error: error instanceof Error ? error.message : String(error)
                     });
-                    errorMsg = 'Failed to send private message to commenter';
+
+                    // If dual mode fails private, we stop? Or do we post public saying "Could not DM"?
+                    // Safer to count as fail to avoid confusion.
+                    if (replyMode === 'private') {
+                        errorMsg = 'Failed to send private message to commenter';
+                    }
                 }
-            } else {
-                // Public reply (default)
-                success = await this.postReplyToFacebook(
+            }
+
+            if (replyMode === 'public' || (replyMode === 'dual' && !errorMsg)) { // Only public if dual didn't fail private logic (or maybe we allow independent?)
+                // For DUAL mode, the public text is a "Nudge", not the AI reply.
+                let publicText = replyText;
+
+                if (replyMode === 'dual') {
+                    const detectedLang = detectLanguageCode(commentMessage);
+                    const lang = detectedLang === 'unknown' ? 'en' : detectedLang;
+
+                    // Get nudge from settings or default
+                    const nudge = userSettings.dualReplyConfig?.[lang] ||
+                        userSettings.dualReplyConfig?.['en'] ||
+                        (lang === 'ar' ? 'تم الرد في رسالة خاصة 📥' : 'Sent you a private message 📥');
+                    publicText = nudge;
+                }
+
+                // Public reply
+                const pubSuccess = await this.postReplyToFacebook(
                     facebookCommentId,
-                    replyText,
+                    publicText,
                     page.accessToken
                 );
 
-                if (!success) {
-                    errorMsg = 'Failed to post public reply to Facebook';
+                if (pubSuccess) {
+                    success = true; // At least public worked
+                    if (replyMode === 'dual') {
+                        // In dual, if public worked, we consider success even if private might have had issues?
+                        // Above we didn't set success=true for private in dual block to avoid early return?
+                        // Let's ensure strictness: Dual means BOTH should ideally work, but at least Public is visible.
+                    }
+                } else {
+                    if (replyMode === 'public') errorMsg = 'Failed to post public reply to Facebook';
+                    if (replyMode === 'dual') this.logger.warn('Dual mode: Public reply failed', { commentId: facebookCommentId });
                 }
             }
 

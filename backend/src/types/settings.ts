@@ -16,6 +16,8 @@ export interface UserSettings {
     commentReplyMode: 'public' | 'private';
     commentsAutoReply: boolean;
     messagesAutoReply: boolean;
+    // Dual reply configuration (language code -> message)
+    dualReplyConfig: Record<string, string>;
     businessHoursOnly: boolean;
     businessHoursStart: string;
     businessHoursEnd: string;
@@ -34,6 +36,7 @@ export interface UpdateSettingsDTO {
     commentReplyMode?: 'public' | 'private';
     commentsAutoReply?: boolean;
     messagesAutoReply?: boolean;
+    dualReplyConfig?: Record<string, string>;
     businessHoursOnly?: boolean;
     businessHoursStart?: string;
     businessHoursEnd?: string;

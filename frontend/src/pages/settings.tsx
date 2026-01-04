@@ -82,8 +82,9 @@ export default function SettingsPage() {
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
     awayMessage: '',
-    replyDelay: 0,
     greetingMessage: '',
+    replyDelay: 0,
+    dualReplyConfig: { en: '', ar: '' } as Record<string, string>,
   });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -113,8 +114,9 @@ export default function SettingsPage() {
         businessHoursStart: data.businessHoursStart || prev.businessHoursStart,
         businessHoursEnd: data.businessHoursEnd || prev.businessHoursEnd,
         awayMessage: data.awayMessage || '',
-        replyDelay: data.replyDelay ?? prev.replyDelay,
         greetingMessage: data.greetingMessage || '',
+        replyDelay: data.replyDelay ?? prev.replyDelay,
+        dualReplyConfig: data.dualReplyConfig || { en: '', ar: '' },
       }));
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -250,7 +252,7 @@ export default function SettingsPage() {
                 <Settings2 className="w-4 h-4" />
                 {t('settings.commentReplyMode')}
               </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'public' })}
                   className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${settings.commentReplyMode === 'public'
@@ -292,7 +294,68 @@ export default function SettingsPage() {
                   </div>
                   {settings.commentReplyMode === 'private' && <Check className="w-5 h-5 text-brand-500" />}
                 </button>
+
+                <button
+                  onClick={() => setSettings({ ...settings, commentReplyMode: 'dual' })}
+                  className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${settings.commentReplyMode === 'dual'
+                    ? 'border-brand-500 bg-brand-50/50 shadow-sm'
+                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/30'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'dual' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+                      <MessageSquare className="w-5 h-5" />
+                    </div>
+                    <div className="text-start">
+                      <span className={`block font-bold ${settings.commentReplyMode === 'dual' ? 'text-brand-900' : 'text-surface-700'}`}>
+                        {t('settings.dualReply')}
+                      </span>
+                      <span className="text-xs text-surface-500">{t('settings.dualReplyDesc')}</span>
+                    </div>
+                  </div>
+                  {settings.commentReplyMode === 'dual' && <Check className="w-5 h-5 text-brand-500" />}
+                </button>
               </div>
+
+              {/* Dual Reply Configuration - Only visible if Dual Mode is ON */}
+              {settings.commentReplyMode === 'dual' && (
+                <div className="mt-6 p-5 rounded-2xl bg-surface-50 border border-surface-100 animate-slide-up">
+                  <h4 className="font-bold text-brand-900 mb-4 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-brand-500" />
+                    {t('settings.dualReplyConfigTitle')}
+                  </h4>
+                  <p className="text-sm text-surface-500 mb-4">{t('settings.dualReplyConfigDesc')}</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">English Public Reply</label>
+                      <Input
+                        value={settings.dualReplyConfig?.en || ''}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          dualReplyConfig: { ...settings.dualReplyConfig, en: e.target.value }
+                        })}
+                        placeholder="Check your DMs! 📩"
+                        className="bg-white"
+                        dir="ltr"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Arabic Public Reply</label>
+                      <Input
+                        value={settings.dualReplyConfig?.ar || ''}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          dualReplyConfig: { ...settings.dualReplyConfig, ar: e.target.value }
+                        })}
+                        placeholder="تم الرد في الخاص 📩"
+                        className="bg-white text-right"
+                        dir="rtl"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </Card>

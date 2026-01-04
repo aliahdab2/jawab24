@@ -171,7 +171,8 @@ export const settings = pgTable('settings', {
     aiEnabled: boolean('ai_enabled').default(true),
     aiModel: varchar('ai_model', { length: 100 }).default('gpt-4o-mini'),
     // Auto-reply settings
-    commentReplyMode: varchar('comment_reply_mode', { length: 20 }).default('public'), // 'public' or 'private'
+    commentReplyMode: varchar('comment_reply_mode', { length: 20 }).default('public'), // 'public', 'private', or 'dual'
+    dualReplyConfig: jsonb('dual_reply_config').default({}), // { "en": "Check DM", "ar": "تم الرد خاص" }
     commentsAutoReply: boolean('comments_auto_reply').default(true),
     messagesAutoReply: boolean('messages_auto_reply').default(true),
     businessHoursOnly: boolean('business_hours_only').default(false),
