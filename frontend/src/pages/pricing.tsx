@@ -220,10 +220,23 @@ export default function PricingPage() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!isAuthenticated) {
+        setUsage(null);
+        try {
+          const plansRes = await plansApi.getAll();
+          setPlans(extractArrayData<Plan>(plansRes.data));
+        } catch (error) {
+          console.error('Failed to fetch plans:', error);
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         const [plansRes, usageRes] = await Promise.all([
           plansApi.getAll(),
-          isAuthenticated ? subscriptionApi.getUsage().catch(() => null) : Promise.resolve(null),
+          subscriptionApi.getUsage().catch(() => null),
         ]);
 
         // Use utility functions for safe response parsing
@@ -271,8 +284,8 @@ export default function PricingPage() {
     );
   }
 
-  const currentPlanId = isAuthenticated ? usage?.subscription?.plan?.id : null;
-  const hasActiveSubscription = isAuthenticated && Boolean(currentPlanId);
+  const currentPlanId = usage?.subscription?.plan?.id;
+  const hasActiveSubscription = Boolean(currentPlanId);
 
   // Filter out inactive plans
   const activePlans = plans.filter(p => p.slug !== 'free' || p.isActive !== false);
