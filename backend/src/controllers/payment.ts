@@ -2,7 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { stripeService } from '../services/stripe';
 import { db } from '../db';
 import { subscriptions, users, plans } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
 import type Stripe from 'stripe';
@@ -43,9 +43,9 @@ export class PaymentController {
             if (!user) {
                 return reply.status(404).send({ error: 'User not found' });
             }
-            
+
             if (!user.email) {
-                return reply.status(400).send({ 
+                return reply.status(400).send({
                     error: 'Email required',
                     message: 'Please add your email address to complete the purchase',
                     code: 'EMAIL_REQUIRED'
@@ -140,7 +140,7 @@ export class PaymentController {
                 .from(subscriptions)
                 .innerJoin(plans, eq(subscriptions.planId, plans.id))
                 .where(eq(subscriptions.userId, userId))
-                .orderBy(subscriptions.createdAt)
+                .orderBy(desc(subscriptions.createdAt))
                 .limit(1);
 
             if (!subscription) {
@@ -373,7 +373,7 @@ export class PaymentController {
                         );
                     }
                 }
-                
+
                 // Mark as canceled in database
                 await db
                     .update(subscriptions)
@@ -384,7 +384,7 @@ export class PaymentController {
                         updatedAt: new Date(),
                     })
                     .where(eq(subscriptions.id, oldSub.id));
-                
+
                 request.log.info({ oldSubscriptionId: oldSub.id }, 'Marked old subscription as canceled');
             }
         }
@@ -426,7 +426,7 @@ export class PaymentController {
             // Subscription exists, update status if needed
             const currentStatus = existing[0].status;
             const newStatus = stripeSubscription.status;
-            
+
             // If subscription is active in Stripe but not in DB, update it
             if (newStatus === 'active' && currentStatus !== 'active') {
                 await db
@@ -436,7 +436,7 @@ export class PaymentController {
                         updatedAt: new Date(),
                     })
                     .where(eq(subscriptions.id, existing[0].id));
-                
+
                 request.log.info(
                     { subscriptionId: stripeSubscription.id, oldStatus: currentStatus },
                     'Subscription status corrected to active'

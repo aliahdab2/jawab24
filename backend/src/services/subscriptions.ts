@@ -1,4 +1,4 @@
-import { eq, and, gte, lte } from 'drizzle-orm';
+import { eq, and, gte, lte, desc } from 'drizzle-orm';
 import { db } from '../db';
 import { subscriptions, plans, usage, usageLogs, pages, templates, rules } from '../db/schema';
 import { plansService } from './plans';
@@ -20,10 +20,11 @@ export const subscriptionsService = {
             .from(subscriptions)
             .innerJoin(plans, eq(subscriptions.planId, plans.id))
             .where(eq(subscriptions.userId, userId))
+            .orderBy(desc(subscriptions.createdAt))
             .limit(1);
-        
+
         if (!result[0]) return null;
-        
+
         return {
             ...this.mapToSubscription(result[0].subscription),
             plan: plansService.mapToPlan(result[0].plan),
@@ -41,24 +42,24 @@ export const subscriptionsService = {
         } else {
             plan = await plansService.getDefaultPlan();
         }
-        
+
         if (!plan) {
             throw new Error('No valid plan found');
         }
-        
+
         // Calculate trial end date if applicable
         const now = new Date();
-        const trialEndsAt = plan.trialDays > 0 
+        const trialEndsAt = plan.trialDays > 0
             ? new Date(now.getTime() + plan.trialDays * 24 * 60 * 60 * 1000)
             : null;
-        
+
         // Calculate period end (1 month from now)
         const periodEnd = new Date(now);
         periodEnd.setMonth(periodEnd.getMonth() + 1);
-        
+
         // Determine initial status
         const status: SubscriptionStatus = plan.trialDays > 0 ? 'trialing' : 'active';
-        
+
         const result = await db
             .insert(subscriptions)
             .values({
@@ -70,10 +71,10 @@ export const subscriptionsService = {
                 currentPeriodEnd: periodEnd,
             })
             .returning();
-        
+
         // Initialize usage tracking for this period
         await this.initializeUsagePeriod(userId, now, periodEnd);
-        
+
         return this.mapToSubscription(result[0]);
     },
 
@@ -85,7 +86,7 @@ export const subscriptionsService = {
         if (!plan) {
             throw new Error('Plan not found');
         }
-        
+
         const result = await db
             .update(subscriptions)
             .set({
@@ -95,7 +96,7 @@ export const subscriptionsService = {
             })
             .where(eq(subscriptions.userId, userId))
             .returning();
-        
+
         return result[0] ? this.mapToSubscription(result[0]) : null;
     },
 
@@ -113,7 +114,7 @@ export const subscriptionsService = {
             })
             .where(eq(subscriptions.userId, userId))
             .returning();
-        
+
         return result[0] ? this.mapToSubscription(result[0]) : null;
     },
 
@@ -129,7 +130,7 @@ export const subscriptionsService = {
             })
             .where(eq(subscriptions.userId, userId))
             .returning();
-        
+
         return result[0] ? this.mapToSubscription(result[0]) : null;
     },
 
@@ -145,7 +146,7 @@ export const subscriptionsService = {
             })
             .where(eq(subscriptions.userId, userId))
             .returning();
-        
+
         return result[0] ? this.mapToSubscription(result[0]) : null;
     },
 
@@ -164,9 +165,9 @@ export const subscriptionsService = {
                 )
             )
             .limit(1);
-        
+
         if (existing.length > 0) return;
-        
+
         await db.insert(usage).values({
             userId,
             periodStart,
@@ -184,7 +185,7 @@ export const subscriptionsService = {
      */
     async getCurrentUsage(userId: string): Promise<Usage | null> {
         const now = new Date();
-        
+
         const result = await db
             .select()
             .from(usage)
@@ -196,7 +197,7 @@ export const subscriptionsService = {
                 )
             )
             .limit(1);
-        
+
         return result[0] ? this.mapToUsage(result[0]) : null;
     },
 
@@ -206,26 +207,26 @@ export const subscriptionsService = {
     async getUsageSummary(userId: string): Promise<UsageSummary | null> {
         const subscription = await this.getUserSubscription(userId);
         if (!subscription) return null;
-        
+
         const currentUsage = await this.getCurrentUsage(userId);
         const plan = subscription.plan;
-        
+
         // Count user's resources
         const [pagesCount] = await db
             .select({ count: pages.id })
             .from(pages)
             .where(eq(pages.userId, userId));
-        
+
         const [templatesCount] = await db
             .select({ count: templates.id })
             .from(templates)
             .where(eq(templates.userId, userId));
-        
+
         const [rulesCount] = await db
             .select({ count: rules.id })
             .from(rules)
             .where(eq(rules.userId, userId));
-        
+
         // Calculate trial days remaining
         let trialDaysRemaining: number | undefined;
         if (subscription.status === 'trialing' && subscription.trialEndsAt) {
@@ -233,10 +234,10 @@ export const subscriptionsService = {
             const now = new Date();
             trialDaysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
         }
-        
+
         const aiUsed = currentUsage?.aiRepliesCount || 0;
         const aiLimit = plan.maxAiRepliesPerMonth;
-        
+
         return {
             currentPeriod: {
                 start: currentUsage?.periodStart?.toString() || new Date().toISOString(),
@@ -278,17 +279,17 @@ export const subscriptionsService = {
     async incrementAiReplies(userId: string, count: number = 1): Promise<void> {
         const now = new Date();
         const _today = now.toISOString().split('T')[0];
-        
+
         // Get current usage period
         const currentUsage = await this.getCurrentUsage(userId);
-        
+
         if (!currentUsage) {
             // Create new usage period if doesn't exist
             const periodEnd = new Date(now);
             periodEnd.setMonth(periodEnd.getMonth() + 1);
             await this.initializeUsagePeriod(userId, now, periodEnd);
         }
-        
+
         // Update usage count
         await db
             .update(usage)
@@ -303,7 +304,7 @@ export const subscriptionsService = {
                     gte(usage.periodEnd, now)
                 )
             );
-        
+
         // Log the usage event
         await this.logUsageEvent(userId, 'ai_reply', { count });
     },
@@ -313,10 +314,10 @@ export const subscriptionsService = {
      */
     async incrementTemplateReplies(userId: string, count: number = 1): Promise<void> {
         const now = new Date();
-        
+
         // Get current usage to increment properly
         const currentUsage = await this.getCurrentUsage(userId);
-        
+
         await db
             .update(usage)
             .set({
@@ -330,7 +331,7 @@ export const subscriptionsService = {
                     gte(usage.periodEnd, now)
                 )
             );
-        
+
         await this.logUsageEvent(userId, 'template_reply', { count });
     },
 
@@ -339,16 +340,16 @@ export const subscriptionsService = {
      */
     async canUseAiReplies(userId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
-        
+
         if (!subscription) {
             return { allowed: false, reason: 'No active subscription' };
         }
-        
+
         // Check subscription status
         if (subscription.status === 'canceled' || subscription.status === 'paused') {
             return { allowed: false, reason: `Subscription is ${subscription.status}` };
         }
-        
+
         // Check trial expiration
         if (subscription.status === 'trialing' && subscription.trialEndsAt) {
             const trialEnd = new Date(subscription.trialEndsAt);
@@ -356,19 +357,19 @@ export const subscriptionsService = {
                 return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.' };
             }
         }
-        
+
         const plan = subscription.plan;
-        
+
         // Check if AI limit is unlimited (null)
         if (plan.maxAiRepliesPerMonth === null) {
             return { allowed: true };
         }
-        
+
         // Check current usage
         const currentUsage = await this.getCurrentUsage(userId);
         const used = currentUsage?.aiRepliesCount || 0;
         const limit = plan.maxAiRepliesPerMonth;
-        
+
         if (used >= limit) {
             return {
                 allowed: false,
@@ -378,7 +379,7 @@ export const subscriptionsService = {
                 remaining: 0,
             };
         }
-        
+
         return {
             allowed: true,
             limit,
@@ -392,27 +393,27 @@ export const subscriptionsService = {
      */
     async canAddPage(userId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
-        
+
         if (!subscription) {
             return { allowed: false, reason: 'No active subscription' };
         }
-        
+
         const plan = subscription.plan;
-        
+
         // Check if pages limit is unlimited (null)
         if (plan.maxPages === null) {
             return { allowed: true };
         }
-        
+
         // Count current pages
         const [result] = await db
             .select({ count: pages.id })
             .from(pages)
             .where(eq(pages.userId, userId));
-        
+
         const used = Number(result?.count) || 0;
         const limit = plan.maxPages;
-        
+
         if (used >= limit) {
             return {
                 allowed: false,
@@ -422,7 +423,7 @@ export const subscriptionsService = {
                 remaining: 0,
             };
         }
-        
+
         return {
             allowed: true,
             limit,
@@ -436,27 +437,27 @@ export const subscriptionsService = {
      */
     async canAddTemplate(userId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
-        
+
         if (!subscription) {
             return { allowed: false, reason: 'No active subscription' };
         }
-        
+
         const plan = subscription.plan;
-        
+
         // Check if templates limit is unlimited (null)
         if (plan.maxTemplates === null) {
             return { allowed: true };
         }
-        
+
         // Count current templates
         const [result] = await db
             .select({ count: templates.id })
             .from(templates)
             .where(eq(templates.userId, userId));
-        
+
         const used = Number(result?.count) || 0;
         const limit = plan.maxTemplates;
-        
+
         if (used >= limit) {
             return {
                 allowed: false,
@@ -466,7 +467,7 @@ export const subscriptionsService = {
                 remaining: 0,
             };
         }
-        
+
         return {
             allowed: true,
             limit,
@@ -480,27 +481,27 @@ export const subscriptionsService = {
      */
     async canAddRule(userId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
-        
+
         if (!subscription) {
             return { allowed: false, reason: 'No active subscription' };
         }
-        
+
         const plan = subscription.plan;
-        
+
         // Check if rules limit is unlimited (null)
         if (plan.maxRules === null) {
             return { allowed: true };
         }
-        
+
         // Count current rules
         const [result] = await db
             .select({ count: rules.id })
             .from(rules)
             .where(eq(rules.userId, userId));
-        
+
         const used = Number(result?.count) || 0;
         const limit = plan.maxRules;
-        
+
         if (used >= limit) {
             return {
                 allowed: false,
@@ -510,7 +511,7 @@ export const subscriptionsService = {
                 remaining: 0,
             };
         }
-        
+
         return {
             allowed: true,
             limit,
@@ -523,8 +524,8 @@ export const subscriptionsService = {
      * Log a usage event
      */
     async logUsageEvent(
-        userId: string, 
-        eventType: string, 
+        userId: string,
+        eventType: string,
         metadata?: Record<string, unknown>,
         pageId?: string,
         platform?: string
