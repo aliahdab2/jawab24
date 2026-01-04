@@ -188,8 +188,15 @@ deploy_env() {
     
     # Build images (quiet mode, no cache - only show errors and final summary)
     # Pass GIT_COMMIT and SEMANTIC_VERSION as build args for versioning
-    log "📦 Building Docker images..."
-    if GIT_COMMIT="$GIT_COMMIT" SEMANTIC_VERSION="$SEMANTIC_VERSION" docker-compose -f docker-compose.yml -f docker-compose.$env.yml build --parallel --quiet --no-cache --build-arg GIT_COMMIT="$GIT_COMMIT" --build-arg SEMANTIC_VERSION="$SEMANTIC_VERSION" 2>&1; then
+    # Build images (no-cache to ensure fresh production build)
+    # Pass GIT_COMMIT and SEMANTIC_VERSION as build args for versioning
+    log "📦 Building Docker images (this may take a few minutes)..."
+    
+    # Use BuildKit for better progress reporting if available
+    export DOCKER_BUILDKIT=1
+    export COMPOSE_DOCKER_CLI_BUILD=1
+    
+    if GIT_COMMIT="$GIT_COMMIT" SEMANTIC_VERSION="$SEMANTIC_VERSION" docker-compose -f docker-compose.yml -f docker-compose.$env.yml build --parallel --no-cache --build-arg GIT_COMMIT="$GIT_COMMIT" --build-arg SEMANTIC_VERSION="$SEMANTIC_VERSION"; then
         log "✅ Images built successfully"
     else
         error "❌ Image build failed!"
