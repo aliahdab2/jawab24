@@ -7,7 +7,15 @@ import type { Subscription, Plan, Usage, UsageSummary, SubscriptionStatus, Limit
 /**
  * Subscriptions Service - Manages user subscriptions and usage
  */
+// Shared SQL for subscription priority: Active/Trialing > Past Due > Others
+const SUBSCRIPTION_PRIORITY_SQL = sql`CASE WHEN ${subscriptions.status} IN ('active', 'trialing') THEN 1 WHEN ${subscriptions.status} = 'past_due' THEN 2 ELSE 3 END`;
+
+/**
+ * Subscriptions Service - Manages user subscriptions and usage
+ */
 export const subscriptionsService = {
+    // Export for use in other files (like PaymentController)
+    PRIORITY_SQL: SUBSCRIPTION_PRIORITY_SQL,
     /**
      * Get user's current subscription with plan details
      */
@@ -21,7 +29,7 @@ export const subscriptionsService = {
             .innerJoin(plans, eq(subscriptions.planId, plans.id))
             .where(eq(subscriptions.userId, userId))
             .orderBy(
-                sql`CASE WHEN ${subscriptions.status} IN ('active', 'trialing') THEN 1 WHEN ${subscriptions.status} = 'past_due' THEN 2 ELSE 3 END`,
+                SUBSCRIPTION_PRIORITY_SQL,
                 desc(subscriptions.createdAt)
             )
             .limit(1);

@@ -30,9 +30,9 @@ export default function CheckoutPage() {
         const response = await publicApi.get(`/plans/${planId}`);
         const planData = response.data.data || response.data;
 
-        // If it's the default plan, redirect to dashboard as they get it for free
+        // If it's a FREE plan, redirect to dashboard as they get it for free
         // But only if they don't have a plan yet (otherwise it might be a downgrade)
-        if (planData.isDefault) {
+        if (planData.price === 0) {
           const token = localStorage.getItem('token');
           if (token) {
             router.push('/dashboard');

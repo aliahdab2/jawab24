@@ -1,8 +1,9 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { stripeService } from '../services/stripe';
+import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
 import { subscriptions, users, plans } from '../db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
 import type Stripe from 'stripe';
@@ -141,7 +142,7 @@ export class PaymentController {
                 .innerJoin(plans, eq(subscriptions.planId, plans.id))
                 .where(eq(subscriptions.userId, userId))
                 .orderBy(
-                    sql`CASE WHEN ${subscriptions.status} IN ('active', 'trialing') THEN 1 WHEN ${subscriptions.status} = 'past_due' THEN 2 ELSE 3 END`,
+                    subscriptionsService.PRIORITY_SQL,
                     desc(subscriptions.createdAt)
                 )
                 .limit(1);

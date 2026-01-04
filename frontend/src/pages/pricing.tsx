@@ -276,9 +276,9 @@ export default function PricingPage() {
     const selectedPlan = plans.find(p => p.id === planId);
     if (!selectedPlan) return;
 
-    // If it's the default plan (Free Trial), we don't need Stripe checkout for NEW users
+    // If it's a FREE plan, we don't need Stripe checkout for NEW users
     // New users get this plan automatically on registration/login
-    if (selectedPlan.isDefault) {
+    if (selectedPlan.price === 0) {
       if (!isAuthenticated) {
         // Just go to login, then dashboard will auto-activate trial
         router.push(`/login?redirect=${encodeURIComponent('/dashboard')}`);
