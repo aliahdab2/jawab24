@@ -106,7 +106,7 @@ Push to `main` and GitHub Actions handles the rest. It uses blue-green deploymen
 ./scripts/deploy-blue-green.sh rollback
 ```
 
-More details in [DEPLOYMENT.md](./DEPLOYMENT.md).
+More details in [Deployment Guide](./docs/deployment.md).
 
 ### Versioning (tags-first)
 - Human version comes from the latest git tag (e.g., `v2.4.1`). If no tag, shows `untagged`.
@@ -209,12 +209,20 @@ There are ~95 tests covering the backend. They run on every push.
 
 ## Docs
 
-- [Deployment Guide](./DEPLOYMENT.md)
-- [Facebook Setup](./FACEBOOK_SETUP.md)
-- [API Spec](./API_SPEC.md)
-- [Database Schema](./DATABASE_SCHEMA.md)
-- [Language Support](./LANGUAGE_SUPPORT.md)
-- [Technical Roadmap](./ROADMAP.md)
+### Integrations
+- [Stripe](./docs/integrations/stripe.md)
+- [Facebook](./docs/integrations/facebook.md)
+- [Instagram](./docs/integrations/instagram.md)
+
+### Technical
+- [Architecture](./docs/technical/architecture.md)
+- [API Reference](./docs/technical/api.md)
+- [Database Schema](./docs/technical/schema.md)
+- [Internationalization](./docs/technical/i18n.md)
+
+### Operations
+- [Deployment](./docs/deployment.md)
+- [Roadmap](./docs/roadmap.md)
 
 ---
 

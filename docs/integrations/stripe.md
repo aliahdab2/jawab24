@@ -290,5 +290,23 @@ stripe listen --forward-to localhost:3000/api/payment/webhook
 
 ---
 
+## ✅ Automated Testing (اختبارات تلقائية)
+
+We have a comprehensive test suite for the payment system:
+
+### Test Coverage
+- **Services**: `backend/test/services/stripe.test.ts`
+- **Controllers**: `backend/test/controllers/payment.test.ts`
+- **Integration**: `backend/test/routes/payment.test.ts`
+
+### Running Tests
+```bash
+# Run all payment tests
+cd backend
+STRIPE_SECRET_KEY=sk_test_mock npm test -- test/services/stripe.test.ts --run
+```
+
+---
+
 **🎉 تهانينا! نظام الدفع جاهز للاستخدام.**
 
