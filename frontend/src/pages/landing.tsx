@@ -18,7 +18,7 @@ import {
   Smartphone,
   Mail
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 
@@ -383,7 +383,7 @@ export default function LandingPage() {
               {/* Dashboard Preview - Hidden on mobile for cleaner layout */}
               <div className="lg:w-1/2 relative hidden lg:block">
                 <div className="relative rounded-3xl overflow-hidden shadow-2xl border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700">
-                  <img src="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&q=80&w=1000" alt="Dashboard Preview" className="w-full" />
+                  <img src="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&q=80&w=1000" alt={t('landing.images.dashboardPreview' as TranslationKey) as string} className="w-full" />
                   <div className="absolute inset-0 bg-gradient-to-t from-brand-900/20 to-transparent"></div>
                 </div>
                 {/* Decorative Elements */}
@@ -410,7 +410,7 @@ export default function LandingPage() {
             </h2>
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 sm:border-4 border-white/30 overflow-hidden mb-2 sm:mb-4 shadow-xl">
-                <img src="https://ui-avatars.com/api/?name=Ahmed+S&background=white&color=0EA5E9" alt="User" />
+                <img src="https://ui-avatars.com/api/?name=Ahmed+S&background=white&color=0EA5E9" alt={t('landing.images.user' as TranslationKey) as string} />
               </div>
               <div className="text-white font-bold text-base sm:text-xl">{t('landing.testimonials.author1')}</div>
             </div>
@@ -559,7 +559,7 @@ export default function LandingPage() {
                 </p>
                 <div className="flex items-center gap-3 sm:gap-4">
                   <a
-                    href="https://wa.me/963959858266?text=مرحباً، أريد الاستفسار عن خدمة Jawab24"
+                    href={`https://wa.me/963959858266?text=${encodeURIComponent(t('landing.footer.whatsappMessage' as TranslationKey))}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
