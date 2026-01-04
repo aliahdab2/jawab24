@@ -162,7 +162,7 @@ function PlanCard({
           {isCurrentPlan ? (
             <div className="flex flex-col items-center gap-1">
               <span>{t('pricing.currentPlan')}</span>
-              {subscriptionStatus === 'trialing' && (
+              {(subscriptionStatus === 'trialing' || (isCurrentPlan && plan.price === 0 && plan.trialDays > 0)) && (
                 <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase font-extrabold tracking-wider border border-amber-200">
                   {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
                 </span>
