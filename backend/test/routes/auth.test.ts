@@ -95,7 +95,7 @@ describe('Auth Routes - Login Flow', () => {
 
             expect(response.statusCode).toBe(200);
             const body = JSON.parse(response.body);
-            
+
             expect(body.token).toBe('jwt_token_123');
             expect(body.fbAccessToken).toBe('fb_access_token_123');
             expect(body.user.id).toBe('user_uuid_123');
@@ -103,7 +103,7 @@ describe('Auth Routes - Login Flow', () => {
             expect(body.user.facebookId).toBe('fb_user_123');
 
             // Verify service calls
-            expect(facebookService.getAccessToken).toHaveBeenCalledWith('facebook_auth_code_xyz');
+            expect(facebookService.getAccessToken).toHaveBeenCalledWith('facebook_auth_code_xyz', undefined);
             expect(facebookService.getUserProfile).toHaveBeenCalledWith('fb_access_token_123');
             expect(authService.findOrCreateUser).toHaveBeenCalledWith(
                 'fb_user_123',
