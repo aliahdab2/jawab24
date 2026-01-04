@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { settingsService, UpdateSettingsDTO } from '../services/settings';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
 
 export class SettingsController {
     /**
@@ -35,7 +36,18 @@ export class SettingsController {
             }
 
             const userId = request.user.userId;
-            const updates = request.body as UpdateSettingsDTO;
+
+            // Validate request body
+            const validation = validateSchema(UpdateSettingsSchema, request.body);
+            if (!validation.success) {
+                request.log.error({ errors: validation.errors }, 'Invalid settings update payload');
+                return reply.status(400).send({
+                    error: 'Invalid request',
+                    details: validation.errors
+                });
+            }
+
+            const updates = validation.data;
             const settings = await settingsService.updateSettings(userId, updates);
             return reply.send(settings);
         } catch (error) {
