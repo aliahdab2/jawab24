@@ -312,7 +312,14 @@ export default function DashboardPage() {
                 </div>
                 <div className="min-w-0 flex-1 text-start">
                   <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                  <h4 className="text-2xl font-display font-bold text-surface-900 truncate tracking-tight">{usage.subscription.plan.name}</h4>
+                  <h4 className="text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
+                    {usage.subscription.plan.name}
+                    {usage.subscription.status === 'trialing' && (
+                      <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] uppercase font-extrabold tracking-wider border border-amber-200">
+                        {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+                      </span>
+                    )}
+                  </h4>
                 </div>
               </div>
 
