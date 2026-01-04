@@ -43,6 +43,13 @@
       "when": 1735830000000,
       "tag": "0005_add_stripe_price_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1767555838440,
+      "tag": "0007_demonic_makkari",
+      "breakpoints": true
     }
   ]
 }
