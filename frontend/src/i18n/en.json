@@ -302,7 +302,7 @@
   "settings.dualReplyDesc": "The public reply text below will be used to reply to the comment, along with a private message.",
   "settings.dualReplyConfigTitle": "Comment Reply Text",
   "settings.dualReplyConfigDesc": "This text is used for the public reply to the comment, along with a private message.",
-  "settings.publicReplyPlaceholder": "e.g. Check your inbox! 📩",
+  "settings.publicReplyPlaceholder": "e.g. Details sent via private message 📩",
   "settings.commentsAutoReply": "Reply to Comments",
   "settings.commentsAutoReplyDesc": "Auto reply to comments on your page",
   "settings.messagesAutoReply": "Reply to Messages",
