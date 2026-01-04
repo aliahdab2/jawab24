@@ -30,6 +30,12 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       _hasHydrated: false,
       setAuth: (user, token, fbToken) => {
+        // Defensive validation: ensure we have valid auth data before storing
+        if (!user?.id || !token || token.trim() === '') {
+          console.error('Invalid auth data provided to setAuth:', { hasUser: !!user, hasUserId: !!user?.id, hasToken: !!token });
+          return;
+        }
+
         if (typeof window !== 'undefined') {
           localStorage.setItem('token', token);
         }

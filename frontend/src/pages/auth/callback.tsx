@@ -8,19 +8,19 @@ export default function AuthCallback() {
   const { setAuth } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const authAttemptedRef = useRef(false);
-  
+
   // Use ref for router to avoid dependency issues
   const routerRef = useRef(router);
   routerRef.current = router;
-  
+
   // Memoize setAuth to ensure stable reference
   const setAuthRef = useRef(setAuth);
   setAuthRef.current = setAuth;
 
-  const handleCallback = useCallback(async () => {
+  const handleCallback = useCallback(async (abortSignal: AbortSignal) => {
     // Prevent multiple auth attempts
     if (authAttemptedRef.current) return;
-    
+
     const { code, error: fbError, state } = routerRef.current.query;
 
     if (fbError) {
@@ -39,15 +39,26 @@ export default function AuthCallback() {
     authAttemptedRef.current = true;
 
     try {
-      // Exchange code for token via our backend
+      // Exchange code for token via our backend with timeout
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-      const response = await fetch(`${apiUrl}/auth/facebook`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ code }),
+
+      // Create a timeout promise (15 seconds)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Login request timed out. Please try again.')), 15000);
       });
+
+      // Race between fetch and timeout
+      const response = await Promise.race([
+        fetch(`${apiUrl}/auth/facebook`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ code }),
+          signal: abortSignal,
+        }),
+        timeoutPromise
+      ]);
 
       if (!response.ok) {
         const data = await response.json();
@@ -55,10 +66,10 @@ export default function AuthCallback() {
       }
 
       const data = await response.json();
-      
+
       // Store auth data including FB token
       setAuthRef.current(data.user, data.token, data.fbAccessToken);
-      
+
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
         // Store the intended destination in query param
@@ -67,22 +78,32 @@ export default function AuthCallback() {
         routerRef.current.push(`/complete-profile?redirect=${encodeURIComponent(safeUrl)}`);
         return;
       }
-      
+
       // Redirect to the original destination (from state param) or dashboard
       const returnUrl = state ? decodeURIComponent(state as string) : '/dashboard';
       // Validate the URL is a relative path (security)
       const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
       routerRef.current.push(safeUrl);
     } catch (err) {
+      // Don't show error if request was aborted (user navigated away)
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       console.error('Auth error:', err);
-      setError(err instanceof Error ? err.message : 'Authentication failed');
+      setError(err instanceof Error ? err.message : 'Authentication failed. Please try again.');
       setTimeout(() => routerRef.current.push('/login'), 3000);
     }
   }, []);
 
   useEffect(() => {
     if (router.isReady) {
-      handleCallback();
+      const abortController = new AbortController();
+      handleCallback(abortController.signal);
+
+      // Cleanup: abort request if component unmounts
+      return () => {
+        abortController.abort();
+      };
     }
   }, [router.isReady, handleCallback]);
 

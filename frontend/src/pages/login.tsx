@@ -22,7 +22,6 @@ export default function LoginPage() {
   const { displayVersion } = useVersion();
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -31,25 +30,35 @@ export default function LoginPage() {
   if (!mounted) return null;
 
   const handleFacebookLogin = () => {
-    setLoading(true);
+    try {
+      // Build Facebook OAuth URL
+      const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
 
-    // Build Facebook OAuth URL
-    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
-    const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
-    // Using minimal scopes that work in Development mode
-    // - email: Get user's email address (required for account notifications)
-    // - pages_*: Manage Facebook pages
-    // Advanced scopes (pages_manage_posts, instagram_*) require App Review
-    const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
+      if (!fbAppId) {
+        console.error('FB_APP_ID is not configured');
+        alert('Login is not configured. Please contact support.');
+        return;
+      }
 
-    // Get the redirect URL from query params (e.g., /checkout?planId=xxx)
-    const returnUrl = router.query.redirect as string || '/dashboard';
-    // Encode the return URL in the state parameter so we can use it after OAuth
-    const state = encodeURIComponent(returnUrl);
+      const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
+      // Using minimal scopes that work in Development mode
+      // - email: Get user's email address (required for account notifications)
+      // - pages_*: Manage Facebook pages
+      // Advanced scopes (pages_manage_posts, instagram_*) require App Review
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
 
-    const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
+      // Get the redirect URL from query params (e.g., /checkout?planId=xxx)
+      const returnUrl = router.query.redirect as string || '/dashboard';
+      // Encode the return URL in the state parameter so we can use it after OAuth
+      const state = encodeURIComponent(returnUrl);
 
-    window.location.href = facebookAuthUrl;
+      const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
+
+      window.location.href = facebookAuthUrl;
+    } catch (error) {
+      console.error('Error initiating Facebook login:', error);
+      alert('Failed to start login. Please try again.');
+    }
   };
 
   const toggleLanguage = () => {
@@ -183,18 +192,11 @@ export default function LoginPage() {
               <div className="space-y-6">
                 <Button
                   onClick={handleFacebookLogin}
-                  disabled={loading}
                   size="lg"
                   className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
                 >
-                  {loading ? (
-                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Facebook className="w-6 h-6 ltr:mr-2 rtl:ml-2" />
-                      {t('auth.loginWithFacebook')}
-                    </>
-                  )}
+                  <Facebook className="w-6 h-6 ltr:mr-2 rtl:ml-2" />
+                  {t('auth.loginWithFacebook')}
                 </Button>
 
                 <div className="p-6 rounded-3xl bg-brand-50/50 border border-brand-100 mt-8">
