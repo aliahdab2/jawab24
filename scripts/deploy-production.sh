@@ -346,27 +346,15 @@ sleep 5
 # Run migrations
 mkdir -p .migrations
 MIGRATION_COUNT=0
-for migration in backend/drizzle/*.sql; do
-    if [ -f "$migration" ]; then
-        MIGRATION_NAME=$(basename "$migration")
-        if [ ! -f ".migrations/$MIGRATION_NAME.done" ]; then
-            echo "   📦 Applying: $MIGRATION_NAME"
-            docker cp "$migration" jawab24-postgres:/tmp/migration.sql
-            if docker exec jawab24-postgres psql -U postgres -d jawab24 -f /tmp/migration.sql 2>&1 | grep -v "already exists"; then
-                touch ".migrations/$MIGRATION_NAME.done"
-                echo "   ✅ Applied: $MIGRATION_NAME"
-                MIGRATION_COUNT=$((MIGRATION_COUNT + 1))
-            else
-                touch ".migrations/$MIGRATION_NAME.done"
-            fi
-            docker exec jawab24-postgres rm -f /tmp/migration.sql
-        fi
-    fi
-done
-if [ $MIGRATION_COUNT -eq 0 ]; then
-    echo "✅ No new migrations to apply"
+# Run migrations via the backend container (using Drizzle)
+echo "   🔄 Triggering Drizzle migrations..."
+# We use the blue container because we are about to deploy blue
+# Ensure the container is running and healthy-ish
+if docker exec jawab24-backend-blue npm run db:migrate; then
+    echo "   ✅ Migrations applied successfully via app container"
 else
-    echo "✅ Applied $MIGRATION_COUNT migrations"
+    echo "   ❌ Migration failed"
+    exit 1
 fi
 
 echo ""
