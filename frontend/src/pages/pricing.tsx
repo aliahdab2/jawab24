@@ -258,15 +258,36 @@ export default function PricingPage() {
   }, [isAuthenticated]);
 
   const handleSelectPlan = async (planId: string) => {
-    // If not authenticated, redirect to login
+    // Find the selected plan
+    const selectedPlan = plans.find(p => p.id === planId);
+    if (!selectedPlan) return;
+
+    // If it's the default plan (Free Trial), we don't need Stripe checkout for NEW users
+    // New users get this plan automatically on registration/login
+    if (selectedPlan.isDefault) {
+      if (!isAuthenticated) {
+        // Just go to login, then dashboard will auto-activate trial
+        router.push(`/login?redirect=${encodeURIComponent('/dashboard')}`);
+      } else {
+        // If already logged in, check if they already have an active sub
+        // If they don't have a plan yet, just go to dashboard to trigger auto-activation
+        if (!usage?.subscription) {
+          router.push('/dashboard');
+        } else {
+          // If they have a plan and are "downgrading" or "switching" back to default,
+          // go to checkout to handle Stripe subscription update
+          router.push(`/checkout?planId=${planId}`);
+        }
+      }
+      return;
+    }
+
+    // For all other PAID plans:
+    // If not authenticated, redirect to login then to checkout
     if (!isAuthenticated) {
       router.push(`/login?redirect=${encodeURIComponent(`/checkout?planId=${planId}`)}`);
       return;
     }
-
-    // Find the selected plan
-    const selectedPlan = plans.find(p => p.id === planId);
-    if (!selectedPlan) return;
 
     setChangingPlan(planId);
 

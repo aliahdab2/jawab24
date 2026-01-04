@@ -28,7 +28,19 @@ export default function CheckoutPage() {
     const fetchPlan = async () => {
       try {
         const response = await publicApi.get(`/plans/${planId}`);
-        setPlan(response.data.data || response.data);
+        const planData = response.data.data || response.data;
+
+        // If it's the default plan, redirect to dashboard as they get it for free
+        // But only if they don't have a plan yet (otherwise it might be a downgrade)
+        if (planData.isDefault) {
+          const token = localStorage.getItem('token');
+          if (token) {
+            router.push('/dashboard');
+            return;
+          }
+        }
+
+        setPlan(planData);
       } catch (err) {
         console.error('Failed to fetch plan:', err);
         setFetchError(true);
