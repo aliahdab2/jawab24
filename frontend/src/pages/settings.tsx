@@ -17,7 +17,9 @@ import {
   Settings2,
   BookTemplate,
   Zap,
-  ChevronRight
+  ChevronRight,
+  MessagesSquare,
+  Send
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslation, useLanguage } from '@/i18n';
@@ -262,7 +264,7 @@ export default function SettingsPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'public' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <Globe className="w-5 h-5" />
+                      <MessageSquare className="w-5 h-5" />
                     </div>
                     <div className="text-start">
                       <span className={`block font-bold ${settings.commentReplyMode === 'public' ? 'text-brand-900' : 'text-surface-700'}`}>
@@ -283,7 +285,7 @@ export default function SettingsPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'private' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <MessageCircle className="w-5 h-5" />
+                      <Send className="w-5 h-5" />
                     </div>
                     <div className="text-start">
                       <span className={`block font-bold ${settings.commentReplyMode === 'private' ? 'text-brand-900' : 'text-surface-700'}`}>
@@ -304,7 +306,7 @@ export default function SettingsPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'dual' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <MessageSquare className="w-5 h-5" />
+                      <MessagesSquare className="w-5 h-5" />
                     </div>
                     <div className="text-start">
                       <span className={`block font-bold ${settings.commentReplyMode === 'dual' ? 'text-brand-900' : 'text-surface-700'}`}>
