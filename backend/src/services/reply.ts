@@ -50,7 +50,7 @@ export class ReplyService {
 
             // 2. Check user settings for messages auto-reply
             const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(userId);
-            
+
             // Store the incoming message regardless of auto-reply status
             const { message: storedMessage, isNew } = await messagesService.findOrCreateFromWebhook(
                 page.id,
@@ -93,7 +93,7 @@ export class ReplyService {
             // 5. If rule found with template, use template
             if (matchingRule && matchingRule.templateId) {
                 const template = await templatesService.getTemplate(userId, matchingRule.templateId);
-                
+
                 if (template && template.translations) {
                     const translations = template.translations as Record<string, string>;
                     // Simple language fallback for now
@@ -130,7 +130,7 @@ export class ReplyService {
                     });
                     replyText = aiResponse.reply;
                     replyMethod = 'ai';
-                    
+
                     // Track AI usage
                     await subscriptionsService.incrementAiReplies(userId);
                 }
@@ -160,9 +160,9 @@ export class ReplyService {
             };
 
         } catch (error) {
-            this.logger.error('Error processing message', { 
+            this.logger.error('Error processing message', {
                 messageId,
-                error: error instanceof Error ? error.message : String(error) 
+                error: error instanceof Error ? error.message : String(error)
             });
             return {
                 success: false,
@@ -210,10 +210,10 @@ export class ReplyService {
 
             // 2. Check user settings for comments auto-reply
             const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(pageUserId);
-            
+
             // 3. Find or create the post (WITHOUT fetching content yet - we'll do it lazily)
             let post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined);
-            
+
             if (!post.autoReplyEnabled) {
                 return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this post' };
             }
@@ -253,7 +253,7 @@ export class ReplyService {
             // 7. If rule found with template, use template (NO API CALL NEEDED!)
             if (matchingRule && matchingRule.templateId) {
                 const template = await templatesService.getTemplate(pageUserId, matchingRule.templateId);
-                
+
                 if (template && template.translations) {
                     // Try to get translation based on detected language or default to English
                     const translations = template.translations as Record<string, string>;
@@ -280,7 +280,7 @@ export class ReplyService {
                         this.logger.debug('[Reply] AI enabled, fetching post content for context');
                         post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined, page.accessToken);
                     }
-                    
+
                     const aiResponse = await aiService.generateReply({
                         comment: commentMessage,
                         context: {
@@ -291,7 +291,7 @@ export class ReplyService {
                     });
                     replyText = aiResponse.reply;
                     replyMethod = 'ai';
-                    
+
                     // Track AI usage
                     await subscriptionsService.incrementAiReplies(pageUserId);
                 }
@@ -304,18 +304,56 @@ export class ReplyService {
                 this.logger.debug('[Reply] Using fallback reply - no API call for post content needed');
             }
 
-            // 10. Post reply to Facebook
-            const facebookSuccess = await this.postReplyToFacebook(
-                facebookCommentId,
-                replyText,
-                page.accessToken
-            );
+            // 10. Send reply based on user preference (public or private)
+            let success = false;
+            let errorMsg = '';
 
-            if (!facebookSuccess) {
-                return { 
-                    success: false, 
-                    commentId: comment.id, 
-                    error: 'Failed to post reply to Facebook' 
+            // Get reply mode from settings (default to public if not set)
+            const replyMode = userSettings.commentReplyMode || 'public';
+
+            if (replyMode === 'private') {
+                // Private message mode
+                if (!fromId) {
+                    return {
+                        success: false,
+                        commentId: comment.id,
+                        error: 'Cannot send private message: commenter ID not available'
+                    };
+                }
+
+                try {
+                    await facebookService.sendPrivateMessage(
+                        page.accessToken,
+                        fromId,
+                        replyText
+                    );
+                    success = true;
+                    this.logger.debug('[Reply] Sent private message to commenter', { fromId });
+                } catch (error) {
+                    this.logger.error('Failed to send private message to commenter', {
+                        fromId,
+                        error: error instanceof Error ? error.message : String(error)
+                    });
+                    errorMsg = 'Failed to send private message to commenter';
+                }
+            } else {
+                // Public reply (default)
+                success = await this.postReplyToFacebook(
+                    facebookCommentId,
+                    replyText,
+                    page.accessToken
+                );
+
+                if (!success) {
+                    errorMsg = 'Failed to post public reply to Facebook';
+                }
+            }
+
+            if (!success) {
+                return {
+                    success: false,
+                    commentId: comment.id,
+                    error: errorMsg
                 };
             }
 
@@ -337,9 +375,9 @@ export class ReplyService {
             };
 
         } catch (error) {
-            this.logger.error('Error processing comment', { 
+            this.logger.error('Error processing comment', {
                 facebookCommentId,
-                error: error instanceof Error ? error.message : String(error) 
+                error: error instanceof Error ? error.message : String(error)
             });
             return {
                 success: false,
@@ -371,9 +409,9 @@ export class ReplyService {
             );
             return true;
         } catch (error) {
-            this.logger.error('Failed to post reply to Facebook', { 
+            this.logger.error('Failed to post reply to Facebook', {
                 commentId,
-                error: error instanceof Error ? error.message : String(error) 
+                error: error instanceof Error ? error.message : String(error)
             });
             return false;
         }

@@ -50,7 +50,7 @@ export class SettingsService {
      */
     async isCommentsAutoReplyEnabled(userId: string): Promise<boolean> {
         const userSettings = await this.getSettings(userId);
-        
+
         if (!userSettings.commentsAutoReply) {
             return false;
         }
@@ -71,7 +71,7 @@ export class SettingsService {
      */
     async isMessagesAutoReplyEnabled(userId: string): Promise<boolean> {
         const userSettings = await this.getSettings(userId);
-        
+
         if (!userSettings.messagesAutoReply) {
             return false;
         }
@@ -117,7 +117,7 @@ export class SettingsService {
     private isWithinBusinessHours(start: string, end: string): boolean {
         const now = new Date();
         const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-        
+
         // Simple string comparison works for HH:MM format
         return currentTime >= start && currentTime <= end;
     }
@@ -135,6 +135,7 @@ export class SettingsService {
             autoDetectLanguage: record.autoDetectLanguage ?? true,
             aiEnabled: record.aiEnabled ?? true,
             aiModel: record.aiModel || 'gpt-4o-mini',
+            commentReplyMode: (record.commentReplyMode as 'public' | 'private') || 'public',
             commentsAutoReply: record.commentsAutoReply ?? true,
             messagesAutoReply: record.messagesAutoReply ?? true,
             businessHoursOnly: record.businessHoursOnly ?? false,

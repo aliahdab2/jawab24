@@ -171,6 +171,7 @@ export const settings = pgTable('settings', {
     aiEnabled: boolean('ai_enabled').default(true),
     aiModel: varchar('ai_model', { length: 100 }).default('gpt-4o-mini'),
     // Auto-reply settings
+    commentReplyMode: varchar('comment_reply_mode', { length: 20 }).default('public'), // 'public' or 'private'
     commentsAutoReply: boolean('comments_auto_reply').default(true),
     messagesAutoReply: boolean('messages_auto_reply').default(true),
     businessHoursOnly: boolean('business_hours_only').default(false),
@@ -261,37 +262,37 @@ export const plans = pgTable('plans', {
     name: varchar('name', { length: 100 }).notNull(),
     slug: varchar('slug', { length: 50 }).unique().notNull(), // 'free', 'starter', 'business', 'pro'
     description: text('description'),
-    
+
     // Pricing
     price: integer('price').notNull().default(0), // Price in cents (500 = $5.00)
     currency: varchar('currency', { length: 3 }).default('USD'),
     interval: varchar('interval', { length: 20 }).default('month'), // 'month', 'year'
     stripePriceId: varchar('stripe_price_id', { length: 255 }), // Stripe Price ID (e.g., price_xxxxx)
-    
+
     // Limits
     maxPages: integer('max_pages').default(1),
     maxAiRepliesPerMonth: integer('max_ai_replies_per_month').default(50),
     maxTemplates: integer('max_templates').default(3), // null = unlimited
     maxRules: integer('max_rules').default(2), // null = unlimited
-    
+
     // Features
     facebookEnabled: boolean('facebook_enabled').default(true),
     instagramEnabled: boolean('instagram_enabled').default(true),
     whatsappEnabled: boolean('whatsapp_enabled').default(false),
     showBranding: boolean('show_branding').default(true), // Show "Powered by Jawab24"
     prioritySupport: boolean('priority_support').default(false),
-    
+
     // Trial
     trialDays: integer('trial_days').default(0), // 0 = no trial, 30 = 30-day trial
-    
+
     // Regional pricing (optional JSON for different regions)
     regionalPricing: jsonb('regional_pricing').default({}), // { "SY": 350000, "SA": 50 }
-    
+
     // Status
     isActive: boolean('is_active').default(true),
     isDefault: boolean('is_default').default(false), // Default plan for new users
     sortOrder: integer('sort_order').default(0), // For display ordering
-    
+
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
@@ -306,28 +307,28 @@ export const subscriptions = pgTable('subscriptions', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
     planId: uuid('plan_id').references(() => plans.id, { onDelete: 'restrict' }).notNull(),
-    
+
     // Status
     status: varchar('status', { length: 20 }).default('active'), // 'trialing', 'active', 'past_due', 'canceled', 'paused'
-    
+
     // Trial info
     trialEndsAt: timestamp('trial_ends_at'),
-    
+
     // Billing period
     currentPeriodStart: timestamp('current_period_start').defaultNow(),
     currentPeriodEnd: timestamp('current_period_end'),
-    
+
     // Payment info (for Stripe integration)
     externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID
     paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual'
     stripeCustomerId: varchar('stripe_customer_id', { length: 255 }), // Stripe Customer ID
     stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }), // For tracking
     cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false), // Cancel at period end flag
-    
+
     // Cancellation
     canceledAt: timestamp('canceled_at'),
     cancelReason: text('cancel_reason'),
-    
+
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
@@ -342,20 +343,20 @@ export const subscriptions = pgTable('subscriptions', {
 export const usage = pgTable('usage', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
-    
+
     // Period (monthly reset)
     periodStart: timestamp('period_start').notNull(),
     periodEnd: timestamp('period_end').notNull(),
-    
+
     // Counters
     aiRepliesCount: integer('ai_replies_count').default(0),
     templateRepliesCount: integer('template_replies_count').default(0),
     totalCommentsProcessed: integer('total_comments_processed').default(0),
     totalMessagesProcessed: integer('total_messages_processed').default(0),
-    
+
     // Daily breakdown (JSON for detailed analytics)
     dailyBreakdown: jsonb('daily_breakdown').default({}), // { "2024-01-15": { ai: 10, template: 5 } }
-    
+
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
@@ -370,17 +371,17 @@ export const usage = pgTable('usage', {
 export const usageLogs = pgTable('usage_logs', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
-    
+
     // Event type
     eventType: varchar('event_type', { length: 50 }).notNull(), // 'ai_reply', 'template_reply', 'comment_processed'
-    
+
     // Context
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),
     platform: varchar('platform', { length: 20 }), // 'facebook', 'instagram'
-    
+
     // Metadata
     metadata: jsonb('metadata').default({}),
-    
+
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => {
     return {

@@ -13,6 +13,7 @@ export interface UserSettings {
     autoDetectLanguage: boolean;
     aiEnabled: boolean;
     aiModel: string;
+    commentReplyMode: 'public' | 'private';
     commentsAutoReply: boolean;
     messagesAutoReply: boolean;
     businessHoursOnly: boolean;
@@ -30,6 +31,7 @@ export interface UpdateSettingsDTO {
     autoDetectLanguage?: boolean;
     aiEnabled?: boolean;
     aiModel?: string;
+    commentReplyMode?: 'public' | 'private';
     commentsAutoReply?: boolean;
     messagesAutoReply?: boolean;
     businessHoursOnly?: boolean;
