@@ -31,6 +31,7 @@ vi.mock('../../src/db', () => ({
 
 vi.mock('../../src/db/schema', () => ({
     users: {},
+    subscriptions: {},
 }));
 
 vi.mock('drizzle-orm', () => ({
