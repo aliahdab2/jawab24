@@ -210,14 +210,14 @@ export default function DashboardPage() {
           >
             {/* Background decoration */}
             <div className={`absolute -end-6 -bottom-6 w-32 h-32 rounded-full opacity-[0.03] transition-all duration-700 group-hover:scale-150 group-hover:opacity-[0.08] ${stat.color === 'brand' ? 'bg-brand-500' :
-                stat.color === 'emerald' ? 'bg-emerald-500' :
-                  'bg-amber-500'
+              stat.color === 'emerald' ? 'bg-emerald-500' :
+                'bg-amber-500'
               }`}></div>
 
             <div className="relative z-10 flex flex-col items-center">
               <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-6 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110 shadow-inner ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600 border border-brand-100/50' :
-                  stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' :
-                    'bg-amber-50 text-amber-600 border border-amber-100/50'
+                stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' :
+                  'bg-amber-50 text-amber-600 border border-amber-100/50'
                 }`}>
                 <stat.icon className="w-10 h-10" />
               </div>
@@ -343,8 +343,11 @@ export default function DashboardPage() {
               )}
 
               <Link href="/pricing" className="block mt-8">
-                <Button variant="primary" className="w-full shadow-2xl shadow-brand-500/30 py-6 text-lg">
-                  <Sparkles className="w-5 h-5" />
+                <Button
+                  variant="primary"
+                  className="w-full shadow-2xl shadow-brand-500/30 py-7 text-lg whitespace-nowrap"
+                  icon={<Sparkles className="w-5 h-5" />}
+                >
                   {t('subscription.upgradePlan')}
                 </Button>
               </Link>
