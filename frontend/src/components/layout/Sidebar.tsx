@@ -51,10 +51,10 @@ export function Sidebar() {
       <button
         onClick={toggleSidebar}
         className={clsx(
-          "absolute top-6 z-50 flex items-center justify-center w-8 h-8 rounded-full bg-surface-800 border border-white/10 text-surface-400 hover:text-white hover:bg-brand-600 transition-all shadow-lg cursor-pointer",
+          "absolute top-8 z-50 flex items-center justify-center w-8 h-8 rounded-full bg-white text-brand-600 hover:bg-brand-600 hover:text-white transition-all shadow-xl shadow-brand-500/10 cursor-pointer border border-brand-100/50",
           "rtl:left-0 rtl:-translate-x-1/2",
           "ltr:right-0 ltr:translate-x-1/2",
-          "opacity-0 group-hover/sidebar:opacity-100 focus:opacity-100 transition-opacity duration-300" // Only show on hover for cleaner look? Or always? Let's keep it always visible for now but maybe subtle.
+          "opacity-0 group-hover/sidebar:opacity-100 focus:opacity-100 transition-opacity duration-300"
         )}
         aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
       >
