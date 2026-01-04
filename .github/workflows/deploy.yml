@@ -181,31 +181,24 @@ jobs:
             docker-compose up -d postgres
             sleep 5
             
-            # Create migrations tracking directory
-            mkdir -p .migrations
+            # Run migrations via the backend container (using Drizzle)
+            echo "   🔄 Triggering Drizzle migrations..."
+            # We use the blue container because we just pulled code, but wait - 
+            # In Blue-Green, we start the NEW container later.
+            # BUT, to run migrations, we usually need a running container with the NEW code.
             
-            # Run any new SQL migrations from backend/drizzle/
-            for migration in backend/drizzle/*.sql; do
-              if [ -f "$migration" ]; then
-                MIGRATION_NAME=$(basename "$migration")
-                # Check if migration was already applied (using a simple marker file)
-                if [ ! -f ".migrations/$MIGRATION_NAME.done" ]; then
-                  echo "   📦 Applying: $MIGRATION_NAME"
-                  # Copy migration to container and run it
-                  docker cp "$migration" jawab24-postgres:/tmp/migration.sql
-                  if docker exec jawab24-postgres psql -U postgres -d jawab24 -f /tmp/migration.sql 2>&1; then
-                    touch ".migrations/$MIGRATION_NAME.done"
-                    echo "   ✅ Applied: $MIGRATION_NAME"
-                  else
-                    echo "   ⚠️  Migration may have been applied already (tables exist)"
-                    touch ".migrations/$MIGRATION_NAME.done"
-                  fi
-                  docker exec jawab24-postgres rm -f /tmp/migration.sql
-                else
-                  echo "   ⏭️  Already applied: $MIGRATION_NAME"
-                fi
-              fi
-            done
+            # The previous logic copied SQL files to postgres directly, so it didn't need the backend running.
+            # Now we want to run `npm run db:migrate` inside the backend.
+            
+            # PROBLEM: The new backend container hasn't started yet! (Step 4 is starting containers)
+            # We are at Step 1.5.
+            
+            # We have two options:
+            # 1. Start the new backend container momentarily to run migrations.
+            # 2. Move migration step to AFTER starting the new container (but before switching traffic).
+            
+            # Moving it to after Step 4 is safer and easier.
+            echo "   ⏳ Migrations will be run after container startup"
             
             echo "✅ Migrations complete"
             
@@ -297,6 +290,21 @@ jobs:
               docker logs jawab24-ai-worker-$DEPLOY_ENV --tail 20 2>&1 || echo "No logs"
             else
               echo "   ✅ AI Worker container is running"
+            fi
+
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🗄️  STEP 5a: Execute Database Migrations"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            echo "   🔄 Running migrations in jawab24-backend-$DEPLOY_ENV..."
+            if docker exec jawab24-backend-$DEPLOY_ENV npm run db:migrate; then
+               echo "   ✅ Migrations applied successfully"
+            else
+               echo "   ❌ Migration failed!"
+               echo "   📋 Logs:"
+               docker logs jawab24-backend-$DEPLOY_ENV --tail 20 2>&1
+               exit 1
             fi
             
             echo ""
