@@ -301,7 +301,7 @@
   "settings.privateReply": "رسالة خاصة",
   "settings.privateReplyDesc": "الرد برسالة خاصة",
   "settings.dualReply": "رد على التعليق وإرسال رسالة خاصة",
-  "settings.dualReplyDesc": "الرد على التعليق بالنص أدناه مع إرسال رسالة خاصة",
+  "settings.dualReplyDesc": "سيتم استخدام هذا النص للرد العلني على التعليق، مع إرسال رسالة خاصة.",
   "settings.dualReplyConfigTitle": "نص الرد على التعليق",
   "settings.dualReplyConfigDesc": "سيتم استخدام هذا النص للرد العلني على التعليق، مع إرسال رسالة خاصة.",
   "settings.publicReplyPlaceholder": "مثال: تم إرسال التفاصيل عبر رسالة خاصة 📩",
