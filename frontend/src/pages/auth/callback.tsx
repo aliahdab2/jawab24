@@ -54,7 +54,10 @@ export default function AuthCallback() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({
+            code,
+            redirectUri: `${window.location.origin}${window.location.pathname}`
+          }),
           signal: abortSignal,
         }),
         timeoutPromise

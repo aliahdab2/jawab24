@@ -16,13 +16,13 @@ export class FacebookService {
     /**
      * Exchange OAuth code for access token
      */
-    async getAccessToken(code: string): Promise<string> {
+    async getAccessToken(code: string, redirectUri?: string): Promise<string> {
         try {
             const response = await axios.get<FacebookTokenResponse>(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
                 params: {
                     client_id: config.facebook.appId,
                     client_secret: config.facebook.appSecret,
-                    redirect_uri: config.facebook.redirectUri,
+                    redirect_uri: redirectUri || config.facebook.redirectUri,
                     code,
                 },
             });
@@ -79,8 +79,8 @@ export class FacebookService {
             return response.data;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                this.logger.error('[Facebook] API Error fetching pages', { 
-                    error: error.response?.data?.error?.message || error.message 
+                this.logger.error('[Facebook] API Error fetching pages', {
+                    error: error.response?.data?.error?.message || error.message
                 });
                 throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
             }
@@ -146,17 +146,17 @@ export class FacebookService {
             });
 
             const message = response.data.message || response.data.story || null;
-            this.logger.debug('[Facebook] Post content fetched', { 
-                postId, 
+            this.logger.debug('[Facebook] Post content fetched', {
+                postId,
                 hasContent: !!message,
                 contentPreview: message ? message.substring(0, 50) : null
             });
             return message;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                this.logger.error('[Facebook] Error fetching post', { 
-                    postId, 
-                    error: error.response?.data?.error?.message || error.message 
+                this.logger.error('[Facebook] Error fetching post', {
+                    postId,
+                    error: error.response?.data?.error?.message || error.message
                 });
                 // Don't throw - just return null if we can't fetch the post
                 return null;
@@ -183,9 +183,9 @@ export class FacebookService {
             return response.data;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                this.logger.error('[Facebook] Error fetching comment', { 
-                    commentId, 
-                    error: error.response?.data?.error?.message || error.message 
+                this.logger.error('[Facebook] Error fetching comment', {
+                    commentId,
+                    error: error.response?.data?.error?.message || error.message
                 });
                 return null;
             }

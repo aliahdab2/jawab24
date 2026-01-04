@@ -23,6 +23,7 @@ export interface JWTPayload {
 // Request/Response types
 export interface AuthRequest {
     code: string;
+    redirectUri?: string;
 }
 
 export interface AuthResponse {

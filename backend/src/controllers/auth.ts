@@ -14,7 +14,7 @@ export class AuthController {
      * POST /auth/facebook
      */
     async facebookLogin(request: FastifyRequest<{ Body: AuthRequest }>, reply: FastifyReply) {
-        const { code } = request.body;
+        const { code, redirectUri } = request.body;
 
         if (!code) {
             return reply.status(400).send({ error: 'Authorization code is required' });
@@ -22,11 +22,11 @@ export class AuthController {
 
         try {
             // 1. Exchange code for access token
-            const accessToken = await facebookService.getAccessToken(code);
+            const accessToken = await facebookService.getAccessToken(code, redirectUri);
 
             // 2. Get user profile from Facebook
             const fbProfile = await facebookService.getUserProfile(accessToken);
-            
+
 
             // 3. Find or create user in our DB
             const user = await authService.findOrCreateUser(
@@ -126,7 +126,7 @@ export class AuthController {
 
             // Fetch updated user
             const [user] = await db.select().from(users).where(eq(users.id, userId));
-            
+
             if (!user) {
                 return reply.status(404).send({ error: 'User not found' });
             }
