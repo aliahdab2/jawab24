@@ -17,18 +17,6 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Rewrite /en/auth/callback and /ar/auth/callback to /auth/callback
-  // This ensures OAuth callbacks work regardless of locale
-  async rewrites() {
-    return {
-      beforeFiles: [
-        {
-          source: '/:locale(en|ar)/auth/callback',
-          destination: '/auth/callback',
-        },
-      ],
-    };
-  },
 }
 
 module.exports = nextConfig
