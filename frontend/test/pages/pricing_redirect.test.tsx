@@ -76,8 +76,8 @@ describe('PricingPage Navigation Logic', () => {
         render(<PricingPage />);
 
         // Wait for plans to load. 
-        // Since price is 1000, logic renders 'pricing.upgrade'
-        const upgradeButton = await screen.findByText('pricing.upgrade');
+        // Since price is 1000 and not logged in (no sub), logic renders 'pricing.subscribe'
+        const upgradeButton = await screen.findByText('pricing.subscribe');
 
         // Action: Click upgrade
         fireEvent.click(upgradeButton);
