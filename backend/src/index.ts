@@ -2,6 +2,7 @@ import fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import Redis from 'ioredis';
 import dotenv from 'dotenv';
 import healthRoutes from './routes/health';
 import authRoutes from './routes/auth';
@@ -87,20 +88,28 @@ const start = async () => {
         const allowedOrigins = isProduction
             ? (process.env.FRONTEND_URL || 'https://jawab24.com')
             : ['http://localhost:3000', 'http://localhost:3001'];
-        
+
         await server.register(cors, {
             origin: allowedOrigins,
             credentials: true,
         });
-        
+
         await server.register(helmet, {
             contentSecurityPolicy: false, // Disable for API
         });
 
         // Register rate limiting
+        // Use Redis for rate limiting to ensure consistency across blue/green deployments
+        const redisClient = new Redis({
+            host: process.env.REDIS_HOST || 'localhost',
+            port: Number(process.env.REDIS_PORT) || 6379,
+            password: process.env.REDIS_PASSWORD,
+        });
+
         await server.register(rateLimit, {
             max: 100, // 100 requests
             timeWindow: '15 minutes',
+            redis: redisClient,
             errorResponseBuilder: (request, context) => ({
                 error: true,
                 message: 'Rate limit exceeded. Please try again later.',
@@ -143,7 +152,7 @@ const start = async () => {
 // Graceful shutdown handling
 const gracefulShutdown = async (signal: string) => {
     console.log(`\n${signal} received, closing server gracefully...`);
-    
+
     try {
         await server.close();
         console.log('✅ Server closed successfully');
