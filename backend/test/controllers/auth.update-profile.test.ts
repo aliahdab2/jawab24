@@ -17,6 +17,7 @@ vi.mock('../../src/db/schema', () => ({
         name: 'name',
         updatedAt: 'updated_at',
     },
+    subscriptions: {},
 }));
 
 vi.mock('drizzle-orm', () => ({

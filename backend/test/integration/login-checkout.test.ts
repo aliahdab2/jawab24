@@ -62,6 +62,7 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/db/schema', () => ({
     users: { id: 'id', email: 'email' },
     plans: { id: 'id', stripePriceId: 'stripe_price_id' },
+    subscriptions: {},
 }));
 
 vi.mock('drizzle-orm', () => ({
