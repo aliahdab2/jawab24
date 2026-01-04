@@ -17,7 +17,7 @@ function getVersionInfo() {
 
     let gitCommit = 'unknown';
     let gitCommitShort = 'unknown';
-    
+
     try {
         // Try to get git commit from environment (set during Docker build)
         if (process.env.GIT_COMMIT) {
@@ -76,13 +76,13 @@ function getVersionInfo() {
 
 export default async function versionRoutes(fastify: FastifyInstance) {
     // Public endpoint - no auth required
-    fastify.get('/api/version', async (_request, reply) => {
+    fastify.get('/version', async (_request, reply) => {
         const info = getVersionInfo();
         return reply.send(info);
     });
 
     // Simple version for health checks
-    fastify.get('/api/version/short', async (_request, reply) => {
+    fastify.get('/version/short', async (_request, reply) => {
         const info = getVersionInfo();
         return reply.send({ v: info.shortVersion });
     });
