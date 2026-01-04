@@ -313,6 +313,11 @@ export default function PricingPage() {
                   : (t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey) !== `plans.${usage.subscription.plan.slug}.name`
                     ? t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey)
                     : usage.subscription.plan.name)}
+                {usage.subscription.status === 'trialing' && (
+                  <span className="ml-1 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-[10px] uppercase font-extrabold tracking-wider border border-amber-200">
+                    {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+                  </span>
+                )}
               </span>
             </div>
             <div className="text-xs text-brand-600">
