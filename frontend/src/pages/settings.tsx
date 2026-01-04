@@ -225,61 +225,80 @@ export default function SettingsPage() {
 
 
 
-        {/* Reply Mode Selector */}
-        <Card className="border-none shadow-lg shadow-surface-200/50 p-6">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
-              <MessageSquare className="w-6 h-6" />
+        {/* Comments Automation Card with Nested Logic */}
+        <Card className={`border-none shadow-lg transition-all duration-300 ${settings.commentsAutoReply ? 'shadow-brand-100 ring-1 ring-brand-100' : 'shadow-surface-200/50'} p-6`}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              <div className="text-start">
+                <h3 className={`font-bold text-lg ${settings.commentsAutoReply ? 'text-brand-900' : 'text-surface-900'}`}>{t('settings.commentsAutoReply')}</h3>
+                <p className="text-sm text-surface-500 font-medium">{t('settings.commentsAutoReplyDesc')}</p>
+              </div>
             </div>
-            <div className="text-start">
-              <h3 className="font-bold text-surface-900 text-lg">{t('settings.commentReplyMode')}</h3>
-              <p className="text-xs text-surface-500 font-medium">{t('settings.replyModeDescription')}</p>
-            </div>
+            <Toggle
+              enabled={settings.commentsAutoReply}
+              onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
+            />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              onClick={() => setSettings({ ...settings, commentReplyMode: 'public' })}
-              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${settings.commentReplyMode === 'public'
-                ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500'
-                : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
-                }`}
-            >
-              <div className="flex items-center gap-3">
-                <Globe className={`w-5 h-5 ${settings.commentReplyMode === 'public' ? 'text-brand-600' : 'text-surface-400'}`} />
-                <span className={`font-bold ${settings.commentReplyMode === 'public' ? 'text-brand-900' : 'text-surface-600'}`}>
-                  {t('settings.publicReply')}
-                </span>
+          {/* Nested Reply Mode Options - Only visible if Comments Auto-Reply is ON */}
+          {settings.commentsAutoReply && (
+            <div className="mt-6 pt-6 border-t border-surface-100 animate-in fade-in slide-in-from-top-2 duration-300">
+              <h4 className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Settings2 className="w-4 h-4" />
+                {t('settings.commentReplyMode')}
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  onClick={() => setSettings({ ...settings, commentReplyMode: 'public' })}
+                  className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${settings.commentReplyMode === 'public'
+                    ? 'border-brand-500 bg-brand-50/50 shadow-sm'
+                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/30'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'public' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div className="text-start">
+                      <span className={`block font-bold ${settings.commentReplyMode === 'public' ? 'text-brand-900' : 'text-surface-700'}`}>
+                        {t('settings.publicReply')}
+                      </span>
+                      <span className="text-xs text-surface-500">Reply with a comment</span>
+                    </div>
+                  </div>
+                  {settings.commentReplyMode === 'public' && <Check className="w-5 h-5 text-brand-500" />}
+                </button>
+
+                <button
+                  onClick={() => setSettings({ ...settings, commentReplyMode: 'private' })}
+                  className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${settings.commentReplyMode === 'private'
+                    ? 'border-brand-500 bg-brand-50/50 shadow-sm'
+                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/30'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'private' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+                      <MessageCircle className="w-5 h-5" />
+                    </div>
+                    <div className="text-start">
+                      <span className={`block font-bold ${settings.commentReplyMode === 'private' ? 'text-brand-900' : 'text-surface-700'}`}>
+                        {t('settings.privateReply')}
+                      </span>
+                      <span className="text-xs text-surface-500">Send a private message</span>
+                    </div>
+                  </div>
+                  {settings.commentReplyMode === 'private' && <Check className="w-5 h-5 text-brand-500" />}
+                </button>
               </div>
-              {settings.commentReplyMode === 'public' && <Check className="w-5 h-5 text-brand-500" />}
-            </button>
-            <button
-              onClick={() => setSettings({ ...settings, commentReplyMode: 'private' })}
-              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${settings.commentReplyMode === 'private'
-                ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500'
-                : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
-                }`}
-            >
-              <div className="flex items-center gap-3">
-                <MessageCircle className={`w-5 h-5 ${settings.commentReplyMode === 'private' ? 'text-brand-600' : 'text-surface-400'}`} />
-                <span className={`font-bold ${settings.commentReplyMode === 'private' ? 'text-brand-900' : 'text-surface-600'}`}>
-                  {t('settings.privateReply')}
-                </span>
-              </div>
-              {settings.commentReplyMode === 'private' && <Check className="w-5 h-5 text-brand-500" />}
-            </button>
-          </div>
+            </div>
+          )}
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SimpleToggle
-            icon={<MessageSquare className="w-6 h-6" />}
-            title={t('settings.commentsAutoReply')}
-            description={t('settings.commentsAutoReplyDesc')}
-            enabled={settings.commentsAutoReply}
-            onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
-          />
-
+        {/* Messages Automation Card */}
+        <div className="mt-4">
           <SimpleToggle
             icon={<MessageCircle className="w-6 h-6" />}
             title={t('settings.messagesAutoReply')}
