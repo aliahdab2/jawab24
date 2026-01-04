@@ -266,7 +266,7 @@ export default function SettingsPage() {
                       <span className={`block font-bold ${settings.commentReplyMode === 'public' ? 'text-brand-900' : 'text-surface-700'}`}>
                         {t('settings.publicReply')}
                       </span>
-                      <span className="text-xs text-surface-500">Reply with a comment</span>
+                      <span className="text-xs text-surface-500">{t('settings.publicReplyDesc')}</span>
                     </div>
                   </div>
                   {settings.commentReplyMode === 'public' && <Check className="w-5 h-5 text-brand-500" />}
@@ -287,7 +287,7 @@ export default function SettingsPage() {
                       <span className={`block font-bold ${settings.commentReplyMode === 'private' ? 'text-brand-900' : 'text-surface-700'}`}>
                         {t('settings.privateReply')}
                       </span>
-                      <span className="text-xs text-surface-500">Send a private message</span>
+                      <span className="text-xs text-surface-500">{t('settings.privateReplyDesc')}</span>
                     </div>
                   </div>
                   {settings.commentReplyMode === 'private' && <Check className="w-5 h-5 text-brand-500" />}
