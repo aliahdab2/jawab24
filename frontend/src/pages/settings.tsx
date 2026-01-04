@@ -320,40 +320,24 @@ export default function SettingsPage() {
               {/* Dual Reply Configuration - Only visible if Dual Mode is ON */}
               {settings.commentReplyMode === 'dual' && (
                 <div className="mt-6 p-5 rounded-2xl bg-surface-50 border border-surface-100 animate-slide-up">
-                  <h4 className="font-bold text-brand-900 mb-4 flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-brand-500" />
-                    {t('settings.dualReplyConfigTitle')}
-                  </h4>
-                  <p className="text-sm text-surface-500 mb-4">{t('settings.dualReplyConfigDesc')}</p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">English Public Reply</label>
-                      <Input
-                        value={settings.dualReplyConfig?.en || ''}
-                        onChange={(e) => setSettings({
-                          ...settings,
-                          dualReplyConfig: { ...settings.dualReplyConfig, en: e.target.value }
-                        })}
-                        placeholder="Check your DMs! 📩"
-                        className="bg-white"
-                        dir="ltr"
-                      />
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
+                      <MessageSquare className="w-5 h-5" />
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-surface-500 uppercase tracking-widest mb-2">Arabic Public Reply</label>
-                      <Input
-                        value={settings.dualReplyConfig?.ar || ''}
-                        onChange={(e) => setSettings({
-                          ...settings,
-                          dualReplyConfig: { ...settings.dualReplyConfig, ar: e.target.value }
-                        })}
-                        placeholder="تم الرد في الخاص 📩"
-                        className="bg-white text-right"
-                        dir="rtl"
-                      />
+                    <div className="text-start">
+                      <h4 className="font-bold text-surface-900 text-base">{t('settings.dualReplyConfigTitle')}</h4>
+                      <p className="text-xs text-surface-500 font-medium">{t('settings.dualReplyConfigDesc')}</p>
                     </div>
                   </div>
+                  <Input
+                    value={settings.dualReplyConfig?.en || ''}
+                    onChange={(e) => setSettings({
+                      ...settings,
+                      dualReplyConfig: { en: e.target.value, ar: e.target.value }
+                    })}
+                    placeholder={t('settings.publicReplyPlaceholder')}
+                    className="bg-white"
+                  />
                 </div>
               )}
             </div>
