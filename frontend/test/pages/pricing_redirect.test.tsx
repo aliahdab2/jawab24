@@ -89,6 +89,10 @@ describe('PricingPage Navigation Logic', () => {
         expect(mockPush).toHaveBeenCalledWith(
             expect.stringContaining(encodeURIComponent('/checkout?planId=plan-1'))
         );
+
+        // Regression test: Ensure "Current Plan" badge is NOT shown
+        const currentPlanBadge = screen.queryByText('pricing.currentPlan');
+        expect(currentPlanBadge).toBeNull();
     });
 
     it('redirects to CHECKOUT when authenticated', async () => {

@@ -271,8 +271,8 @@ export default function PricingPage() {
     );
   }
 
-  const currentPlanId = usage?.subscription?.plan?.id;
-  const hasActiveSubscription = Boolean(currentPlanId);
+  const currentPlanId = isAuthenticated ? usage?.subscription?.plan?.id : null;
+  const hasActiveSubscription = isAuthenticated && Boolean(currentPlanId);
 
   // Filter out inactive plans
   const activePlans = plans.filter(p => p.slug !== 'free' || p.isActive !== false);
