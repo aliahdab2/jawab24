@@ -227,6 +227,8 @@ export default function PricingPage() {
 
         if (usageRes?.data) {
           setUsage(extractObjectData<UsageSummary>(usageRes.data));
+        } else {
+          setUsage(null);
         }
       } catch (error) {
         console.error('Failed to fetch plans:', error);
