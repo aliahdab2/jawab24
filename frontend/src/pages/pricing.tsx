@@ -18,6 +18,7 @@ function PlanCard({
   loading,
   t,
   currentPlanPrice,
+  subscriptionStatus,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
@@ -26,6 +27,7 @@ function PlanCard({
   loading: boolean;
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
   currentPlanPrice: number;
+  subscriptionStatus?: string;
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
@@ -68,6 +70,11 @@ function PlanCard({
         <div className="absolute top-4 start-0 end-0 flex justify-center">
           <span className="bg-green-100 text-green-700 text-[10px] font-bold px-3 py-1 rounded-full border border-green-200">
             {t('pricing.currentPlan')}
+            {subscriptionStatus === 'trialing' && (
+              <span className="ms-1 px-1 bg-amber-500 text-white rounded text-[8px] font-black leading-none">
+                {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+              </span>
+            )}
           </span>
         </div>
       )}
@@ -152,15 +159,22 @@ function PlanCard({
           className={`w-full py-3 text-sm font-bold rounded-xl transition-all duration-300 ${isPopular ? 'shadow-lg shadow-brand-200 hover:shadow-brand-300' : ''
             }`}
         >
-          {isCurrentPlan
-            ? t('pricing.currentPlan')
-            : hasActiveSubscription
-              ? (plan.price > currentPlanPrice ? t('pricing.upgrade') : t('pricing.downgrade'))
-              : (isFree)
-                ? t('pricing.getStarted')
-                : (plan.trialDays > 0)
-                  ? t('pricing.startTrial')
-                  : t('pricing.subscribe')
+          {isCurrentPlan ? (
+            <div className="flex flex-col items-center gap-1">
+              <span>{t('pricing.currentPlan')}</span>
+              {subscriptionStatus === 'trialing' && (
+                <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase font-extrabold tracking-wider border border-amber-200">
+                  {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+                </span>
+              )}
+            </div>
+          ) : hasActiveSubscription
+            ? (plan.price > currentPlanPrice ? t('pricing.upgrade') : t('pricing.downgrade'))
+            : (isFree)
+              ? t('pricing.getStarted')
+              : (plan.trialDays > 0)
+                ? t('pricing.startTrial')
+                : t('pricing.subscribe')
           }
         </Button>
         {isFree && (
@@ -367,6 +381,7 @@ export default function PricingPage() {
               onSelect={() => handleSelectPlan(plan.id)}
               loading={changingPlan === plan.id}
               currentPlanPrice={activePlans.find(p => p.id === currentPlanId)?.price || 0}
+              subscriptionStatus={usage?.subscription?.status}
               t={t}
             />
           ))}
