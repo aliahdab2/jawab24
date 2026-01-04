@@ -5,6 +5,12 @@ import { subscriptions, plans } from '../../src/db/schema';
 import { desc } from 'drizzle-orm';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        PRIORITY_SQL: { type: 'sql', content: 'PRIORITY_SQL' },
+    },
+}));
+
 // Mock database
 vi.mock('../../src/db', () => ({
     db: {
@@ -21,6 +27,7 @@ vi.mock('../../src/db/schema', () => ({
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((f, v) => ({ f, v, type: 'eq' })),
     desc: vi.fn((f) => ({ f, type: 'desc' })),
+    sql: vi.fn((strings) => ({ type: 'sql', content: strings[0] })),
 }));
 
 describe('Payment Controller - Subscription Status Ordering', () => {
@@ -37,7 +44,7 @@ describe('Payment Controller - Subscription Status Ordering', () => {
         };
         mockRequest = {
             user: { userId: 'user_123', facebookId: 'fb_123' },
-            log: { error: vi.fn() },
+            log: { error: vi.fn() } as unknown as FastifyRequest['log'],
         };
     });
 
@@ -62,7 +69,10 @@ describe('Payment Controller - Subscription Status Ordering', () => {
         await paymentController.getSubscriptionStatus(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
         // Verify it called orderBy(desc(subscriptions.createdAt))
-        expect(orderByMock).toHaveBeenCalledWith(desc(subscriptions.createdAt));
+        expect(orderByMock).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'sql', content: 'PRIORITY_SQL' }),
+            desc(subscriptions.createdAt)
+        );
         expect(limitMock).toHaveBeenCalledWith(1);
     });
 });

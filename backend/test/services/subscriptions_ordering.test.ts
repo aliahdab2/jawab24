@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { subscriptionsService } from '../../src/services/subscriptions';
 import { db } from '../../src/db';
 import { subscriptions, plans } from '../../src/db/schema';
-import { desc } from 'drizzle-orm';
-
+import { desc, sql } from 'drizzle-orm';
 // Mock specific parts of the database
 vi.mock('../../src/db', () => ({
     db: {
@@ -24,6 +23,7 @@ vi.mock('../../src/db/schema', () => ({
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((f, v) => ({ f, v, type: 'eq' })),
     desc: vi.fn((f) => ({ f, type: 'desc' })),
+    sql: vi.fn((strings) => ({ type: 'sql', content: strings[0] })),
     and: vi.fn(),
     gte: vi.fn(),
     lte: vi.fn(),
@@ -53,8 +53,11 @@ describe('Subscriptions Service - Ordering Logic', () => {
 
         await subscriptionsService.getUserSubscription(userId);
 
-        // Verify it called orderBy(desc(subscriptions.createdAt))
-        expect(orderByMock).toHaveBeenCalledWith(desc(subscriptions.createdAt));
+        // Verify it called orderBy(SQL_OBJECT, desc(subscriptions.createdAt))
+        expect(orderByMock).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'sql' }),
+            desc(subscriptions.createdAt)
+        );
         expect(limitMock).toHaveBeenCalledWith(1);
     });
 });
