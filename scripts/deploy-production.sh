@@ -324,61 +324,14 @@ ssh -i "$SSH_KEY" ${SERVER_USER}@${SERVER_HOST} << 'ENDSSH'
 set -e
 cd /var/www/jawab24
 
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "📥 Step 1: Pulling latest code..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-git fetch origin main
-git reset --hard origin/main
-git rev-parse HEAD > VERSION
-date -u '+%Y-%m-%dT%H:%M:%SZ' > .deploy-time
-echo "✅ Code updated to: $(git rev-parse --short HEAD)"
+# Ensure deployment script is updated and executable
+echo "🔄 Updating deployment scripts..."
+git fetch origin main > /dev/null
+git checkout origin/main -- scripts/deploy-on-server.sh
+chmod +x scripts/deploy-on-server.sh
 
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🗄️  Step 2: Running database migrations..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-# Ensure postgres is running (suppress warnings)
-docker-compose up -d postgres 2>&1 | grep -v "orphan containers" | grep -v "level=warning" || true
-sleep 5
-
-# Run migrations
-mkdir -p .migrations
-MIGRATION_COUNT=0
-# Run migrations via the backend container (using Drizzle)
-echo "   🔄 Triggering Drizzle migrations..."
-# We use the blue container because we are about to deploy blue
-# Ensure the container is running and healthy-ish
-if docker exec jawab24-backend-blue npm run db:migrate; then
-    echo "   ✅ Migrations applied successfully via app container"
-else
-    echo "   ❌ Migration failed"
-    exit 1
-fi
-
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 Step 3: Running Blue-Green Deployment..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-# Use existing deploy-blue-green.sh script
-if [ -f "./scripts/deploy-blue-green.sh" ]; then
-    chmod +x ./scripts/deploy-blue-green.sh
-    ./scripts/deploy-blue-green.sh deploy
-else
-    echo "⚠️  deploy-blue-green.sh not found, using fallback..."
-    
-    # Fallback to simple deploy
-    if [ -f "./scripts/deploy.sh" ]; then
-        chmod +x ./scripts/deploy.sh
-        ./scripts/deploy.sh
-    else
-        echo "❌ No deployment script found!"
-        exit 1
-    fi
-fi
-
+# Run the unified deployment script
+./scripts/deploy-on-server.sh
 ENDSSH
 
 # Calculate elapsed time

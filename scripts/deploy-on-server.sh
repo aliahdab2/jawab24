@@ -1,0 +1,198 @@
+#!/bin/bash
+set -e
+
+# Jawab24 Server-Side Deployment Script
+# This script is executed ON the production server to deploy the application.
+# It can be triggered by:
+# 1. Local machine via SSH (scripts/deploy-production.sh)
+# 2. GitHub Actions via SSH (.github/workflows/deploy.yml)
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📥 STEP 1: Pulling latest code"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+git fetch origin main
+git reset --hard origin/main
+
+# Save version info
+git rev-parse HEAD > VERSION
+date -u '+%Y-%m-%dT%H:%M:%SZ' > .deploy-time
+
+echo "✅ Code updated to: $(git rev-parse --short HEAD)"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔍 STEP 2: Determine deployment target"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Get current active environment
+if [ -f .active-env ]; then
+  ACTIVE_ENV=$(cat .active-env)
+else
+  # Default to blue if no state file
+  ACTIVE_ENV="blue"
+  echo "blue" > .active-env
+fi
+
+# Determine target environment (toggle blue/green)
+if [ "$ACTIVE_ENV" == "blue" ]; then
+  DEPLOY_ENV="green"
+else
+  DEPLOY_ENV="blue"
+fi
+
+echo "📍 Current active: $ACTIVE_ENV"
+echo "🎯 Deploying to: $DEPLOY_ENV"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🏗️  STEP 3: Building Docker images"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Load frontend env vars if present
+if [ -f ./env/frontend.env ]; then
+  export $(grep -v '^#' ./env/frontend.env | xargs)
+fi
+
+# Build images with --no-cache to ensure fresh code
+# Parallel build for speed
+docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build --no-cache --parallel
+echo "✅ Images built (fresh, no cache)"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🚀 STEP 4: Starting $DEPLOY_ENV environment"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Ensure shared services are running
+docker-compose up -d postgres redis nginx
+
+# Start new environment
+docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml up -d \
+  backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV
+
+echo "✅ $DEPLOY_ENV containers started"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "⏳ STEP 5: Container Startup Verification"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+sleep 10
+echo "🔍 Checking if containers started without crashing..."
+
+# Check if backend crashed
+if ! docker ps | grep -q "jawab24-backend-$DEPLOY_ENV"; then
+  echo "❌ Backend container crashed on startup!"
+  echo "📋 Last 50 lines of logs:"
+  docker logs jawab24-backend-$DEPLOY_ENV --tail 50 2>&1 || echo "No logs"
+  exit 1
+fi
+echo "   ✅ Backend container is running"
+
+# Check if frontend crashed
+if ! docker ps | grep -q "jawab24-frontend-$DEPLOY_ENV"; then
+  echo "❌ Frontend container crashed on startup!"
+  docker logs jawab24-frontend-$DEPLOY_ENV --tail 50 2>&1 || echo "No logs"
+  exit 1
+fi
+echo "   ✅ Frontend container is running"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🗄️  STEP 5a: Execute Database Migrations"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+echo "   🔄 Running migrations in jawab24-backend-$DEPLOY_ENV..."
+# Use the explicit npm script inside the running container (Uses Drizzle ORM)
+if docker exec jawab24-backend-$DEPLOY_ENV npm run db:migrate; then
+   echo "   ✅ Migrations applied successfully"
+else
+   echo "   ❌ Migration failed!"
+   echo "   📋 Logs:"
+   docker logs jawab24-backend-$DEPLOY_ENV --tail 20 2>&1
+   exit 1
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "⏳ STEP 5b: Waiting for health checks"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Wait for containers to be healthy
+MAX_WAIT=60
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+  BACKEND_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-backend-$DEPLOY_ENV 2>/dev/null || echo "starting")
+  FRONTEND_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-frontend-$DEPLOY_ENV 2>/dev/null || echo "starting")
+  
+  echo "   Backend: $BACKEND_HEALTH, Frontend: $FRONTEND_HEALTH"
+  
+  if [ "$BACKEND_HEALTH" == "healthy" ] && [ "$FRONTEND_HEALTH" == "healthy" ]; then
+    echo "✅ All containers healthy!"
+    break
+  fi
+  
+  # Check crash
+  if ! docker ps | grep -q "jawab24-backend-$DEPLOY_ENV"; then
+    echo "❌ Backend crashed during startup!"
+    docker logs jawab24-backend-$DEPLOY_ENV --tail 50 2>&1
+    exit 1
+  fi
+  
+  if [ $WAITED -ge $MAX_WAIT ]; then
+    echo "❌ Health check timeout!"
+    docker logs jawab24-backend-$DEPLOY_ENV --tail 30 2>&1
+    exit 1
+  fi
+  
+  sleep 5
+  WAITED=$((WAITED + 5))
+done
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔄 STEP 6: Switching traffic to $DEPLOY_ENV"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Update upstream config
+cat > ./nginx/upstream.conf << EOF
+# Active environment: $DEPLOY_ENV
+# Switched at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+
+upstream backend_active {
+    server jawab24-backend-$DEPLOY_ENV:3000;
+}
+
+upstream frontend_active {
+    server jawab24-frontend-$DEPLOY_ENV:3001;
+}
+
+upstream ai_worker_active {
+    server jawab24-ai-worker-$DEPLOY_ENV:3002;
+}
+EOF
+
+# Reload nginx
+docker exec jawab24-nginx nginx -s reload
+
+# Save new active environment
+echo "$DEPLOY_ENV" > .active-env
+
+echo "✅ Traffic switched to $DEPLOY_ENV"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🧹 STEP 7: Cleanup"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Cleanup old images
+docker image prune -f --filter "until=24h" 2>/dev/null || true
+
+echo "✅ Cleanup complete"
+echo ""
+echo "📊 Container Status:"
+docker-compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" | head -20
+
+echo ""
+echo "🎉 DEPLOYMENT SUCCESSFUL"
