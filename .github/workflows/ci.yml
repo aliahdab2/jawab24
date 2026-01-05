@@ -182,6 +182,14 @@ jobs:
       - name: Run linter
         run: npm run lint --workspace=jawab24-backend
 
+      - name: Check for schema drift
+        run: |
+          echo "🔍 Checking for schema drift..."
+          chmod +x scripts/check-schema-drift.sh
+          ./scripts/check-schema-drift.sh
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/autoreply_test
+
       - name: Validate migrations
         run: |
           cd backend

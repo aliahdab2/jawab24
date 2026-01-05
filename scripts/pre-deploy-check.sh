@@ -57,9 +57,21 @@ else
     exit 1
 fi
 
-# 4. Check Docker build (optional, slower)
+# 4. Check for schema drift
 echo ""
-echo "4️⃣  Building Docker image..."
+echo "4️⃣  Checking for schema drift..."
+if ./scripts/check-schema-drift.sh; then
+    echo -e "${GREEN}   ✅ No schema drift detected${NC}"
+else
+    echo -e "${RED}   ❌ Schema drift detected!${NC}"
+    echo ""
+    echo "Run: npm run db:generate --workspace=jawab24-backend"
+    exit 1
+fi
+
+# 5. Check Docker build (optional, slower)
+echo ""
+echo "5️⃣  Building Docker image..."
 if docker build -f backend/Dockerfile -t jawab24-backend:pre-deploy-check . > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ Docker image builds successfully${NC}"
 else
@@ -70,7 +82,7 @@ fi
 
 # 5. Smoke test Docker container
 echo ""
-echo "5️⃣  Smoke testing Docker container..."
+echo "6️⃣  Smoke testing Docker container..."
 docker run --rm -d --name pre-deploy-test \
     -e DATABASE_URL=postgres://test:test@localhost:5432/test \
     -e JWT_SECRET=test \

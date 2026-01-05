@@ -97,161 +97,23 @@ echo -e "${GREEN}✅ Node version: $(node --version)${NC}"
 # ═══════════════════════════════════════════════════════════════════
 if [ "$SKIP_TESTS" = false ]; then
     echo ""
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BLUE}${BOLD}🧪 RUNNING CI CHECKS (Same as GitHub Actions)${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Preflight: Check deployment scripts exist
-    # ────────────────────────────────────────────────────────────────
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${CYAN}🧪 RUNNING CI CHECKS (Same as GitHub Actions)${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo -e "${CYAN}📋 Preflight: Checking deployment scripts...${NC}"
-    REQUIRED_SCRIPTS=(
-        "scripts/deploy-blue-green.sh"
-        "scripts/check-env.sh"
-        "scripts/health-check.sh"
-    )
-    SCRIPTS_MISSING=0
-    for script in "${REQUIRED_SCRIPTS[@]}"; do
-        if [ ! -f "$script" ]; then
-            echo -e "${RED}   ❌ Missing: $script${NC}"
-            SCRIPTS_MISSING=1
-        fi
-    done
-    if [ $SCRIPTS_MISSING -eq 1 ]; then
-        echo -e "${RED}   Missing required deployment scripts!${NC}"
+
+    # Run the shared pre-deploy check script
+    # This ensures local deploys and GitHub Actions use the same validation
+    if ! ./scripts/pre-deploy-check.sh; then
+        echo ""
+        echo -e "${RED}❌ Pre-deploy checks failed!${NC}"
+        echo "Fix the issues above before deploying."
         exit 1
     fi
-    echo -e "${GREEN}   ✅ All deployment scripts found${NC}"
 
-    # ────────────────────────────────────────────────────────────────
-    # Step 1: Build shared package
-    # ────────────────────────────────────────────────────────────────
     echo ""
-    echo -e "${CYAN}1️⃣  Building shared package...${NC}"
-    npm run build --workspace=@jawab24/shared > /dev/null 2>&1
-    echo -e "${GREEN}   ✅ Shared package built${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 2: Check for ESM-only packages (CommonJS compatibility)
-    # ────────────────────────────────────────────────────────────────
+    echo -e "${GREEN}✅ All CI checks passed!${NC}"
     echo ""
-    echo -e "${CYAN}2️⃣  Checking ESM-only packages...${NC}"
-    ESM_PACKAGES=("uuid" "node-fetch" "chalk" "ora" "execa" "got" "globby")
-    ESM_FOUND=0
-    for pkg in "${ESM_PACKAGES[@]}"; do
-        if grep -q "\"$pkg\":" backend/package.json 2>/dev/null; then
-            echo -e "${YELLOW}   ⚠️  Found ESM-only package: $pkg${NC}"
-            ESM_FOUND=1
-        fi
-    done
-    if [ $ESM_FOUND -eq 0 ]; then
-        echo -e "${GREEN}   ✅ No ESM-only packages detected${NC}"
-    fi
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 3: Backend lint
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}3️⃣  Backend lint...${NC}"
-    npm run lint --workspace=jawab24-backend > /dev/null 2>&1
-    echo -e "${GREEN}   ✅ Backend lint passed${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 4: Validate migrations
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}4️⃣  Validating database migrations...${NC}"
-    if [ -f "backend/scripts/validate-migrations.ts" ]; then
-        cd backend && npx ts-node scripts/validate-migrations.ts > /dev/null 2>&1 && cd ..
-        echo -e "${GREEN}   ✅ Migrations validated${NC}"
-    else
-        echo -e "${YELLOW}   ⚠️  Migration validator not found, skipping${NC}"
-    fi
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 5: Backend tests
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}5️⃣  Backend tests...${NC}"
-    if ! BACKEND_RESULT=$(npm test --workspace=jawab24-backend -- --run 2>&1); then
-        echo -e "${RED}   ❌ Backend tests failed!${NC}"
-        echo "$BACKEND_RESULT"
-        exit 1
-    fi
-    # Extract test count (works on both macOS and Linux)
-    BACKEND_TESTS=$(echo "$BACKEND_RESULT" | grep -o 'Tests[[:space:]]*[0-9]* passed' | grep -o '[0-9]*' | head -1 || echo "0")
-    [ -z "$BACKEND_TESTS" ] && BACKEND_TESTS="0"
-    echo -e "${GREEN}   ✅ Backend tests passed (${BACKEND_TESTS} tests)${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 6: Backend build
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}6️⃣  Backend build...${NC}"
-    npm run build --workspace=jawab24-backend > /dev/null 2>&1
-    echo -e "${GREEN}   ✅ Backend build successful${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 7: AI Worker lint + build
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}7️⃣  AI Worker lint + build...${NC}"
-    npm run lint --workspace=jawab24-ai-worker > /dev/null 2>&1 || true
-    npm run build --workspace=jawab24-ai-worker > /dev/null 2>&1
-    echo -e "${GREEN}   ✅ AI Worker build successful${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 8: Check for duplicate /api/api paths
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}8️⃣  Checking for duplicate API paths...${NC}"
-    if grep -r "/api/api" frontend/src/ 2>/dev/null; then
-        echo -e "${RED}   ❌ Found duplicate /api/api paths!${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}   ✅ No duplicate API paths${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 9: Frontend lint
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}9️⃣  Frontend lint...${NC}"
-    npm run lint --workspace=jawab24-frontend > /dev/null 2>&1
-    echo -e "${GREEN}   ✅ Frontend lint passed${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 10: Frontend tests
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}🔟 Frontend tests...${NC}"
-    FRONTEND_RESULT=$(npm test --workspace=jawab24-frontend -- --run 2>&1)
-    # Extract test count (works on both macOS and Linux)
-    FRONTEND_TESTS=$(echo "$FRONTEND_RESULT" | grep -o 'Tests[[:space:]]*[0-9]* passed' | grep -o '[0-9]*' | head -1 || echo "0")
-    [ -z "$FRONTEND_TESTS" ] && FRONTEND_TESTS="0"
-    echo -e "${GREEN}   ✅ Frontend tests passed (${FRONTEND_TESTS} tests)${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Step 11: Frontend build
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}1️⃣1️⃣ Frontend build...${NC}"
-    NEXT_PUBLIC_API_URL=https://jawab24.com/api npm run build --workspace=jawab24-frontend > /dev/null 2>&1
-    echo -e "${GREEN}   ✅ Frontend build successful${NC}"
-
-    # ────────────────────────────────────────────────────────────────
-    # Summary
-    # ────────────────────────────────────────────────────────────────
-    echo ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}✅ ALL CI CHECKS PASSED${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "   ✅ Preflight checks"
-    echo -e "   ✅ ESM compatibility"
-    echo -e "   ✅ Backend: lint, migrations, tests (${BACKEND_TESTS}), build"
-    echo -e "   ✅ AI Worker: lint, build"
-    echo -e "   ✅ Frontend: lint, tests (${FRONTEND_TESTS}), build"
-    echo -e "   📊 Total tests: $((BACKEND_TESTS + FRONTEND_TESTS))"
 fi
 
 # ═══════════════════════════════════════════════════════════════════
