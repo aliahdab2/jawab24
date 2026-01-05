@@ -98,6 +98,10 @@ const start = async () => {
             contentSecurityPolicy: false, // Disable for API
         });
 
+        // Register health and version routes BEFORE rate limit to exempt them
+        await server.register(healthRoutes);
+        await server.register(versionRoutes);
+
         // Register rate limiting
         // Use Redis for rate limiting to ensure consistency across blue/green deployments
         const redisClient = new Redis({
@@ -107,7 +111,7 @@ const start = async () => {
         });
 
         await server.register(rateLimit, {
-            max: 1000, // 1000 requests
+            max: 2000, // 2000 requests per 15 minutes
             timeWindow: '15 minutes',
             redis: redisClient,
             errorResponseBuilder: (request, context) => ({
@@ -119,9 +123,7 @@ const start = async () => {
             }),
         });
 
-        // Register routes
-        await server.register(healthRoutes);
-        await server.register(versionRoutes);
+        // Register other routes
         await server.register(authRoutes);
         await server.register(webhookRoutes);
         await server.register(rulesRoutes);
