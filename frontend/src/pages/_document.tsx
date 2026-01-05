@@ -5,8 +5,9 @@ export default function Document() {
     // Default to LTR, client-side will update based on user preference
     <Html lang="ar" dir="rtl">
       <Head>
-        {/* Favicon & Icons */}
+        {/* Favicon & Icons - Optimized with multiple sizes */}
         <link rel="icon" href="/brand/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" sizes="64x64" href="/brand/favicon-64x64.png" />
         <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16x16.png" />
         <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
