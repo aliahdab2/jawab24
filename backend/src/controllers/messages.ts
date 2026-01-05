@@ -3,7 +3,7 @@ import { messagesService } from '../services/messages';
 
 /** Authenticated request with user info */
 interface AuthenticatedRequest extends FastifyRequest {
-    user: { id: string };
+    user: { userId: string; facebookId: string };
 }
 
 export class MessagesController {
@@ -13,7 +13,7 @@ export class MessagesController {
      */
     async getAll(request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) {
         try {
-            const userId = (request as AuthenticatedRequest).user.id;
+            const userId = (request as AuthenticatedRequest).user.userId;
             const limit = request.query.limit ? parseInt(request.query.limit) : 50;
             const messages = await messagesService.getMessages(userId, limit);
             return reply.send(messages);
@@ -29,7 +29,7 @@ export class MessagesController {
      */
     async getStats(request: FastifyRequest, reply: FastifyReply) {
         try {
-            const userId = (request as AuthenticatedRequest).user.id;
+            const userId = (request as AuthenticatedRequest).user.userId;
             const stats = await messagesService.getStats(userId);
             return reply.send(stats);
         } catch (error) {
