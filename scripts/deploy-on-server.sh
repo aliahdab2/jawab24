@@ -160,6 +160,9 @@ echo "🔄 STEP 6: Switching traffic to $DEPLOY_ENV"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Update upstream config
+echo "📝 Updating nginx config to point to $DEPLOY_ENV..."
+echo "Config path: $(pwd)/nginx/upstream.conf"
+
 cat > ./nginx/upstream.conf << EOF
 # Active environment: $DEPLOY_ENV
 # Switched at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
@@ -177,8 +180,35 @@ upstream ai_worker_active {
 }
 EOF
 
-# Reload nginx
-docker exec jawab24-nginx nginx -s reload
+# Verify file write
+echo "📄 New config header on host:"
+head -n 5 ./nginx/upstream.conf
+
+# Verify container sees the file
+echo "📄 Config header inside Nginx container:"
+if ! docker exec jawab24-nginx head -n 5 /etc/nginx/upstream.conf; then
+    echo "❌ ERROR: Nginx container cannot read the upstream configuration file!"
+    echo "⚠️  Attempting to copy file manually into container..."
+    docker cp ./nginx/upstream.conf jawab24-nginx:/etc/nginx/upstream.conf
+fi
+
+# Reload nginx with retry and fallback
+echo "🔄 Reloading Nginx..."
+if docker exec jawab24-nginx nginx -s reload; then
+    echo "✅ Nginx reloaded successfully"
+else
+    echo "⚠️  Reload failed. Checking config syntax..."
+    docker exec jawab24-nginx nginx -t || true
+    
+    echo "⚠️  Attempting full restart of Nginx..."
+    if docker restart jawab24-nginx; then
+        echo "✅ Nginx restarted successfully"
+    else
+        echo "❌ FATAL: Nginx failed to restart!"
+        docker logs jawab24-nginx --tail 20 2>&1
+        exit 1
+    fi
+fi
 
 # Save new active environment
 echo "$DEPLOY_ENV" > .active-env
