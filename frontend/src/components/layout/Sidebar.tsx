@@ -80,8 +80,8 @@ export function Sidebar() {
       )}>
         <Link href="/dashboard" className="flex items-center gap-3 group">
           <BrandLogo
-            variant="main"
-            className="w-11 h-11 rounded-[1.1rem] shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform flex-shrink-0"
+            variant="vector"
+            className="w-10 h-10 group-hover:rotate-6 transition-transform flex-shrink-0"
           />
           <span className={clsx(
             "font-display font-bold text-xl tracking-tight whitespace-nowrap transition-all duration-300 origin-left rtl:origin-right",

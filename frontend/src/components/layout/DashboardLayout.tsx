@@ -113,8 +113,8 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           <div className="md:hidden fixed top-0 left-0 right-0 h-20 bg-surface-900 flex items-center justify-between px-6 z-40 shadow-xl border-b border-white/5">
             <Link href="/dashboard" className="flex items-center gap-3 ps-1">
               <BrandLogo
-                variant="main"
-                className="w-8 h-8 rounded-lg shadow-lg border border-white/50 flex-shrink-0"
+                variant="vector"
+                className="w-8 h-8 flex-shrink-0"
               />
               <span className="font-display font-bold text-lg text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
