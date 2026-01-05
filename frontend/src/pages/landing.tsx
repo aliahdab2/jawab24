@@ -370,15 +370,16 @@ export default function LandingPage() {
         {/* How It Works - Optimized for mobile */}
         <section className="py-12 sm:py-20 lg:py-32 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-row items-center gap-3 sm:gap-12 lg:gap-20 text-start">
-              <div className="w-1/2 flex-shrink-0">
+            <div className="grid grid-cols-2 gap-4 sm:gap-8 lg:gap-16 items-center">
+              {/* Steps - Takes half width on mobile */}
+              <div className="space-y-4 sm:space-y-8 col-span-1">
                 <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-relaxed sm:leading-snug text-start">
                   {t('landing.howItWorks.title1')}
                   <span className="block text-brand-600 mt-2 sm:mt-1">{t('landing.howItWorks.title2')}</span>
                 </h2>
-                <div className="space-y-4 sm:space-y-6 lg:space-y-10">
+                <div className="space-y-3 sm:space-y-6 lg:space-y-10">
                   {howItWorks.map((item, i) => (
-                    <div key={i} className="flex flex-col sm:flex-row gap-2 sm:gap-6">
+                    <div key={i} className="flex flex-row gap-3 sm:gap-6 items-start">
                       <div className="flex-shrink-0 w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl bg-brand-600 text-white flex items-center justify-center text-sm sm:text-2xl font-bold shadow-lg shadow-brand-200">
                         {item.step}
                       </div>
@@ -390,7 +391,7 @@ export default function LandingPage() {
                   ))}
                 </div>
                 <div className="text-start">
-                  <Link href={isAuthenticated ? "/dashboard" : "/login"} className="inline-block mt-6 sm:mt-12">
+                  <Link href={isAuthenticated ? "/dashboard" : "/login"} className="inline-block mt-4 sm:mt-12">
                     <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
                       <span className="flex items-center gap-2">
                         {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.howItWorks.cta')}
@@ -400,9 +401,10 @@ export default function LandingPage() {
                   </Link>
                 </div>
               </div>
-              {/* Dashboard Preview - Visible on mobile now */}
-              <div className="w-1/2 relative block">
-                <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-4 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700">
+
+              {/* Dashboard Preview - Takes half width on mobile */}
+              <div className="relative col-span-1 pt-8 sm:pt-0">
+                <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-2 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700">
                   <img src="/images/social-icons-3d.png" alt={t('landing.images.dashboardPreview' as TranslationKey) as string} className="w-full" />
                   <div className="absolute inset-0 bg-gradient-to-t from-brand-900/20 to-transparent"></div>
                 </div>
