@@ -177,6 +177,10 @@ if [ "$BACKEND_HEALTH" != "healthy" ] || [ "$FRONTEND_HEALTH" != "healthy" ]; th
     exit 1
 fi
 
+echo "⏳ Allowing containers to settle for 15s (warm-up)..."
+sleep 15
+
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🔄 STEP 6: Switching traffic to $DEPLOY_ENV"

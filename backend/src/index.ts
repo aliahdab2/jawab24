@@ -107,7 +107,7 @@ const start = async () => {
         });
 
         await server.register(rateLimit, {
-            max: 100, // 100 requests
+            max: 1000, // 1000 requests
             timeWindow: '15 minutes',
             redis: redisClient,
             errorResponseBuilder: (request, context) => ({
