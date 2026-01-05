@@ -124,8 +124,10 @@ echo "⏳ STEP 5b: Waiting for health checks"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Wait for containers to be healthy
-MAX_WAIT=60
+# Wait for containers to be healthy
+MAX_WAIT=120
 WAITED=0
+
 while [ $WAITED -lt $MAX_WAIT ]; do
   BACKEND_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-backend-$DEPLOY_ENV 2>/dev/null || echo "starting")
   FRONTEND_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-frontend-$DEPLOY_ENV 2>/dev/null || echo "starting")
@@ -144,15 +146,19 @@ while [ $WAITED -lt $MAX_WAIT ]; do
     exit 1
   fi
   
-  if [ $WAITED -ge $MAX_WAIT ]; then
-    echo "❌ Health check timeout!"
-    docker logs jawab24-backend-$DEPLOY_ENV --tail 30 2>&1
-    exit 1
-  fi
-  
   sleep 5
   WAITED=$((WAITED + 5))
 done
+
+# Final check after timeout
+if [ "$BACKEND_HEALTH" != "healthy" ] || [ "$FRONTEND_HEALTH" != "healthy" ]; then
+    echo "❌ Health check timeout! Backend: $BACKEND_HEALTH, Frontend: $FRONTEND_HEALTH"
+    echo "📋 Backend Logs:"
+    docker logs jawab24-backend-$DEPLOY_ENV --tail 50 2>&1
+    echo "📋 Frontend Logs:"
+    docker logs jawab24-frontend-$DEPLOY_ENV --tail 20 2>&1
+    exit 1
+fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
