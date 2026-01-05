@@ -81,9 +81,18 @@ if [ -f ./env/frontend.env ]; then
   export $(grep -v '^#' ./env/frontend.env | xargs)
 fi
 
+# Export GIT_COMMIT for Docker build args
+export GIT_COMMIT=$(git rev-parse HEAD)
+echo "📝 Git commit: $(git rev-parse --short HEAD)"
+
 # Build images with --no-cache to ensure fresh code
+# Pass GIT_COMMIT as build arg
 # Parallel build for speed
-docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build --no-cache --parallel
+docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build \
+  --no-cache \
+  --parallel \
+  --build-arg GIT_COMMIT=$GIT_COMMIT
+
 echo "✅ Images built (fresh, no cache)"
 
 echo ""

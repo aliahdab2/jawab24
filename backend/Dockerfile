@@ -1,6 +1,10 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 
+# Build argument for git commit (passed during docker build)
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 # Copy root config and workspaces
 COPY package.json package-lock.json ./
 COPY packages/shared ./packages/shared
@@ -16,6 +20,10 @@ FROM node:18-alpine AS production
 WORKDIR /app
 RUN apk add --no-cache dumb-init wget
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+# Get GIT_COMMIT from builder stage
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
 
 # Copy the entire monorepo structure
 COPY --from=builder /app/package.json ./
