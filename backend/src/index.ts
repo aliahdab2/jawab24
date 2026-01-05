@@ -114,6 +114,7 @@ const start = async () => {
                 error: true,
                 message: 'Rate limit exceeded. Please try again later.',
                 code: 'RATE_LIMIT_EXCEEDED',
+                statusCode: 429,
                 retryAfter: context.after,
             }),
         });
