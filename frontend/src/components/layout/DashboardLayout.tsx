@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X, LogOut } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -20,7 +20,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
   const router = useRouter();
   const { t, language, setLanguage } = useTranslation();
   const isRTL = language === 'ar';
-  const { isAuthenticated, _hasHydrated } = useAuthStore();
+  const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
   const { sidebarOpen } = useUIStore();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -111,10 +111,10 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           </div>
         ) : (
           <div className="md:hidden fixed top-0 left-0 right-0 h-20 bg-surface-900 flex items-center justify-between px-6 z-40 shadow-xl border-b border-white/5">
-            <Link href="/dashboard" className="flex items-center gap-3">
+            <Link href="/dashboard" className="flex items-center gap-3 ps-1">
               <BrandLogo
                 variant="main"
-                className="w-8 h-8 rounded-lg shadow-lg border border-white/50"
+                className="w-8 h-8 rounded-lg shadow-lg border border-white/50 flex-shrink-0"
               />
               <span className="font-display font-bold text-lg text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
@@ -219,6 +219,12 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                   icon={<Settings className="w-6 h-6" />}
                   label={t('nav.settings')}
                 />
+                <MobileMenuButton
+                  onClick={() => { logout(); setMobileMenuOpen(false); router.push('/login'); }}
+                  icon={<LogOut className="w-6 h-6 text-red-500" />}
+                  label={t('nav.logout')}
+                  className="hover:border-red-200 hover:bg-red-50/30"
+                />
               </div>
             </div>
           </div>
@@ -266,16 +272,19 @@ function MobileNavButton({ onClick, icon, label, active }: {
   );
 }
 
-// Mobile menu button component
-function MobileMenuButton({ onClick, icon, label }: {
+function MobileMenuButton({ onClick, icon, label, className }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  className?: string;
 }) {
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center p-6 rounded-[2rem] bg-surface-50 border border-surface-100 hover:border-brand-200 hover:bg-brand-50/30 transition-all group"
+      className={clsx(
+        "flex flex-col items-center p-6 rounded-[2rem] bg-surface-50 border border-surface-100 transition-all group",
+        className || "hover:border-brand-200 hover:bg-brand-50/30"
+      )}
     >
       <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-surface-100 flex items-center justify-center text-brand-600 mb-3 group-hover:scale-110 group-hover:rotate-3 transition-transform">
         {icon}

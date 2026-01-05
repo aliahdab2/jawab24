@@ -154,7 +154,7 @@ export default function LandingPage() {
               <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
                 <BrandLogo
                   variant="main"
-                  className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6"
+                  className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6 flex-shrink-0"
                 />
                 <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
               </Link>
@@ -573,7 +573,7 @@ export default function LandingPage() {
                 <Link href="/landing" className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-8 group">
                   <BrandLogo
                     variant="main"
-                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg"
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg flex-shrink-0"
                   />
                   <span className="font-display font-bold text-2xl sm:text-3xl tracking-tight">{BRAND_ASSETS.meta.appName}</span>
                 </Link>
