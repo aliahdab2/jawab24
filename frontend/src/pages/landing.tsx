@@ -582,7 +582,7 @@ export default function LandingPage() {
                 </p>
                 <div className="flex items-center gap-3 sm:gap-4">
                   <a
-                    href={`https://wa.me/963959858266?text=${encodeURIComponent(t('landing.footer.whatsappMessage' as TranslationKey))}`}
+                    href={`https://wa.me/46700224720?text=${encodeURIComponent(t('landing.footer.whatsappMessage' as TranslationKey))}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
