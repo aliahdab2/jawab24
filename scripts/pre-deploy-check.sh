@@ -83,41 +83,18 @@ else
     exit 1
 fi
 
-# 6. Smoke test Docker container
-echo ""
-echo "6️⃣  Smoke testing Docker container..."
-# TEMPORARILY DISABLED - Container needs full env vars
-# docker run --rm -d --name pre-deploy-test \
-#     -e DATABASE_URL=postgres://test:test@localhost:5432/test \
-#     -e JWT_SECRET=test \
-#     -e NODE_ENV=production \
-#     -e PORT=3000 \
-#     jawab24-backend:pre-deploy-check > /dev/null 2>&1 || true
-#
-# sleep 3
-#
-# if docker ps | grep -q pre-deploy-test; then
-#     echo -e "${GREEN}   ✅ Container starts without crashing${NC}"
-#     docker stop pre-deploy-test > /dev/null 2>&1
-# else
-#     echo -e "${RED}   ❌ Container crashed on startup!${NC}"
-#     echo ""
-#     echo "Container logs:"
-#     docker logs pre-deploy-test 2>&1 || echo "No logs available"
-#     exit 1
-# fi
-echo -e "${YELLOW}   ⚠️  Smoke test temporarily skipped${NC}"
-echo -e "${YELLOW}   (Full env validation happens on server)${NC}"
-
 # Summary
 echo ""
 echo "==========================="
 if [ $ERRORS -eq 0 ]; then
     echo -e "${GREEN}✅ All pre-deploy checks passed!${NC}"
     echo "   Safe to deploy to production."
+    echo ""
+    echo "   Note: Container smoke tests run in:"
+    echo "   - GitHub Actions CI (with full services)"
+    echo "   - Production deployment (with real env)"
 else
     echo -e "${YELLOW}⚠️  Checks completed with warnings${NC}"
     echo "   Review warnings before deploying."
 fi
 echo ""
-
