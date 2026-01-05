@@ -169,9 +169,11 @@ export default function LoginPage() {
           {/* Mobile Nav */}
           <div className="flex items-center justify-between p-6 lg:p-12">
             <Link href="/landing" className="flex items-center gap-3 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
-                <MessageCircle className="w-5 h-5 text-white fill-white" />
-              </div>
+              <img
+                src="/apple-touch-icon.png"
+                alt="Jawab24 Logo"
+                className="w-10 h-10 rounded-xl shadow-lg group-hover:rotate-6 transition-transform"
+              />
               <span className="font-display font-bold text-xl text-surface-900 tracking-tight">Jawab24</span>
             </Link>
             <button

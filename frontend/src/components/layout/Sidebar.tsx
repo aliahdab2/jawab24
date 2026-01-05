@@ -77,9 +77,11 @@ export function Sidebar() {
         sidebarOpen ? "justify-start gap-3" : "justify-center"
       )}>
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-11 h-11 rounded-[1.1rem] bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform flex-shrink-0">
-            <MessageCircle className="w-6 h-6 text-white fill-white" />
-          </div>
+          <img
+            src="/apple-touch-icon.png"
+            alt="Jawab24 Logo"
+            className="w-11 h-11 rounded-[1.1rem] shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform flex-shrink-0"
+          />
           <span className={clsx(
             "font-display font-bold text-xl tracking-tight whitespace-nowrap transition-all duration-300 origin-left rtl:origin-right",
             sidebarOpen ? "opacity-100 scale-100" : "opacity-0 scale-0 w-0 overflow-hidden"

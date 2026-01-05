@@ -110,9 +110,11 @@ export default function CheckoutPage() {
           {/* Header */}
           <div className="text-center mb-8">
             <Link href="/landing" className="inline-flex flex-col items-center gap-2 mb-6 group">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform">
-                <MessageCircle className="w-7 h-7 text-white fill-white" />
-              </div>
+              <img
+                src="/apple-touch-icon.png"
+                alt="Jawab24 Logo"
+                className="w-14 h-14 rounded-2xl shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform"
+              />
               <span className="font-display font-bold text-2xl tracking-tight text-surface-900 group-hover:text-brand-600 transition-colors">
                 Jawab24
               </span>

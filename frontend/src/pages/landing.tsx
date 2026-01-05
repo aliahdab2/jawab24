@@ -132,10 +132,13 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-14 sm:h-20">
               {/* Logo */}
+              {/* Logo */}
               <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
-                <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6">
-                  <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-white fill-white" />
-                </div>
+                <img
+                  src="/apple-touch-icon.png"
+                  alt="Jawab24 Logo"
+                  className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6"
+                />
                 <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">Jawab24</span>
               </Link>
 
@@ -549,9 +552,11 @@ export default function LandingPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-16 mb-10 sm:mb-20">
               <div className="col-span-2">
                 <Link href="/landing" className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-8 group">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-brand-400 via-brand-500 to-accent-500 flex items-center justify-center shadow-lg">
-                    <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 text-white fill-white" />
-                  </div>
+                  <img
+                    src="/apple-touch-icon.png"
+                    alt="Jawab24 Logo"
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg"
+                  />
                   <span className="font-display font-bold text-2xl sm:text-3xl tracking-tight">Jawab24</span>
                 </Link>
                 <p className="text-surface-400 text-sm sm:text-lg max-w-sm mb-6 sm:mb-10 leading-relaxed font-medium">

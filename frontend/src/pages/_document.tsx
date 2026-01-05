@@ -6,19 +6,20 @@ export default function Document() {
     <Html lang="ar" dir="rtl">
       <Head>
         {/* Favicon & Icons */}
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="apple-touch-icon" href="/app-icon.svg" />
-        
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
         {/* Primary Meta Tags - Arabic First for Arabic SEO */}
         <meta name="description" content="جواب24 - خدمة الرد التلقائي الذكي على تعليقات ورسائل فيسبوك وإنستغرام. ردود فورية ذكية على مدار الساعة. Jawab24 - Smart AI auto-replies for Facebook & Instagram Pages 24/7." />
         <meta name="keywords" content="jawab, jawab24, jawab 24, jawab facebook, jawab instagram, jawab auto reply, jawab bot, جواب, جواب 24, جواب24, جواب٢٤, جواب فيسبوك, جواب انستغرام, جواب بوت, جواب رد تلقائي, رد تلقائي, ردود تلقائية, رد تلقائي فيسبوك, رد تلقائي انستغرام, بوت فيسبوك عربي, بوت انستغرام, ردود ذكية, رد آلي, الرد الذكي, رد على التعليقات, رد على الرسائل, ذكاء اصطناعي عربي, Facebook auto reply, Instagram auto reply, AI chatbot Arabic" />
         <meta name="author" content="Jawab24 جواب24" />
-        
+
         {/* Hreflang Tags for Language Targeting - Next.js i18n handles per-page */}
         <link rel="alternate" hrefLang="ar" href="https://jawab24.com/" />
         <link rel="alternate" hrefLang="en" href="https://jawab24.com/en" />
         <link rel="alternate" hrefLang="x-default" href="https://jawab24.com/" />
-        
+
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://jawab24.com/" />
@@ -30,14 +31,14 @@ export default function Document() {
         <meta property="og:locale" content="ar_SA" />
         <meta property="og:locale:alternate" content="en_US" />
         <meta property="og:site_name" content="Jawab24 جواب24" />
-        
+
         {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:url" content="https://jawab24.com/" />
         <meta name="twitter:title" content="Jawab24 جواب24 - ردود ذكية تلقائية | Smart Auto-Replies" />
         <meta name="twitter:description" content="AI-powered auto-replies for Facebook & Instagram. الرد الذكي التلقائي لفيسبوك وإنستغرام." />
         <meta name="twitter:image" content="https://jawab24.com/og-image.png" />
-        
+
         {/* Structured Data - SoftwareApplication (Bilingual) */}
         <script
           type="application/ld+json"
@@ -64,7 +65,7 @@ export default function Document() {
             })
           }}
         />
-        
+
         {/* Structured Data - Organization (for brand recognition) */}
         <script
           type="application/ld+json"
@@ -84,7 +85,7 @@ export default function Document() {
             })
           }}
         />
-        
+
         {/* Structured Data - WebSite (for sitelinks search box) */}
         <script
           type="application/ld+json"
@@ -99,7 +100,7 @@ export default function Document() {
             })
           }}
         />
-        
+
         {/* Google Analytics - Replace GA_MEASUREMENT_ID with your actual ID */}
         {process.env.NEXT_PUBLIC_GA_ID && (
           <>
@@ -116,16 +117,16 @@ export default function Document() {
             />
           </>
         )}
-        
+
         {/* Google Search Console Verification - Replace with your verification code */}
         {process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION && (
           <meta name="google-site-verification" content={process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION} />
         )}
-        
+
         {/* Additional SEO */}
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
         <link rel="canonical" href="https://jawab24.com/" />
-        
+
         {/* Load both English and Arabic fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
