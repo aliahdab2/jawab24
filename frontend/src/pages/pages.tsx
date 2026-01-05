@@ -57,7 +57,7 @@ export default function PagesPage() {
 
   // Auto-sync if no pages found after initial load (only once)
   const syncAttemptedRef = useRef(false);
-  
+
   // Create a stable reference to handleSync
   const handleSyncRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -84,10 +84,10 @@ export default function PagesPage() {
       setSyncing(false);
     }
   }, [token, fbToken, apiUrl, fetchPages]);
-  
+
   // Keep ref updated
   handleSyncRef.current = handleSync;
-  
+
   useEffect(() => {
     if (!loading && pages.length === 0 && fbToken && token && !syncing && !syncAttemptedRef.current) {
       // Auto-sync pages from Facebook (only attempt once)
@@ -252,17 +252,19 @@ export default function PagesPage() {
                 {/* Platform Toggles */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className={`p-4 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 border-blue-100 ring-1 ring-blue-100' : 'bg-surface-50 border-surface-100'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
                           <FileText className="w-4 h-4" />
                         </div>
-                        <span className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
+                        <span className={`text-sm font-bold truncate ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
                       </div>
-                      <Toggle
-                        enabled={page.autoReplyEnabled ?? false}
-                        onChange={(enabled) => handleToggle(page.id, enabled)}
-                      />
+                      <div className="flex-shrink-0">
+                        <Toggle
+                          enabled={page.autoReplyEnabled ?? false}
+                          onChange={(enabled) => handleToggle(page.id, enabled)}
+                        />
+                      </div>
                     </div>
                     <p className={`text-[10px] font-medium ${page.autoReplyEnabled ? 'text-blue-600' : 'text-surface-400'}`}>
                       {page.autoReplyEnabled ? t('common.enabled') : t('common.disabled')}
@@ -270,21 +272,23 @@ export default function PagesPage() {
                   </div>
 
                   <div className={`p-4 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-100 ring-1 ring-pink-100' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-50 opacity-60 cursor-not-allowed'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
                           <Instagram className="w-4 h-4" />
                         </div>
-                        <span className={`text-sm font-bold ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
+                        <span className={`text-sm font-bold truncate ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
                       </div>
-                      {page.instagramUsername ? (
-                        <Toggle
-                          enabled={page.instagramAutoReplyEnabled ?? false}
-                          onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
-                        />
-                      ) : (
-                        <div className="w-8 h-4 bg-surface-200 rounded-full"></div>
-                      )}
+                      <div className="flex-shrink-0">
+                        {page.instagramUsername ? (
+                          <Toggle
+                            enabled={page.instagramAutoReplyEnabled ?? false}
+                            onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
+                          />
+                        ) : (
+                          <div className="w-8 h-4 bg-surface-200 rounded-full"></div>
+                        )}
+                      </div>
                     </div>
                     <p className={`text-[10px] font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-600' : 'text-surface-400') : 'text-surface-300'}`}>
                       {page.instagramUsername
