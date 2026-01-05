@@ -59,8 +59,18 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <Head>
+        <title>Jawab24 جواب | AI Auto-Reply for Facebook & Instagram</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
         <meta name="theme-color" content="#18181b" />
+
+        {/* Open Graph Defaults */}
+        <meta property="og:site_name" content="Jawab24 جواب" />
+        <meta property="og:title" content="Jawab24 جواب | AI Auto-Reply for Facebook & Instagram" />
+        <meta property="og:description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
+        <meta property="og:image" content="https://jawab24.com/brand/og-social.png" />
+        <meta property="og:type" content="website" />
+
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </Head>
