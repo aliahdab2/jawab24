@@ -219,28 +219,56 @@ if ! docker exec jawab24-nginx head -n 5 /etc/nginx/upstream.conf; then
     docker cp ./nginx/upstream.conf jawab24-nginx:/etc/nginx/upstream.conf
 fi
 
-# Reload nginx with retry and fallback
-echo "🔄 Reloading Nginx..."
-if docker exec jawab24-nginx nginx -s reload; then
-    echo "✅ Nginx reloaded successfully"
-else
-    echo "⚠️  Reload failed. Checking config syntax..."
-    docker exec jawab24-nginx nginx -t || true
+# Since upstream.conf is mounted as read-only, nginx reload won't pick up changes
+# We must restart the container to force Docker to re-mount the updated file
+echo "🔄 Restarting Nginx to apply new upstream configuration..."
+
+# Verify config syntax before restart
+echo "🔍 Verifying Nginx configuration syntax..."
+if ! docker exec jawab24-nginx nginx -t 2>&1 | grep -q "syntax is ok"; then
+    echo "❌ ERROR: Nginx configuration has syntax errors!"
+    docker exec jawab24-nginx nginx -t 2>&1
+    exit 1
+fi
+
+# Restart Nginx container to pick up the new upstream.conf
+if docker restart jawab24-nginx; then
+    echo "✅ Nginx restarted successfully"
     
-    echo "⚠️  Attempting full restart of Nginx..."
-    if docker restart jawab24-nginx; then
-        echo "✅ Nginx restarted successfully"
-    else
-        echo "❌ FATAL: Nginx failed to restart!"
-        docker logs jawab24-nginx --tail 20 2>&1
-        exit 1
-    fi
+    # Wait for Nginx to be healthy
+    echo "⏳ Waiting for Nginx to become healthy..."
+    for i in {1..30}; do
+        if docker inspect jawab24-nginx | grep -q '"Status": "healthy"'; then
+            echo "✅ Nginx is healthy"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            echo "⚠️  Warning: Nginx health check timeout (but container is running)"
+        fi
+        sleep 1
+    done
+else
+    echo "❌ FATAL: Nginx failed to restart!"
+    docker logs jawab24-nginx --tail 20 2>&1
+    exit 1
 fi
 
 # Save new active environment
 echo "$DEPLOY_ENV" > .active-env
 
-echo "✅ Traffic switched to $DEPLOY_ENV"
+# Verify the switch actually worked
+echo "🔍 Verifying traffic switch..."
+ACTUAL_ENV=$(curl -s http://localhost/api/version | grep -o '"environment":"[^"]*"' | cut -d'"' -f4)
+if [ "$ACTUAL_ENV" = "$DEPLOY_ENV" ]; then
+    echo "✅ Traffic switched to $DEPLOY_ENV (verified)"
+else
+    echo "⚠️  WARNING: Expected environment '$DEPLOY_ENV' but API reports '$ACTUAL_ENV'"
+    echo "📄 Current upstream.conf inside container:"
+    docker exec jawab24-nginx cat /etc/nginx/upstream.conf
+    echo ""
+    echo "⚠️  Traffic switch may not have taken effect properly!"
+fi
+
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
