@@ -114,15 +114,15 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             <Link href="/dashboard" className="flex items-center gap-3 ps-1">
               <BrandLogo
                 variant="vector"
-                className="w-8 h-8 flex-shrink-0"
+                className="w-10 h-10 flex-shrink-0"
               />
               <span className="font-display font-bold text-lg text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
             <button
-              onClick={() => router.push('/settings')}
+              onClick={() => setMobileMenuOpen(true)}
               className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5 shadow-inner"
             >
-              <Settings className="w-5 h-5 text-white" />
+              <MoreHorizontal className="w-5 h-5 text-white" />
             </button>
           </div>
         )}

@@ -171,7 +171,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-between p-6 lg:p-12">
             <Link href="/landing" className="flex items-center gap-3 group">
               <BrandLogo
-                variant="main"
+                variant="vector"
                 className="w-12 h-12 rounded-2xl shadow-lg group-hover:rotate-6 transition-transform"
               />
               <span className="font-display font-bold text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
@@ -233,11 +233,10 @@ export default function LoginPage() {
           </div>
 
           {/* Footer Info */}
-          <div className="p-8 border-t border-surface-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs font-bold text-surface-400 uppercase tracking-widest">
+          <div className="p-4 border-t border-surface-100 flex items-center justify-center">
+            <div className="text-[10px] font-medium text-surface-300 tracking-wider">
               © {new Date().getFullYear()} Jawab24
             </div>
-            <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">v{displayVersion}</span>
           </div>
         </div>
       </div>
