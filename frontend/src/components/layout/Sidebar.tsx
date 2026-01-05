@@ -15,6 +15,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { BrandLogo } from '@/components/ui';
 
 // Simple navigation - Templates & Rules are in Settings > Advanced
 const navigationKeys = [
@@ -78,9 +79,8 @@ export function Sidebar() {
         sidebarOpen ? "justify-start gap-3" : "justify-center"
       )}>
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <img
-            src={BRAND_ASSETS.logo.main}
-            alt={BRAND_ASSETS.meta.appName + " Logo"}
+          <BrandLogo
+            variant="main"
             className="w-11 h-11 rounded-[1.1rem] shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform flex-shrink-0"
           />
           <span className={clsx(

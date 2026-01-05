@@ -20,13 +20,14 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     ...props
 }) => {
     const { language } = useTranslation();
-    const isRTL = language === 'ar';
+    // Reversed: English uses RTL version, Arabic uses standard
+    const shouldUseRtlVersion = language === 'en';
 
     // Determine the correct source
     let src = BRAND_ASSETS.logo[variant];
 
-    // Specific logic for 'main' variant in RTL mode
-    if (variant === 'main' && isRTL && BRAND_ASSETS.logo.mainRtl) {
+    // Specific logic for 'main' variant - English gets RTL version
+    if (variant === 'main' && shouldUseRtlVersion && BRAND_ASSETS.logo.mainRtl) {
         src = BRAND_ASSETS.logo.mainRtl;
     }
 
