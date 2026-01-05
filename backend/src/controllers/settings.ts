@@ -1,5 +1,5 @@
-import { FastifyReply, FastifyRequest } from 'fastify';
-import { settingsService, UpdateSettingsDTO } from '../services/settings';
+import { FastifyReply } from 'fastify';
+import { settingsService } from '../services/settings';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
 
