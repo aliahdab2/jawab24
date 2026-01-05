@@ -13,7 +13,7 @@ export interface UserSettings {
     autoDetectLanguage: boolean;
     aiEnabled: boolean;
     aiModel: string;
-    commentReplyMode: 'public' | 'private';
+    commentReplyMode: 'public' | 'private' | 'dual';
     commentsAutoReply: boolean;
     messagesAutoReply: boolean;
     // Dual reply configuration (language code -> message)
@@ -33,7 +33,7 @@ export interface UpdateSettingsDTO {
     autoDetectLanguage?: boolean;
     aiEnabled?: boolean;
     aiModel?: string;
-    commentReplyMode?: 'public' | 'private';
+    commentReplyMode?: 'public' | 'private' | 'dual';
     commentsAutoReply?: boolean;
     messagesAutoReply?: boolean;
     dualReplyConfig?: Record<string, string>;

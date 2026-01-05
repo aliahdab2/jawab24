@@ -80,6 +80,8 @@ export const UpdateSettingsSchema = z.object({
     awayMessage: z.string().max(500, 'Away message must be less than 500 characters').optional(),
     replyDelay: z.number().int().min(0).max(300, 'Reply delay must be between 0-300 seconds').optional(),
     greetingMessage: z.string().max(500, 'Greeting message must be less than 500 characters').optional(),
+    commentReplyMode: z.enum(['public', 'private', 'dual']).optional(),
+    dualReplyConfig: z.record(z.string(), z.string()).optional(),
 });
 
 // ==========================================

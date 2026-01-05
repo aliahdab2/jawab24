@@ -135,7 +135,7 @@ export class SettingsService {
             autoDetectLanguage: record.autoDetectLanguage ?? true,
             aiEnabled: record.aiEnabled ?? true,
             aiModel: record.aiModel || 'gpt-4o-mini',
-            commentReplyMode: (record.commentReplyMode as 'public' | 'private') || 'public',
+            commentReplyMode: (record.commentReplyMode as 'public' | 'private' | 'dual') || 'public',
             commentsAutoReply: record.commentsAutoReply ?? true,
             messagesAutoReply: record.messagesAutoReply ?? true,
             dualReplyConfig: (record.dualReplyConfig as Record<string, string>) || {},
