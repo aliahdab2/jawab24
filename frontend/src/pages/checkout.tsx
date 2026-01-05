@@ -103,6 +103,9 @@ export default function CheckoutPage() {
     <>
       <Head>
         <title>{t('checkout.title')} - Jawab24</title>
+        <meta name="description" content={t('checkout.subtitle')} />
+        <link rel="canonical" href="https://jawab24.com/checkout" />
+        <meta name="robots" content="noindex, follow" />
       </Head>
 
       <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-12 px-4">

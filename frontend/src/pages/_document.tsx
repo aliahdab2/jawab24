@@ -9,10 +9,11 @@ export default function Document() {
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" href="/apple-touch-icon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.json" />
 
         {/* Primary Meta Tags - Arabic First for Arabic SEO */}
-        <meta name="description" content="جواب24 - خدمة الرد التلقائي الذكي على تعليقات ورسائل فيسبوك وإنستغرام. ردود فورية ذكية على مدار الساعة. Jawab24 - Smart AI auto-replies for Facebook & Instagram Pages 24/7." />
-        <meta name="keywords" content="jawab, jawab24, jawab 24, jawab facebook, jawab instagram, jawab auto reply, jawab bot, جواب, جواب 24, جواب24, جواب٢٤, جواب فيسبوك, جواب انستغرام, جواب بوت, جواب رد تلقائي, رد تلقائي, ردود تلقائية, رد تلقائي فيسبوك, رد تلقائي انستغرام, بوت فيسبوك عربي, بوت انستغرام, ردود ذكية, رد آلي, الرد الذكي, رد على التعليقات, رد على الرسائل, ذكاء اصطناعي عربي, Facebook auto reply, Instagram auto reply, AI chatbot Arabic" />
+        <meta name="description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7. جواب24 - أول نظام عربي للرد الذكي التلقائي على تعليقات ورسائل فيسبوك وإنستغرام. وفّر وقتك وزد مبيعاتك بردود دقيقة 24/7." />
+        <meta name="keywords" content="jawab, jawab24, جواب, auto reply, smart replies, Facebook bot, Instagram bot, AI chatbot, رد تلقائي, ردود ذكية, فيسبوك, انستغرام, بوت عربي, ذكاء اصطناعي, رد آلي" />
         <meta name="author" content="Jawab24 جواب24" />
 
         {/* Hreflang Tags for Language Targeting - Next.js i18n handles per-page */}
@@ -24,7 +25,7 @@ export default function Document() {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://jawab24.com/" />
         <meta property="og:title" content="جواب24 | جواب - الرد التلقائي الذكي لفيسبوك وإنستغرام" />
-        <meta property="og:description" content="جواب24 - خدمة الرد التلقائي الذكي على تعليقات ورسائل فيسبوك وإنستغرام 24/7. ردود فورية ذكية بالعربية والإنجليزية." />
+        <meta property="og:description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7. جواب24 - أول نظام عربي للرد الذكي التلقائي على تعليقات ورسائل فيسبوك وإنستغرام. وفّر وقتك وزد مبيعاتك بردود دقيقة 24/7." />
         <meta property="og:image" content="https://jawab24.com/og-image.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
@@ -76,7 +77,7 @@ export default function Document() {
               "name": "Jawab24",
               "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24"],
               "url": "https://jawab24.com",
-              "logo": "https://jawab24.com/app-icon.svg",
+              "logo": "https://jawab24.com/apple-touch-icon.png",
               "description": "Smart AI auto-reply service for Facebook & Instagram - خدمة الرد الذكي التلقائي لفيسبوك وإنستغرام",
               "sameAs": [
                 "https://facebook.com/jawab24",
