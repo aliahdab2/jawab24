@@ -19,10 +19,10 @@ const runMigrations = async () => {
         throw new Error('DATABASE_URL is not defined');
     }
 
-    // In Docker: /app/backend/drizzle
-    // Locally: ./drizzle (relative to dist)
-    const migrationsFolder = path.resolve(__dirname, '../drizzle');
-    
+    // In Docker: /app/backend/migrations
+    // Locally: ./migrations (relative to dist)
+    const migrationsFolder = path.resolve(__dirname, '../migrations');
+
     console.log('🔍 Looking for migrations at:', migrationsFolder);
 
     if (!fs.existsSync(migrationsFolder)) {
@@ -42,7 +42,7 @@ const runMigrations = async () => {
 
     console.log('⏳ Connecting to database for migrations...');
     console.log(`📂 Found ${files.length} migration file(s)`);
-    
+
     const migrationClient = postgres(connectionString, { max: 1 });
     const db = drizzle(migrationClient);
 
@@ -51,7 +51,7 @@ const runMigrations = async () => {
         console.log('✅ All migrations applied successfully');
     } catch (error) {
         console.error('❌ Migration failed:', error);
-        
+
         // Provide helpful error messages
         if (error instanceof Error) {
             if (error.message.includes('column') && error.message.includes('does not exist')) {
@@ -65,7 +65,7 @@ const runMigrations = async () => {
                 console.error('   Check that the initial schema SQL has been applied.');
             }
         }
-        
+
         process.exit(1);
     } finally {
         await migrationClient.end();
