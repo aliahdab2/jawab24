@@ -125,7 +125,7 @@ docker rm -f jawab24-backend-$DEPLOY_ENV jawab24-frontend-$DEPLOY_ENV jawab24-ai
 
 # Step 4: Start new environment
 echo "  🚀 Starting new containers..."
-docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml up -d \
+docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml up -d --remove-orphans \
   backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV
 
 echo "✅ $DEPLOY_ENV containers started"
