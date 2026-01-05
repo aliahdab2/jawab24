@@ -319,10 +319,28 @@ jobs:
             }
             EOF
               
-              docker exec jawab24-nginx nginx -s reload
+              # Restart Nginx to apply rollback config (reload doesn't work with read-only mounts)
+              echo "🔄 Restarting Nginx to apply rollback configuration..."
+              docker restart jawab24-nginx
+              
+              # Wait for Nginx to be healthy
+              for i in {1..30}; do
+                if docker inspect jawab24-nginx | grep -q '"Status": "healthy"'; then
+                  echo "✅ Nginx is healthy"
+                  break
+                fi
+                sleep 1
+              done
+              
               echo "$ROLLBACK_ENV" > .active-env
               
-              echo "✅ Rolled back to $ROLLBACK_ENV"
+              # Verify rollback worked
+              ACTUAL_ENV=$(curl -s http://localhost/api/version | grep -o '"environment":"[^"]*"' | cut -d'"' -f4)
+              if [ "$ACTUAL_ENV" = "$ROLLBACK_ENV" ]; then
+                echo "✅ Rolled back to $ROLLBACK_ENV (verified)"
+              else
+                echo "⚠️  WARNING: Rollback may not have taken effect (expected $ROLLBACK_ENV, got $ACTUAL_ENV)"
+              fi
             else
               echo "⚠️ No previous environment to rollback to"
             fi

@@ -1,11 +1,38 @@
 #!/bin/bash
-set -e
+set -e  # Exit on error
+set -u  # Exit on undefined variable
+set -o pipefail  # Exit on pipe failure
 
 # Jawab24 Server-Side Deployment Script
 # This script is executed ON the production server to deploy the application.
 # It can be triggered by:
 # 1. Local machine via SSH (scripts/deploy-production.sh)
 # 2. GitHub Actions via SSH (.github/workflows/deploy.yml)
+
+# Trap errors and provide helpful context
+trap 'echo "❌ ERROR: Deployment failed at line $LINENO. Check logs above for details."; exit 1' ERR
+
+# Validate we're in the correct directory
+if [ ! -f "docker-compose.yml" ]; then
+    echo "❌ ERROR: docker-compose.yml not found!"
+    echo "This script must be run from the project root directory."
+    exit 1
+fi
+
+# Validate required files exist
+REQUIRED_FILES=(
+    "nginx/nginx.conf"
+    "nginx/upstream.conf"
+    "backend/Dockerfile"
+    "frontend/Dockerfile"
+)
+
+for file in "${REQUIRED_FILES[@]}"; do
+    if [ ! -f "$file" ]; then
+        echo "❌ ERROR: Required file missing: $file"
+        exit 1
+    fi
+done
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
