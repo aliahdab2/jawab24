@@ -13,13 +13,13 @@ interface CardProps {
 export function Card({ children, className, hover = false, padding = 'md', style, onClick }: CardProps) {
   const paddingClasses = {
     none: '',
-    sm: 'p-5',
-    md: 'p-8',
-    lg: 'p-12',
+    sm: 'p-4 sm:p-5',
+    md: 'p-5 sm:p-8',
+    lg: 'p-6 sm:p-12',
   };
 
   return (
-    <div 
+    <div
       className={clsx(
         hover ? 'card-hover' : 'card',
         paddingClasses[padding],

@@ -237,7 +237,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Comments */}
         <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-white" padding="none">
-          <div className="p-8 border-b border-surface-100 flex items-center justify-between bg-surface-50/50">
+          <div className="p-5 sm:p-8 border-b border-surface-100 flex items-center justify-between bg-surface-50/50">
             <div>
               <h3 className="text-xl font-display font-bold text-surface-900 tracking-tight">{t('dashboard.recentComments')}</h3>
               <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.latestCommentsDesc')}</p>
@@ -253,7 +253,7 @@ export default function DashboardPage() {
             {recentComments.length > 0 ? recentComments.map((comment, i) => (
               <div
                 key={comment.id}
-                className="px-8 py-6 hover:bg-brand-50/20 transition-all group animate-slide-up"
+                className="px-5 sm:px-8 py-5 sm:py-6 hover:bg-brand-50/20 transition-all group animate-slide-up"
                 style={{ animationDelay: `${(i + 3) * 0.1}s` } as React.CSSProperties}
               >
                 <div className="flex items-start justify-between gap-6">
@@ -363,11 +363,11 @@ export default function DashboardPage() {
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-white overflow-hidden">
-            <div className="p-8 border-b border-surface-100 bg-surface-50/50">
+            <div className="p-5 sm:p-8 border-b border-surface-100 bg-surface-50/50">
               <h3 className="text-xl font-display font-bold text-surface-900 tracking-tight">{t('dashboard.topPages')}</h3>
               <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.topPagesDesc')}</p>
             </div>
-            <div className="space-y-6 px-8 py-8">
+            <div className="space-y-6 px-5 sm:px-8 py-5 sm:py-8">
               {pages.length > 0 ? pages.slice(0, 3).map((page, i) => (
                 <div key={page.id} className="flex items-center gap-5 group animate-slide-up" style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}>
                   <div className="relative">
@@ -395,7 +395,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-            <div className="px-8 py-5 border-t border-surface-100 bg-surface-50/30">
+            <div className="px-5 sm:px-8 py-5 border-t border-surface-100 bg-surface-50/30">
               <Link href="/pages" className="text-sm text-brand-600 hover:text-brand-700 font-bold flex items-center justify-center gap-2 group transition-all">
                 {t('dashboard.managePages')}
                 <ChevronRight className={`w-4 h-4 transition-transform group-hover:translate-x-1 ${language === 'ar' ? 'rotate-180 group-hover:-translate-x-1' : ''}`} />
