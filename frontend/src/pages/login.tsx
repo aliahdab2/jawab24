@@ -12,7 +12,7 @@ import {
   Star
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { Button } from '@/components/ui';
+import { Button, BrandLogo } from '@/components/ui';
 import { useVersion } from '@/lib/useVersion';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -170,9 +170,8 @@ export default function LoginPage() {
           {/* Mobile Nav */}
           <div className="flex items-center justify-between p-6 lg:p-12">
             <Link href="/landing" className="flex items-center gap-3 group">
-              <img
-                src={BRAND_ASSETS.logo.small}
-                alt={BRAND_ASSETS.meta.appName + " Logo"}
+              <BrandLogo
+                variant="small"
                 className="w-10 h-10 rounded-xl shadow-lg group-hover:rotate-6 transition-transform"
               />
               <span className="font-display font-bold text-xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>

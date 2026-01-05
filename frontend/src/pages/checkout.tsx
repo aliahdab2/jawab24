@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { BRAND_ASSETS } from '@/constants/brand';
 
-import { Button } from '@/components/ui';
+import { Button, BrandLogo } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft, MessageCircle } from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
 
@@ -114,9 +114,8 @@ export default function CheckoutPage() {
           {/* Header */}
           <div className="text-center mb-8">
             <Link href="/" className="flex items-center gap-3">
-              <img
-                src={BRAND_ASSETS.logo.main}
-                alt={BRAND_ASSETS.meta.appName + " Logo"}
+              <BrandLogo
+                variant="main"
                 className="w-10 h-10 rounded-xl shadow-lg"
               />
               <span className="font-display font-bold text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>

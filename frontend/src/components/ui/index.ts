@@ -1,5 +1,6 @@
 export { Card, CardHeader } from './Card';
 export { Button } from './Button';
+export { BrandLogo } from './BrandLogo';
 export { Toggle } from './Toggle';
 export { Badge } from './Badge';
 export { Input } from './Input';

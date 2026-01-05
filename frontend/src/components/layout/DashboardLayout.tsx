@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
-import { PageSpinner, VersionBadge, WhatsAppHelpButton } from '@/components/ui';
+import { PageSpinner, VersionBadge, WhatsAppHelpButton, BrandLogo } from '@/components/ui';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 
@@ -89,9 +89,8 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {isCleanLayout ? (
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 z-40 border-b border-surface-100 shadow-sm">
             <Link href="/landing" className="flex items-center gap-2 group">
-              <img
-                src={BRAND_ASSETS.logo.small}
-                alt={BRAND_ASSETS.meta.appName + " Logo"}
+              <BrandLogo
+                variant="small"
                 className="w-8 h-8 rounded-lg shadow-md shadow-brand-500/20 group-hover:rotate-6 transition-transform"
               />
               <span className="font-display font-bold text-lg tracking-tight text-surface-900">{BRAND_ASSETS.meta.appName}</span>
@@ -113,9 +112,8 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         ) : (
           <div className="md:hidden fixed top-0 left-0 right-0 h-20 bg-surface-900 flex items-center justify-between px-6 z-40 shadow-xl border-b border-white/5">
             <Link href="/dashboard" className="flex items-center gap-3">
-              <img
-                src={BRAND_ASSETS.logo.main}
-                alt={BRAND_ASSETS.meta.appName + " Logo"}
+              <BrandLogo
+                variant="main"
                 className="w-8 h-8 rounded-lg shadow-lg border border-white/50"
               />
               <span className="font-display font-bold text-lg text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>

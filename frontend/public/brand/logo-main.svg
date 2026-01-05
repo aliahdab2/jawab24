@@ -2,8 +2,8 @@
   <!-- Solid Pure White Background -->
   <rect width="1024" height="1024" fill="white"/>
   
-  <!-- Content Scaled to 94% (The Sweet Spot) -->
-  <g transform="translate(30.72, 30.72) scale(0.94)">
+  <!-- Content Scaled to 88% (Safe Margin to prevent cutoff) -->
+  <g transform="translate(61.44, 61.44) scale(0.88)">
     <defs>
       <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" style="stop-color:#06B6D4"/> <!-- Bright Cyan/Teal -->

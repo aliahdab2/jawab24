@@ -19,7 +19,7 @@ import {
   Mail
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import { Button } from '@/components/ui';
+import { Button, BrandLogo } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
 
@@ -152,9 +152,8 @@ export default function LandingPage() {
               {/* Logo */}
               {/* Logo */}
               <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
-                <img
-                  src={BRAND_ASSETS.logo.main}
-                  alt={BRAND_ASSETS.meta.appTitle + " Logo"}
+                <BrandLogo
+                  variant="main"
                   className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6"
                 />
                 <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
