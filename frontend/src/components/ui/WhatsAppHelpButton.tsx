@@ -8,7 +8,7 @@ const WHATSAPP_NUMBER = '46700224720'; // Sweden +46
 const DEFAULT_MESSAGE_AR = 'مرحباً، أحتاج مساعدة في استخدام Jawab24';
 const DEFAULT_MESSAGE_EN = 'Hello, I need help using Jawab24';
 
-export function WhatsAppHelpButton() {
+export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const { t, language } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const isRTL = language === 'ar';
@@ -28,7 +28,8 @@ export function WhatsAppHelpButton() {
       {/* Floating button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-24 md:bottom-8 ltr:right-8 rtl:left-8 z-50 w-16 h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[2rem] shadow-2xl hover:shadow-emerald-500/40 transition-all flex items-center justify-center group active:scale-90 overflow-hidden"
+        className={`fixed bottom-24 md:bottom-8 ltr:right-8 rtl:left-8 z-50 w-16 h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[2rem] shadow-2xl hover:shadow-emerald-500/40 transition-all duration-300 flex items-center justify-center group active:scale-90 overflow-hidden ${hidden ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+          }`}
         aria-label={t('common.needHelp')}
       >
         <div className="absolute inset-0 bg-gradient-to-tr from-emerald-600/20 to-transparent pointer-events-none"></div>

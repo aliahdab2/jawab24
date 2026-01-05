@@ -247,14 +247,14 @@ export default function CommentsPage() {
                 variant={filter === f ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => setFilter(f)}
-                className={`rounded-full whitespace-nowrap px-6 transition-all duration-300 ${filter === f ? 'shadow-md shadow-brand-100' : ''
+                className={`rounded-full px-3 sm:px-6 transition-all duration-300 flex-shrink-0 ${filter === f ? 'shadow-md shadow-brand-100' : ''
                   } ${f === 'needs_attention' && needsAttentionCount > 0 ? 'ring-2 ring-red-200' : ''}`}
               >
-                <div className="flex items-center gap-2">
-                  {f === 'needs_attention' && <AlertTriangle className="w-3.5 h-3.5" />}
-                  <span>{getFilterLabel(f)}</span>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  {f === 'needs_attention' && <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />}
+                  <span className="text-xs sm:text-sm whitespace-nowrap">{getFilterLabel(f)}</span>
                   {f === 'needs_attention' && needsAttentionCount > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    <span className="bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
                       {needsAttentionCount}
                     </span>
                   )}

@@ -612,10 +612,10 @@ export default function LandingPage() {
                 <h4 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.support')}</h4>
                 <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
                   <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
-                    <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400">
+                    <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
                       <Zap className="w-3 h-3 sm:w-4 sm:h-4" />
                     </div>
-                    <span className="text-xs sm:text-base break-all">support@jawab24.com</span>
+                    <span className="text-[11px] sm:text-base whitespace-nowrap">support@jawab24.com</span>
                   </li>
                   <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
                     <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400">
@@ -628,7 +628,7 @@ export default function LandingPage() {
             </div>
 
             <div className="pt-6 sm:pt-12 border-t border-white/10 flex items-center justify-start">
-              <div className="text-surface-500 font-bold text-xs sm:text-sm tracking-widest uppercase text-start">
+              <div className="text-surface-500 font-bold text-xs sm:text-sm tracking-widest uppercase text-start" dir="ltr">
                 © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
               </div>
             </div>

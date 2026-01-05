@@ -122,7 +122,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
               onClick={() => router.push('/settings')}
               className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5 shadow-inner"
             >
-              <Settings className="w-5 h-5" />
+              <Settings className="w-5 h-5 text-white" />
             </button>
           </div>
         )}
@@ -234,7 +234,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <VersionBadge />
 
         {/* WhatsApp help button - floating */}
-        <WhatsAppHelpButton />
+        <WhatsAppHelpButton hidden={mobileMenuOpen} />
       </div>
     </>
   );
