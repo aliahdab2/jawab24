@@ -170,7 +170,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-between p-6 lg:p-12">
             <Link href="/landing" className="flex items-center gap-3 group">
               <img
-                src="/apple-touch-icon.png"
+                src="/logo-sm.png"
                 alt="Jawab24 Logo"
                 className="w-10 h-10 rounded-xl shadow-lg group-hover:rotate-6 transition-transform"
               />

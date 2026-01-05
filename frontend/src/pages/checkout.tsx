@@ -111,7 +111,7 @@ export default function CheckoutPage() {
           <div className="text-center mb-8">
             <Link href="/landing" className="inline-flex flex-col items-center gap-2 mb-6 group">
               <img
-                src="/apple-touch-icon.png"
+                src="/logo-sm.png"
                 alt="Jawab24 Logo"
                 className="w-14 h-14 rounded-2xl shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform"
               />

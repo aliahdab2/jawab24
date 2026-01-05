@@ -152,7 +152,7 @@ export default function LandingPage() {
               {/* Logo */}
               <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
                 <img
-                  src="/apple-touch-icon.png"
+                  src="/logo-sm.png"
                   alt="Jawab24 Logo"
                   className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6"
                 />
@@ -570,7 +570,7 @@ export default function LandingPage() {
               <div className="col-span-2">
                 <Link href="/landing" className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-8 group">
                   <img
-                    src="/apple-touch-icon.png"
+                    src="/logo-sm.png"
                     alt="Jawab24 Logo"
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg"
                   />

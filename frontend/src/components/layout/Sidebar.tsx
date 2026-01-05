@@ -78,7 +78,7 @@ export function Sidebar() {
       )}>
         <Link href="/dashboard" className="flex items-center gap-3 group">
           <img
-            src="/apple-touch-icon.png"
+            src="/logo-sm.png"
             alt="Jawab24 Logo"
             className="w-11 h-11 rounded-[1.1rem] shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform flex-shrink-0"
           />
