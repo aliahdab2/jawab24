@@ -63,6 +63,15 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
         <meta name="theme-color" content="#18181b" />
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+
+        {/* Canonical URL - Dynamic based on locale */}
+        <link rel="canonical" href={`https://jawab24.com${locale === 'en' ? '/en' : ''}`} />
+
+        {/* Hreflang Tags for Multi-language Support */}
+        <link rel="alternate" hrefLang="ar" href="https://jawab24.com/" />
+        <link rel="alternate" hrefLang="en" href="https://jawab24.com/en" />
+        <link rel="alternate" hrefLang="x-default" href="https://jawab24.com/" />
 
         {/* Open Graph Defaults */}
         <meta property="og:site_name" content="Jawab24 جواب" />
@@ -70,6 +79,14 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta property="og:description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
         <meta property="og:image" content="https://jawab24.com/brand/og-social.png" />
         <meta property="og:type" content="website" />
+        <meta property="og:locale" content={locale === 'ar' ? 'ar_SA' : 'en_US'} />
+        <meta property="og:locale:alternate" content={locale === 'ar' ? 'en_US' : 'ar_SA'} />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Jawab24 جواب | AI Auto-Reply for Facebook & Instagram" />
+        <meta name="twitter:description" content="Smart AI auto-replies for Facebook & Instagram. الرد الذكي التلقائي لفيسبوك وإنستغرام." />
+        <meta name="twitter:image" content="https://jawab24.com/brand/og-social.png" />
 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
