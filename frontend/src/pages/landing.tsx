@@ -124,6 +124,23 @@ export default function LandingPage() {
         <meta name="description" content={t('landing.seoDescription')} />
         <meta name="keywords" content={t('landing.seoKeywords')} />
         <link rel="canonical" href="https://jawab24.com/landing" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              "mainEntity": faqs.map(faq => ({
+                "@type": "Question",
+                "name": faq.question,
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": faq.answer
+                }
+              }))
+            })
+          }}
+        />
       </Head>
 
       <div className="min-h-screen bg-white overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>

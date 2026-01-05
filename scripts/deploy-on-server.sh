@@ -260,10 +260,10 @@ fi
 echo "🔄 Restarting Nginx to apply new upstream configuration..."
 
 # Verify config syntax before restart
+# Verify config syntax before restart
 echo "🔍 Verifying Nginx configuration syntax..."
-if ! docker exec jawab24-nginx nginx -t 2>&1 | grep -q "syntax is ok"; then
+if ! docker exec jawab24-nginx nginx -t; then
     echo "❌ ERROR: Nginx configuration has syntax errors!"
-    docker exec jawab24-nginx nginx -t 2>&1
     exit 1
 fi
 
