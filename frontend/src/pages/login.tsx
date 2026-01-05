@@ -97,7 +97,7 @@ export default function LoginPage() {
     <>
       <Head>
         <title>{t('auth.seoTitle')}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content={t('auth.seoDescription')} />
         <meta name="keywords" content={t('auth.seoKeywords')} />
         <link rel="canonical" href="https://jawab24.com/login" />

@@ -11,6 +11,7 @@ export default function DataDeletion() {
       <Head>
         <title>{t('dataDeletion.title')}</title>
         <meta name="description" content={t('dataDeletion.metaDescription')} />
+        <link rel="canonical" href="https://jawab24.com/data-deletion" />
       </Head>
 
       <div className="min-h-screen bg-surface-50 py-12 px-4 sm:px-6 lg:px-8 text-start">

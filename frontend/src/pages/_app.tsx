@@ -11,11 +11,11 @@ import type { Language } from '@/i18n';
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const { locale } = router;
-  
+
   // Use ref for router to avoid dependency issues
   const routerRef = useRef(router);
   routerRef.current = router;
-  
+
   // Memoize setLanguage to ensure stable reference
   const setLanguageStore = useUIStore((state) => state.setLanguage);
   const setLanguage = useCallback((lang: Language) => {
@@ -59,7 +59,7 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#18181b" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
