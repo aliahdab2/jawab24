@@ -52,7 +52,7 @@ export default function Document() {
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://jawab24.com/" />
-        <meta property="og:title" content="جواب24 | جواب - الرد التلقائي الذكي لفيسبوك وإنستغرام" />
+        <meta property="og:title" content="Jawab24 جواب | AI Auto-Reply for Facebook & Instagram" />
         <meta property="og:description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7. جواب24 - أول نظام عربي للرد الذكي التلقائي على تعليقات ورسائل فيسبوك وإنستغرام. وفّر وقتك وزد مبيعاتك بردود دقيقة 24/7." />
         <meta property="og:image" content="https://jawab24.com/og-image.png" />
         <meta property="og:image:width" content="1200" />
