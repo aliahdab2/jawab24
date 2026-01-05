@@ -5,10 +5,10 @@ dotenv.config();
 
 export default defineConfig({
     schema: './src/db/schema.ts',
-    out: './drizzle',
-    dialect: 'postgresql',
+    out: './migrations',
+    driver: 'pg',
     dbCredentials: {
-        url: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5433/jawab24',
+        connectionString: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5433/jawab24',
     },
     // Ensure migrations are verbose
     verbose: true,

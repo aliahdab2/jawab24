@@ -1,1 +1,0 @@
-ALTER TABLE "settings" ADD COLUMN "dual_reply_config" jsonb DEFAULT '{}'::jsonb;

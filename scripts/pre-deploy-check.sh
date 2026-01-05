@@ -60,19 +60,16 @@ fi
 # 4. Check for schema drift
 echo ""
 echo "4️⃣  Checking for schema drift..."
-# TEMPORARILY DISABLED - False positive due to manual migration 003
-# if ./scripts/check-schema-drift.sh; then
-#     echo -e "${GREEN}   ✅ No schema drift detected${NC}"
-# else
-#     echo -e "${RED}   ❌ Schema drift detected!${NC}"
-#     echo ""
-#     echo "Run: npm run db:generate --workspace=jawab24-backend"
-#     exit 1
-# fi
-echo -e "${YELLOW}   ⚠️  Schema drift check temporarily disabled${NC}"
-echo -e "${YELLOW}   (Manual migration 003 exists, will be applied on server)${NC}"
+if ./scripts/check-schema-drift.sh; then
+    echo -e "${GREEN}   ✅ No schema drift detected${NC}"
+else
+    echo -e "${RED}   ❌ Schema drift detected!${NC}"
+    echo ""
+    echo "Run: npm run db:generate --workspace=jawab24-backend"
+    exit 1
+fi
 
-# 5. Check Docker build (optional, slower)
+# 5. Check Docker build
 echo ""
 echo "5️⃣  Building Docker image..."
 if docker build -f backend/Dockerfile -t jawab24-backend:pre-deploy-check . > /dev/null 2>&1; then
