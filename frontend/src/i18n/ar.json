@@ -97,6 +97,8 @@
   "auth.ourBlog": "المدونة",
   "auth.didYouKnow": "هل تعلم؟",
   "auth.didYouKnowDesc": "الردود الفورية تزيد من فرصة إتمام البيع بنسبة تزيد عن 60%.",
+  "auth.loginError": "خطأ في تسجيل الدخول",
+  "auth.redirecting": "جاري إعادة التوجيه...",
   "auth.systemsActive": "الأنظمة تعمل",
   "auth.nextGenAutoReplies": "الجيل الجديد من الردود التلقائية",
   "auth.startYourJourney": "ابدأ رحلة",

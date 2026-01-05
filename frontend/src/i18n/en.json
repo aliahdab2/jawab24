@@ -95,6 +95,8 @@
   "auth.ourBlog": "Our Blog",
   "auth.didYouKnow": "Did you know?",
   "auth.didYouKnowDesc": "Instant replies increase the chance of closing a sale by more than 60%.",
+  "auth.loginError": "Login Error",
+  "auth.redirecting": "Redirecting...",
   "auth.systemsActive": "Systems Active",
   "auth.nextGenAutoReplies": "Next-Gen Auto Replies",
   "auth.startYourJourney": "Start Your",

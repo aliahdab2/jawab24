@@ -154,9 +154,9 @@ export default function LandingPage() {
               <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
                 <BrandLogo
                   variant="main"
-                  className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6 flex-shrink-0"
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6 flex-shrink-0"
                 />
-                <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+                <span className="font-display font-bold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
               </Link>
 
               {/* Actions */}
@@ -575,7 +575,7 @@ export default function LandingPage() {
                     variant="vector"
                     className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0"
                   />
-                  <span className="font-display font-bold text-2xl sm:text-3xl tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+                  <span className="font-display font-bold text-xl sm:text-2xl tracking-tight">{BRAND_ASSETS.meta.appName}</span>
                 </Link>
                 <p className="text-surface-400 text-sm sm:text-lg max-w-sm mb-6 sm:mb-10 leading-relaxed font-medium">
                   {t('landing.footer.description')}

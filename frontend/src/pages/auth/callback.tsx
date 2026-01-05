@@ -2,10 +2,12 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
 import { PageSpinner } from '@/components/ui';
+import { useTranslation } from '@/i18n';
 
 export default function AuthCallback() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
+  const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const authAttemptedRef = useRef(false);
 
@@ -115,9 +117,9 @@ export default function AuthCallback() {
       <div className="min-h-screen flex items-center justify-center bg-surface-50">
         <div className="text-center">
           <div className="text-red-500 text-xl mb-4">❌</div>
-          <h1 className="text-xl font-semibold text-surface-900 mb-2">خطأ في تسجيل الدخول</h1>
+          <h1 className="text-xl font-semibold text-surface-900 mb-2">{t('auth.loginError')}</h1>
           <p className="text-surface-500 mb-4">{error}</p>
-          <p className="text-sm text-surface-400">جاري إعادة التوجيه...</p>
+          <p className="text-sm text-surface-400">{t('auth.redirecting')}</p>
         </div>
       </div>
     );

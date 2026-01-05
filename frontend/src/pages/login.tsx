@@ -169,12 +169,12 @@ export default function LoginPage() {
         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
           {/* Mobile Nav */}
           <div className="flex items-center justify-between p-6 lg:p-12">
-            <Link href="/landing" className="flex items-center gap-3 group">
+            <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
-                variant="vector"
-                className="w-12 h-12 rounded-2xl shadow-lg group-hover:rotate-6 transition-transform"
+                variant="main"
+                className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg group-hover:rotate-6 transition-transform"
               />
-              <span className="font-display font-bold text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+              <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
             <button
               onClick={toggleLanguage}
