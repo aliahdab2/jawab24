@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { BRAND_ASSETS } from '@/constants/brand';
 
 import { Button } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft, MessageCircle } from 'lucide-react';
@@ -112,15 +113,13 @@ export default function CheckoutPage() {
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
-            <Link href="/landing" className="inline-flex flex-col items-center gap-2 mb-6 group">
+            <Link href="/" className="flex items-center gap-3">
               <img
-                src="/logo-sm.png"
-                alt="Jawab24 Logo"
-                className="w-14 h-14 rounded-2xl shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform"
+                src={BRAND_ASSETS.logo.main}
+                alt={BRAND_ASSETS.meta.appName + " Logo"}
+                className="w-10 h-10 rounded-xl shadow-lg"
               />
-              <span className="font-display font-bold text-2xl tracking-tight text-surface-900 group-hover:text-brand-600 transition-colors">
-                Jawab24
-              </span>
+              <span className="font-display font-bold text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
             <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2">
               {t('checkout.title')}

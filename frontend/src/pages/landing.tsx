@@ -21,6 +21,7 @@ import {
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
+import { BRAND_ASSETS } from '@/constants/brand';
 
 export default function LandingPage() {
   const { t, language, setLanguage } = useTranslation();
@@ -117,9 +118,9 @@ export default function LandingPage() {
   }
 
   return (
-    <>
+    <div className="min-h-screen bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
       <Head>
-        <title>{t('landing.seoTitle')}</title>
+        <title>{BRAND_ASSETS.meta.appTitle}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content={t('landing.seoDescription')} />
         <meta name="keywords" content={t('landing.seoKeywords')} />
@@ -152,11 +153,11 @@ export default function LandingPage() {
               {/* Logo */}
               <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
                 <img
-                  src="/logo-sm.png"
-                  alt="Jawab24 Logo"
+                  src={BRAND_ASSETS.logo.main}
+                  alt={BRAND_ASSETS.meta.appTitle + " Logo"}
                   className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg shadow-brand-100 transition-transform group-hover:rotate-6"
                 />
-                <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">Jawab24</span>
+                <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
               </Link>
 
               {/* Actions */}
@@ -570,11 +571,11 @@ export default function LandingPage() {
               <div className="col-span-2">
                 <Link href="/landing" className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-8 group">
                   <img
-                    src="/logo-sm.png"
-                    alt="Jawab24 Logo"
+                    src={BRAND_ASSETS.logo.small}
+                    alt={BRAND_ASSETS.meta.appName + " Logo"}
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg"
                   />
-                  <span className="font-display font-bold text-2xl sm:text-3xl tracking-tight">Jawab24</span>
+                  <span className="font-display font-bold text-2xl sm:text-3xl tracking-tight">{BRAND_ASSETS.meta.appName}</span>
                 </Link>
                 <p className="text-surface-400 text-sm sm:text-lg max-w-sm mb-6 sm:mb-10 leading-relaxed font-medium">
                   {t('landing.footer.description')}
@@ -634,7 +635,7 @@ export default function LandingPage() {
           </div>
         </footer>
       </div>
-    </>
+    </div>
   );
 }
 

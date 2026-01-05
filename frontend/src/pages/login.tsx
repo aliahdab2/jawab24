@@ -15,6 +15,7 @@ import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
 import { useVersion } from '@/lib/useVersion';
 import Link from 'next/link';
+import { BRAND_ASSETS } from '@/constants/brand';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -96,7 +97,7 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>{t('auth.seoTitle')}</title>
+        <title>{BRAND_ASSETS.meta.appTitle} - {t('auth.login')}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content={t('auth.seoDescription')} />
         <meta name="keywords" content={t('auth.seoKeywords')} />
@@ -170,11 +171,11 @@ export default function LoginPage() {
           <div className="flex items-center justify-between p-6 lg:p-12">
             <Link href="/landing" className="flex items-center gap-3 group">
               <img
-                src="/logo-sm.png"
-                alt="Jawab24 Logo"
+                src={BRAND_ASSETS.logo.small}
+                alt={BRAND_ASSETS.meta.appName + " Logo"}
                 className="w-10 h-10 rounded-xl shadow-lg group-hover:rotate-6 transition-transform"
               />
-              <span className="font-display font-bold text-xl text-surface-900 tracking-tight">Jawab24</span>
+              <span className="font-display font-bold text-xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
             <button
               onClick={toggleLanguage}

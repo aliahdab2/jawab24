@@ -6,10 +6,10 @@ export default function Document() {
     <Html lang="ar" dir="rtl">
       <Head>
         {/* Favicon & Icons */}
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="icon" href="/brand/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16x16.png" />
+        <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
 
         {/* Google Analytics */}
@@ -54,7 +54,7 @@ export default function Document() {
         <meta property="og:url" content="https://jawab24.com/" />
         <meta property="og:title" content="Jawab24 جواب | AI Auto-Reply for Facebook & Instagram" />
         <meta property="og:description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7. جواب24 - أول نظام عربي للرد الذكي التلقائي على تعليقات ورسائل فيسبوك وإنستغرام. وفّر وقتك وزد مبيعاتك بردود دقيقة 24/7." />
-        <meta property="og:image" content="https://jawab24.com/og-image.png" />
+        <meta property="og:image" content="https://jawab24.com/brand/og-social.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:locale" content="ar_SA" />
@@ -66,7 +66,7 @@ export default function Document() {
         <meta name="twitter:url" content="https://jawab24.com/" />
         <meta name="twitter:title" content="Jawab24 جواب24 - ردود ذكية تلقائية | Smart Auto-Replies" />
         <meta name="twitter:description" content="AI-powered auto-replies for Facebook & Instagram. الرد الذكي التلقائي لفيسبوك وإنستغرام." />
-        <meta name="twitter:image" content="https://jawab24.com/og-image.png" />
+        <meta name="twitter:image" content="https://jawab24.com/brand/og-social.png" />
 
         {/* Structured Data - SoftwareApplication (Bilingual) */}
         <script
@@ -105,7 +105,7 @@ export default function Document() {
               "name": "Jawab24",
               "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24"],
               "url": "https://jawab24.com",
-              "logo": "https://jawab24.com/apple-touch-icon.png",
+              "logo": "https://jawab24.com/brand/apple-touch-icon.png",
               "description": "Smart AI auto-reply service for Facebook & Instagram - خدمة الرد الذكي التلقائي لفيسبوك وإنستغرام",
               "sameAs": [
                 "https://facebook.com/jawab24",

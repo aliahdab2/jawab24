@@ -14,6 +14,7 @@ import {
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import clsx from 'clsx';
+import { BRAND_ASSETS } from '@/constants/brand';
 
 // Simple navigation - Templates & Rules are in Settings > Advanced
 const navigationKeys = [
@@ -78,15 +79,15 @@ export function Sidebar() {
       )}>
         <Link href="/dashboard" className="flex items-center gap-3 group">
           <img
-            src="/logo-sm.png"
-            alt="Jawab24 Logo"
+            src={BRAND_ASSETS.logo.main}
+            alt={BRAND_ASSETS.meta.appName + " Logo"}
             className="w-11 h-11 rounded-[1.1rem] shadow-lg shadow-brand-500/20 group-hover:rotate-6 transition-transform flex-shrink-0"
           />
           <span className={clsx(
             "font-display font-bold text-xl tracking-tight whitespace-nowrap transition-all duration-300 origin-left rtl:origin-right",
             sidebarOpen ? "opacity-100 scale-100" : "opacity-0 scale-0 w-0 overflow-hidden"
           )}>
-            Jawab24
+            {BRAND_ASSETS.meta.appName}
           </span>
         </Link>
       </div>
