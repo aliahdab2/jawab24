@@ -301,7 +301,7 @@
   "settings.dualReply": "Comment Reply & Private Message",
   "settings.dualReplyDesc": "This text will be used for the public reply, along with a DM.",
   "settings.dualReplyConfigTitle": "Nudge Comment Text",
-  "settings.dualReplyConfigDesc": "This text is used for the public reply to the comment, along with a private message.",
+  "settings.dualReplyConfigDesc": "The text that will appear publicly on the comment",
   "settings.publicReplyPlaceholder": "Default: Sent you a private message 📥",
   "settings.commentsAutoReply": "Reply to Comments",
   "settings.commentsAutoReplyDesc": "Auto reply to comments on your page",
