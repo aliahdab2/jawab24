@@ -604,8 +604,8 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="pt-6 sm:pt-12 border-t border-white/10 flex items-center justify-center">
-              <div className="text-surface-500 font-bold text-xs sm:text-sm tracking-widest uppercase text-center">
+            <div className="pt-6 sm:pt-12 border-t border-white/10 flex items-center justify-start">
+              <div className="text-surface-500 font-bold text-xs sm:text-sm tracking-widest uppercase text-start">
                 © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
               </div>
             </div>
