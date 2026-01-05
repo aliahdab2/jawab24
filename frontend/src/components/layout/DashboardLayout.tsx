@@ -90,7 +90,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 z-40 border-b border-surface-100 shadow-sm">
             <Link href="/landing" className="flex items-center gap-2 group">
               <BrandLogo
-                variant="small"
+                variant="vector"
                 className="w-8 h-8 rounded-lg shadow-md shadow-brand-500/20 group-hover:rotate-6 transition-transform"
               />
               <span className="font-display font-bold text-lg tracking-tight text-surface-900">{BRAND_ASSETS.meta.appName}</span>

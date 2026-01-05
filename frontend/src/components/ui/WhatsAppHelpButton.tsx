@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 
-// Configure your WhatsApp number here (with country code, no + or spaces)
 // Configure your WhatsApp number here (with country code, no + or spaces)
 const WHATSAPP_NUMBER = '46700224720'; // Sweden +46
 const DEFAULT_MESSAGE_AR = 'مرحباً، أحتاج مساعدة في استخدام Jawab24';
@@ -11,7 +10,33 @@ const DEFAULT_MESSAGE_EN = 'Hello, I need help using Jawab24';
 export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const { t, language } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
   const isRTL = language === 'ar';
+
+  // Auto-hide on scroll down, show on scroll up
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      // Show if at top of page
+      if (currentScrollY < 10) {
+        setIsVisible(true);
+      }
+      // Hide when scrolling down, show when scrolling up
+      else if (currentScrollY > lastScrollY) {
+        setIsVisible(false);
+        setIsOpen(false); // Close popup when hiding
+      } else {
+        setIsVisible(true);
+      }
+
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
 
   const handleWhatsAppClick = () => {
     const message = encodeURIComponent(
@@ -28,7 +53,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
       {/* Floating button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-24 md:bottom-8 ltr:right-8 rtl:left-8 z-50 w-16 h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[2rem] shadow-2xl hover:shadow-emerald-500/40 transition-all duration-300 flex items-center justify-center group active:scale-90 overflow-hidden ${hidden ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+        className={`fixed bottom-28 md:bottom-8 ltr:right-8 rtl:left-8 z-50 w-16 h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[2rem] shadow-2xl hover:shadow-emerald-500/40 transition-all duration-300 flex items-center justify-center group active:scale-90 overflow-hidden ${hidden || !isVisible ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
           }`}
         aria-label={t('common.needHelp')}
       >

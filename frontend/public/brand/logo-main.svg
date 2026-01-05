@@ -1,6 +1,6 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <!-- Solid Pure White Background -->
-  <rect width="1024" height="1024" fill="white"/>
+  <!-- Background removed for transparency -->
   
   <!-- Content Scaled to 88% (Safe Margin to prevent cutoff) -->
   <g transform="translate(61.44, 61.44) scale(0.88)">
