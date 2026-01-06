@@ -373,9 +373,9 @@ export default function LandingPage() {
             <div className="grid grid-cols-2 gap-4 sm:gap-8 lg:gap-16 items-center">
               {/* Steps - Takes half width on mobile */}
               <div className="space-y-4 sm:space-y-8 col-span-1">
-                <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-relaxed sm:leading-snug text-start">
+                <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-relaxed text-start">
                   {t('landing.howItWorks.title1')}
-                  <span className="block text-brand-600 mt-2 sm:mt-1">{t('landing.howItWorks.title2')}</span>
+                  <span className="block text-brand-600 mt-2">{t('landing.howItWorks.title2')}</span>
                 </h2>
                 <div className="space-y-3 sm:space-y-6 lg:space-y-10">
                   {howItWorks.map((item, i) => (
@@ -385,7 +385,7 @@ export default function LandingPage() {
                       </div>
                       <div className="text-start">
                         <h3 className="text-sm sm:text-xl font-bold text-surface-900 mb-1 sm:mb-2">{item.title}</h3>
-                        <p className="text-[10px] sm:text-base text-surface-600 font-medium leading-tight sm:leading-relaxed">{item.description}</p>
+                        <p className="text-[10px] sm:text-base text-surface-600 font-medium leading-relaxed">{item.description}</p>
                       </div>
                     </div>
                   ))}
