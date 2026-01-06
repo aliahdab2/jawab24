@@ -69,7 +69,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
     return null;
   }
 
-  const isCleanLayout = isPublic;
+  const isCleanLayout = isPublic && !isAuthenticated;
 
   return (
     <>
