@@ -64,7 +64,7 @@ export async function getUserCountry(): Promise<string | undefined> {
 
         const data: GeoCheckResponse = await response.json();
         return data.country;
-    } catch (error) {
+    } catch {
         return undefined;
     }
 }

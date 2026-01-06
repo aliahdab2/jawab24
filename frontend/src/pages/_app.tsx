@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useUIStore } from '@/lib/store';
 import type { Language } from '@/i18n';
+import { dmSans, cairo, tajawal } from '@/lib/fonts';
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
@@ -95,9 +96,11 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </Head>
-      <ErrorBoundary>
-        <Component {...pageProps} />
-      </ErrorBoundary>
+      <div className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable}`}>
+        <ErrorBoundary>
+          <Component {...pageProps} />
+        </ErrorBoundary>
+      </div>
     </QueryClientProvider>
   );
 }

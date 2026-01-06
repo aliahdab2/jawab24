@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -13,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
-import { useVersion } from '@/lib/useVersion';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 

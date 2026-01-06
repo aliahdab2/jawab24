@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Badge, Input, PageHeader, PageSpinner } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import {
@@ -36,7 +36,7 @@ export default function CommentsPage() {
   const [exporting, setExporting] = useState(false);
 
   // Helper component for stats - BEST PRACTICE LAYOUT
-  const StatCard = ({ title, value, icon, color, description }: { title: string; value: number; icon: React.ReactNode; color: string; description?: string }) => (
+  const StatCard = ({ title, value, icon, color, description: _description }: { title: string; value: number; icon: React.ReactNode; color: string; description?: string }) => (
     <Card className="border-none hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5 group" padding="none" style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
       <div className="px-5 py-4 flex items-center justify-between">
         <div>
@@ -46,10 +46,10 @@ export default function CommentsPage() {
           <p className="text-xs font-medium text-surface-500 truncate leading-tight">{title}</p>
         </div>
         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/20' :
-            color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/20' :
-              color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/20' :
-                color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/20' :
-                  'bg-red-50 text-red-600 shadow-red-500/20'
+          color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/20' :
+            color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/20' :
+              color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/20' :
+                'bg-red-50 text-red-600 shadow-red-500/20'
           }`}>
           {icon}
         </div>

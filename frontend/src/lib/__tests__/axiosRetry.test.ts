@@ -52,7 +52,9 @@ describe('axiosRetry', () => {
 
             try {
                 await axiosInstance.get('/test');
-            } catch (error) {
+                // Should not reach here
+                expect(true).toBe(false);
+            } catch {
                 expect(attemptCount).toBe(1); // No retries for 4xx
             }
         });
@@ -68,7 +70,9 @@ describe('axiosRetry', () => {
 
             try {
                 await axiosInstance.get('/test');
-            } catch (error) {
+                // Should not reach here
+                expect(true).toBe(false);
+            } catch {
                 expect(attemptCount).toBe(4); // Initial + 3 retries
             }
         });

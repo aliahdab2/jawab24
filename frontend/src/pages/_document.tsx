@@ -12,10 +12,7 @@ export default function Document() {
         <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
 
-        {/* Fonts: DM Sans (English) + Cairo & Tajawal (Arabic) */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Cairo:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet" />
+        {/* Fonts are now loaded via next/font in _app.tsx for better performance */}
 
         {/* Global Verification Tags */}
         {process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION && (

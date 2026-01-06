@@ -130,7 +130,7 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl]);
+  }, [token, apiUrl, language]);
 
   useEffect(() => {
     fetchSettings();

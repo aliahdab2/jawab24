@@ -64,14 +64,6 @@ export function addRetryInterceptor(
             // Calculate delay with exponential backoff
             const delay = getRetryDelay(originalRequest._retryCount - 1, retryConfig.retryDelay);
 
-            // Log retry attempt (only in development)
-            if (process.env.NODE_ENV === 'development') {
-                console.log(
-                    `Retrying request (${originalRequest._retryCount}/${retryConfig.retries}) after ${delay}ms:`,
-                    originalRequest.url
-                );
-            }
-
             // Wait before retrying
             await new Promise((resolve) => setTimeout(resolve, delay));
 
