@@ -412,7 +412,7 @@
   "pricing.included": "مشمول",
   "pricing.notIncluded": "غير مشمول",
   "pricing.brandingShown": "يظهر شعار Jawab24",
-  "pricing.brandingHidden": "بدون علامة تجارية (White Label)",
+  "pricing.brandingHidden": "بدون علامة تجارية",
   "pricing.standardSupport": "دعم فني قياسي",
   "pricing.prioritySupport": "دعم فني ذو أولوية",
   "pricing.trialDays": "فترة تجربة مجانية لمدة {days} يوم",
