@@ -219,25 +219,23 @@ export default function DashboardPage() {
               }`}></div>
 
             {/* Number-first layout: Vertical stack with icon as supporting element */}
-            <div className="relative z-10 px-5 py-3">
-              {/* Primary: Number (largest, bold) */}
-              <div className="flex items-baseline justify-between gap-3 mb-1">
-                <p className="text-[30px] font-semibold text-surface-900 leading-none tracking-tight">
+            {/* Prominent Icon Layout */}
+            <div className="relative z-10 px-5 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-[30px] font-bold text-surface-900 leading-none tracking-tight mb-1">
                   {stat.value}
                 </p>
-                {/* Supporting: Icon (reduced opacity, smaller) */}
-                <div className={`opacity-40 transition-opacity group-hover:opacity-60 ${stat.color === 'brand' ? 'text-brand-500' :
-                  stat.color === 'emerald' ? 'text-emerald-500' :
-                    'text-amber-500'
-                  }`}>
-                  <stat.icon className="w-4 h-4" />
-                </div>
+                <p className="text-xs font-medium text-surface-500 truncate leading-tight">
+                  {t(stat.nameKey)}
+                </p>
               </div>
 
-              {/* Secondary: Label */}
-              <p className="text-xs font-medium text-surface-500 truncate leading-tight">
-                {t(stat.nameKey)}
-              </p>
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/20' :
+                  stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/20' :
+                    'bg-amber-50 text-amber-600 shadow-amber-500/20'
+                }`}>
+                <stat.icon className="w-6 h-6" />
+              </div>
             </div>
           </Card>
         ))}

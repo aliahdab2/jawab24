@@ -37,25 +37,22 @@ export default function CommentsPage() {
 
   // Helper component for stats - BEST PRACTICE LAYOUT
   const StatCard = ({ title, value, icon, color, description }: { title: string; value: number; icon: React.ReactNode; color: string; description?: string }) => (
-    <Card className="border-none hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5" padding="none" style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-      <div className="px-5 py-3.5">
-        {/* Number-first hierarchy */}
-        <div className="flex items-baseline justify-between gap-2 mb-1">
-          <p className="text-[28px] font-semibold text-surface-900 leading-none tracking-tight">
+    <Card className="border-none hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5 group" padding="none" style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+      <div className="px-5 py-4 flex items-center justify-between">
+        <div>
+          <p className="text-[30px] font-bold text-surface-900 leading-none tracking-tight mb-1">
             {value.toLocaleString()}
           </p>
-          {/* Icon: supporting role only (40% opacity, 16px) */}
-          <div className={`opacity-40 transition-opacity hover:opacity-60 ${color === 'brand' ? 'text-brand-500' :
-            color === 'emerald' ? 'text-emerald-500' :
-              color === 'amber' ? 'text-amber-500' :
-                color === 'violet' ? 'text-violet-500' :
-                  'text-red-500'
-            }`}>
-            {icon}
-          </div>
+          <p className="text-xs font-medium text-surface-500 truncate leading-tight">{title}</p>
         </div>
-        {/* Label: secondary */}
-        <p className="text-xs font-medium text-surface-500 truncate leading-tight">{title}</p>
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/20' :
+            color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/20' :
+              color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/20' :
+                color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/20' :
+                  'bg-red-50 text-red-600 shadow-red-500/20'
+          }`}>
+          {icon}
+        </div>
       </div>
     </Card>
   );
@@ -228,11 +225,11 @@ export default function CommentsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <StatCard title={t('comments.totalComments')} value={stats.total} icon={<MessageSquare className="w-4 h-4" />} color="brand" description={t('comments.totalCommentsDesc')} />
-        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle className="w-4 h-4" />} color="emerald" description={t('comments.repliedDesc')} />
-        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock className="w-4 h-4" />} color="amber" description={t('comments.pendingDesc')} />
-        <StatCard title={t('comments.aiReplies')} value={stats.aiReplies} icon={<Bot className="w-4 h-4" />} color="violet" description={t('comments.aiRepliesDesc')} />
-        <StatCard title={t('comments.needsAttention')} value={stats.needsAttention} icon={<AlertTriangle className="w-4 h-4" />} color="red" description={t('comments.needsAttentionDesc')} />
+        <StatCard title={t('comments.totalComments')} value={stats.total} icon={<MessageSquare className="w-6 h-6" />} color="brand" description={t('comments.totalCommentsDesc')} />
+        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle className="w-6 h-6" />} color="emerald" description={t('comments.repliedDesc')} />
+        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock className="w-6 h-6" />} color="amber" description={t('comments.pendingDesc')} />
+        <StatCard title={t('comments.aiReplies')} value={stats.aiReplies} icon={<Bot className="w-6 h-6" />} color="violet" description={t('comments.aiRepliesDesc')} />
+        <StatCard title={t('comments.needsAttention')} value={stats.needsAttention} icon={<AlertTriangle className="w-6 h-6" />} color="red" description={t('comments.needsAttentionDesc')} />
       </div>
 
       {/* Filters & Search - Compact unified section */}
