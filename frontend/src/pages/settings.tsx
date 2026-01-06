@@ -201,7 +201,10 @@ export default function SettingsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
-              onClick={() => setSettings({ ...settings, dashboardLanguage: 'ar' })}
+              onClick={() => {
+                setSettings({ ...settings, dashboardLanguage: 'ar' });
+                setLanguage('ar');
+              }}
               className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${settings.dashboardLanguage === 'ar'
                 ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500'
                 : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
@@ -212,7 +215,10 @@ export default function SettingsPage() {
             </button>
 
             <button
-              onClick={() => setSettings({ ...settings, dashboardLanguage: 'en' })}
+              onClick={() => {
+                setSettings({ ...settings, dashboardLanguage: 'en' });
+                setLanguage('en');
+              }}
               className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${settings.dashboardLanguage === 'en'
                 ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500'
                 : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
