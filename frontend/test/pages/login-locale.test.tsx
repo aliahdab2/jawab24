@@ -35,13 +35,13 @@ describe('LoginPage - Locale Redirects', () => {
         window.location = { ...originalLocation, href: '', origin: 'http://localhost:3000' } as any;
 
         // Mock alert
-        alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { });
+        alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { }) as any;
 
         process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
     });
 
     afterEach(() => {
-        window.location = originalLocation;
+        window.location = originalLocation as any;
         alertSpy.mockRestore();
         vi.clearAllMocks();
     });

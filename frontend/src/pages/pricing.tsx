@@ -21,6 +21,7 @@ function PlanCard({
   t,
   currentPlanPrice,
   subscriptionStatus,
+  isSanctioned,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
@@ -30,6 +31,7 @@ function PlanCard({
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
   currentPlanPrice: number;
   subscriptionStatus?: string;
+  isSanctioned: boolean;
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
@@ -153,33 +155,47 @@ function PlanCard({
 
       {/* CTA */}
       <div className="mt-auto pt-3 px-3 pb-1">
-        <Button
-          onClick={onSelect}
-          loading={loading}
-          disabled={isCurrentPlan}
-          variant={isPopular ? 'primary' : 'secondary'}
-          className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold border-surface-300' : 'font-bold'
-            }`}
-        >
-          {isCurrentPlan ? (
-            <div className="flex flex-col items-center gap-1">
-              <span>{t('pricing.currentPlan')}</span>
-              {(subscriptionStatus === 'trialing' || (isCurrentPlan && plan.price === 0 && plan.trialDays > 0)) && (
-                <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase font-extrabold tracking-wider border border-amber-200">
-                  {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
-                </span>
-              )}
-            </div>
-          ) : hasActiveSubscription
-            ? (plan.price > currentPlanPrice ? t('pricing.upgrade') : t('pricing.downgrade'))
-            : (isFree)
-              ? t('pricing.getStarted')
-              : (plan.trialDays > 0)
-                ? t('pricing.startTrial')
-                : t('pricing.subscribe')
-          }
-        </Button>
-        {isFree && (
+        {isSanctioned ? (
+          <div className="text-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <p className="text-xs font-bold text-slate-500 mb-1">
+              Payments not available in your region
+            </p>
+            <a
+              href="mailto:support@jawab24.com"
+              className="text-xs text-brand-600 font-bold hover:underline"
+            >
+              Contact Support
+            </a>
+          </div>
+        ) : (
+          <Button
+            onClick={onSelect}
+            loading={loading}
+            disabled={isCurrentPlan}
+            variant={isPopular ? 'primary' : 'secondary'}
+            className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold border-surface-300' : 'font-bold'
+              }`}
+          >
+            {isCurrentPlan ? (
+              <div className="flex flex-col items-center gap-1">
+                <span>{t('pricing.currentPlan')}</span>
+                {(subscriptionStatus === 'trialing' || (isCurrentPlan && plan.price === 0 && plan.trialDays > 0)) && (
+                  <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase font-extrabold tracking-wider border border-amber-200">
+                    {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+                  </span>
+                )}
+              </div>
+            ) : hasActiveSubscription
+              ? (plan.price > currentPlanPrice ? t('pricing.upgrade') : t('pricing.downgrade'))
+              : (isFree)
+                ? t('pricing.getStarted')
+                : (plan.trialDays > 0)
+                  ? t('pricing.startTrial')
+                  : t('pricing.subscribe')
+            }
+          </Button>
+        )}
+        {isFree && !isSanctioned && (
           <p className="text-xs text-surface-400 text-center mt-3 font-medium">
             {t('pricing.noCreditCardNote')}
           </p>
@@ -246,7 +262,8 @@ export default function PricingPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!isAuthenticated) {
+      // If sanctioned, only fetch plans (public), do not fetch private usage data
+      if (!isAuthenticated || isSanctioned === true) {
         setUsage(null);
         try {
           const plansRes = await plansApi.getAll();
@@ -280,8 +297,11 @@ export default function PricingPage() {
       }
     };
 
-    fetchData();
-  }, [isAuthenticated]);
+    // Wait for sanctions check to complete (isSanctioned !== null) before fetching
+    if (isSanctioned !== null) {
+      fetchData();
+    }
+  }, [isAuthenticated, isSanctioned]);
 
   const handleSelectPlan = async (planId: string) => {
     // SANCTIONS CHECK: Do not proceed if sanctioned
@@ -338,17 +358,7 @@ export default function PricingPage() {
     );
   }
 
-  // EARLY RETURN 2: Show blocked message for sanctioned geos
-  // CRITICAL: This prevents ANY payment UI from being shown
-  if (isSanctioned) {
-    return (
-      <DashboardLayout title={t('pricing.title')} isPublic>
-        <div className="max-w-4xl mx-auto px-4 py-12">
-          <PaymentsUnavailableNotice />
-        </div>
-      </DashboardLayout>
-    );
-  }
+
 
   // EARLY RETURN 3: Show loading while fetching plans (only for allowed geos)
   if (loading) {
@@ -427,6 +437,7 @@ export default function PricingPage() {
               currentPlanPrice={activePlans.find(p => p.id === currentPlanId)?.price || 0}
               subscriptionStatus={usage?.subscription?.status}
               t={t}
+              isSanctioned={isSanctioned === true}
             />
           ))}
         </div>

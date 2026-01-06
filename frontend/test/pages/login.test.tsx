@@ -42,11 +42,11 @@ describe('LoginPage - error handling', () => {
         window.location = { ...originalLocation, href: '', origin: 'http://localhost:3000' } as any;
 
         // Mock alert
-        alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { });
+        alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { }) as any;
     });
 
     afterEach(() => {
-        window.location = originalLocation;
+        window.location = originalLocation as any;
         alertSpy.mockRestore();
         vi.clearAllMocks();
     });
