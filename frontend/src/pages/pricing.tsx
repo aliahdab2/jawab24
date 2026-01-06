@@ -161,7 +161,9 @@ function PlanCard({
               {t('payment.unavailable.message')}
             </p>
             <a
-              href="mailto:support@jawab24.com"
+              href={`https://wa.me/46700224720?text=${encodeURIComponent(t('landing.footer.whatsappMessage'))}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-xs text-brand-600 font-bold hover:underline"
             >
               {t('payment.unavailable.supportLink')}
