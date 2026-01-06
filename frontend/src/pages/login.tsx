@@ -44,8 +44,8 @@ export default function LoginPage() {
       // Use locale-specific callback URL (standard best practice)
       // Arabic (default): /auth/callback
       // English: /en/auth/callback
-      const localePath = language === 'ar' ? '' : `/ ${language} `;
-      const redirectUri = encodeURIComponent(`${window.location.origin}${localePath} /auth/callback`);
+      const localePath = language === 'ar' ? '' : `/${language}`;
+      const redirectUri = encodeURIComponent(`${window.location.origin}${localePath}/auth/callback`);
       // Using minimal scopes that work in Development mode
       // - email: Get user's email address (required for account notifications)
       // - pages_*: Manage Facebook pages
