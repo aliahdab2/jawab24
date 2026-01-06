@@ -55,6 +55,7 @@ const server = fastify({
     bodyLimit: 10485760, // 10MB
     requestIdHeader: 'x-request-id',
     requestIdLogLabel: 'requestId',
+    trustProxy: true, // Critical: Trust Nginx proxy headers to get real client IP
 });
 
 // Add rawBody support for Stripe webhooks

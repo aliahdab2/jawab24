@@ -8,7 +8,7 @@ import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 
 import { Button, BrandLogo } from '@/components/ui';
-import { CheckCircle2, Loader2, ArrowRight, ArrowLeft, MessageCircle } from 'lucide-react';
+import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
 
 export default function CheckoutPage() {

@@ -1,9 +1,9 @@
+
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import {
   Facebook,
-  MessageCircle,
   Zap,
   ShieldCheck,
   Sparkles,
@@ -20,7 +20,7 @@ import { BRAND_ASSETS } from '@/constants/brand';
 export default function LoginPage() {
   const router = useRouter();
   const { t, language, setLanguage } = useTranslation();
-  const { displayVersion } = useVersion();
+
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
 
@@ -44,8 +44,8 @@ export default function LoginPage() {
       // Use locale-specific callback URL (standard best practice)
       // Arabic (default): /auth/callback
       // English: /en/auth/callback
-      const localePath = language === 'ar' ? '' : `/${language}`;
-      const redirectUri = encodeURIComponent(`${window.location.origin}${localePath}/auth/callback`);
+      const localePath = language === 'ar' ? '' : `/ ${language} `;
+      const redirectUri = encodeURIComponent(`${window.location.origin}${localePath} /auth/callback`);
       // Using minimal scopes that work in Development mode
       // - email: Get user's email address (required for account notifications)
       // - pages_*: Manage Facebook pages
