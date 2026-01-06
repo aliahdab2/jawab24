@@ -319,7 +319,7 @@
   "settings.publicReplyPlaceholder": "الافتراضي: تم الرد في رسالة خاصة 📥",
   "settings.commentsAutoReply": "الرد على التعليقات",
   "settings.commentsAutoReplyDesc": "الرد التلقائي على تعليقات صفحتك",
-  "settings.commentsAutoReplyHelper": "عند التفعيل، سيرد جواب24 تلقائياً على التعليقات الجديدة.",
+  "settings.commentsAutoReplyHelper": "عند التفعيل، اختر كيفية الرد: علنياً، خاصاً، أو كليهما.",
   "settings.messagesAutoReply": "الرد على الرسائل الخاصة",
   "settings.messagesAutoReplyDesc": "تفعيل الرد التلقائي على الرسائل في صندوق الوارد",
   "settings.businessHours": "الرد خلال ساعات العمل فقط",

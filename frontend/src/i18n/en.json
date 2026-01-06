@@ -317,7 +317,7 @@
   "settings.publicReplyPlaceholder": "Default: Sent you a private message 📥",
   "settings.commentsAutoReply": "Reply to Comments",
   "settings.commentsAutoReplyDesc": "Auto reply to comments on your page",
-  "settings.commentsAutoReplyHelper": "When enabled, Jawab24 will automatically respond to new comments.",
+  "settings.commentsAutoReplyHelper": "When enabled, choose how to reply: publicly, privately, or both.",
   "settings.messagesAutoReply": "Reply to Messages",
   "settings.messagesAutoReplyDesc": "Auto reply to private messages",
   "settings.businessHours": "Business Hours Only",
