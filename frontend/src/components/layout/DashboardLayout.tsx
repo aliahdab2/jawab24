@@ -91,7 +91,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             <Link href="/landing" className="flex items-center gap-2 group">
               <BrandLogo
                 variant="vector"
-                className="w-8 h-8 rounded-lg shadow-md shadow-brand-500/20 group-hover:rotate-6 transition-transform"
+                className="w-8 h-8 group-hover:rotate-6 transition-transform"
               />
               <span className="font-display font-bold text-lg tracking-tight text-surface-900">{BRAND_ASSETS.meta.appName}</span>
             </Link>
