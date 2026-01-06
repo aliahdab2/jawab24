@@ -198,35 +198,40 @@ export default function DashboardPage() {
         description={t('dashboard.overview')}
       />
 
-      {/* Stats Grid - Simplified to 3 cards with more visual interest */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-12">
+
+      {/* Stats Grid - Compact horizontal layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         {stats.map((stat, i) => (
           <Card
             key={stat.nameKey}
             hover
-            className="animate-slide-up relative overflow-hidden group border-none shadow-xl shadow-surface-200/50 bg-white"
+            className="animate-slide-up relative overflow-hidden group border-none shadow-lg shadow-surface-200/30 bg-white"
             style={{ animationDelay: `${i * 0.1}s` } as React.CSSProperties}
-            padding="lg"
+            padding="none"
           >
             {/* Background decoration */}
-            <div className={`absolute -end-6 -bottom-6 w-32 h-32 rounded-full opacity-[0.03] transition-all duration-700 group-hover:scale-150 group-hover:opacity-[0.08] ${stat.color === 'brand' ? 'bg-brand-500' :
+            <div className={`absolute -end-4 -bottom-4 w-24 h-24 rounded-full opacity-[0.03] transition-all duration-700 group-hover:scale-125 group-hover:opacity-[0.06] ${stat.color === 'brand' ? 'bg-brand-500' :
               stat.color === 'emerald' ? 'bg-emerald-500' :
                 'bg-amber-500'
               }`}></div>
 
-            <div className="relative z-10 flex flex-col items-center">
-              <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-6 transition-all duration-500 group-hover:rotate-12 group-hover:scale-110 shadow-inner ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600 border border-brand-100/50' :
-                stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' :
-                  'bg-amber-50 text-amber-600 border border-amber-100/50'
+            {/* Horizontal layout: icon on left, content on right */}
+            <div className="relative z-10 flex items-center gap-4 p-4">
+              {/* Icon */}
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-110 ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600' :
+                stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
+                  'bg-amber-50 text-amber-600'
                 }`}>
-                <stat.icon className="w-10 h-10" />
+                <stat.icon className="w-6 h-6" />
               </div>
-              <p className="text-5xl font-display font-extrabold text-surface-900 mb-2 tracking-tighter">
-                {stat.value}
-              </p>
-              <p className="text-xs font-bold text-surface-400 uppercase tracking-[0.2em]">{t(stat.nameKey)}</p>
-              <div className="mt-4 px-4 py-1.5 rounded-full bg-surface-50 border border-surface-100 text-[10px] font-bold text-surface-500 uppercase tracking-widest group-hover:bg-brand-50 group-hover:text-brand-600 group-hover:border-brand-100 transition-all">
-                {t(stat.descriptionKey)}
+
+              {/* Number + Label */}
+              <div className="flex-1 min-w-0">
+                <p className="text-3xl font-display font-extrabold text-surface-900 leading-none mb-1 tracking-tight">
+                  {stat.value}
+                </p>
+                <p className="text-[10px] font-bold text-surface-400 uppercase tracking-wider truncate">{t(stat.nameKey)}</p>
+                <p className="text-[9px] text-surface-400 mt-0.5 leading-tight line-clamp-1">{t(stat.descriptionKey)}</p>
               </div>
             </div>
           </Card>
