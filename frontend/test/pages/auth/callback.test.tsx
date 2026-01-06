@@ -20,6 +20,14 @@ vi.mock('@/lib/store', () => ({
     })),
 }));
 
+// Mock translations
+vi.mock('@/i18n', () => ({
+    useTranslation: () => ({
+        t: (key: string) => key, // Return the key itself as translation
+        language: 'ar',
+    }),
+}));
+
 describe('AuthCallback - OAuth edge cases', () => {
     let mockPush: ReturnType<typeof vi.fn>;
     let mockSetAuth: ReturnType<typeof vi.fn>;
@@ -61,7 +69,7 @@ describe('AuthCallback - OAuth edge cases', () => {
         render(<AuthCallback />);
 
         // Should show loading spinner
-        expect(screen.getByText(/جاري تسجيل الدخول/i)).toBeInTheDocument();
+        expect(screen.getByText('auth.loggingIn')).toBeInTheDocument();
 
         // Should not make API call
         expect(fetchMock).not.toHaveBeenCalled();

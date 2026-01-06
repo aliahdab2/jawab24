@@ -27,7 +27,7 @@ export default function AuthCallback() {
 
     if (fbError) {
       authAttemptedRef.current = true;
-      setError('Facebook login was cancelled or failed.');
+      setError(t('auth.loginCancelled'));
       setTimeout(() => routerRef.current.push('/login'), 3000);
       return;
     }
@@ -46,7 +46,7 @@ export default function AuthCallback() {
 
       // Create a timeout promise (15 seconds)
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Login request timed out. Please try again.')), 15000);
+        setTimeout(() => reject(new Error(t('auth.loginTimeout'))), 15000);
       });
 
       // Race between fetch and timeout
@@ -67,7 +67,7 @@ export default function AuthCallback() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || 'Authentication failed');
+        throw new Error(data.message || t('auth.loginError'));
       }
 
       const data = await response.json();
@@ -95,10 +95,11 @@ export default function AuthCallback() {
         return;
       }
       console.error('Auth error:', err);
-      setError(err instanceof Error ? err.message : 'Authentication failed. Please try again.');
+      // Use translation for generic error if custom message isn't set, mainly attempting fallback
+      setError(err instanceof Error ? err.message : t('auth.loginError'));
       setTimeout(() => routerRef.current.push('/login'), 3000);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (router.isReady) {
@@ -129,7 +130,7 @@ export default function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-surface-50">
       <div className="text-center">
         <PageSpinner />
-        <p className="mt-4 text-surface-500">جاري تسجيل الدخول...</p>
+        <p className="mt-4 text-surface-500">{t('auth.loggingIn')}</p>
       </div>
     </div>
   );
