@@ -1,6 +1,7 @@
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
 import Redis from 'ioredis';
 import dotenv from 'dotenv';
@@ -102,6 +103,14 @@ const start = async () => {
 
         await server.register(helmet, {
             contentSecurityPolicy: false, // Disable for API
+        });
+
+        // Register compression for better performance on poor connections
+        // Reduces response sizes by 60-70%
+        await server.register(compress, {
+            global: true,
+            threshold: 1024, // Only compress responses > 1KB
+            encodings: ['br', 'gzip', 'deflate'], // Prefer brotli, fallback to gzip
         });
 
         // Register health and version routes BEFORE rate limit to exempt them

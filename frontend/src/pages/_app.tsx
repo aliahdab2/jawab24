@@ -25,8 +25,12 @@ export default function App({ Component, pageProps }: AppProps) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 60 * 1000,
-        refetchOnWindowFocus: false,
+        staleTime: 5 * 60 * 1000, // 5 minutes - reduce refetches on poor connections
+        gcTime: 10 * 60 * 1000, // 10 minutes - keep data in cache longer
+        refetchOnWindowFocus: false, // Don't refetch on window focus
+        refetchOnReconnect: true, // Do refetch when connection is restored
+        retry: 2, // Retry failed queries twice
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff
       },
     },
   }));

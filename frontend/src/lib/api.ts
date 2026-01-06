@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -17,6 +18,12 @@ export const publicApi = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Add retry logic and timeout to both instances
+addRetryInterceptor(api, { retries: 3, retryDelay: 1000 });
+addRetryInterceptor(publicApi, { retries: 3, retryDelay: 1000 });
+addTimeoutConfig(api, 30000); // 30 seconds
+addTimeoutConfig(publicApi, 30000);
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
