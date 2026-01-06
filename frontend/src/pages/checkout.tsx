@@ -116,7 +116,7 @@ export default function CheckoutPage() {
             <Link href="/" className="flex items-center gap-3">
               <BrandLogo
                 variant="main"
-                className="w-10 h-10 rounded-xl shadow-lg"
+                className="w-10 h-10"
               />
               <span className="font-display font-bold text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
