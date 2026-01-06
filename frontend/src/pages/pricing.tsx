@@ -158,13 +158,13 @@ function PlanCard({
         {isSanctioned ? (
           <div className="text-center p-3 bg-slate-50 rounded-xl border border-slate-100">
             <p className="text-xs font-bold text-slate-500 mb-1">
-              Payments not available in your region
+              {t('payment.unavailable.message')}
             </p>
             <a
               href="mailto:support@jawab24.com"
               className="text-xs text-brand-600 font-bold hover:underline"
             >
-              Contact Support
+              {t('payment.unavailable.supportLink')}
             </a>
           </div>
         ) : (

@@ -642,6 +642,7 @@
   "payment.unavailable.title": "المدفوعات غير متاحة في منطقتك",
   "payment.unavailable.message": "بسبب المتطلبات التنظيمية، معالجة المدفوعات غير متاحة في موقعك الجغرافي في الوقت الحالي.",
   "payment.unavailable.support": "إذا كنت تعتقد أن هذا خطأ، يرجى الاتصال بالدعم.",
+  "payment.unavailable.supportLink": "تواصل مع الدعم",
   "plans.month": "شهرياً",
   "plans.pages": "صفحات",
   "plans.aiReplies": "رد ذكي شهرياً",

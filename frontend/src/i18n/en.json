@@ -640,6 +640,7 @@
   "payment.unavailable.title": "Payments are not available in your region",
   "payment.unavailable.message": "Due to regulatory requirements, payment processing is not available in your geographic location at this time.",
   "payment.unavailable.support": "If you believe this is an error, please contact support.",
+  "payment.unavailable.supportLink": "Contact Support",
   "plans.month": "month",
   "plans.pages": "Pages",
   "plans.aiReplies": "AI Replies per month",
