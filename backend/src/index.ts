@@ -20,6 +20,7 @@ import versionRoutes from './routes/version';
 import plansRoutes from './routes/plans';
 import subscriptionsRoutes from './routes/subscriptions';
 import paymentRoutes from './routes/payment';
+import geoRoutes from './routes/geo';
 import { errorHandler } from './middleware/errorHandler';
 import { requestIdMiddleware } from './middleware/requestId';
 import { validateEnv } from './utils/env';
@@ -80,6 +81,10 @@ const start = async () => {
         // Add request ID middleware (must be first)
         server.addHook('onRequest', requestIdMiddleware);
 
+        // Add geo middleware (must be early for sanctions checking)
+        const { geoMiddleware } = await import('./middleware/geo');
+        server.addHook('onRequest', geoMiddleware);
+
         // Register plugins
         // CORS: Environment-based origin configuration
         // - Production: Only allow FRONTEND_URL (required in production)
@@ -138,6 +143,7 @@ const start = async () => {
         await server.register(plansRoutes, { prefix: '/plans' });
         await server.register(subscriptionsRoutes, { prefix: '/subscription' });
         await server.register(paymentRoutes, { prefix: '/payment' });
+        await server.register(geoRoutes, { prefix: '/geo' });
 
         const port = parseInt(process.env.PORT || '3000', 10);
         const host = '0.0.0.0';

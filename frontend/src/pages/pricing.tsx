@@ -9,6 +9,8 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { Check, X, Zap, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
+import { isUserSanctioned } from '@/utils/geoCheck';
+import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 
 function PlanCard({
   plan,
@@ -231,6 +233,16 @@ export default function PricingPage() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
+  const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null); // null = checking
+
+  // SANCTIONS CHECK: Check geo on page load
+  useEffect(() => {
+    const checkGeo = async () => {
+      const sanctioned = await isUserSanctioned();
+      setIsSanctioned(sanctioned);
+    };
+    checkGeo();
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -272,6 +284,12 @@ export default function PricingPage() {
   }, [isAuthenticated]);
 
   const handleSelectPlan = async (planId: string) => {
+    // SANCTIONS CHECK: Do not proceed if sanctioned
+    if (isSanctioned) {
+      console.warn('[Pricing] Blocked: user is in sanctioned jurisdiction');
+      return;
+    }
+
     // Find the selected plan
     const selectedPlan = plans.find(p => p.id === planId);
     if (!selectedPlan) return;
@@ -309,6 +327,30 @@ export default function PricingPage() {
     router.push(`/checkout?planId=${planId}`);
   };
 
+  // EARLY RETURN 1: Show loading while checking geo
+  if (isSanctioned === null) {
+    return (
+      <DashboardLayout title={t('pricing.title')} isPublic>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <PageSpinner />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // EARLY RETURN 2: Show blocked message for sanctioned geos
+  // CRITICAL: This prevents ANY payment UI from being shown
+  if (isSanctioned) {
+    return (
+      <DashboardLayout title={t('pricing.title')} isPublic>
+        <div className="max-w-4xl mx-auto px-4 py-12">
+          <PaymentsUnavailableNotice />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // EARLY RETURN 3: Show loading while fetching plans (only for allowed geos)
   if (loading) {
     return (
       <DashboardLayout title={t('pricing.title')} isPublic>
@@ -318,6 +360,8 @@ export default function PricingPage() {
       </DashboardLayout>
     );
   }
+
+  // NORMAL PRICING FLOW - Only reachable if NOT sanctioned
 
   const currentPlanId = usage?.subscription?.plan?.id;
   const hasActiveSubscription = Boolean(currentPlanId);

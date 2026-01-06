@@ -4,6 +4,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { isUserSanctioned } from '@/utils/geoCheck';
+import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 
 import { Button, BrandLogo } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft, MessageCircle } from 'lucide-react';
@@ -18,13 +20,29 @@ export default function CheckoutPage() {
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<any>(null);
   const [fetchError, setFetchError] = useState(false);
+  const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null); // null = checking
 
   // Extract translated string before useEffect to avoid dependency on t
   const errorLoadPlanMessage = t('checkout.errorLoadPlan');
 
+  // SANCTIONS CHECK: Check geo on page load
+  useEffect(() => {
+    const checkGeo = async () => {
+      const sanctioned = await isUserSanctioned();
+      setIsSanctioned(sanctioned);
+    };
+    checkGeo();
+  }, []);
+
   useEffect(() => {
     // Prevent re-fetching if already loaded or errored
     if (plan || fetchError || !planId) return;
+
+    // Do not fetch plan if sanctioned (will show blocked message)
+    if (isSanctioned === true) return;
+
+    // Wait for geo check to complete
+    if (isSanctioned === null) return;
 
     const fetchPlan = async () => {
       try {
@@ -50,10 +68,16 @@ export default function CheckoutPage() {
     };
 
     fetchPlan();
-  }, [planId, plan, fetchError, errorLoadPlanMessage]);
+  }, [planId, plan, fetchError, errorLoadPlanMessage, isSanctioned, router]);
 
   const handleCheckout = async () => {
     if (!planId) return;
+
+    // SANCTIONS CHECK: Do not proceed if sanctioned
+    if (isSanctioned) {
+      console.warn('[Checkout] Blocked: user is in sanctioned jurisdiction');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -66,6 +90,7 @@ export default function CheckoutPage() {
       }
 
       // Create checkout session (uses authenticated api client)
+      // Backend will also check geo and return 403 if sanctioned
       const response = await api.post('/payment/create-checkout-session', {
         planId,
         successUrl: `${window.location.origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -81,6 +106,13 @@ export default function CheckoutPage() {
 
       // Handle specific error cases
       const errorData = err.response?.data;
+
+      // Handle sanctions block from backend
+      if (errorData?.code === 'SANCTIONED_GEO_BLOCK' || errorData?.code === 'GEO_VERIFICATION_REQUIRED') {
+        setIsSanctioned(true);
+        return;
+      }
+
       if (errorData?.code === 'EMAIL_REQUIRED') {
         // Email is missing - redirect to complete profile then back to checkout
         router.push(`/complete-profile?redirect=/checkout?planId=${planId}`);
@@ -92,6 +124,56 @@ export default function CheckoutPage() {
     }
   };
 
+  // EARLY RETURN 1: Show loading while checking geo
+  if (isSanctioned === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
+      </div>
+    );
+  }
+
+  // EARLY RETURN 2: Show blocked message for sanctioned geos
+  // CRITICAL: This prevents ANY Stripe code from being reachable
+  if (isSanctioned) {
+    return (
+      <>
+        <Head>
+          <title>{t('checkout.title')} - Jawab24</title>
+          <meta name="robots" content="noindex, follow" />
+        </Head>
+
+        <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4">
+          <div className="max-w-3xl mx-auto">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <Link href="/">
+                <BrandLogo variant="main" className="w-10 h-10 mx-auto mb-4" />
+              </Link>
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                {t('checkout.title')}
+              </h1>
+            </div>
+
+            {/* Blocked Message */}
+            <div className="py-12">
+              <PaymentsUnavailableNotice />
+              <div className="mt-8 text-center">
+                <Link href="/pricing">
+                  <Button variant="secondary">
+                    <ArrowLeft className="w-4 h-4 ltr:mr-2 rtl:ml-2" />
+                    {t('checkout.backToPricing')}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // EARLY RETURN 3: Show loading while fetching plan (only for allowed geos)
   if (!plan && !error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -100,6 +182,7 @@ export default function CheckoutPage() {
     );
   }
 
+  // NORMAL CHECKOUT FLOW - Only reachable if NOT sanctioned
   return (
     <>
       <Head>

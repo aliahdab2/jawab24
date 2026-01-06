@@ -33,11 +33,44 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
+            // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
+            const { isSanctionedGeo } = await import('../utils/sanctions');
+            const { shouldBlockUnknownGeo } = await import('../middleware/geo');
+
+            // Check if geo is sanctioned
+            if (request.geo && isSanctionedGeo(request.geo)) {
+                request.log.warn({
+                    userId,
+                    geo: request.geo,
+                    route: '/payment/create-checkout-session',
+                }, 'Payment blocked: sanctioned jurisdiction');
+
+                return reply.status(403).send({
+                    error: 'Payments are not available in your region',
+                    code: 'SANCTIONED_GEO_BLOCK',
+                });
+            }
+
+            // Safe-by-default: Block if geo is unknown/unreliable
+            if (shouldBlockUnknownGeo(request.geo)) {
+                request.log.warn({
+                    userId,
+                    geo: request.geo,
+                    route: '/payment/create-checkout-session',
+                }, 'Payment blocked: unknown geo (safe-by-default)');
+
+                return reply.status(403).send({
+                    error: 'Unable to process payment at this time',
+                    code: 'GEO_VERIFICATION_REQUIRED',
+                });
+            }
+
             const { planId, successUrl, cancelUrl } = request.body;
 
             if (!planId) {
                 return reply.status(400).send({ error: 'Plan ID is required' });
             }
+
 
             // Get user
             const [user] = await db.select().from(users).where(eq(users.id, userId));
@@ -223,6 +256,36 @@ export class PaymentController {
             const userId = (request as AuthenticatedRequest).user?.userId;
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
+            }
+
+            // SANCTIONS CHECK: Block billing portal access for sanctioned jurisdictions
+            const { isSanctionedGeo } = await import('../utils/sanctions');
+            const { shouldBlockUnknownGeo } = await import('../middleware/geo');
+
+            if (request.geo && isSanctionedGeo(request.geo)) {
+                request.log.warn({
+                    userId,
+                    geo: request.geo,
+                    route: '/payment/billing-portal',
+                }, 'Billing portal blocked: sanctioned jurisdiction');
+
+                return reply.status(403).send({
+                    error: 'Payments are not available in your region',
+                    code: 'SANCTIONED_GEO_BLOCK',
+                });
+            }
+
+            if (shouldBlockUnknownGeo(request.geo)) {
+                request.log.warn({
+                    userId,
+                    geo: request.geo,
+                    route: '/payment/billing-portal',
+                }, 'Billing portal blocked: unknown geo');
+
+                return reply.status(403).send({
+                    error: 'Unable to process payment at this time',
+                    code: 'GEO_VERIFICATION_REQUIRED',
+                });
             }
 
             // Get subscription with Stripe customer ID

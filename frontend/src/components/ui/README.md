@@ -6,7 +6,7 @@ This directory contains the **design system components** that enforce visual con
 
 1. **Consistency beats beauty** - All pages should feel like siblings, not different products
 2. **Number-first hierarchy** - In KPI cards, numbers are always the primary visual element
-3. **Icons support, never dominate** - Icons at 40% opacity, supporting role only
+3. **Icons as Visual Anchors** - Icons are prominent (24px), inside colored containers (48px) to provide quick visual recognition
 4. **Intentional empty space** - Empty states guide users, they don't just fill space
 
 ## 📦 Components
@@ -14,12 +14,13 @@ This directory contains the **design system components** that enforce visual con
 ### `KpiCard.tsx`
 **Purpose**: Standardized KPI/stat card component  
 **Locked Specs**:
-- Number: 28px, weight 600
-- Label: 12px (text-xs), ~70% opacity
-- Icon: 16px, 40% opacity
+- Number: 30px, weight 700 (bold), text-surface-900
+- Label: 12px (text-xs), medium, text-surface-500
+- Icon: 24px (w-6 h-6)
+- Icon Container: 48px (w-12 h-12), colored bg + shadow
 - Shadow: `0 10px 30px rgba(0,0,0,0.05)`
-- Padding: `px-5 py-3.5`
-- Hover: lift 2px, 150ms transition
+- Padding: `px-5 py-4`
+- Hover: lift 2px, 150ms transition, icon scale/rotate
 
 **Usage**:
 ```tsx
@@ -40,8 +41,8 @@ See `/constants/designTokens.ts` for the complete token system.
 ### Key Tokens:
 - **Card Shadow**: `0 10px 30px rgba(0,0,0,0.05)`
 - **Card Radius**: `20px`
-- **KPI Number**: `28px`, weight `600`
-- **Icon Opacity**: `0.4` (40%)
+- **KPI Number**: `30px`, weight `700`
+- **Icon Size**: `24px` (in 48px container)
 - **Hover Lift**: `-2px`
 - **Transition**: `150ms ease`
 
@@ -65,6 +66,10 @@ When creating or updating a page:
 
 ## 🔄 Version History
 
+- **v1.1.0** (2026-01-06): Updated KPI Design
+  - Increased icon size to 24px
+  - Added colored icon containers (48px)
+  - Updated KpiCard component
 - **v1.0.0** (2026-01-06): Initial DNA lock
   - Created KpiCard component
   - Established design tokens
