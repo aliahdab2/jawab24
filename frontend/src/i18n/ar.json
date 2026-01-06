@@ -75,7 +75,7 @@
   "auth.termsAgreement": "بتسجيل دخولك، أنت توافق على",
   "auth.termsOfService": "شروط الخدمة",
   "auth.privacyPolicy": "سياسة الخصوصية",
-  "auth.and": "و",
+  "auth.and": " و ",
   "auth.or": "أو",
   "auth.demoMode": "الوضع التجريبي:",
   "auth.demoDescription": "اضغط هنا لاستكشاف التطبيق ببيانات تجريبية",

@@ -573,7 +573,7 @@ export default function LandingPage() {
                 <Link href="/landing" className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-8 group">
                   <BrandLogo
                     variant="vector"
-                    className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0"
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex-shrink-0"
                   />
                   <span className="font-display font-bold text-xl sm:text-2xl tracking-tight">{BRAND_ASSETS.meta.appName}</span>
                 </Link>
