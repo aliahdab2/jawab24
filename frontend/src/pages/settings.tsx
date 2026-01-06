@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Toggle, PageHeader, PageSpinner } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -61,10 +61,6 @@ export default function SettingsPage() {
   const { setLanguage } = useLanguage();
   const { token } = useAuthStore();
 
-  // Use ref for setLanguage to avoid dependency issues
-  const setLanguageRef = useRef(setLanguage);
-  setLanguageRef.current = setLanguage;
-
   // Show/hide advanced settings
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -120,21 +116,25 @@ export default function SettingsPage() {
         replyDelay: data.replyDelay ?? prev.replyDelay,
         dualReplyConfig: data.dualReplyConfig || { en: '', ar: '' },
       }));
-
-      // Sync language ONCE when settings load (not continuously)
-      if (data.dashboardLanguage && data.dashboardLanguage !== language) {
-        setLanguageRef.current(data.dashboardLanguage as 'ar' | 'en');
-      }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl, language]);
+  }, [token, apiUrl]);
 
+  // Fetch settings on mount
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  // Separate effect: Sync language when settings.dashboardLanguage changes
+  // This is the industry-standard pattern for side effects
+  useEffect(() => {
+    if (settings.dashboardLanguage && settings.dashboardLanguage !== language) {
+      setLanguage(settings.dashboardLanguage as 'ar' | 'en');
+    }
+  }, [settings.dashboardLanguage, language, setLanguage]);
 
   const handleSave = async () => {
     if (!token) return;
