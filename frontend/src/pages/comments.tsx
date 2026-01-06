@@ -37,7 +37,7 @@ export default function CommentsPage() {
 
   // Helper component for stats - BEST PRACTICE LAYOUT
   const StatCard = ({ title, value, icon, color, description }: { title: string; value: number; icon: React.ReactNode; color: string; description?: string }) => (
-    <Card className="border-none shadow-md shadow-surface-200/20 hover:shadow-lg transition-shadow" padding="none">
+    <Card className="border-none hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5" padding="none" style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
       <div className="px-5 py-3.5">
         {/* Number-first hierarchy */}
         <div className="flex items-baseline justify-between gap-2 mb-1">
@@ -46,10 +46,10 @@ export default function CommentsPage() {
           </p>
           {/* Icon: supporting role only (40% opacity, 16px) */}
           <div className={`opacity-40 transition-opacity hover:opacity-60 ${color === 'brand' ? 'text-brand-500' :
-            color === 'emerald' ? 'text-emerald-500' :
-              color === 'amber' ? 'text-amber-500' :
-                color === 'violet' ? 'text-violet-500' :
-                  'text-red-500'
+              color === 'emerald' ? 'text-emerald-500' :
+                color === 'amber' ? 'text-amber-500' :
+                  color === 'violet' ? 'text-violet-500' :
+                    'text-red-500'
             }`}>
             {icon}
           </div>
@@ -237,7 +237,7 @@ export default function CommentsPage() {
 
       {/* Filters & Search - Compact unified section */}
       <Card className="mb-8 border-none shadow-md shadow-surface-200/20">
-        <div className="p-4 flex flex-col gap-4">
+        <div className="p-3.5 flex flex-col gap-3.5">
           <div className="relative group">
             <Search
               className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400 group-focus-within:text-brand-500 transition-colors"
@@ -378,19 +378,19 @@ export default function CommentsPage() {
         </div>
       ) : (
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl" padding="lg">
-          <div className="py-12 text-center">
+          <div className="py-10 text-center">
             <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
-              <MessageSquare className="w-8 h-8 text-surface-300" />
+              <MessageSquare className="w-8 h-8 text-surface-300 opacity-60" />
             </div>
-            <p className="text-lg font-semibold text-surface-700 mb-2">
+            <p className="text-base font-semibold text-surface-600 mb-2">
               {searchQuery ? t('common.noData') : t('comments.noComments')}
             </p>
-            <p className="text-sm text-surface-500 mb-6">
+            <p className="text-sm text-surface-500 mb-5">
               {searchQuery ? t('comments.tryDifferentSearch') : t('comments.noCommentsDesc')}
             </p>
             {!searchQuery && (
               <Link href="/pages">
-                <Button variant="primary" size="sm">
+                <Button variant="primary" size="sm" className="py-2" style={{ boxShadow: '0 8px 24px rgba(20, 184, 166, 0.2)' }}>
                   {t('comments.connectPage')}
                 </Button>
               </Link>
