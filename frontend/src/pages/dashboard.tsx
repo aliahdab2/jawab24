@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Badge, PageHeader, PageSpinner, Button } from '@/components/ui';
+import { Card, Badge, PageHeader, Button, Skeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
@@ -173,11 +173,59 @@ export default function DashboardPage() {
     setShowOnboarding(false);
   };
 
+  // Dashboard Skeleton Loading State
   if (loading) {
     return (
       <DashboardLayout title={t('dashboard.title')}>
-        <div className="flex items-center justify-center h-64">
-          <PageSpinner />
+        <PageHeader title={<Skeleton width={200} height={32} />} description={<Skeleton width={300} height={20} />} />
+
+        {/* Stats Grid Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white p-5 rounded-3xl border border-surface-100 shadow-sm flex justify-between items-center h-[100px]">
+              <div>
+                <Skeleton width={80} height={36} className="mb-2 rounded-lg" />
+                <Skeleton width={120} height={16} />
+              </div>
+              <Skeleton width={48} height={48} variant="rectangular" className="rounded-2xl" />
+            </div>
+          ))}
+        </div>
+
+        {/* Content Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-3xl border border-surface-100 shadow-sm h-[400px] p-8 space-y-6">
+              <div className="flex justify-between">
+                <div className="space-y-2">
+                  <Skeleton width={180} height={28} />
+                  <Skeleton width={240} height={16} />
+                </div>
+                <Skeleton width={100} height={36} className="rounded-xl" />
+              </div>
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex gap-4">
+                  <Skeleton width={40} height={40} variant="circular" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton width="60%" height={16} />
+                    <Skeleton width="90%" height={14} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-8">
+            <div className="bg-white rounded-3xl border border-surface-100 shadow-sm h-[380px] p-6 lg:p-8 flex flex-col items-center justify-center text-center space-y-4">
+              <Skeleton width={64} height={64} variant="rectangular" className="rounded-2xl" />
+              <Skeleton width={150} height={24} />
+              <Skeleton width={200} height={16} />
+              <div className="w-full space-y-4 pt-4">
+                <Skeleton width="100%" height={8} />
+                <Skeleton width="100%" height={8} />
+              </div>
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -231,8 +279,8 @@ export default function DashboardPage() {
               </div>
 
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/20' :
-                  stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/20' :
-                    'bg-amber-50 text-amber-600 shadow-amber-500/20'
+                stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/20' :
+                  'bg-amber-50 text-amber-600 shadow-amber-500/20'
                 }`}>
                 <stat.icon className="w-6 h-6" />
               </div>

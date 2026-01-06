@@ -23,6 +23,8 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import type { Comment } from '@jawab24/shared';
 
+import { commentsApi, aiApi } from '@/lib/api';
+
 type FilterType = 'all' | 'replied' | 'pending' | 'needs_attention';
 
 export default function CommentsPage() {
@@ -34,6 +36,12 @@ export default function CommentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  // Reply State
+  const [replyText, setReplyText] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState<string>('');
 
   // Helper component for stats - BEST PRACTICE LAYOUT
   const StatCard = ({ title, value, icon, color, description: _description }: { title: string; value: number; icon: React.ReactNode; color: string; description?: string }) => (
@@ -138,6 +146,67 @@ export default function CommentsPage() {
       return format(new Date(dateValue), 'PPp', { locale: language === 'ar' ? ar : enUS });
     } catch {
       return String(dateValue);
+    }
+  };
+
+  const handleGenerateAi = async () => {
+    if (!selectedComment) return;
+    setIsGenerating(true);
+    setGenerationStatus(t('common.loading'));
+
+    try {
+      // 1. Start Async Job
+      const { data: job } = await aiApi.generateAsync({
+        comment: selectedComment.message,
+        language: selectedComment.detectedLanguage || 'en',
+        context: {
+          // context is optional, omitting strictly typed missing fields for now
+        }
+      });
+
+      // 2. Poll for Status
+      const interval = setInterval(async () => {
+        try {
+          const { data: status } = await aiApi.getJobStatus(job.jobId);
+
+          if (status.status === 'completed' && status.result) {
+            clearInterval(interval);
+            setReplyText(status.result.reply);
+            setIsGenerating(false);
+            setGenerationStatus('');
+          } else if (status.status === 'failed') {
+            clearInterval(interval);
+            setIsGenerating(false);
+            setGenerationStatus('Failed');
+            // toast.error('AI Generation failed');
+          } else {
+            setGenerationStatus('Generating...');
+          }
+        } catch {
+          clearInterval(interval);
+          setIsGenerating(false);
+        }
+      }, 1000);
+
+    } catch (error) {
+      console.error('AI Generation caught error', error);
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSendReply = async () => {
+    if (!selectedComment || !replyText.trim()) return;
+    setIsSending(true);
+    try {
+      await commentsApi.reply(selectedComment.id, replyText);
+      // Refresh list
+      await fetchComments();
+      setSelectedComment(null);
+      setReplyText('');
+    } catch (error) {
+      console.error('Failed to send reply', error);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -473,6 +542,44 @@ export default function CommentsPage() {
                         )}
                       </Badge>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Reply Section */}
+              {!selectedComment.replied && (
+                <div className="bg-surface-50 rounded-xl p-4 border border-surface-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="text-sm font-medium text-surface-700">{t('comments.reply')}</label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleGenerateAi}
+                      disabled={isGenerating}
+                      className={isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50'}
+                      icon={<Bot className="w-4 h-4" />}
+                    >
+                      {isGenerating ? generationStatus || t('common.loading') : t('dashboard.aiReply')}
+                    </Button>
+                  </div>
+                  <textarea
+                    className="w-full p-3 rounded-lg border border-surface-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-surface-900 placeholder:text-surface-400 resize-y"
+                    placeholder={t('comments.typeReply')}
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    disabled={isGenerating || isSending}
+                    dir="auto"
+                  />
+                  <div className="flex justify-end mt-3">
+                    <Button
+                      variant="primary"
+                      onClick={handleSendReply}
+                      loading={isSending}
+                      disabled={!replyText.trim() || isGenerating}
+                      icon={<Reply className="w-4 h-4" />}
+                    >
+                      {t('comments.sendReply')}
+                    </Button>
                   </div>
                 </div>
               )}

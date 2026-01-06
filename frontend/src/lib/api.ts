@@ -148,3 +148,12 @@ export const subscriptionApi = {
   checkRuleLimit: () => api.get('/subscription/limits/rules'),
 };
 
+// AI API
+export const aiApi = {
+  generateAsync: (data: { comment: string; language?: string; context?: any }) =>
+    api.post<{ jobId: string; status: string }>('/ai/generate-async', data),
+
+  getJobStatus: (jobId: string) =>
+    api.get<{ jobId: string; status: string; result?: any; error?: string }>(`/ai/jobs/${jobId}`),
+};
+

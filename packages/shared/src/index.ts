@@ -215,3 +215,14 @@ export interface LimitCheckResult {
   used?: number;
   remaining?: number;
 }
+
+// --- AI Worker Types ---
+export interface AiGenerateJobData {
+  commentId?: string; // Optional if just testing
+  comment: string;
+  language?: string;
+  context?: Record<string, any>;
+  type: 'reply' | 'moderation';
+}
+
+export const AI_QUEUE_NAME = 'ai-generation-queue';

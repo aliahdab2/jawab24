@@ -12,3 +12,4 @@ export { Toggle } from './Toggle';
 export { VersionBadge } from './VersionBadge';
 export { WhatsAppHelpButton } from './WhatsAppHelpButton';
 export { KpiCard } from './KpiCard';
+export { Skeleton } from './Skeleton';

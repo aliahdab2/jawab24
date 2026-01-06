@@ -97,6 +97,43 @@ const start = async () => {
         await server.listen({ port: config.port, host: '0.0.0.0' });
         server.log.info(`AI Worker listening on http://0.0.0.0:${config.port}`);
         server.log.info(`OpenAI configured: ${openaiService.isConfigured()}`);
+
+        // Initialize BullMQ Worker
+        const { Worker } = await import('bullmq');
+        const { AI_QUEUE_NAME } = await import('@jawab24/shared');
+
+        const connection = {
+            host: config.redis.host,
+            port: config.redis.port,
+            password: config.redis.password,
+        };
+
+        const worker = new Worker(AI_QUEUE_NAME, async (job) => {
+            server.log.info({ jobId: job.id }, 'Processing job');
+            const { comment, language, context } = job.data;
+            try {
+                const result = await openaiService.generateReply({ comment, language, context });
+                return result;
+            } catch (error) {
+                server.log.error({ jobId: job.id, error }, 'Job failed');
+                throw error;
+            }
+        }, {
+            connection,
+            concurrency: config.queue.concurrency
+        });
+
+        worker.on('completed', (job) => {
+            server.log.info({ jobId: job.id }, 'Job completed');
+        });
+
+        worker.on('failed', (job, err) => {
+            server.log.error({ jobId: job?.id, err }, 'Job failed');
+        });
+
+        // Store worker for shutdown
+        (global as any).aiWorker = worker;
+
     } catch (err) {
         server.log.error(err);
         process.exit(1);
@@ -106,9 +143,12 @@ const start = async () => {
 // Graceful shutdown handling
 const gracefulShutdown = async (signal: string) => {
     server.log.info(`${signal} received, closing AI worker gracefully...`);
-    
+
     try {
         await server.close();
+        if ((global as any).aiWorker) {
+            await (global as any).aiWorker.close();
+        }
         server.log.info('AI Worker closed successfully');
         process.exit(0);
     } catch (err) {

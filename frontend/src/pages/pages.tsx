@@ -198,8 +198,12 @@ export default function PagesPage() {
         title={t('pages.title')}
         description={t('pages.description')}
         action={
-          <Button onClick={handleSync} loading={syncing} icon={<RefreshCw className="w-4 h-4" />}>
-            {t('pages.connectPage')}
+          <Button
+            onClick={handleSync}
+            disabled={syncing}
+            icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
+          >
+            {syncing ? t('pages.syncing' as TranslationKey) : t('pages.connectPage')}
           </Button>
         }
       />
