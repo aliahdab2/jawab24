@@ -211,6 +211,8 @@
   "comments.commenterId": "معرف المعلق",
   "comments.status": "الحالة",
   "comments.close": "إغلاق",
+  "comments.tryDifferentSearch": "جرب مصطلح بحث آخر",
+  "comments.connectPage": "ربط صفحة",
   "messages.title": "الرسائل",
   "messages.description": "عرض وإدارة الرسائل الخاصة لصفحاتك",
   "messages.incoming": "الواردة",
