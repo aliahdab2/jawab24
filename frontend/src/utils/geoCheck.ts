@@ -23,6 +23,12 @@ export interface GeoCheckResponse {
  */
 export async function isUserSanctioned(): Promise<boolean> {
     try {
+        // DEV OVERRIDE: Allow simulating sanctions via localStorage
+        if (typeof window !== 'undefined' && window.localStorage.getItem('SIMULATE_SANCTIONS') === 'true') {
+            console.warn('Simulating Sanctions Mode Active');
+            return true;
+        }
+
         const response = await fetch('/api/geo/check', {
             method: 'GET',
             headers: {
