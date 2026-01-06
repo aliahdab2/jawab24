@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -34,22 +35,28 @@ export default function CommentsPage() {
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  // Helper component for stats
+  // Helper component for stats - BEST PRACTICE LAYOUT
   const StatCard = ({ title, value, icon, color, description }: { title: string; value: number; icon: React.ReactNode; color: string; description?: string }) => (
-    <Card className="text-center p-4 border-none shadow-md shadow-surface-200/50 flex flex-col items-center">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${color === 'brand' ? 'bg-brand-100 text-brand-600' :
-        color === 'emerald' ? 'bg-emerald-100 text-emerald-600' :
-          color === 'amber' ? 'bg-amber-100 text-amber-600' :
-            color === 'violet' ? 'bg-violet-100 text-violet-600' :
-              'bg-red-100 text-red-600'
-        }`}>
-        {icon}
+    <Card className="border-none shadow-md shadow-surface-200/20 hover:shadow-lg transition-shadow" padding="none">
+      <div className="px-5 py-3.5">
+        {/* Number-first hierarchy */}
+        <div className="flex items-baseline justify-between gap-2 mb-1">
+          <p className="text-[28px] font-semibold text-surface-900 leading-none tracking-tight">
+            {value.toLocaleString()}
+          </p>
+          {/* Icon: supporting role only (40% opacity, 16px) */}
+          <div className={`opacity-40 transition-opacity hover:opacity-60 ${color === 'brand' ? 'text-brand-500' :
+            color === 'emerald' ? 'text-emerald-500' :
+              color === 'amber' ? 'text-amber-500' :
+                color === 'violet' ? 'text-violet-500' :
+                  'text-red-500'
+            }`}>
+            {icon}
+          </div>
+        </div>
+        {/* Label: secondary */}
+        <p className="text-xs font-medium text-surface-500 truncate leading-tight">{title}</p>
       </div>
-      <p className="text-2xl font-bold text-surface-900">{value.toLocaleString()}</p>
-      <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest truncate w-full">{title}</p>
-      {description && (
-        <p className="text-[9px] text-surface-400 mt-1 leading-tight">{description}</p>
-      )}
     </Card>
   );
 
@@ -228,9 +235,9 @@ export default function CommentsPage() {
         <StatCard title={t('comments.needsAttention')} value={stats.needsAttention} icon={<AlertTriangle className="w-4 h-4" />} color="red" description={t('comments.needsAttentionDesc')} />
       </div>
 
-      {/* Filters & Search */}
-      <Card className="mb-8 border-none shadow-lg shadow-surface-200/50">
-        <div className="p-4 md:p-6 flex flex-col gap-6">
+      {/* Filters & Search - Compact unified section */}
+      <Card className="mb-8 border-none shadow-md shadow-surface-200/20">
+        <div className="p-4 flex flex-col gap-4">
           <div className="relative group">
             <Search
               className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400 group-focus-within:text-brand-500 transition-colors"
@@ -240,7 +247,7 @@ export default function CommentsPage() {
               placeholder={t('common.search') + '...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="py-6 ps-12 rounded-2xl bg-surface-50 border-none focus:ring-2 focus:ring-brand-500 transition-all"
+              className="py-3 ps-12 rounded-xl bg-surface-50 border-none focus:ring-2 focus:ring-brand-500 transition-all"
             />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
@@ -370,12 +377,25 @@ export default function CommentsPage() {
           })}
         </div>
       ) : (
-        <Card className="border-none shadow-xl shadow-surface-200/50 rounded-3xl">
-          <EmptyState
-            icon={MessageSquare}
-            title={t('comments.noComments')}
-            description={searchQuery ? t('common.noData') : t('comments.noCommentsDesc')}
-          />
+        <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl" padding="lg">
+          <div className="py-12 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
+              <MessageSquare className="w-8 h-8 text-surface-300" />
+            </div>
+            <p className="text-lg font-semibold text-surface-700 mb-2">
+              {searchQuery ? t('common.noData') : t('comments.noComments')}
+            </p>
+            <p className="text-sm text-surface-500 mb-6">
+              {searchQuery ? t('comments.tryDifferentSearch') : t('comments.noCommentsDesc')}
+            </p>
+            {!searchQuery && (
+              <Link href="/pages">
+                <Button variant="primary" size="sm">
+                  {t('comments.connectPage')}
+                </Button>
+              </Link>
+            )}
+          </div>
         </Card>
       )}
 

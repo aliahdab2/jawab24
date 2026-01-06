@@ -199,40 +199,45 @@ export default function DashboardPage() {
       />
 
 
-      {/* Stats Grid - Compact horizontal layout */}
+      {/* Stats Grid - Best Practice KPI Layout */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         {stats.map((stat, i) => (
           <Card
             key={stat.nameKey}
             hover
-            className="animate-slide-up relative overflow-hidden group border-none shadow-lg shadow-surface-200/30 bg-white"
-            style={{ animationDelay: `${i * 0.1}s` } as React.CSSProperties}
+            className="animate-slide-up relative overflow-hidden group border-none bg-white transition-all duration-150 hover:-translate-y-0.5"
+            style={{
+              animationDelay: `${i * 0.1}s`,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.04)'
+            } as React.CSSProperties}
             padding="none"
           >
-            {/* Background decoration */}
-            <div className={`absolute -end-4 -bottom-4 w-24 h-24 rounded-full opacity-[0.03] transition-all duration-700 group-hover:scale-125 group-hover:opacity-[0.06] ${stat.color === 'brand' ? 'bg-brand-500' :
+            {/* Subtle background decoration */}
+            <div className={`absolute -end-4 -bottom-4 w-20 h-20 rounded-full opacity-[0.08] transition-all duration-700 group-hover:scale-110 group-hover:opacity-[0.12] ${stat.color === 'brand' ? 'bg-brand-500' :
               stat.color === 'emerald' ? 'bg-emerald-500' :
                 'bg-amber-500'
               }`}></div>
 
-            {/* Horizontal layout: content on left, icon on right (reversed in RTL) */}
-            <div className="relative z-10 flex flex-row-reverse items-center gap-4 p-4">
-              {/* Icon */}
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-110 ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600' :
-                stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
-                  'bg-amber-50 text-amber-600'
-                }`}>
-                <stat.icon className="w-6 h-6" />
-              </div>
-
-              {/* Number + Label */}
-              <div className="flex-1 min-w-0">
-                <p className="text-3xl font-display font-extrabold text-surface-900 leading-none mb-1 tracking-tight">
+            {/* Number-first layout: Vertical stack with icon as supporting element */}
+            <div className="relative z-10 px-5 py-3">
+              {/* Primary: Number (largest, bold) */}
+              <div className="flex items-baseline justify-between gap-3 mb-1">
+                <p className="text-[30px] font-semibold text-surface-900 leading-none tracking-tight">
                   {stat.value}
                 </p>
-                <p className="text-[10px] font-bold text-surface-400 uppercase tracking-wider truncate">{t(stat.nameKey)}</p>
-                <p className="text-[9px] text-surface-400 mt-0.5 leading-tight line-clamp-1">{t(stat.descriptionKey)}</p>
+                {/* Supporting: Icon (reduced opacity, smaller) */}
+                <div className={`opacity-40 transition-opacity group-hover:opacity-60 ${stat.color === 'brand' ? 'text-brand-500' :
+                  stat.color === 'emerald' ? 'text-emerald-500' :
+                    'text-amber-500'
+                  }`}>
+                  <stat.icon className="w-4 h-4" />
+                </div>
               </div>
+
+              {/* Secondary: Label */}
+              <p className="text-xs font-medium text-surface-500 truncate leading-tight">
+                {t(stat.nameKey)}
+              </p>
             </div>
           </Card>
         ))}
@@ -294,12 +299,16 @@ export default function DashboardPage() {
                 </div>
               </div>
             )) : (
-              <div className="py-20 text-center">
-                <div className="w-20 h-20 rounded-3xl bg-surface-50 flex items-center justify-center mx-auto mb-6 border border-surface-100 shadow-inner">
-                  <MessageSquare className="w-10 h-10 text-surface-200" />
+              <div className="py-14 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
+                  <MessageSquare className="w-8 h-8 text-surface-300" />
                 </div>
-                <p className="text-lg font-bold text-surface-400 uppercase tracking-widest">{t('dashboard.noData')}</p>
-                <p className="text-sm font-medium text-surface-400 mt-2">{t('dashboard.noDataDesc')}</p>
+                <p className="text-base font-semibold text-surface-600 mb-4">{t('dashboard.noDataDesc')}</p>
+                <Link href="/pages">
+                  <Button variant="primary" size="sm">
+                    {t('pages.connectPage')}
+                  </Button>
+                </Link>
               </div>
             )}
           </div>
@@ -359,7 +368,8 @@ export default function DashboardPage() {
               <Link href="/pricing" className="block mt-8">
                 <Button
                   variant="primary"
-                  className="w-full shadow-2xl shadow-brand-500/30 py-7 text-lg whitespace-nowrap"
+                  className="w-full py-6 text-base whitespace-nowrap"
+                  style={{ boxShadow: '0 12px 32px rgba(20, 184, 166, 0.24)' }}
                   icon={<Sparkles className="w-5 h-5" />}
                 >
                   {t('subscription.upgradePlan')}

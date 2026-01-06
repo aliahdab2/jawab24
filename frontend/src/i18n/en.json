@@ -209,6 +209,8 @@
   "comments.commenterId": "Commenter ID",
   "comments.status": "Status",
   "comments.close": "Close",
+  "comments.tryDifferentSearch": "Try a different search term",
+  "comments.connectPage": "Connect a Page",
   "messages.title": "Messages",
   "messages.description": "View and manage private messages for your pages",
   "messages.incoming": "Incoming",
