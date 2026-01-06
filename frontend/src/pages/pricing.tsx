@@ -10,7 +10,7 @@ import { useAuthStore } from '@/lib/store';
 import { Check, X, Zap, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned } from '@/utils/geoCheck';
-import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
+
 
 function PlanCard({
   plan,
