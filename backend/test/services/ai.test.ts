@@ -37,6 +37,15 @@ vi.mock('drizzle-orm', () => ({
     eq: vi.fn(),
 }));
 
+// Mock Redis
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn(),
+        set: vi.fn(),
+        quit: vi.fn(),
+    },
+}));
+
 // Mock config
 vi.mock('../../src/config', () => ({
     config: {

@@ -25,6 +25,7 @@ import geoRoutes from './routes/geo';
 import { errorHandler } from './middleware/errorHandler';
 import { requestIdMiddleware } from './middleware/requestId';
 import { validateEnv } from './utils/env';
+import { redis } from './lib/redis';
 
 dotenv.config();
 
@@ -174,6 +175,7 @@ const gracefulShutdown = async (signal: string) => {
 
     try {
         await server.close();
+        await redis.quit();
         console.log('✅ Server closed successfully');
         process.exit(0);
     } catch (err) {

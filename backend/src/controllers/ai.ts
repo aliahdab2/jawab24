@@ -24,6 +24,26 @@ export class AiController {
     }
 
     /**
+     * Enqueue AI reply generation (Async)
+     * POST /ai/generate-async
+     */
+    async generateAsync(request: FastifyRequest<{ Body: AiGenerateRequest }>, reply: FastifyReply) {
+        const { comment } = request.body;
+
+        if (!comment || comment.trim().length === 0) {
+            return reply.status(400).send({ error: 'Comment is required' });
+        }
+
+        try {
+            const result = await aiService.enqueueReply(request.body);
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to enqueue AI reply' });
+        }
+    }
+
+    /**
      * Get cache statistics
      * GET /ai/cache/stats
      */

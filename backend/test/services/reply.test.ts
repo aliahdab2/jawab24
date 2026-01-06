@@ -24,6 +24,16 @@ vi.mock('../../src/services/subscriptions', () => ({
         incrementAiReplies: vi.fn().mockResolvedValue(undefined),
     }
 }));
+
+// Mock Redis
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn(),
+        set: vi.fn(),
+        quit: vi.fn(),
+    },
+}));
+
 vi.mock('axios');
 vi.mock('../../src/config', () => ({
     config: {
@@ -39,7 +49,7 @@ vi.mock('../../src/config', () => ({
 describe('Reply Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        
+
         // Default mock implementations for settingsService
         vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
         vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);

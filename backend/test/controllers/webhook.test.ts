@@ -14,6 +14,15 @@ vi.mock('../../src/services/reply', () => ({
     },
 }));
 
+// Mock Redis
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn(),
+        set: vi.fn(),
+        quit: vi.fn(),
+    },
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         facebook: {

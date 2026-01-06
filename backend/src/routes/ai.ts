@@ -8,6 +8,7 @@ export default async function aiRoutes(fastify: FastifyInstance) {
 
         // Generate AI reply
         protectedRoutes.post('/ai/generate', aiController.generate);
+        protectedRoutes.post('/ai/generate-async', aiController.generateAsync);
 
         // Cache management
         protectedRoutes.get('/ai/cache/stats', aiController.getCacheStats);

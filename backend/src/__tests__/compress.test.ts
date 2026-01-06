@@ -4,8 +4,8 @@ import compress from '@fastify/compress';
 import { promisify } from 'util';
 import { gzip, brotliCompress } from 'zlib';
 
-const gzipAsync = promisify(gzip);
-const brotliAsync = promisify(brotliCompress);
+const _gzipAsync = promisify(gzip);
+const _brotliAsync = promisify(brotliCompress);
 
 describe('Compression Middleware', () => {
     let server: FastifyInstance;
