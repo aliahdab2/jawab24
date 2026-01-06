@@ -41,7 +41,7 @@ export interface GeoLocation {
     /** ISO 3166-2 region code (e.g., 'UA-43') */
     region?: string;
     /** Source of geolocation data */
-    source?: 'cloudflare' | 'vercel' | 'nginx' | 'ipapi' | 'maxmind' | 'unknown';
+    source?: 'cloudflare' | 'vercel' | 'nginx' | 'ipapi' | 'geoip-lite' | 'maxmind' | 'unknown';
 }
 
 /**

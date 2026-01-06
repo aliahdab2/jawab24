@@ -60,18 +60,23 @@ export async function geoMiddleware(request: FastifyRequest, reply: FastifyReply
         return;
     }
 
-    // Priority 4: IP-based geolocation fallback
-    // TODO: Implement IP geolocation service (MaxMind GeoIP2, IP-API, etc.)
-    // For now, we leave geo as unknown
-    // const ip = request.ip;
-    // const geoData = await resolveIpToGeo(ip);
-    // if (geoData) {
-    //     geo.country = geoData.country;
-    //     geo.region = geoData.region;
-    //     geo.source = 'ipapi';
-    // }
+    // Priority 4: IP-based geolocation fallback (Local GeoIP Database)
+    // Using geoip-lite for fast, local, offline resolution
+    const ip = request.ip;
+    if (ip && ip !== '127.0.0.1' && ip !== '::1') {
+        const geoip = await import('geoip-lite');
+        const geoData = geoip.lookup(ip);
 
-    // Attach geo to request (may be unknown)
+        if (geoData && geoData.country) {
+            geo.country = geoData.country;
+            geo.region = geoData.region;
+            geo.source = 'geoip-lite';
+            request.geo = geo;
+            return;
+        }
+    }
+
+    // Attach geo to request (possibly unknown if IP lookup failed)
     request.geo = geo;
 
     // Log geo resolution for debugging (only in development)
