@@ -15,3 +15,5 @@ nginx/ssl/*
 # Environment files with secrets (keep only .example files)
 env/*.env
 !env/*.env.example
+*.backup
+*.tsbuildinfo
