@@ -120,6 +120,11 @@ export default function SettingsPage() {
         replyDelay: data.replyDelay ?? prev.replyDelay,
         dualReplyConfig: data.dualReplyConfig || { en: '', ar: '' },
       }));
+
+      // Sync language ONCE when settings load (not continuously)
+      if (data.dashboardLanguage && data.dashboardLanguage !== language) {
+        setLanguageRef.current(data.dashboardLanguage as 'ar' | 'en');
+      }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
     } finally {
@@ -130,13 +135,6 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
-
-  // Sync dashboard language with app language (only when dashboardLanguage changes)
-  useEffect(() => {
-    if (settings.dashboardLanguage && settings.dashboardLanguage !== language) {
-      setLanguageRef.current(settings.dashboardLanguage as 'ar' | 'en');
-    }
-  }, [settings.dashboardLanguage, language]);
 
   const handleSave = async () => {
     if (!token) return;
