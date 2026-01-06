@@ -6,9 +6,9 @@ export const BRAND_ASSETS = {
     logo: {
         small: '/brand/logo-small.png',
         large: '/brand/logo-large.png',
-        main: '/brand/logo-main.svg?v=2',
-        mainRtl: '/brand/logo-main-rtl.svg?v=2',
-        vector: '/brand/icon-vector.svg?v=2',
+        main: '/brand/logo-main.svg?v=3',
+        mainRtl: '/brand/logo-main-rtl.svg?v=3',
+        vector: '/brand/icon-vector.svg?v=3',
     },
     seo: {
         ogSocial: '/brand/og-social.png',
