@@ -14,6 +14,10 @@ vi.mock('@/lib/store', () => ({
     useAuthStore: vi.fn(() => ({
         setAuth: vi.fn(),
     })),
+    useUIStore: vi.fn(() => ({
+        language: 'ar',
+        setLanguage: vi.fn(),
+    })),
 }));
 
 describe('AuthCallback - OAuth edge cases', () => {

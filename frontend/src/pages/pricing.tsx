@@ -311,7 +311,7 @@ export default function PricingPage() {
 
   if (loading) {
     return (
-      <DashboardLayout title={t('pricing.title')}>
+      <DashboardLayout title={t('pricing.title')} isPublic>
         <div className="flex items-center justify-center min-h-[400px]">
           <PageSpinner />
         </div>
@@ -336,7 +336,7 @@ export default function PricingPage() {
         <meta property="og:description" content={t('pricing.ogDescription')} />
         <meta property="og:url" content="https://jawab24.com/pricing" />
       </Head>
-      <DashboardLayout title={t('pricing.title')}>
+      <DashboardLayout title={t('pricing.title')} isPublic>
         {/* Usage Summary if subscribed - Inline */}
         {usage && (
           <div className="flex flex-wrap items-center justify-center gap-4 mb-6 p-3 bg-brand-50 rounded-xl border border-brand-100">

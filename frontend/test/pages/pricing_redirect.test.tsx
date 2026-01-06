@@ -65,13 +65,18 @@ describe('PricingPage Navigation Logic', () => {
         (useRouter as any).mockReturnValue({
             push: mockPush,
             route: '/pricing',
+            pathname: '/pricing',
             query: {},
+            asPath: '/pricing',
         });
     });
 
     it('redirects to LOGIN when NOT authenticated', async () => {
         // Setup: Not authenticated
-        useAuthStore.setState({ isAuthenticated: false });
+        useAuthStore.setState({
+            isAuthenticated: false,
+            _hasHydrated: true
+        });
 
         render(<PricingPage />);
 
@@ -97,7 +102,10 @@ describe('PricingPage Navigation Logic', () => {
 
     it('redirects to CHECKOUT when authenticated', async () => {
         // Setup: Authenticated
-        useAuthStore.setState({ isAuthenticated: true });
+        useAuthStore.setState({
+            isAuthenticated: true,
+            _hasHydrated: true
+        });
 
         render(<PricingPage />);
 
