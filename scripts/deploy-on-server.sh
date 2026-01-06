@@ -121,17 +121,32 @@ verify_and_wait() {
         services=("backend" "frontend" "ai-worker")
         ALL_RUNNING=true
         for s in "${services[@]}"; do
-            container="jawab24-$s-$DEPLOY_ENV"
-            if ! docker ps --format '{{.Names}}' | grep -q "^$container$"; then
-                echo "❌ $container is NOT running!"
-                docker logs "$container" --tail 50 2>&1 || echo "No logs"
+            service_name="$s-$DEPLOY_ENV"
+            # Get Container ID using docker-compose
+            container_id=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "$service_name")
+            
+            if [ -z "$container_id" ]; then
+                echo "❌ Service $service_name is NOT running!"
+                # try to get logs if possible
+                docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml logs --tail 20 "$service_name" 2>&1 || echo "No logs"
                 exit 1
+            fi
+            
+            # Check if container process is actually running
+            if ! docker ps -q --no-trunc | grep -q "^$container_id$"; then
+                 echo "❌ Container $container_id ($service_name) died!"
+                 docker logs "$container_id" --tail 50 2>&1 || echo "No logs"
+                 exit 1
             fi
         done
 
         # Check health status
-        B_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-backend-$DEPLOY_ENV 2>/dev/null || echo "starting")
-        F_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' jawab24-frontend-$DEPLOY_ENV 2>/dev/null || echo "starting")
+        # We need the IDs for inspection
+        B_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "backend-$DEPLOY_ENV")
+        F_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "frontend-$DEPLOY_ENV")
+        
+        B_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' "$B_ID" 2>/dev/null || echo "starting")
+        F_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' "$F_ID" 2>/dev/null || echo "starting")
         
         echo "   Backend: $B_HEALTH, Frontend: $F_HEALTH ($WAITED/$MAX_WAIT s)"
         
@@ -153,13 +168,21 @@ run_migrations() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "🗄️  STEP 5a: Execute Database Migrations"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    container="jawab24-backend-$DEPLOY_ENV"
-    echo "   🔄 Running migrations in $container..."
-    if docker exec "$container" npm run db:migrate; then
+    
+    # Find container ID via docker-compose
+    container_id=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "backend-$DEPLOY_ENV")
+    
+    if [ -z "$container_id" ]; then
+        echo "❌ Could not find backend container for migrations!"
+        exit 1
+    fi
+
+    echo "   🔄 Running migrations in container $container_id..."
+    if docker exec "$container_id" npm run db:migrate; then
         echo "   ✅ Migrations applied successfully"
     else
         echo "   ❌ Migration failed!"
-        docker logs "$container" --tail 20 2>&1
+        docker logs "$container_id" --tail 20 2>&1
         exit 1
     fi
 }
