@@ -293,7 +293,8 @@ export default function DashboardPage() {
                 <div className="w-20 h-20 rounded-3xl bg-surface-50 flex items-center justify-center mx-auto mb-6 border border-surface-100 shadow-inner">
                   <MessageSquare className="w-10 h-10 text-surface-200" />
                 </div>
-                <p className="text-lg font-bold text-surface-400 uppercase tracking-widest">{t('common.noData')}</p>
+                <p className="text-lg font-bold text-surface-400 uppercase tracking-widest">{t('dashboard.noData')}</p>
+                <p className="text-sm font-medium text-surface-400 mt-2">{t('dashboard.noDataDesc')}</p>
               </div>
             )}
           </div>
@@ -320,6 +321,7 @@ export default function DashboardPage() {
                       </span>
                     )}
                   </h4>
+                  <p className="text-sm font-medium text-surface-500 mt-1">{t('subscription.upgradeDesc')}</p>
                 </div>
               </div>
 
