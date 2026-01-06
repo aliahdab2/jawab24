@@ -24,7 +24,7 @@ declare module 'fastify' {
  * 
  * Note: IP-based geolocation fallback (MaxMind, IP-API) can be added later.
  */
-export async function geoMiddleware(request: FastifyRequest, reply: FastifyReply) {
+export async function geoMiddleware(request: FastifyRequest, _reply: FastifyReply) {
     const geo: GeoLocation = {
         country: undefined,
         region: undefined,

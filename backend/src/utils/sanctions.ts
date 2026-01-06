@@ -71,12 +71,12 @@ export function isSanctioned(country?: string, region?: string): boolean {
     const normalizedRegion = region?.toUpperCase();
 
     // Check if country is in sanctioned list
-    if (SANCTIONED_COUNTRIES.includes(normalizedCountry as any)) {
+    if (SANCTIONED_COUNTRIES.includes(normalizedCountry as typeof SANCTIONED_COUNTRIES[number])) {
         return true;
     }
 
     // Check if region is in sanctioned list
-    if (normalizedRegion && SANCTIONED_REGIONS.includes(normalizedRegion as any)) {
+    if (normalizedRegion && SANCTIONED_REGIONS.includes(normalizedRegion as typeof SANCTIONED_REGIONS[number])) {
         return true;
     }
 
