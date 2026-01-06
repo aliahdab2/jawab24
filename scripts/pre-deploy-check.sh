@@ -46,14 +46,52 @@ else
     exit 1
 fi
 
+if npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
+else
+    echo -e "${RED}   ❌ Frontend build failed!${NC}"
+    npm run build --workspace=jawab24-frontend
+    exit 1
+fi
+
+if npm run build --workspace=jawab24-ai-worker > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ AI Worker builds successfully${NC}"
+else
+    echo -e "${RED}   ❌ AI Worker build failed!${NC}"
+    npm run build --workspace=jawab24-ai-worker
+    exit 1
+fi
+
 # 3. Run tests
 echo ""
 echo "3️⃣  Running tests..."
+# Backend Tests
+echo "   Testing Backend..."
 if npm test --workspace=jawab24-backend -- --run > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ All tests pass${NC}"
+    echo -e "${GREEN}   ✅ Backend tests pass${NC}"
 else
-    echo -e "${RED}   ❌ Tests failed!${NC}"
+    echo -e "${RED}   ❌ Backend tests failed!${NC}"
     npm test --workspace=jawab24-backend -- --run
+    exit 1
+fi
+
+# Frontend Tests
+echo "   Testing Frontend..."
+if npm test --workspace=jawab24-frontend -- --run > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Frontend tests pass${NC}"
+else
+    echo -e "${RED}   ❌ Frontend tests failed!${NC}"
+    npm test --workspace=jawab24-frontend -- --run
+    exit 1
+fi
+
+# AI Worker Tests
+echo "   Testing AI Worker..."
+if npm test --workspace=jawab24-ai-worker -- --run > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ AI Worker tests pass${NC}"
+else
+    echo -e "${RED}   ❌ AI Worker tests failed!${NC}"
+    npm test --workspace=jawab24-ai-worker -- --run
     exit 1
 fi
 
