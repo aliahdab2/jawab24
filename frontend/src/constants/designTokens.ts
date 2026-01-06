@@ -30,9 +30,9 @@ export const DESIGN_TOKENS = {
      */
     kpi: {
         /** Number font size (primary metric) */
-        numberSize: '28px',
+        numberSize: '30px',
         /** Number font weight */
-        numberWeight: 600,
+        numberWeight: 700,
         /** Number color */
         numberColor: 'text-surface-900',
 
@@ -44,19 +44,19 @@ export const DESIGN_TOKENS = {
         labelColor: 'text-surface-500',
 
         /** Icon size */
-        iconSize: '16px', // w-4 h-4
-        /** Icon opacity (supporting role) */
-        iconOpacity: 0.4,
+        iconSize: '24px', // w-6 h-6
+        /** Icon opacity (prominent role) */
+        iconOpacity: 1.0,
         /** Icon opacity on hover */
-        iconOpacityHover: 0.6,
+        iconOpacityHover: 1.0,
 
         /** Card padding horizontal */
         paddingX: '20px', // px-5
         /** Card padding vertical */
-        paddingY: '14px', // py-3.5
+        paddingY: '16px', // py-4
 
         /** Icon background opacity (if used) */
-        iconBackgroundOpacity: 0.1,
+        iconBackgroundOpacity: 1.0, // Fully colored container
     },
 
     /**
@@ -136,9 +136,9 @@ export const DESIGN_TOKENS = {
      * Explicitly distinct from Action Icons
      */
     kpiIcon: {
-        size: 16,
-        opacity: 0.4,
-        shadow: 'none',
+        size: 24,
+        opacity: 1.0,
+        shadow: 'standard',
     },
 
     /**
