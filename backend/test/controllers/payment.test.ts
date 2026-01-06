@@ -85,6 +85,7 @@ describe('Payment Controller', () => {
             mockRequest = {
                 body: { planId: 'plan_123' },
                 user: { userId: 'user_123', facebookId: 'fb_123' },
+                geo: { country: 'US' }, // Mock allowed geo for sanctions check
                 log: { error: vi.fn() },
             };
         });
@@ -488,6 +489,9 @@ describe('Payment Controller', () => {
                 externalSubscriptionId: 'sub_ext_old',
             };
 
+            // Add geo mock for sanctions check
+            mockRequest.geo = { country: 'US' };
+
             const mockDb = vi.mocked(db);
 
             // Mock user lookup
@@ -544,6 +548,7 @@ describe('Payment Controller', () => {
 
             mockRequest.user = { userId: 'user_new', facebookId: 'fb_new' };
             mockRequest.body = { planId: 'plan_starter' };
+            mockRequest.geo = { country: 'US' }; // Add geo mock for sanctions check
 
             mockDb.select
                 .mockReturnValueOnce({

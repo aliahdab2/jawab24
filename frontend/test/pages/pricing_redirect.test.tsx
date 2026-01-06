@@ -57,6 +57,11 @@ vi.mock('@/i18n', () => ({
     }),
 }));
 
+// Mock geo check to allow payments (not sanctioned)
+vi.mock('@/utils/geoCheck', () => ({
+    isUserSanctioned: vi.fn().mockResolvedValue(false),
+}));
+
 describe('PricingPage Navigation Logic', () => {
     const mockPush = vi.fn();
 
@@ -80,9 +85,12 @@ describe('PricingPage Navigation Logic', () => {
 
         render(<PricingPage />);
 
-        // Wait for plans to load. 
-        // Since price is 1000 and not logged in (no sub), logic renders 'pricing.subscribe'
-        const upgradeButton = await screen.findByText('pricing.subscribe');
+        // Wait for geo check and plans to load
+        await waitFor(() => {
+            expect(screen.queryByText('pricing.subscribe')).toBeInTheDocument();
+        });
+
+        const upgradeButton = screen.getByText('pricing.subscribe');
 
         // Action: Click upgrade
         fireEvent.click(upgradeButton);
@@ -109,8 +117,12 @@ describe('PricingPage Navigation Logic', () => {
 
         render(<PricingPage />);
 
-        // Wait for plans to load and find button
-        const upgradeButton = await screen.findByText('pricing.upgrade');
+        // Wait for geo check and plans to load
+        await waitFor(() => {
+            expect(screen.queryByText('pricing.upgrade')).toBeInTheDocument();
+        });
+
+        const upgradeButton = screen.getByText('pricing.upgrade');
 
         // Action: Click upgrade
         fireEvent.click(upgradeButton);
