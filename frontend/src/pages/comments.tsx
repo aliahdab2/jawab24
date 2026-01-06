@@ -35,7 +35,7 @@ export default function CommentsPage() {
   const [exporting, setExporting] = useState(false);
 
   // Helper component for stats
-  const StatCard = ({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) => (
+  const StatCard = ({ title, value, icon, color, description }: { title: string; value: number; icon: React.ReactNode; color: string; description?: string }) => (
     <Card className="text-center p-4 border-none shadow-md shadow-surface-200/50 flex flex-col items-center">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${color === 'brand' ? 'bg-brand-100 text-brand-600' :
         color === 'emerald' ? 'bg-emerald-100 text-emerald-600' :
@@ -47,6 +47,9 @@ export default function CommentsPage() {
       </div>
       <p className="text-2xl font-bold text-surface-900">{value.toLocaleString()}</p>
       <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest truncate w-full">{title}</p>
+      {description && (
+        <p className="text-[9px] text-surface-400 mt-1 leading-tight">{description}</p>
+      )}
     </Card>
   );
 
@@ -218,11 +221,11 @@ export default function CommentsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <StatCard title={t('dashboard.totalComments')} value={stats.total} icon={<MessageSquare className="w-4 h-4" />} color="brand" />
-        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle className="w-4 h-4" />} color="emerald" />
-        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock className="w-4 h-4" />} color="amber" />
-        <StatCard title={t('dashboard.aiReplies')} value={stats.aiReplies} icon={<Bot className="w-4 h-4" />} color="violet" />
-        <StatCard title={t('comments.needsAttention')} value={stats.needsAttention} icon={<AlertTriangle className="w-4 h-4" />} color="red" />
+        <StatCard title={t('comments.totalComments')} value={stats.total} icon={<MessageSquare className="w-4 h-4" />} color="brand" description={t('comments.totalCommentsDesc')} />
+        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle className="w-4 h-4" />} color="emerald" description={t('comments.repliedDesc')} />
+        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock className="w-4 h-4" />} color="amber" description={t('comments.pendingDesc')} />
+        <StatCard title={t('comments.aiReplies')} value={stats.aiReplies} icon={<Bot className="w-4 h-4" />} color="violet" description={t('comments.aiRepliesDesc')} />
+        <StatCard title={t('comments.needsAttention')} value={stats.needsAttention} icon={<AlertTriangle className="w-4 h-4" />} color="red" description={t('comments.needsAttentionDesc')} />
       </div>
 
       {/* Filters & Search */}
