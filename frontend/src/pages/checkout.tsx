@@ -109,7 +109,7 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-12 px-4">
+      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
@@ -135,7 +135,7 @@ export default function CheckoutPage() {
           )}
 
           {plan && (
-            <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
+            <div className="bg-white rounded-2xl p-8 mb-6" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.04)' }}>
               {/* Plan Details */}
               <div className="border-b border-surface-200 pb-6 mb-6 text-start">
                 <h2 className="text-2xl font-bold text-surface-900 mb-2">
@@ -150,7 +150,7 @@ export default function CheckoutPage() {
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-bold text-brand-600">
-                    ${(plan.price / 100).toFixed(2)}
+                    ${(plan.price / 100).toFixed(2).split('.')[0]}<span className="opacity-60 text-3xl">.{(plan.price / 100).toFixed(2).split('.')[1]}</span>
                   </span>
                   <span className="text-surface-600">
                     / {t('plans.month')}
@@ -182,10 +182,9 @@ export default function CheckoutPage() {
                 )}
               </div>
 
-              {/* Checkout Button */}
               <Button
                 size="lg"
-                className="w-full flex items-center justify-center gap-2"
+                className="w-full h-[52px] shadow-md hover:shadow-lg flex items-center justify-center gap-2"
                 onClick={handleCheckout}
                 disabled={loading}
               >
@@ -202,7 +201,7 @@ export default function CheckoutPage() {
                 )}
               </Button>
 
-              <p className="text-center text-sm text-surface-500 mt-4">
+              <p className="text-center text-xs text-surface-400 mt-6">
                 {t('checkout.securePayment')}
               </p>
             </div>

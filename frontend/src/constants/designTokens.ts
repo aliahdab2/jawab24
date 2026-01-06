@@ -113,6 +113,35 @@ export const DESIGN_TOKENS = {
     },
 
     /**
+     * ACTION ICONS
+     * Shared spec for functional icons (Home buttons, Empty states, CTAs)
+     */
+    actionIcon: {
+        desktop: {
+            size: 20,
+            containerSize: 40,
+            radius: 12,
+            shadow: '0 8px 24px rgba(0,0,0,0.08)',
+        },
+        mobile: {
+            size: 18,
+            containerSize: 36,
+            radius: 12,
+            shadow: '0 6px 18px rgba(0,0,0,0.08)',
+        }
+    },
+
+    /**
+     * KPI ICONS (Quiet)
+     * Explicitly distinct from Action Icons
+     */
+    kpiIcon: {
+        size: 16,
+        opacity: 0.4,
+        shadow: 'none',
+    },
+
+    /**
      * SPACING SCALE
      * Consistent spacing across components
      */

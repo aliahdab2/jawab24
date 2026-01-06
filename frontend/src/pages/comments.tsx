@@ -46,10 +46,10 @@ export default function CommentsPage() {
           </p>
           {/* Icon: supporting role only (40% opacity, 16px) */}
           <div className={`opacity-40 transition-opacity hover:opacity-60 ${color === 'brand' ? 'text-brand-500' :
-              color === 'emerald' ? 'text-emerald-500' :
-                color === 'amber' ? 'text-amber-500' :
-                  color === 'violet' ? 'text-violet-500' :
-                    'text-red-500'
+            color === 'emerald' ? 'text-emerald-500' :
+              color === 'amber' ? 'text-amber-500' :
+                color === 'violet' ? 'text-violet-500' :
+                  'text-red-500'
             }`}>
             {icon}
           </div>
@@ -217,7 +217,7 @@ export default function CommentsPage() {
           <Button
             variant="secondary"
             size="sm"
-            icon={<Download className="w-4 h-4" />}
+            icon={<Download className="w-[18px] h-[18px] sm:w-5 sm:h-5" />}
             onClick={exportToCSV}
             loading={exporting}
           >
@@ -390,7 +390,7 @@ export default function CommentsPage() {
             </p>
             {!searchQuery && (
               <Link href="/pages">
-                <Button variant="primary" size="sm" className="py-2" style={{ boxShadow: '0 8px 24px rgba(20, 184, 166, 0.2)' }}>
+                <Button variant="primary" size="sm" className="py-2" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }} icon={<ExternalLink className="w-[18px] h-[18px] sm:w-5 sm:h-5" />}>
                   {t('comments.connectPage')}
                 </Button>
               </Link>

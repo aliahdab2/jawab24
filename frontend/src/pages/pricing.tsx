@@ -50,8 +50,8 @@ function PlanCard({
 
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${isHighlighted
-        ? 'ring-2 ring-brand-500 shadow-brand-100 shadow-xl md:scale-105 z-10 md:mt-4'
+      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${plan.slug === 'business' ? 'order-first md:order-none' : ''} ${isHighlighted
+        ? 'ring-2 ring-brand-500/80 shadow-xl shadow-brand-500/10 md:scale-105 z-10 md:mt-4'
         : 'border-surface-200 shadow-sm'
         } ${isCurrentPlan ? 'bg-brand-50/50' : 'bg-white'}`}
     >
@@ -84,7 +84,7 @@ function PlanCard({
           plan.slug === 'starter' ? 'bg-blue-100 text-blue-600' :
             plan.slug === 'business' ? 'bg-brand-100 text-brand-600' :
               'bg-amber-100 text-amber-600'
-          }`}>
+          }`} style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
           {plan.slug === 'free' || plan.slug === 'starter' ? (
             <Zap className="w-5 h-5 md:w-6 md:h-6" />
           ) : plan.slug === 'pro' ? (
@@ -95,7 +95,7 @@ function PlanCard({
         </div>
         <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight mb-1">{planName}</h3>
         {planDescription && (
-          <p className="text-xs md:text-sm text-surface-500 leading-relaxed min-h-[32px] px-2">{planDescription}</p>
+          <p className="text-xs md:text-sm text-surface-600 leading-relaxed min-h-[32px] px-2">{planDescription}</p>
         )}
       </div>
 
@@ -156,7 +156,7 @@ function PlanCard({
           loading={loading}
           disabled={isCurrentPlan}
           variant={isPopular ? 'primary' : 'secondary'}
-          className={`w-full py-3 text-sm font-bold rounded-xl transition-all duration-300 ${isPopular ? 'shadow-lg shadow-brand-200 hover:shadow-brand-300' : ''
+          className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold border-surface-300' : 'font-bold'
             }`}
         >
           {isCurrentPlan ? (
@@ -339,7 +339,7 @@ export default function PricingPage() {
       <DashboardLayout title={t('pricing.title')} isPublic>
         {/* Usage Summary if subscribed - Inline */}
         {usage && (
-          <div className="flex flex-wrap items-center justify-center gap-4 mb-6 p-3 bg-brand-50 rounded-xl border border-brand-100">
+          <div className="flex flex-wrap items-center justify-center gap-4 mb-6 py-2 px-3 bg-brand-50/50 rounded-xl border border-brand-100">
             <div className="flex items-center gap-2">
               <Crown className="w-4 h-4 text-brand-600" />
               <span className="text-sm font-bold text-brand-700">

@@ -213,9 +213,9 @@ export default function MessagesPage() {
           </p>
           {/* Icon: supporting role only (40% opacity, 16px) */}
           <div className={`opacity-40 transition-opacity hover:opacity-60 ${color === 'brand' ? 'text-brand-500' :
-              color === 'emerald' ? 'text-emerald-500' :
-                color === 'amber' ? 'text-amber-500' :
-                  'text-red-500'
+            color === 'emerald' ? 'text-emerald-500' :
+              color === 'amber' ? 'text-amber-500' :
+                'text-red-500'
             }`}>
             {icon}
           </div>
@@ -246,7 +246,7 @@ export default function MessagesPage() {
           <Button
             variant="secondary"
             size="sm"
-            icon={<Download className="w-4 h-4" />}
+            icon={<Download className="w-[18px] h-[18px] sm:w-5 sm:h-5" />}
             onClick={exportToCSV}
             loading={exporting}
           >
