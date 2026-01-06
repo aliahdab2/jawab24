@@ -178,6 +178,7 @@ export default function SettingsPage() {
             icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
             variant={saved ? 'secondary' : 'primary'}
             size="lg"
+            className="shadow-md hover:shadow-md hover:translate-y-0"
           >
             {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
           </Button>
@@ -189,8 +190,8 @@ export default function SettingsPage() {
         {/* Language Selection */}
         <Card className="border-none shadow-lg shadow-surface-200/30 p-4">
           <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-brand-600 text-white flex items-center justify-center shadow-lg shadow-brand-100">
-              <Globe className="w-7 h-7" />
+            <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center">
+              <Globe className="w-4 h-4 opacity-50" />
             </div>
             <div className="text-start">
               <h3 className="font-bold text-surface-900 text-xl">{t('settings.language')}</h3>
@@ -230,11 +231,11 @@ export default function SettingsPage() {
 
 
         {/* Comments Automation Card with Nested Logic - MOST IMPORTANT */}
-        <Card className={`border-none shadow-xl transition-all duration-300 ${settings.commentsAutoReply ? 'shadow-brand-200 ring-2 ring-brand-200' : 'shadow-surface-200/50'} p-5`}>
+        <Card className={`border-none transition-all duration-300 ${settings.commentsAutoReply ? 'ring-1 ring-brand-200/50' : 'shadow-surface-200/50'} p-4`} style={settings.commentsAutoReply ? { boxShadow: '0 10px 30px rgba(16,185,129,0.12)' } : {}}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
-                <MessageSquare className="w-6 h-6" />
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
+                <MessageSquare className="w-4 h-4 opacity-50" />
               </div>
               <div className="text-start">
                 <h3 className={`font-bold text-lg ${settings.commentsAutoReply ? 'text-brand-900' : 'text-surface-900'}`}>{t('settings.commentsAutoReply')}</h3>
@@ -258,9 +259,9 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'public' })}
-                  className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${settings.commentReplyMode === 'public'
-                    ? 'border-brand-500 bg-brand-50/50 shadow-sm'
-                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/30'
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${settings.commentReplyMode === 'public'
+                    ? 'border-brand-500 bg-brand-50/20 shadow-sm'
+                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
                     }`}
                 >
                   <div className="flex items-center gap-3">
@@ -279,9 +280,9 @@ export default function SettingsPage() {
 
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'private' })}
-                  className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${settings.commentReplyMode === 'private'
-                    ? 'border-brand-500 bg-brand-50/50 shadow-sm'
-                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/30'
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${settings.commentReplyMode === 'private'
+                    ? 'border-brand-500 bg-brand-50/20 shadow-sm'
+                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
                     }`}
                 >
                   <div className="flex items-center gap-3">
@@ -300,9 +301,9 @@ export default function SettingsPage() {
 
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'dual' })}
-                  className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${settings.commentReplyMode === 'dual'
-                    ? 'border-brand-500 bg-brand-50/50 shadow-sm'
-                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/30'
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${settings.commentReplyMode === 'dual'
+                    ? 'border-brand-500 bg-brand-50/20 shadow-sm'
+                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
                     }`}
                 >
                   <div className="flex items-center gap-3">
@@ -439,8 +440,8 @@ export default function SettingsPage() {
             <Card className="border-none shadow-md shadow-surface-200/30 p-4 overflow-hidden">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600 shadow-inner' : 'bg-surface-100 text-surface-400'}`}>
-                    <Clock className="w-6 h-6" />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
+                    <Clock className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
                     <h4 className="font-bold text-surface-900 text-lg">{t('settings.businessHours')}</h4>
@@ -485,8 +486,8 @@ export default function SettingsPage() {
               {/* Reply Delay */}
               <Card className="border-none shadow-md shadow-surface-200/30 p-4">
                 <div className="flex items-center gap-4 mb-6">
-                  <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
-                    <Zap className="w-6 h-6" />
+                  <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center">
+                    <Zap className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
                     <h4 className="font-bold text-surface-900 text-lg">{t('settings.responseTime')}</h4>
@@ -510,8 +511,8 @@ export default function SettingsPage() {
               <Card className="border-none shadow-md shadow-surface-200/30 p-4 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600 shadow-inner' : 'bg-surface-100 text-surface-400'}`}>
-                      <Bell className="w-6 h-6" />
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
+                      <Bell className="w-4 h-4 opacity-50" />
                     </div>
                     <div className="text-start">
                       <h4 className="font-bold text-surface-900 text-lg">{t('settings.notifications')}</h4>
@@ -525,10 +526,10 @@ export default function SettingsPage() {
 
             {/* Messaging */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="border-none shadow-lg shadow-surface-200/50 p-6">
+              <Card className="border-none shadow-lg shadow-surface-200/50 p-5">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
-                    <MessageCircle className="w-6 h-6" />
+                  <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center">
+                    <MessageCircle className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
                     <h4 className="font-bold text-surface-900 text-lg">{t('settings.greetingMessage')}</h4>
@@ -543,10 +544,10 @@ export default function SettingsPage() {
                 />
               </Card>
 
-              <Card className="border-none shadow-lg shadow-surface-200/50 p-6">
+              <Card className="border-none shadow-lg shadow-surface-200/50 p-5">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 flex items-center justify-center shadow-inner">
-                    <Clock className="w-6 h-6" />
+                  <div className="w-10 h-10 rounded-xl bg-surface-100 text-surface-600 flex items-center justify-center">
+                    <Clock className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
                     <h4 className="font-bold text-surface-900 text-lg">{t('settings.awayMessage')}</h4>
