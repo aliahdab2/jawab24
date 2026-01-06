@@ -41,6 +41,7 @@ vi.mock('@/components/ui', () => ({
     ),
     PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
     PageSpinner: () => <div>Loading...</div>,
+    PageSkeleton: () => <div data-testid="page-skeleton">Loading...</div>,
 }));
 
 describe('SettingsPage - Infinite Loop Prevention', () => {

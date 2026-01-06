@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import {
@@ -184,9 +184,7 @@ export default function PagesPage() {
   if (loading && pages.length === 0) {
     return (
       <DashboardLayout title={t('pages.title')}>
-        <div className="flex items-center justify-center h-64">
-          <PageSpinner />
-        </div>
+        <PageSkeleton type="grid" />
       </DashboardLayout>
     );
   }

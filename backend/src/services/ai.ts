@@ -19,7 +19,13 @@ export class AiService {
      * Generate a hash for a comment to use as cache key
      */
     private hashComment(comment: string, language?: string): string {
-        const normalized = comment.toLowerCase().trim();
+        // Remove punctuation, emojis, and extra whitespace to increase cache hits
+        const normalized = comment
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, '') // Keep letters, numbers, whitespace
+            .replace(/\s+/g, ' ') // Collapse multiple spaces
+            .trim();
+
         const key = `${normalized}:${language || 'auto'}`;
         return crypto.createHash('sha256').update(key).digest('hex');
     }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Toggle, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Input, Toggle, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import {
@@ -156,9 +156,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <DashboardLayout title={t('settings.title')}>
-        <div className="flex items-center justify-center h-64">
-          <PageSpinner />
-        </div>
+        <PageSkeleton />
       </DashboardLayout>
     );
   }

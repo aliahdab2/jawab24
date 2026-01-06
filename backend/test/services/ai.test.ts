@@ -188,6 +188,39 @@ describe('AI Service', () => {
             expect(db.delete).toHaveBeenCalled();
         });
     });
+    describe('normalization', () => {
+        it('should normalize comments for better cache hits', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            // 1. Prime the cache (simulated)
+            const baseComment = 'Price';
+            await service.saveToCache(baseComment, 'Cached Response', 'en');
+
+            // Capture the exact key used for storage
+            const setCall = vi.mocked(redis.set).mock.calls[0];
+            const storageKey = setCall[0];
+
+            // Ensure redis.get returns a hit so we don't fall back to DB
+            vi.mocked(redis.get).mockResolvedValue('Cached Response');
+
+            vi.clearAllMocks(); // clear history
+
+            // 2. Variations should all check against the storageKey
+            const variations = [
+                'Price?',
+                'price.',
+                'PRICE',
+                'Price 😡',
+                '  price  '
+            ];
+
+            for (const v of variations) {
+                await service.checkCache(v, 'en');
+                expect(redis.get).toHaveBeenCalledWith(storageKey);
+                vi.clearAllMocks();
+            }
+        });
+    });
 });
 
 describe('AI Service (disabled)', () => {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, PageSpinner } from '@/components/ui';
+import { Card, Button, PageSkeleton } from '@/components/ui';
 import { plansApi, subscriptionApi } from '@/lib/api';
 import { extractArrayData, extractObjectData } from '@/lib/api-utils';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -349,26 +349,11 @@ export default function PricingPage() {
     router.push(`/checkout?planId=${planId}`);
   };
 
-  // EARLY RETURN 1: Show loading while checking geo
-  if (isSanctioned === null) {
+  // EARLY RETURN 1: Show loading while checking geo OR fetching plans
+  if (isSanctioned === null || loading) {
     return (
       <DashboardLayout title={t('pricing.title')} isPublic>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <PageSpinner />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-
-
-  // EARLY RETURN 3: Show loading while fetching plans (only for allowed geos)
-  if (loading) {
-    return (
-      <DashboardLayout title={t('pricing.title')} isPublic>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <PageSpinner />
-        </div>
+        <PageSkeleton />
       </DashboardLayout>
     );
   }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import {
@@ -227,9 +227,7 @@ export default function MessagesPage() {
   if (loading && messages.length === 0) {
     return (
       <DashboardLayout title={t('messages.title')}>
-        <div className="flex items-center justify-center h-64">
-          <PageSpinner />
-        </div>
+        <PageSkeleton type="list" />
       </DashboardLayout>
     );
   }
