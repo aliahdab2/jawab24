@@ -215,8 +215,8 @@ export default function DashboardPage() {
                 'bg-amber-500'
               }`}></div>
 
-            {/* Horizontal layout: icon on left, content on right */}
-            <div className="relative z-10 flex items-center gap-4 p-4">
+            {/* Horizontal layout: content on left, icon on right (reversed in RTL) */}
+            <div className="relative z-10 flex flex-row-reverse items-center gap-4 p-4">
               {/* Icon */}
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-110 ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600' :
                 stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' :
