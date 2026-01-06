@@ -167,10 +167,10 @@ export default function SettingsPage() {
 
   return (
     <DashboardLayout title={t('settings.title')}>
-      {/* Header */}
+      {/* Header with Global Context */}
       <PageHeader
         title={t('settings.title')}
-        description={t('settings.description')}
+        description={t('settings.pageContext')}
         action={
           <Button
             onClick={handleSave}
@@ -187,7 +187,7 @@ export default function SettingsPage() {
       {/* Main Settings - Simplified */}
       <div className="space-y-6 mb-8">
         {/* Language Selection */}
-        <Card className="border-none shadow-xl shadow-surface-200/50 p-6">
+        <Card className="border-none shadow-lg shadow-surface-200/30 p-4">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-14 h-14 rounded-2xl bg-brand-600 text-white flex items-center justify-center shadow-lg shadow-brand-100">
               <Globe className="w-7 h-7" />
@@ -229,8 +229,8 @@ export default function SettingsPage() {
 
 
 
-        {/* Comments Automation Card with Nested Logic */}
-        <Card className={`border-none shadow-lg transition-all duration-300 ${settings.commentsAutoReply ? 'shadow-brand-100 ring-1 ring-brand-100' : 'shadow-surface-200/50'} p-6`}>
+        {/* Comments Automation Card with Nested Logic - MOST IMPORTANT */}
+        <Card className={`border-none shadow-xl transition-all duration-300 ${settings.commentsAutoReply ? 'shadow-brand-200 ring-2 ring-brand-200' : 'shadow-surface-200/50'} p-5`}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
@@ -239,6 +239,7 @@ export default function SettingsPage() {
               <div className="text-start">
                 <h3 className={`font-bold text-lg ${settings.commentsAutoReply ? 'text-brand-900' : 'text-surface-900'}`}>{t('settings.commentsAutoReply')}</h3>
                 <p className="text-sm text-surface-500 font-medium">{t('settings.commentsAutoReplyDesc')}</p>
+                <p className="text-xs text-surface-400 mt-1">{t('settings.commentsAutoReplyHelper')}</p>
               </div>
             </div>
             <Toggle
@@ -346,49 +347,48 @@ export default function SettingsPage() {
           )}
         </Card>
 
-        {/* Messages Automation Card */}
-        <div className="mt-4">
+        {/* Messages & AI Toggles - Lighter Visual Weight */}
+        <div className="space-y-3">
           <SimpleToggle
-            icon={<MessageCircle className="w-6 h-6" />}
+            icon={<MessageCircle className="w-5 h-5" />}
             title={t('settings.messagesAutoReply')}
             description={t('settings.messagesAutoReplyDesc')}
             enabled={settings.messagesAutoReply}
             onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
           />
+          <SimpleToggle
+            icon={<Bot className="w-5 h-5" />}
+            title={t('settings.enableAI')}
+            description={t('settings.aiDescription')}
+            enabled={settings.aiEnabled}
+            onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
+          />
         </div>
-
-        <SimpleToggle
-          icon={<Bot className="w-6 h-6" />}
-          title={t('settings.enableAI')}
-          description={t('settings.aiDescription')}
-          enabled={settings.aiEnabled}
-          onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
-        />
       </div>
 
-      {/* Advanced Settings Toggle */}
+      {/* Advanced Settings Toggle - Lighter Style */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all duration-300 mb-6 ${showAdvanced ? 'bg-surface-900 border-surface-900 shadow-lg' : 'bg-white border-surface-200 hover:border-brand-300'
+        className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all duration-300 mb-6 ${showAdvanced ? 'bg-surface-50 border-surface-200 shadow-sm' : 'bg-white border-surface-200 hover:border-surface-300 hover:bg-surface-50'
           }`}
       >
         <div className="flex items-center gap-4">
-          <div className={`p-2.5 rounded-xl ${showAdvanced ? 'bg-surface-800 text-brand-400' : 'bg-surface-100 text-surface-500'}`}>
-            <Settings2 className="w-6 h-6" />
+          <div className={`p-2 rounded-lg ${showAdvanced ? 'bg-surface-200 text-surface-600' : 'bg-surface-100 text-surface-500'}`}>
+            <Settings2 className="w-5 h-5" />
           </div>
           <div className="text-start">
-            <span className={`block font-bold text-lg ${showAdvanced ? 'text-white' : 'text-surface-700'}`}>
+            <span className={`block font-bold ${showAdvanced ? 'text-surface-900' : 'text-surface-700'}`}>
               {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
             </span>
-            <p className={`text-xs ${showAdvanced ? 'text-surface-400' : 'text-surface-500'}`}>
+            <p className={`text-xs ${showAdvanced ? 'text-surface-500' : 'text-surface-400'}`}>
               {t('settings.advancedDescription')}
             </p>
           </div>
         </div>
         {showAdvanced ? (
-          <ChevronUp className="w-6 h-6 text-brand-400" />
+          <ChevronUp className="w-5 h-5 text-surface-600" />
         ) : (
-          <ChevronDown className="w-6 h-6 text-surface-400" />
+          <ChevronDown className="w-5 h-5 text-surface-400" />
         )}
       </button>
 
@@ -436,7 +436,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Business Hours */}
-            <Card className="border-none shadow-lg shadow-surface-200/50 p-6 overflow-hidden">
+            <Card className="border-none shadow-md shadow-surface-200/30 p-4 overflow-hidden">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600 shadow-inner' : 'bg-surface-100 text-surface-400'}`}>
@@ -480,9 +480,10 @@ export default function SettingsPage() {
               )}
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Compact Row: Reply Speed + Notifications */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Reply Delay */}
-              <Card className="border-none shadow-lg shadow-surface-200/50 p-6">
+              <Card className="border-none shadow-md shadow-surface-200/30 p-4">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
                     <Zap className="w-6 h-6" />
@@ -506,7 +507,7 @@ export default function SettingsPage() {
               </Card>
 
               {/* Notifications */}
-              <Card className="border-none shadow-lg shadow-surface-200/50 p-6 flex flex-col justify-between">
+              <Card className="border-none shadow-md shadow-surface-200/30 p-4 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600 shadow-inner' : 'bg-surface-100 text-surface-400'}`}>
