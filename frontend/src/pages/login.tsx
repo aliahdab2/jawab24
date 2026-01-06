@@ -172,7 +172,7 @@ export default function LoginPage() {
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
-                className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shadow-lg group-hover:rotate-6 transition-transform"
+                className="w-9 h-9 sm:w-12 sm:h-12 group-hover:rotate-6 transition-transform"
               />
               <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
