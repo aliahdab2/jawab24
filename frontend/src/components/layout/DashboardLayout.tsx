@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X, LogOut } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X, LogOut, CreditCard } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -24,6 +24,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
   const { sidebarOpen } = useUIStore();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLogoutCheck, setShowLogoutCheck] = useState(false);
 
   const toggleLanguage = () => {
     const newLang = language === 'ar' ? 'en' : 'ar';
@@ -75,6 +76,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
     <>
       <Head>
         <title>{pageTitle} | Jawab24</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
       </Head>
 
       <div className="min-h-screen bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -110,20 +112,14 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </div>
           </div>
         ) : (
-          <div className="md:hidden fixed top-0 left-0 right-0 h-20 bg-surface-900 flex items-center justify-between px-6 z-40 shadow-xl border-b border-white/5">
-            <Link href="/dashboard" className="flex items-center gap-3 ps-1">
-              <BrandLogo
-                variant="vector"
-                className="w-10 h-10 flex-shrink-0"
-              />
-              <span className="font-display font-bold text-lg text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+          /* Mobile APP Header (Authenticated) - Strict Spec: h-14, Logo Only, No Shadow, Sticky */
+          <div
+            className="md:hidden sticky top-0 left-0 right-0 h-14 bg-surface-50/95 backdrop-blur-md flex items-center justify-between px-5 z-40 border-b border-surface-200/50"
+            style={{ paddingTop: 'env(safe-area-inset-top)' }}
+          >
+            <Link href="/dashboard" className="flex items-center">
+              <BrandLogo variant="vector" className="w-[30px] h-[30px]" />
             </Link>
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5 shadow-inner"
-            >
-              <MoreHorizontal className="w-5 h-5 text-white" />
-            </button>
           </div>
         )}
 
@@ -131,7 +127,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <main
           className={clsx(
             'transition-all duration-500 min-h-screen',
-            isCleanLayout ? 'pt-16 md:pt-20' : 'pt-20 md:pt-0',
+            isCleanLayout ? 'pt-16 md:pt-20' : 'pt-14 md:pt-0',
             !isCleanLayout && (sidebarOpen ? 'md:ms-64' : 'md:ms-20')
           )}
         >
@@ -146,7 +142,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {/* Mobile bottom navigation - hidden on clean layouts */}
         {!isCleanLayout && (
           <nav
-            className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-surface-100 flex justify-around items-center h-20 px-2 z-40 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]"
+            className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-200 flex justify-around items-center h-16 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] pb-[env(safe-area-inset-bottom)] box-content"
           >
             <MobileNavButton
               onClick={() => router.push('/dashboard')}
@@ -177,32 +173,32 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
 
         {/* Mobile full menu overlay */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 bg-black/50 z-50" onClick={() => setMobileMenuOpen(false)}>
+          <div className="md:hidden fixed inset-0 bg-black/50 z-50 backdrop-blur-sm animate-in fade-in" onClick={() => setMobileMenuOpen(false)}>
             <div
-              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-4"
-              style={{ paddingBottom: 'max(1rem, calc(1rem + env(safe-area-inset-bottom, 0px)))' }}
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 animate-in slide-in-from-bottom"
+              style={{
+                paddingBottom: 'max(1.25rem, calc(1.25rem + env(safe-area-inset-bottom, 0px)))',
+                maxHeight: 'calc(100dvh - 72px)'
+              }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-lg">{t('nav.menu') || 'Menu'}</h3>
+              {/* Menu Header */}
+              <div className="flex justify-between items-center mb-6">
                 <button
                   onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 rounded-full hover:bg-surface-100"
+                  className="p-2 -m-2 rounded-full hover:bg-surface-100 text-surface-500"
                 >
                   <X className="w-5 h-5" />
                 </button>
+                <h3 className="font-semibold text-lg text-surface-900">{t('nav.menu') || 'Menu'}</h3>
               </div>
-              {/* Simple navigation - Templates & Rules are in Settings */}
-              <div className="grid grid-cols-3 gap-4">
+
+              {/* Launcher Grid */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
                 <MobileMenuButton
                   onClick={() => { router.push('/dashboard'); setMobileMenuOpen(false); }}
                   icon={<LayoutDashboard className="w-6 h-6" />}
                   label={t('nav.dashboard')}
-                />
-                <MobileMenuButton
-                  onClick={() => { router.push('/pages'); setMobileMenuOpen(false); }}
-                  icon={<FileText className="w-6 h-6" />}
-                  label={t('nav.pages')}
                 />
                 <MobileMenuButton
                   onClick={() => { router.push('/comments'); setMobileMenuOpen(false); }}
@@ -214,17 +210,61 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                   icon={<MessageCircle className="w-6 h-6" />}
                   label={t('nav.messages')}
                 />
+
+                {/* Row 2 */}
+                <MobileMenuButton
+                  onClick={() => { router.push('/pages'); setMobileMenuOpen(false); }}
+                  icon={<FileText className="w-6 h-6" />}
+                  label={t('nav.pages')}
+                />
                 <MobileMenuButton
                   onClick={() => { router.push('/settings'); setMobileMenuOpen(false); }}
                   icon={<Settings className="w-6 h-6" />}
                   label={t('nav.settings')}
                 />
                 <MobileMenuButton
-                  onClick={() => { logout(); setMobileMenuOpen(false); router.push('/login'); }}
+                  onClick={() => { router.push('/pricing'); setMobileMenuOpen(false); }}
+                  icon={<CreditCard className="w-6 h-6" />}
+                  label={t('pricing.title') || 'Pricing'}
+                />
+              </div>
+
+              {/* Logout - Separated Row */}
+              <div className="grid grid-cols-3 gap-4">
+                <MobileMenuButton
+                  onClick={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
                   icon={<LogOut className="w-6 h-6 text-red-500" />}
                   label={t('nav.logout')}
-                  className="hover:border-red-200 hover:bg-red-50/30"
+                  className="hover:border-red-200 hover:bg-red-50/30 col-start-3"
                 />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Logout Confirmation Modal */}
+        {showLogoutCheck && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-surface-900 mb-2 text-center">
+                {language === 'ar' ? 'تسجيل الخروج' : 'Log Out'}
+              </h3>
+              <p className="text-surface-600 text-center mb-6">
+                {language === 'ar' ? 'هل تريد تسجيل الخروج؟' : 'Are you sure you want to log out?'}
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowLogoutCheck(false)}
+                  className="flex-1 py-2.5 rounded-xl font-semibold text-surface-600 bg-surface-100 hover:bg-surface-200"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={() => { logout(); router.push('/login'); }}
+                  className="flex-1 py-2.5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/20"
+                >
+                  {t('nav.logout')}
+                </button>
               </div>
             </div>
           </div>
@@ -234,7 +274,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <VersionBadge />
 
         {/* WhatsApp help button - floating */}
-        <WhatsAppHelpButton hidden={mobileMenuOpen} />
+        <WhatsAppHelpButton hidden={mobileMenuOpen || showLogoutCheck} />
       </div>
     </>
   );
@@ -250,23 +290,20 @@ function MobileNavButton({ onClick, icon, label, active }: {
   return (
     <button
       onClick={onClick}
-      className={clsx(
-        "flex flex-col items-center justify-center h-full px-4 transition-all duration-300 relative",
-        active ? "text-brand-600" : "text-surface-400 hover:text-brand-500"
-      )}
+      className="flex flex-col items-center justify-center h-full w-full relative group min-h-[44px]"
     >
       <div className={clsx(
-        "transition-transform duration-300 mb-1",
-        active ? "scale-110" : "scale-100"
+        "transition-all duration-300 mb-1",
+        active ? "text-brand-600 scale-110 opacity-100" : "text-surface-400 scale-100 opacity-60 group-hover:opacity-80"
       )}>
         {icon}
       </div>
       <span className={clsx(
-        "text-[10px] font-bold uppercase tracking-widest",
-        active ? "opacity-100" : "opacity-60"
+        "text-[10px] tracking-wide transition-all",
+        active ? "font-semibold text-brand-600 opacity-100" : "font-medium text-surface-400 opacity-60"
       )}>{label}</span>
       {active && (
-        <div className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-1 bg-brand-600 rounded-full shadow-[0_0_10px_rgba(13,148,136,0.5)]"></div>
+        <div className="absolute top-0 w-8 h-0.5 bg-brand-600 rounded-b-full shadow-[0_1px_6px_rgba(13,148,136,0.3)]"></div>
       )}
     </button>
   );
@@ -282,14 +319,16 @@ function MobileMenuButton({ onClick, icon, label, className }: {
     <button
       onClick={onClick}
       className={clsx(
-        "flex flex-col items-center p-6 rounded-[2rem] bg-surface-50 border border-surface-100 transition-all group",
-        className || "hover:border-brand-200 hover:bg-brand-50/30"
+        "flex flex-col items-center justify-center p-4 rounded-2xl bg-white border border-surface-100 shadow-[0_6px_18px_rgba(0,0,0,0.06)] active:scale-95 transition-all h-[110px]",
+        className
       )}
     >
-      <div className="w-12 h-12 rounded-2xl bg-white shadow-sm border border-surface-100 flex items-center justify-center text-brand-600 mb-3 group-hover:scale-110 group-hover:rotate-3 transition-transform">
+      <div className="w-12 h-12 rounded-xl bg-brand-50/50 flex items-center justify-center text-brand-600 mb-3">
         {icon}
       </div>
-      <span className="text-xs font-bold text-surface-900 uppercase tracking-tight">{label}</span>
+      <span className="text-xs font-medium text-surface-900 leading-relaxed text-center w-full truncate px-1">
+        {label}
+      </span>
     </button>
   );
 }

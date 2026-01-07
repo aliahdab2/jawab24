@@ -261,8 +261,9 @@ export default function PricingPage() {
       try {
         // Run geo check and plans fetch in parallel (non-blocking)
         const [geoResult, plansResult, usageResult] = await Promise.all([
-          // Geo check with 2s timeout (non-blocking for display)
-          isUserSanctionedNonBlocking(2000),
+          // Geo check with 1s timeout (non-blocking for display)
+          // Reduced to 1s to make offline/slow network experience snappier
+          isUserSanctionedNonBlocking(1000),
           // Plans API with fallback
           plansApi.getAll().catch(() => null),
           // Usage API (only if authenticated)
