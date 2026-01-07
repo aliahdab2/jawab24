@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { authService } from '../services/auth';
 import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
+import { settingsService } from '../services/settings';
 import { AuthRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
@@ -43,8 +44,13 @@ export class AuthController {
                 request.log.error({ err }, 'Auto-sync pages failed');
             });
 
-            // 6. Return response
-            const response = authService.createAuthResponse(user, token, accessToken);
+            // 6. Fetch user settings for immediate UI sync
+            const userSettings = await settingsService.getSettings(user.id);
+
+            // 7. Return response
+            const response = authService.createAuthResponse(user, token, accessToken, {
+                dashboardLanguage: userSettings.dashboardLanguage,
+            });
             return reply.send(response);
 
         } catch (error) {
@@ -142,6 +148,25 @@ export class AuthController {
             });
         } catch (error) {
             request.log.error({ err: error }, 'Update profile failed');
+            return reply.status(500).send({ error: 'Internal Server Error' });
+        }
+    }
+    /**
+     * Delete user account
+     * DELETE /auth/me
+     */
+    async deleteAccount(request: AuthenticatedRequest, reply: FastifyReply) {
+        const userId = request.user?.userId;
+
+        if (!userId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        try {
+            await authService.deleteUser(userId);
+            return reply.send({ success: true, message: 'Account deleted successfully' });
+        } catch (error) {
+            request.log.error({ err: error }, 'Delete account failed');
             return reply.status(500).send({ error: 'Internal Server Error' });
         }
     }

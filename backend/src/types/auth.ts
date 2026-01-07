@@ -35,5 +35,8 @@ export interface AuthResponse {
         email?: string;
         facebookId: string;
     };
+    settings?: {
+        dashboardLanguage: string;
+    };
 }
 

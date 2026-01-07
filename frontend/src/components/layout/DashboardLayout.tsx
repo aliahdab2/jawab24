@@ -202,7 +202,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
               dir={isRTL ? 'rtl' : 'ltr'}
             >
               {/* Menu Header - RTL: القائمة (right), X (left), 48px height */}
-              <div className="flex items-center justify-between h-12 mb-6">
+              <div className="flex items-center justify-between h-12 pb-4 mb-6 border-b border-surface-100">
                 <h3 className="font-semibold text-lg text-surface-900 text-start">{t('nav.menu') || 'القائمة'}</h3>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
@@ -254,14 +254,16 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {/* Logout Confirmation Modal */}
         {showLogoutCheck && (
           <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold text-surface-900 mb-2 text-center">
-                {t('logout.confirmTitle')}
-              </h3>
-              <p className="text-surface-600 text-center mb-6">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 pt-6 pb-4 border-b border-surface-100">
+                <h3 className="text-lg font-bold text-surface-900 text-center">
+                  {t('logout.confirmTitle')}
+                </h3>
+              </div>
+              <p className="text-surface-600 text-center px-6 pt-4 pb-6">
                 {t('logout.confirmBody')}
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-3 px-6 pb-6">
                 <button
                   onClick={() => setShowLogoutCheck(false)}
                   className="flex-1 py-3 rounded-xl font-semibold text-surface-700 bg-surface-100 hover:bg-surface-200 transition-colors"
@@ -333,7 +335,7 @@ function MobileMenuButton({ onClick, icon, label, className, fullWidth }: {
       className={clsx(
         "rounded-2xl bg-white border active:scale-95 transition-all",
         isLogout
-          ? "flex flex-row items-center justify-start gap-4 p-4 mt-6 h-[52px] w-full border-red-200 bg-red-50 text-red-600 hover:bg-red-100/50"
+          ? "flex items-center justify-start gap-4 p-4 mt-6 h-[52px] w-full border-red-200 bg-red-50 text-red-600 hover:bg-red-100/50"
           : "flex flex-col items-center justify-center p-4 border-surface-100/40 shadow-[0_8px_20px_rgba(0,0,0,0.06)] min-h-[96px]",
         className
       )}

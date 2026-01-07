@@ -34,10 +34,10 @@ export class AuthService {
 
                 return { ...user, name, email: email ?? null, updatedAt: new Date() };
             }
-            
+
             // Ensure existing user has a subscription
             await this.ensureSubscription(user.id);
-            
+
             return user;
         }
 
@@ -52,13 +52,13 @@ export class AuthService {
             .returning();
 
         const newUser = newUsers[0];
-        
+
         // Create subscription for new user (with free trial)
         await this.createSubscriptionForNewUser(newUser.id);
 
         return newUser;
     }
-    
+
     /**
      * Create subscription for a new user
      */
@@ -71,7 +71,7 @@ export class AuthService {
             // Error is silently handled to not block authentication
         }
     }
-    
+
     /**
      * Ensure user has a subscription (for existing users who might not have one)
      */
@@ -99,7 +99,7 @@ export class AuthService {
 
         const payloadStr = Buffer.from(JSON.stringify(payload)).toString('base64url');
         const signature = this.sign(payloadStr);
-        
+
         return `${payloadStr}.${signature}`;
     }
 
@@ -112,9 +112,9 @@ export class AuthService {
             if (parts.length !== 2) {
                 return null;
             }
-            
+
             const [payloadStr, signature] = parts;
-            
+
             // Verify signature
             const expectedSignature = this.sign(payloadStr);
             if (!crypto.timingSafeEqual(
@@ -123,17 +123,17 @@ export class AuthService {
             )) {
                 return null;
             }
-            
+
             // Decode payload
             const payload = JSON.parse(
                 Buffer.from(payloadStr, 'base64url').toString('utf-8')
             ) as JWTPayload & { exp?: number };
-            
+
             // Check expiry
             if (payload.exp && payload.exp < Date.now()) {
                 return null;
             }
-            
+
             return {
                 userId: payload.userId,
                 facebookId: payload.facebookId,
@@ -142,7 +142,7 @@ export class AuthService {
             return null;
         }
     }
-    
+
     /**
      * Create HMAC signature
      */
@@ -164,7 +164,7 @@ export class AuthService {
     /**
      * Create auth response
      */
-    createAuthResponse(user: User, token: string, fbAccessToken: string): AuthResponse {
+    createAuthResponse(user: User, token: string, fbAccessToken: string, settings?: { dashboardLanguage: string }): AuthResponse {
         return {
             token,
             fbAccessToken,
@@ -174,7 +174,12 @@ export class AuthService {
                 email: user.email || undefined,
                 facebookId: user.facebookId,
             },
+            settings,
         };
+    }
+
+    async deleteUser(userId: string): Promise<void> {
+        await db.delete(users).where(eq(users.id, userId));
     }
 }
 

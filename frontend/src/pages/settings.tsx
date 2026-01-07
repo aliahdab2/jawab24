@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Toggle, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, Input, Toggle, PageHeader, PageSkeleton, Modal } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
+import { useRouter } from 'next/router';
 import axios from 'axios';
 import {
   Globe,
@@ -60,9 +61,12 @@ export default function SettingsPage() {
   const { t, language } = useTranslation();
   const { setLanguage } = useLanguage();
   const { token } = useAuthStore();
+  const router = useRouter();
 
   // Show/hide advanced settings
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   const [settings, setSettings] = useState({
     dashboardLanguage: language,
@@ -150,6 +154,22 @@ export default function SettingsPage() {
       console.error('Failed to save settings:', error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!token) return;
+    setSaving(true);
+    try {
+      await axios.delete(`${apiUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      useAuthStore.getState().logout();
+      router.push('/');
+    } catch (error) {
+      console.error('Failed to delete account:', error);
+      setSaving(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -569,7 +589,11 @@ export default function SettingsPage() {
                   <h4 className="font-bold text-red-700 text-lg">{t('settings.dangerZone')}</h4>
                   <p className="text-sm text-red-600/80 font-medium mt-1">{t('settings.deleteAccountWarning')}</p>
                 </div>
-                <Button variant="danger" className="px-8 py-4 shadow-lg shadow-red-200">
+                <Button
+                  variant="danger"
+                  className="px-8 py-4 shadow-lg shadow-red-200"
+                  onClick={() => setShowDeleteModal(true)}
+                >
                   {t('settings.deleteAccount')}
                 </Button>
               </div>
@@ -577,6 +601,60 @@ export default function SettingsPage() {
           </div>
         )
       }
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setDeleteConfirmation('');
+        }}
+        title={t('settings.deleteAccount')}
+      >
+        <div className="space-y-6">
+          <div className="p-4 rounded-xl bg-red-50 border border-red-100 text-red-800">
+            <p className="font-bold mb-2 flex items-center gap-2">
+              <span className="text-xl">⚠️</span>
+              {t('common.warning')}
+            </p>
+            <p className="text-sm leading-relaxed">{t('settings.deleteAccountWarning')}</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-2">
+              {language === 'ar' ? 'اكتب "DELETE" للتأكيد' : 'Type "DELETE" to confirm'}
+            </label>
+            <Input
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              placeholder="DELETE"
+              className="border-red-200 focus:border-red-500 focus:ring-red-500"
+            />
+          </div>
+
+          <div className="flex gap-4">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => {
+                setShowDeleteModal(false);
+                setDeleteConfirmation('');
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              onClick={handleDeleteAccount}
+              loading={saving}
+              disabled={deleteConfirmation !== 'DELETE'}
+            >
+              {t('settings.deleteAccount')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </DashboardLayout >
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import { PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 
@@ -74,6 +74,11 @@ export default function AuthCallback() {
 
       // Store auth data including FB token
       setAuthRef.current(data.user, data.token, data.fbAccessToken);
+
+      // Apply language setting if available
+      if (data.settings?.dashboardLanguage) {
+        useUIStore.getState().setLanguage(data.settings.dashboardLanguage);
+      }
 
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {

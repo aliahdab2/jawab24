@@ -43,6 +43,12 @@ vi.mock('../../src/services/pages', () => ({
     },
 }));
 
+vi.mock('../../src/services/settings', () => ({
+    settingsService: {
+        getSettings: vi.fn(),
+    },
+}));
+
 describe('Auth Routes - Login Flow', () => {
     let app: FastifyInstance;
 
@@ -51,6 +57,29 @@ describe('Auth Routes - Login Flow', () => {
         app.register(authRoutes);
         await app.ready();
         vi.clearAllMocks();
+
+        // Setup default mocks
+        const { settingsService } = await import('../../src/services/settings');
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings_default',
+            userId: 'user_uuid_default',
+            dashboardLanguage: 'ar',
+            defaultReplyLanguage: 'ar',
+            supportedLanguages: ['ar', 'en'],
+            autoDetectLanguage: true,
+            aiEnabled: true,
+            aiModel: 'gpt-4o',
+            commentReplyMode: 'public',
+            commentsAutoReply: true,
+            messagesAutoReply: true,
+            dualReplyConfig: {},
+            businessHoursOnly: false,
+            businessHoursStart: '09:00',
+            businessHoursEnd: '17:00',
+            awayMessage: null,
+            greetingMessage: null,
+            replyDelay: 0,
+        });
     });
 
     describe('POST /auth/facebook - Facebook Login', () => {
@@ -58,8 +87,29 @@ describe('Auth Routes - Login Flow', () => {
             // Import mocked services
             const { facebookService } = await import('../../src/services/facebook');
             const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
 
             // Setup mocks
+            vi.mocked(settingsService.getSettings).mockResolvedValue({
+                id: 'settings_123',
+                userId: 'user_uuid_123',
+                dashboardLanguage: 'ar',
+                defaultReplyLanguage: 'ar',
+                supportedLanguages: ['ar', 'en'],
+                autoDetectLanguage: true,
+                aiEnabled: true,
+                aiModel: 'gpt-4o',
+                commentReplyMode: 'public',
+                commentsAutoReply: true,
+                messagesAutoReply: true,
+                dualReplyConfig: {},
+                businessHoursOnly: false,
+                businessHoursStart: '09:00',
+                businessHoursEnd: '17:00',
+                awayMessage: null,
+                greetingMessage: null,
+                replyDelay: 0,
+            });
             vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_access_token_123');
             vi.mocked(facebookService.getUserProfile).mockResolvedValue({
                 id: 'fb_user_123',

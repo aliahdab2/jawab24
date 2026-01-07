@@ -136,10 +136,12 @@ describe('Auth Service', () => {
                 updatedAt: new Date(),
             };
             const token = 'test_token';
+            const fbToken = 'fb_token_123';
 
-            const response = service.createAuthResponse(user, token);
+            const response = service.createAuthResponse(user, token, fbToken);
 
             expect(response.token).toBe('test_token');
+            expect(response.fbAccessToken).toBe('fb_token_123');
             expect(response.user.id).toBe('user_123');
             expect(response.user.name).toBe('John Doe');
             expect(response.user.facebookId).toBe('fb_456');
@@ -155,10 +157,32 @@ describe('Auth Service', () => {
                 updatedAt: null,
             };
             const token = 'test_token';
+            const fbToken = 'fb_token_123';
 
-            const response = service.createAuthResponse(user, token);
+            const response = service.createAuthResponse(user, token, fbToken);
 
             expect(response.user.name).toBe('');
+        });
+
+        it('should include settings when provided', () => {
+            const user = {
+                id: 'user_123',
+                facebookId: 'fb_456',
+                name: 'John Doe',
+                email: 'john@example.com',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            const token = 'test_token';
+            const fbToken = 'fb_token_123';
+            const settings = {
+                dashboardLanguage: 'ar'
+            };
+
+            const response = service.createAuthResponse(user, token, fbToken, settings);
+
+            expect(response.settings).toBeDefined();
+            expect(response.settings?.dashboardLanguage).toBe('ar');
         });
     });
 
