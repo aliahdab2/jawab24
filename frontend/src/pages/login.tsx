@@ -46,11 +46,12 @@ export default function LoginPage() {
       const redirectUri = encodeURIComponent(`${window.location.origin}${localePath}/auth/callback`);
       // Using minimal scopes that work in Development mode
       // - email: Get user's email address (required for account notifications)
-      // - pages_*: Manage Facebook pages
-      // - pages_*: Manage Facebook pages
-      // - instagram_*: Manage Instagram interactions
-      // Advanced scopes require App Review for specific features
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_comments,instagram_manage_messages');
+      // - pages_show_list: View list of pages user manages
+      // - pages_read_engagement: Read page engagement data (comments, posts)
+      // - pages_messaging: Send messages on behalf of pages
+      // NOTE: Instagram scopes (instagram_basic, instagram_manage_comments, instagram_manage_messages)
+      // are temporarily removed until Facebook app permissions are configured properly
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
 
       // Get the redirect URL from query params (e.g., /checkout?planId=xxx)
       const returnUrl = router.query.redirect as string || '/dashboard';
