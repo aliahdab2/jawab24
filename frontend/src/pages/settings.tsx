@@ -348,8 +348,7 @@ export default function SettingsPage() {
               {settings.commentReplyMode === 'dual' && (
                 <div className="mt-4 p-5 rounded-2xl bg-brand-50/20 border border-brand-200/50 animate-slide-up relative shadow-sm">
                   {/* Visual Connector Notch */}
-                  <div className="absolute -top-2 end-8 sm:end-12 w-4 h-4 bg-[#fdfefd] border-t border-s border-brand-200/50 rotate-45" 
-                       style={{ backgroundColor: 'rgb(240 253 244 / 0.2)' }} />
+                  <div className="absolute -top-2 start-1/2 -translate-x-1/2 sm:start-auto sm:translate-x-0 sm:end-12 w-4 h-4 bg-brand-50/20 border-t border-s border-brand-200/50 rotate-45 shadow-sm" />
                   
                   <div className="flex items-center gap-4 mb-4">
                     <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">

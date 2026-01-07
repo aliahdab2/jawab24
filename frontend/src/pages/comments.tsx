@@ -337,7 +337,7 @@ export default function CommentsPage() {
               className="py-3.5 ps-14 rounded-2xl bg-surface-50 border-none focus:ring-4 focus:ring-brand-500/10 focus:bg-white transition-all shadow-sm"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 sm:mx-0 sm:px-0">
+          <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-hide">
             {(['all', 'replied', 'pending', 'needs_attention'] as FilterType[]).map((f) => (
               <Button
                 key={f}
