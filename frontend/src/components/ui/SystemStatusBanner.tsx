@@ -134,11 +134,10 @@ export function SystemStatusBanner({
                 {title}
               </p>
               
-              {/* Supporting text - Visible on desktop always, on mobile only when expanded */}
+              {/* Supporting text - Visible on desktop always, hidden on mobile to avoid duplication with the expanded section */}
               {description && (
                 <p className={clsx(
-                  "text-xs sm:text-sm leading-relaxed truncate sm:whitespace-normal transition-all",
-                  isExpanded ? "block mt-1 line-clamp-2" : "hidden sm:block sm:mt-0.5",
+                  "text-xs sm:text-sm leading-relaxed truncate sm:whitespace-normal transition-all hidden sm:block sm:mt-0.5",
                   isSuccess ? "text-emerald-600/90" : 
                   isWarning ? "text-amber-700/80" : 
                   "text-red-700/80"
@@ -182,8 +181,8 @@ export function SystemStatusBanner({
           {/* Mobile Expanded Logic: Description only */}
           {/* Note: Mobile CTA is now in the header row for 'Always visible' compliance */}
           <div className={clsx(
-            "transition-all overflow-hidden",
-            !isExpanded ? "max-h-0 sm:max-h-none mt-0 opacity-0 sm:opacity-100 sm:mt-0.5" : "max-h-40 mt-1 opacity-100"
+            "transition-all overflow-hidden sm:hidden",
+            !isExpanded ? "max-h-0 mt-0 opacity-0" : "max-h-40 mt-1 opacity-100"
           )}>
             {description && (
               <p className={clsx(
