@@ -21,16 +21,16 @@ export function AutoReplyStatusCard({ activePages, commentsAutoReply, messagesAu
 
   if (isActive) {
     return (
-      <Card className="mt-6 bg-emerald-50 border-emerald-200">
-        <div className="flex items-center gap-3 text-emerald-700">
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-            <Zap className="w-5 h-5 text-emerald-600" />
+      <Card className="mb-8 bg-emerald-50 border-emerald-200">
+        <div className="flex items-start sm:items-center gap-4 text-emerald-700">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+            <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
           </div>
           <div>
-            <p className="font-medium">
+            <p className="font-bold text-base sm:text-lg">
               {t('dashboard.activeRepliesOn', { count: activePages })}
             </p>
-            <p className="text-sm text-emerald-600">
+            <p className="text-sm text-emerald-600/90 leading-relaxed">
               {t('dashboard.autoReplyNote')}
             </p>
           </div>
@@ -40,21 +40,23 @@ export function AutoReplyStatusCard({ activePages, commentsAutoReply, messagesAu
   }
 
   return (
-    <Card className="mt-6 bg-amber-50 border-amber-200">
-      <div className="flex items-center gap-3 text-amber-700">
-        <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-          <AlertTriangle className="w-5 h-5 text-amber-600" />
+    <Card className="mb-8 bg-amber-50 border-amber-200">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-amber-900">
+        <div className="flex items-start gap-4 flex-1">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-base sm:text-lg">
+              {t('dashboard.autoReplyConfiguredButDisabled', { count: activePages })}
+            </p>
+            <p className="text-sm text-amber-700/90 leading-relaxed">
+              {t('dashboard.autoReplyConfiguredNote')}
+            </p>
+          </div>
         </div>
-        <div className="flex-1">
-          <p className="font-medium">
-            {t('dashboard.autoReplyConfiguredButDisabled', { count: activePages })}
-          </p>
-          <p className="text-sm text-amber-600">
-            {t('dashboard.autoReplyConfiguredNote')}
-          </p>
-        </div>
-        <Link href="/settings">
-          <Button variant="secondary" size="sm" className="whitespace-nowrap">
+        <Link href="/settings" className="sm:ms-auto">
+          <Button variant="secondary" size="md" className="w-full sm:w-auto shadow-sm">
             {t('dashboard.goToSettings')}
           </Button>
         </Link>

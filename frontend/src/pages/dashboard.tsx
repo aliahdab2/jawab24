@@ -236,6 +236,15 @@ export default function DashboardPage() {
         description={t('dashboard.overview')}
       />
 
+      {/* Smart status message - Active or Configured but Disabled */}
+      {userSettings && (
+        <AutoReplyStatusCard
+          activePages={statsData.activePages}
+          commentsAutoReply={userSettings.commentsAutoReply}
+          messagesAutoReply={userSettings.messagesAutoReply}
+        />
+      )}
+
 
       {/* Stats Grid - Best Practice KPI Layout - Dense 2-col on mobile */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
@@ -431,14 +440,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Smart status message - Active or Configured but Disabled */}
-      {userSettings && (
-        <AutoReplyStatusCard
-          activePages={statsData.activePages}
-          commentsAutoReply={userSettings.commentsAutoReply}
-          messagesAutoReply={userSettings.messagesAutoReply}
-        />
-      )}
     </DashboardLayout>
   );
 }
