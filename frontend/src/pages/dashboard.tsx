@@ -20,6 +20,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
+import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
@@ -72,23 +73,33 @@ export default function DashboardPage() {
     activeRules: 0
   });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      const [commentsRes, pagesRes, templatesRes, rulesRes, usageRes] = await Promise.all([
+      const [commentsRes, pagesRes, templatesRes, rulesRes, usageRes, settingsRes] = await Promise.all([
         axios.get(`${apiUrl}/comments`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${apiUrl}/pages`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${apiUrl}/templates`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } }),
-        subscriptionApi.getUsage().catch(() => null)
+        subscriptionApi.getUsage().catch(() => null),
+        axios.get(`${apiUrl}/settings`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
       ]);
 
       // Set usage data if available
       if (usageRes?.data?.data) {
         setUsage(usageRes.data.data);
+      }
+
+      // Set user settings if available
+      if (settingsRes?.data) {
+        setUserSettings({
+          commentsAutoReply: settingsRes.data.commentsAutoReply ?? true,
+          messagesAutoReply: settingsRes.data.messagesAutoReply ?? true
+        });
       }
 
       const comments: Comment[] = Array.isArray(commentsRes.data)
@@ -160,7 +171,13 @@ export default function DashboardPage() {
   };
 
   // Simplified stats - only 3 essential metrics for low-tech users
-  const stats = [
+  const stats: Array<{
+    nameKey: TranslationKey;
+    value: string;
+    icon: React.ComponentType<{ className?: string }>;
+    color: 'brand' | 'emerald' | 'amber';
+    descriptionKey: TranslationKey;
+  }> = [
     {
       nameKey: 'dashboard.totalComments' as TranslationKey,
       value: statsData.totalComments.toLocaleString(),
@@ -223,47 +240,14 @@ export default function DashboardPage() {
       {/* Stats Grid - Best Practice KPI Layout - Dense 2-col on mobile */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
         {stats.map((stat, i) => (
-          <Card
+          <StatCard
             key={stat.nameKey}
-            hover
-            className={clsx(
-              "animate-slide-up relative overflow-hidden group border-none bg-white transition-all duration-300 hover:-translate-y-1",
-              i === 2 ? "col-span-2 sm:col-span-1" : "col-span-1"
-            )}
-            style={{
-              animationDelay: `${i * 0.1}s`,
-              boxShadow: '0 10px 30px rgba(0,0,0,0.04)'
-            } as React.CSSProperties}
-            padding="none"
-          >
-            {/* Subtle background decoration */}
-            <div className={clsx(
-              "absolute -end-4 -bottom-4 w-20 h-20 rounded-full opacity-[0.08] transition-all duration-700 group-hover:scale-125 group-hover:opacity-[0.15]",
-              stat.color === 'brand' ? 'bg-brand-500' :
-                stat.color === 'emerald' ? 'bg-emerald-500' :
-                  'bg-amber-500'
-            )}></div>
-
-            <div className="relative z-10 px-4 py-4 sm:px-5 sm:py-5 flex items-center justify-between">
-              <div>
-                <p className="text-[26px] sm:text-[32px] font-bold text-surface-900 leading-none tracking-tight mb-1.5">
-                  {stat.value}
-                </p>
-                <p className="text-[11px] sm:text-xs font-bold text-surface-500 uppercase tracking-widest truncate leading-tight opacity-70">
-                  {t(stat.nameKey)}
-                </p>
-              </div>
-
-              <div className={clsx(
-                "w-11 h-11 sm:w-13 sm:h-13 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
-                stat.color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
-                  stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
-                    'bg-amber-50 text-amber-600 shadow-amber-500/10'
-              )}>
-                <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
-            </div>
-          </Card>
+            nameKey={stat.nameKey}
+            value={stat.value}
+            icon={stat.icon}
+            color={stat.color}
+            index={i}
+          />
         ))}
       </div>
 
@@ -447,23 +431,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Simple status message */}
-      {statsData.activePages > 0 && (
-        <Card className="mt-6 bg-emerald-50 border-emerald-200">
-          <div className="flex items-center gap-3 text-emerald-700">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-              <Zap className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="font-medium">
-                {t('dashboard.activeRepliesOn', { count: statsData.activePages })}
-              </p>
-              <p className="text-sm text-emerald-600">
-                {t('dashboard.autoReplyNote')}
-              </p>
-            </div>
-          </div>
-        </Card>
+      {/* Smart status message - Active or Configured but Disabled */}
+      {userSettings && (
+        <AutoReplyStatusCard
+          activePages={statsData.activePages}
+          commentsAutoReply={userSettings.commentsAutoReply}
+          messagesAutoReply={userSettings.messagesAutoReply}
+        />
       )}
     </DashboardLayout>
   );
