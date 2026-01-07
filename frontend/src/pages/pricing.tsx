@@ -55,7 +55,7 @@ function PlanCard({
 
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${plan.slug === 'business' ? 'order-first md:order-none' : ''} ${isHighlighted
+      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${isHighlighted
         ? 'ring-2 ring-brand-500/80 shadow-xl shadow-brand-500/10 md:scale-105 z-10 md:mt-4'
         : 'border-surface-200 shadow-sm'
         } ${isCurrentPlan ? 'bg-brand-50/50' : 'bg-white'}`}
@@ -73,10 +73,11 @@ function PlanCard({
       {/* Current plan badge - centered at top */}
       {isCurrentPlan && (
         <div className="absolute top-4 start-0 end-0 flex justify-center">
-          <span className="bg-green-100 text-green-700 text-[10px] font-bold px-3 py-1 rounded-full border border-green-200">
+          <span className="inline-flex items-center gap-2 bg-green-50 text-green-700 text-[10px] font-bold px-3 py-1 rounded-full border border-green-200/50 shadow-sm">
+            <Check className="w-2.5 h-2.5" />
             {t('pricing.currentPlan')}
             {subscriptionStatus === 'trialing' && (
-              <span className="ms-2 px-2 py-0.5 bg-amber-500 text-white rounded text-[9px] font-black leading-none flex items-center">
+              <span className="px-1.5 py-0.5 bg-amber-500 text-white rounded text-[8px] font-black uppercase tracking-wider shadow-sm">
                 {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
               </span>
             )}
@@ -180,10 +181,11 @@ function PlanCard({
               }`}
           >
             {isCurrentPlan ? (
-              <div className="flex flex-col items-center gap-1">
-                <span>{t('pricing.currentPlan')}</span>
+              <div className="flex items-center justify-center gap-2">
+                <Check className="w-4 h-4" />
+                <span className="font-bold">{t('pricing.currentPlan')}</span>
                 {(subscriptionStatus === 'trialing' || (isCurrentPlan && plan.price === 0 && plan.trialDays > 0)) && (
-                  <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded font-extrabold border border-amber-200">
+                  <span className="text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-black border border-amber-200 uppercase tracking-tighter">
                     {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
                   </span>
                 )}
@@ -398,34 +400,52 @@ export default function PricingPage() {
 
         {/* Usage Summary if subscribed - Inline */}
         {usage && (
-          <div className="flex flex-wrap items-center justify-center gap-4 mb-6 py-2 px-3 bg-brand-50/50 rounded-xl border border-brand-100">
-            <div className="flex items-center gap-2">
-              <Crown className="w-4 h-4 text-brand-600" />
-              <span className="text-sm font-bold text-brand-700">
-                {t(`pricing.${usage.subscription.plan.slug}` as TranslationKey) !== `pricing.${usage.subscription.plan.slug}`
-                  ? t(`pricing.${usage.subscription.plan.slug}` as TranslationKey)
-                  : (t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey) !== `plans.${usage.subscription.plan.slug}.name`
-                    ? t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey)
-                    : usage.subscription.plan.name)}
-                {usage.subscription.status === 'trialing' && (
-                  <span className="ms-2 text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
-                    {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+          <div className="max-w-4xl mx-auto mb-8">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 py-3.5 px-6 bg-white rounded-2xl border border-brand-100 shadow-sm">
+              {/* Plan Info */}
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shadow-inner">
+                  <Crown className="w-5 h-5" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-surface-900">
+                    {t(`pricing.${usage.subscription.plan.slug}` as TranslationKey) !== `pricing.${usage.subscription.plan.slug}`
+                      ? t(`pricing.${usage.subscription.plan.slug}` as TranslationKey)
+                      : (t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey) !== `plans.${usage.subscription.plan.slug}.name`
+                        ? t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey)
+                        : usage.subscription.plan.name)}
                   </span>
-                )}
-              </span>
-            </div>
-            <div className="text-xs text-brand-600">
-              {t('pricing.usageReplies', {
-                used: usage.aiReplies.used,
-                limit: usage.aiReplies.limit || '∞'
-              })}
-            </div>
-            {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
-              <div className="flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
-                <Zap className="w-3 h-3" />
-                {t('pricing.daysLeftCount', { count: usage.subscription.trialDaysRemaining })}
+                  {usage.subscription.status === 'trialing' && (
+                    <span className="px-2 py-0.5 bg-amber-500 text-white rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm">
+                      {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+                    </span>
+                  )}
+                </div>
               </div>
-            )}
+
+              {/* Vertical Divider (desktop only) */}
+              <div className="hidden sm:block w-px h-6 bg-surface-200" />
+
+              {/* Usage Stats */}
+              <div className="flex items-center gap-6 text-sm">
+                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2">
+                  <span className="text-surface-500 font-medium">{t('pricing.repliesUsed' as TranslationKey) !== 'pricing.repliesUsed' ? t('pricing.repliesUsed' as TranslationKey) : 'Replies:'}</span>
+                  <span className="font-bold text-brand-600">
+                    {usage.aiReplies.used} / {usage.aiReplies.limit || '∞'}
+                  </span>
+                </div>
+
+                {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
+                  <>
+                    <div className="w-px h-4 bg-surface-200" />
+                    <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-100 font-bold">
+                      <Zap className="w-3.5 h-3.5 fill-amber-500" />
+                      {t('pricing.daysLeftCount', { count: usage.subscription.trialDaysRemaining })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
