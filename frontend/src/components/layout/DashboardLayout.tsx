@@ -112,10 +112,13 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </div>
           </div>
         ) : (
-          /* Mobile APP Header - Final: h-16 (64px), Solid Dark, Logo Only, No Shadow */
+          /* Mobile APP Header - Final: h-16 (64px), Dark Gradient, Logo Only, No Shadow */
           <div
-            className="md:hidden sticky top-0 left-0 right-0 h-16 bg-slate-900 flex items-center justify-center px-5 z-40"
-            style={{ paddingTop: 'env(safe-area-inset-top)' }}
+            className="md:hidden sticky top-0 left-0 right-0 h-16 flex items-center justify-center px-5 z-40"
+            style={{
+              paddingTop: 'env(safe-area-inset-top)',
+              background: 'linear-gradient(to bottom, #0f172a 0%, rgba(15, 23, 42, 0.85) 60%, rgba(15, 23, 42, 0) 100%)'
+            }}
           >
             <Link href="/dashboard" className="flex items-center p-2 -m-2 min-w-[44px] min-h-[44px] justify-center">
               <BrandLogo variant="vector" className="w-9 h-9" />
