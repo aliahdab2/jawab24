@@ -43,7 +43,7 @@ export function AutoReplyStatusCard({ activePages, commentsAutoReply, messagesAu
     return (
       <SystemStatusBanner
         type="success"
-        title={t('dashboard.activeRepliesOn', { count: activePages })}
+        title={t('dashboard.activeRepliesOn')}
         description={t('dashboard.autoReplyNote')}
         onDismiss={handleDismiss}
       />
@@ -54,7 +54,7 @@ export function AutoReplyStatusCard({ activePages, commentsAutoReply, messagesAu
   return (
     <SystemStatusBanner
       type="warning"
-      title={t('dashboard.autoReplyConfiguredButDisabled', { count: activePages })}
+      title={t('dashboard.autoReplyConfiguredButDisabled')}
       description={t('dashboard.autoReplyConfiguredNote')}
       cta={{
         label: t('dashboard.goToSettings'),

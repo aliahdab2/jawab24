@@ -34,7 +34,7 @@ describe('AutoReplyStatusCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render GREEN active card and handle expand/dismiss', () => {
+  it('should render GREEN active card: Dismissible ONLY', () => {
     render(
       <AutoReplyStatusCard
         activePages={3}
@@ -43,19 +43,29 @@ describe('AutoReplyStatusCard', () => {
       />
     );
 
-    // Initial state (Title visible)
-    expect(screen.getByText('dashboard.activeRepliesOn 3')).toBeInTheDocument();
+    // Should show title (Modified: No count suffix)
+    expect(screen.getByText('dashboard.activeRepliesOn')).toBeInTheDocument();
     
-    // Click to expand
-    fireEvent.click(screen.getByText('dashboard.activeRepliesOn 3'));
-    expect(screen.getByText('dashboard.autoReplyNote')).toBeInTheDocument();
+    // Rule #5: Success has X (Dismissible)
+    const dismissBtn = screen.getByLabelText('Dismiss');
+    expect(dismissBtn).toBeInTheDocument();
+
+    // Rule #5: Success NOT expandable (clicking it shouldn't change height/visibility)
+    // There are 2 descriptions (desktop static, mobile expandable). We want the mobile one.
+    const notes = screen.getAllByText('dashboard.autoReplyNote');
+    const mobileNote = notes.find(n => !n.className.includes('hidden sm:block'));
+    
+    // It's collapsed on mobile
+    expect(mobileNote?.parentElement).toHaveClass('max-h-0');
+
+    fireEvent.click(screen.getByText('dashboard.activeRepliesOn'));
+    
+    // Should still be collapsed (not expandable)
+    expect(mobileNote?.parentElement).toHaveClass('max-h-0');
 
     // Handle Dismiss
-    const dismissBtn = screen.getByLabelText('Dismiss');
     fireEvent.click(dismissBtn);
-
-    // Should disappear
-    expect(screen.queryByText('dashboard.activeRepliesOn 3')).not.toBeInTheDocument();
+    expect(screen.queryByText('dashboard.activeRepliesOn')).not.toBeInTheDocument();
     expect(sessionStorage.getItem('dashboard_success_banner_dismissed')).toBe('true');
   });
 
@@ -71,7 +81,7 @@ describe('AutoReplyStatusCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render AMBER warning card and require expand for details', () => {
+  it('should render AMBER warning card: Expandable ONLY', () => {
     render(
       <AutoReplyStatusCard
         activePages={5}
@@ -80,13 +90,28 @@ describe('AutoReplyStatusCard', () => {
       />
     );
 
-    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled 5')).toBeInTheDocument();
+    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled')).toBeInTheDocument();
     
-    // Expand to see note and CTA
-    fireEvent.click(screen.getByText('dashboard.autoReplyConfiguredButDisabled 5'));
-    expect(screen.getByText('dashboard.autoReplyConfiguredNote')).toBeInTheDocument();
+    // Rule #5: Warning is NOT dismissible (No X)
+    expect(screen.queryByLabelText('Dismiss')).not.toBeInTheDocument();
+
+    // Initial state (mobile view logic)
+    // There are 2 descriptions (desktop static, mobile expandable). We want the mobile one.
+    const notes = screen.getAllByText('dashboard.autoReplyConfiguredNote');
+    const mobileNote = notes.find(n => !n.className.includes('hidden sm:block'));
     
-    // Use getAllByText because we have mobile/desktop CTAs
+    // Check parent wrapper for collapsed state classes
+    expect(mobileNote?.parentElement).toHaveClass('max-h-0');
+    expect(mobileNote?.parentElement).toHaveClass('opacity-0');
+
+    // Rule #6: Expand on tap
+    fireEvent.click(screen.getByText('dashboard.autoReplyConfiguredButDisabled'));
+    
+    // Switch to expanded
+    expect(mobileNote?.parentElement).toHaveClass('max-h-40');
+    expect(mobileNote?.parentElement).toHaveClass('opacity-100');
+
+    // CTAs should be present
     const ctas = screen.getAllByText('dashboard.goToSettings');
     expect(ctas.length).toBeGreaterThan(0);
   });
