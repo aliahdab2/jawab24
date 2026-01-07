@@ -43,6 +43,8 @@
   "nav.rules": "Reply Rules",
   "nav.settings": "Settings",
   "nav.logout": "Logout",
+  "logout.confirmTitle": "Log out?",
+  "logout.confirmBody": "You will be logged out from your current account.",
   "nav.advanced": "Advanced Settings",
   "nav.menu": "Menu",
   "nav.more": "More",

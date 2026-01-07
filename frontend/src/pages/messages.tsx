@@ -274,7 +274,7 @@ export default function MessagesPage() {
               className="py-3 ps-12 rounded-xl bg-surface-50 border-none focus:ring-2 focus:ring-brand-500 transition-all"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
+          <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-1 px-1">
             {(['all', 'incoming', 'outgoing', 'needs_attention'] as FilterType[]).map((f) => (
               <Button
                 key={f}

@@ -45,6 +45,8 @@
   "nav.rules": "قواعد الرد",
   "nav.settings": "الإعدادات",
   "nav.logout": "تسجيل الخروج",
+  "logout.confirmTitle": "هل تريد تسجيل الخروج؟",
+  "logout.confirmBody": "سيتم تسجيل خروجك من الحساب الحالي.",
   "nav.advanced": "الإعدادات المتقدمة",
   "nav.menu": "القائمة",
   "nav.more": "المزيد",

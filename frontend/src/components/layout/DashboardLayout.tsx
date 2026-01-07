@@ -112,17 +112,30 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </div>
           </div>
         ) : (
-          /* Mobile APP Header - Final: h-16 (64px), Dark Gradient, Logo Only, No Shadow */
+          /* Mobile APP Header - Final: h-16 (64px), Dark Gradient, Logo Left, Dynamic Icon Right */
           <div
-            className="md:hidden sticky top-0 left-0 right-0 h-16 flex items-center justify-center px-5 z-40"
+            className="md:hidden sticky top-0 left-0 right-0 h-16 flex items-center justify-between px-5 z-40"
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               background: 'linear-gradient(to bottom, #0f172a 0%, rgba(15, 23, 42, 0.85) 60%, rgba(15, 23, 42, 0) 100%)'
             }}
           >
-            <Link href="/dashboard" className="flex items-center p-2 -m-2 min-w-[44px] min-h-[44px] justify-center">
+            <Link href="/dashboard" className="flex items-center p-2 -ml-2 min-w-[44px] min-h-[44px] justify-center">
               <BrandLogo variant="vector" className="w-10 h-10" />
             </Link>
+
+            {/* Dynamic Active Page Icon */}
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/90">
+              {router.pathname.includes('/comments') ? (
+                <MessageSquare className="w-5 h-5" />
+              ) : router.pathname.includes('/messages') ? (
+                <MessageCircle className="w-5 h-5" />
+              ) : router.pathname.includes('/settings') ? (
+                <Settings className="w-5 h-5" />
+              ) : (
+                <LayoutDashboard className="w-5 h-5" />
+              )}
+            </div>
           </div>
         )}
 
@@ -243,21 +256,21 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold text-surface-900 mb-2 text-center">
-                {language === 'ar' ? 'تسجيل الخروج' : 'Log Out'}
+                {t('logout.confirmTitle')}
               </h3>
               <p className="text-surface-600 text-center mb-6">
-                {language === 'ar' ? 'هل تريد تسجيل الخروج؟' : 'Are you sure you want to log out?'}
+                {t('logout.confirmBody')}
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowLogoutCheck(false)}
-                  className="flex-1 py-2.5 rounded-xl font-semibold text-surface-600 bg-surface-100 hover:bg-surface-200"
+                  className="flex-1 py-3 rounded-xl font-semibold text-surface-700 bg-surface-100 hover:bg-surface-200 transition-colors"
                 >
                   {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => { logout(); router.push('/login'); }}
-                  className="flex-1 py-2.5 rounded-xl font-semibold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/20"
+                  className="flex-1 py-3 rounded-xl font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
                 >
                   {t('nav.logout')}
                 </button>
@@ -318,22 +331,22 @@ function MobileMenuButton({ onClick, icon, label, className, fullWidth }: {
     <button
       onClick={onClick}
       className={clsx(
-        "flex flex-col items-center justify-center p-4 rounded-2xl bg-white border active:scale-95 transition-all min-h-[96px]",
+        "rounded-2xl bg-white border active:scale-95 transition-all",
         isLogout
-          ? "border-red-100 shadow-[0_6px_20px_rgba(239,68,68,0.12)] col-span-2"
-          : "border-surface-100/40 shadow-[0_8px_20px_rgba(0,0,0,0.06)]",
+          ? "flex flex-row items-center justify-start gap-4 p-4 mt-6 h-[52px] w-full border-red-200 bg-red-50 text-red-600 hover:bg-red-100/50"
+          : "flex flex-col items-center justify-center p-4 border-surface-100/40 shadow-[0_8px_20px_rgba(0,0,0,0.06)] min-h-[96px]",
         className
       )}
     >
       <div className={clsx(
-        "w-12 h-12 rounded-full flex items-center justify-center mb-3",
-        isLogout ? "bg-red-50 text-red-500" : "bg-brand-50/80 text-brand-600"
+        "flex items-center justify-center",
+        isLogout ? "text-red-500" : "w-12 h-12 rounded-full bg-brand-50/80 text-brand-600 mb-3"
       )}>
         {icon}
       </div>
       <span className={clsx(
-        "text-[14px] font-medium text-center w-full px-1 line-clamp-2 leading-snug",
-        isLogout ? "text-red-600" : "text-surface-900"
+        "font-medium leading-snug",
+        isLogout ? "text-red-600 text-sm" : "text-[14px] text-surface-900 text-center w-full px-1 line-clamp-2"
       )}>
         {label}
       </span>
