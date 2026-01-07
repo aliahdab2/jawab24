@@ -279,21 +279,21 @@ export default function MessagesPage() {
       </div>
 
       {/* Filters & Search - Compact unified section */}
-      <Card className="mb-8 border-none shadow-md shadow-surface-200/20">
-        <div className="p-3.5 flex flex-col gap-3.5">
+      <Card className="mb-8 border-none shadow-md shadow-surface-200/20 overflow-visible" padding="none">
+        <div className="p-5 sm:p-7 flex flex-col gap-5">
           <div className="relative group">
             <Search
-              className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400 group-focus-within:text-brand-500 transition-colors"
-              style={{ insetInlineStart: '1rem' }}
+              className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
+              style={{ insetInlineStart: '1.25rem' }}
             />
             <Input
               placeholder={t('common.search') + '...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="py-3 ps-12 rounded-xl bg-surface-50 border-none focus:ring-2 focus:ring-brand-500 transition-all"
+              className="py-3.5 ps-14 rounded-2xl bg-surface-50 border-none focus:ring-4 focus:ring-brand-500/10 focus:bg-white transition-all shadow-sm"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide -mx-1 px-1">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 sm:mx-0 sm:px-0">
             {(['all', 'incoming', 'outgoing', 'needs_attention'] as FilterType[]).map((f) => (
               <Button
                 key={f}

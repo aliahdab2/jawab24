@@ -13,9 +13,9 @@ interface CardProps {
 export function Card({ children, className, hover = false, padding = 'md', style, onClick }: CardProps) {
   const paddingClasses = {
     none: '',
-    sm: 'p-4 sm:p-5',
-    md: 'p-5 sm:p-8',
-    lg: 'p-6 sm:p-12',
+    sm: 'p-5 sm:p-6',
+    md: 'p-6 sm:p-8',
+    lg: 'p-8 sm:p-12',
   };
 
   return (
@@ -23,6 +23,9 @@ export function Card({ children, className, hover = false, padding = 'md', style
       className={clsx(
         hover ? 'card-hover' : 'card',
         paddingClasses[padding],
+        // Ensure overflow is visible by default to prevent clipping of shadows, rings, and focus states
+        // Only override with overflow-hidden if explicitly needed via className
+        !className?.includes('overflow-') && 'overflow-visible',
         onClick && 'cursor-pointer active:scale-[0.98] transition-transform duration-300',
         className
       )}

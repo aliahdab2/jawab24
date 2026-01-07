@@ -344,16 +344,20 @@ export default function SettingsPage() {
                 </button>
               </div>
 
-              {/* Dual Reply Configuration - Only visible if Dual Mode is ON */}
+              {/* Dual Reply Configuration - Connected to the 3rd option */}
               {settings.commentReplyMode === 'dual' && (
-                <div className="mt-6 p-5 rounded-2xl bg-surface-50 border border-surface-100 animate-slide-up">
+                <div className="mt-4 p-5 rounded-2xl bg-brand-50/20 border border-brand-200/50 animate-slide-up relative shadow-sm">
+                  {/* Visual Connector Notch */}
+                  <div className="absolute -top-2 end-8 sm:end-12 w-4 h-4 bg-[#fdfefd] border-t border-s border-brand-200/50 rotate-45" 
+                       style={{ backgroundColor: 'rgb(240 253 244 / 0.2)' }} />
+                  
                   <div className="flex items-center gap-4 mb-4">
                     <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
                       <MessageSquare className="w-5 h-5" />
                     </div>
                     <div className="text-start">
-                      <h4 className="font-bold text-surface-900 text-base">{t('settings.dualReplyConfigTitle')}</h4>
-                      <p className="text-xs text-surface-500 font-medium">{t('settings.dualReplyConfigDesc')}</p>
+                      <h4 className="font-bold text-brand-900 text-base">{t('settings.dualReplyConfigTitle')}</h4>
+                      <p className="text-xs text-brand-700/70 font-medium">{t('settings.dualReplyConfigDesc')}</p>
                     </div>
                   </div>
                   <Input

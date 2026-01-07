@@ -105,7 +105,7 @@
   }
 
   .card {
-    @apply bg-white rounded-[2rem] border border-surface-100 shadow-lg shadow-surface-200/50;
+    @apply bg-white rounded-[1.5rem] border border-surface-100 shadow-lg shadow-surface-200/50;
   }
 
   .card-hover {
