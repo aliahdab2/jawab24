@@ -112,13 +112,16 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </div>
           </div>
         ) : (
-          /* Mobile APP Header (Authenticated) - Strict Spec: h-14, Logo Only, No Shadow, Sticky */
+          /* Mobile APP Header (Authenticated) - Final Spec: h-14 (56px), Logo Only, Dark Gradient, No Shadow */
           <div
-            className="md:hidden sticky top-0 left-0 right-0 h-14 bg-surface-50/95 backdrop-blur-md flex items-center justify-between px-5 z-40 border-b border-surface-200/50"
-            style={{ paddingTop: 'env(safe-area-inset-top)' }}
+            className="md:hidden sticky top-0 left-0 right-0 h-14 flex items-center justify-center px-5 z-40"
+            style={{
+              paddingTop: 'env(safe-area-inset-top)',
+              background: 'linear-gradient(to bottom, #0f172a 0%, rgba(15, 23, 42, 0.85) 60%, rgba(15, 23, 42, 0) 100%)'
+            }}
           >
             <Link href="/dashboard" className="flex items-center">
-              <BrandLogo variant="vector" className="w-[30px] h-[30px]" />
+              <BrandLogo variant="vector" className="w-9 h-9" />
             </Link>
           </div>
         )}
@@ -139,58 +142,59 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           </div>
         </main>
 
-        {/* Mobile bottom navigation - hidden on clean layouts */}
+        {/* Mobile bottom navigation - Final Spec: h-16 (64px), 4 items, proper sizing */}
         {!isCleanLayout && (
           <nav
-            className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-200 flex justify-around items-center h-16 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.03)] pb-[env(safe-area-inset-bottom)] box-content"
+            className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 pb-[env(safe-area-inset-bottom)] box-content"
           >
             <MobileNavButton
               onClick={() => router.push('/dashboard')}
-              icon={<LayoutDashboard className="w-5 h-5" />}
+              icon={<LayoutDashboard className="w-6 h-6" />}
               label={t('nav.dashboard')}
               active={router.pathname === '/dashboard'}
             />
             <MobileNavButton
               onClick={() => router.push('/comments')}
-              icon={<MessageSquare className="w-5 h-5" />}
+              icon={<MessageSquare className="w-6 h-6" />}
               label={t('nav.comments')}
               active={router.pathname === '/comments'}
             />
             <MobileNavButton
               onClick={() => router.push('/messages')}
-              icon={<MessageCircle className="w-5 h-5" />}
+              icon={<MessageCircle className="w-6 h-6" />}
               label={t('nav.messages')}
               active={router.pathname === '/messages'}
             />
             <MobileNavButton
               onClick={() => setMobileMenuOpen(true)}
-              icon={<MoreHorizontal className="w-5 h-5" />}
+              icon={<MoreHorizontal className="w-6 h-6" />}
               label={t('nav.more') || 'More'}
               active={mobileMenuOpen}
             />
           </nav>
         )}
 
-        {/* Mobile full menu overlay */}
+        {/* Mobile full menu overlay - Final Spec: rounded-t-2xl, p-5, max-height 85vh, backdrop rgba(0,0,0,0.4) */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 bg-black/50 z-50 backdrop-blur-sm animate-in fade-in" onClick={() => setMobileMenuOpen(false)}>
+          <div className="md:hidden fixed inset-0 bg-black/40 z-50 backdrop-blur-sm animate-in fade-in" onClick={() => setMobileMenuOpen(false)}>
             <div
-              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 animate-in slide-in-from-bottom"
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 animate-in slide-in-from-bottom overflow-y-auto"
               style={{
                 paddingBottom: 'max(1.25rem, calc(1.25rem + env(safe-area-inset-bottom, 0px)))',
-                maxHeight: 'calc(100dvh - 72px)'
+                maxHeight: '85vh'
               }}
               onClick={(e) => e.stopPropagation()}
+              dir={isRTL ? 'rtl' : 'ltr'}
             >
-              {/* Menu Header */}
-              <div className="flex justify-between items-center mb-6">
+              {/* Menu Header - RTL aligned */}
+              <div className="flex items-center mb-6" style={{ justifyContent: 'space-between', flexDirection: isRTL ? 'row-reverse' : 'row' }}>
+                <h3 className="font-semibold text-lg text-surface-900" style={{ textAlign: isRTL ? 'right' : 'left' }}>{t('nav.menu') || 'القائمة'}</h3>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
                   className="p-2 -m-2 rounded-full hover:bg-surface-100 text-surface-500"
                 >
                   <X className="w-5 h-5" />
                 </button>
-                <h3 className="font-semibold text-lg text-surface-900">{t('nav.menu') || 'Menu'}</h3>
               </div>
 
               {/* Launcher Grid */}
@@ -293,17 +297,17 @@ function MobileNavButton({ onClick, icon, label, active }: {
       className="flex flex-col items-center justify-center h-full w-full relative group min-h-[44px]"
     >
       <div className={clsx(
-        "transition-all duration-300 mb-1",
-        active ? "text-brand-600 scale-110 opacity-100" : "text-surface-400 scale-100 opacity-60 group-hover:opacity-80"
+        "transition-all duration-200 mb-1",
+        active ? "text-brand-600 scale-100 opacity-100" : "text-surface-500 scale-100 opacity-40 group-hover:opacity-60"
       )}>
         {icon}
       </div>
       <span className={clsx(
-        "text-[10px] tracking-wide transition-all",
-        active ? "font-semibold text-brand-600 opacity-100" : "font-medium text-surface-400 opacity-60"
+        "text-[11px] tracking-wide transition-all leading-tight",
+        active ? "font-semibold text-brand-600 opacity-100" : "font-medium text-surface-500 opacity-50"
       )}>{label}</span>
       {active && (
-        <div className="absolute top-0 w-8 h-0.5 bg-brand-600 rounded-b-full shadow-[0_1px_6px_rgba(13,148,136,0.3)]"></div>
+        <div className="absolute top-0 w-10 h-0.5 bg-brand-600 rounded-b-full"></div>
       )}
     </button>
   );
@@ -315,18 +319,23 @@ function MobileMenuButton({ onClick, icon, label, className }: {
   label: string;
   className?: string;
 }) {
+  const isLogout = className?.includes('red');
+
   return (
     <button
       onClick={onClick}
       className={clsx(
-        "flex flex-col items-center justify-center p-4 rounded-2xl bg-white border border-surface-100 shadow-[0_6px_18px_rgba(0,0,0,0.06)] active:scale-95 transition-all h-[110px]",
+        "flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-surface-100/40 shadow-[0_8px_20px_rgba(0,0,0,0.06)] active:scale-95 transition-all h-[100px]",
         className
       )}
     >
-      <div className="w-12 h-12 rounded-xl bg-brand-50/50 flex items-center justify-center text-brand-600 mb-3">
+      <div className={clsx(
+        "w-12 h-12 rounded-full flex items-center justify-center mb-3",
+        isLogout ? "bg-red-50 text-red-500" : "bg-brand-50/80 text-brand-600"
+      )}>
         {icon}
       </div>
-      <span className="text-xs font-medium text-surface-900 leading-relaxed text-center w-full truncate px-1">
+      <span className="text-[13px] font-medium text-surface-900 leading-snug text-center w-full px-1 line-clamp-2">
         {label}
       </span>
     </button>

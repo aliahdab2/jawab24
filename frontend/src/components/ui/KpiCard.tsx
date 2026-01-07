@@ -48,7 +48,7 @@ export function KpiCard({
             className="border-none hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5 animate-slide-up group"
             padding="none"
             style={{
-                boxShadow: '0 10px 30px rgba(0,0,0,0.05)',
+                boxShadow: '0 12px 28px rgba(0,0,0,0.08)',
                 animationDelay
             }}
         >
@@ -62,8 +62,8 @@ export function KpiCard({
                     </p>
                 </div>
 
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${containerClassMap[color]}`}>
-                    <Icon className="w-6 h-6" />
+                <div className={`w-[54px] h-[54px] rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${containerClassMap[color]}`}>
+                    <Icon className="w-7 h-7" />
                 </div>
             </div>
         </Card>

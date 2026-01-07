@@ -53,8 +53,9 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
       {/* Floating button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-28 md:bottom-8 ltr:right-8 rtl:left-8 z-50 w-14 h-14 md:w-16 md:h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[2rem] shadow-2xl hover:shadow-emerald-500/40 transition-all duration-300 flex items-center justify-center group active:scale-90 overflow-hidden ${hidden || !isVisible ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+        className={`fixed bottom-28 md:bottom-8 ltr:right-8 rtl:left-8 z-50 w-14 h-14 md:w-16 md:h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[2rem] transition-all duration-300 flex items-center justify-center group active:scale-90 overflow-hidden ${hidden || !isVisible ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
           }`}
+        style={{ boxShadow: '0 12px 24px rgba(0,0,0,0.2)' }}
         aria-label={t('common.needHelp')}
       >
         <div className="absolute inset-0 bg-gradient-to-tr from-emerald-600/20 to-transparent pointer-events-none"></div>
