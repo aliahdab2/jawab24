@@ -63,7 +63,7 @@ export function KpiCard({
                 </div>
 
                 <div className={`w-[54px] h-[54px] rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${containerClassMap[color]}`}>
-                    <Icon className="w-7 h-7" />
+                    <Icon className="w-[30px] h-[30px]" />
                 </div>
             </div>
         </Card>

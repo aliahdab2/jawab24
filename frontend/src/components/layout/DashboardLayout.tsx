@@ -112,15 +112,12 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </div>
           </div>
         ) : (
-          /* Mobile APP Header (Authenticated) - Final Spec: h-14 (56px), Logo Only, Dark Gradient, No Shadow */
+          /* Mobile APP Header - Final: h-16 (64px), Solid Dark, Logo Only, No Shadow */
           <div
-            className="md:hidden sticky top-0 left-0 right-0 h-14 flex items-center justify-center px-5 z-40"
-            style={{
-              paddingTop: 'env(safe-area-inset-top)',
-              background: 'linear-gradient(to bottom, #0f172a 0%, rgba(15, 23, 42, 0.85) 60%, rgba(15, 23, 42, 0) 100%)'
-            }}
+            className="md:hidden sticky top-0 left-0 right-0 h-16 bg-slate-900 flex items-center justify-center px-5 z-40"
+            style={{ paddingTop: 'env(safe-area-inset-top)' }}
           >
-            <Link href="/dashboard" className="flex items-center">
+            <Link href="/dashboard" className="flex items-center p-2 -m-2 min-w-[44px] min-h-[44px] justify-center">
               <BrandLogo variant="vector" className="w-9 h-9" />
             </Link>
           </div>
@@ -174,21 +171,22 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           </nav>
         )}
 
-        {/* Mobile full menu overlay - Final Spec: rounded-t-2xl, p-5, max-height 85vh, backdrop rgba(0,0,0,0.4) */}
+        {/* Mobile full menu overlay - 2 columns, stronger shadow, 40-50% backdrop */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 bg-black/40 z-50 backdrop-blur-sm animate-in fade-in" onClick={() => setMobileMenuOpen(false)}>
+          <div className="md:hidden fixed inset-0 bg-black/45 z-50 backdrop-blur-sm animate-in fade-in" onClick={() => setMobileMenuOpen(false)}>
             <div
-              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5 animate-in slide-in-from-bottom overflow-y-auto"
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[24px] p-5 animate-in slide-in-from-bottom overflow-y-auto"
               style={{
                 paddingBottom: 'max(1.25rem, calc(1.25rem + env(safe-area-inset-bottom, 0px)))',
-                maxHeight: '85vh'
+                maxHeight: '85vh',
+                boxShadow: '0 -8px 32px rgba(0,0,0,0.16)'
               }}
               onClick={(e) => e.stopPropagation()}
               dir={isRTL ? 'rtl' : 'ltr'}
             >
-              {/* Menu Header - RTL aligned */}
-              <div className="flex items-center mb-6" style={{ justifyContent: 'space-between', flexDirection: isRTL ? 'row-reverse' : 'row' }}>
-                <h3 className="font-semibold text-lg text-surface-900" style={{ textAlign: isRTL ? 'right' : 'left' }}>{t('nav.menu') || 'القائمة'}</h3>
+              {/* Menu Header - RTL: القائمة (right), X (left), 48px height */}
+              <div className="flex items-center justify-between h-12 mb-6">
+                <h3 className="font-semibold text-lg text-surface-900 text-start">{t('nav.menu') || 'القائمة'}</h3>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
                   className="p-2 -m-2 rounded-full hover:bg-surface-100 text-surface-500"
@@ -197,51 +195,53 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                 </button>
               </div>
 
-              {/* Launcher Grid */}
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              {/* Menu Grid - 2 columns, specific Arabic order */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {/* Row 1: الرئيسية | التعليقات */}
                 <MobileMenuButton
                   onClick={() => { router.push('/dashboard'); setMobileMenuOpen(false); }}
-                  icon={<LayoutDashboard className="w-6 h-6" />}
+                  icon={<LayoutDashboard className="w-7 h-7" />}
                   label={t('nav.dashboard')}
                 />
                 <MobileMenuButton
                   onClick={() => { router.push('/comments'); setMobileMenuOpen(false); }}
-                  icon={<MessageSquare className="w-6 h-6" />}
+                  icon={<MessageSquare className="w-7 h-7" />}
                   label={t('nav.comments')}
                 />
+
+                {/* Row 2: الرسائل | إدارة الصفحات */}
                 <MobileMenuButton
                   onClick={() => { router.push('/messages'); setMobileMenuOpen(false); }}
-                  icon={<MessageCircle className="w-6 h-6" />}
+                  icon={<MessageCircle className="w-7 h-7" />}
                   label={t('nav.messages')}
                 />
-
-                {/* Row 2 */}
                 <MobileMenuButton
                   onClick={() => { router.push('/pages'); setMobileMenuOpen(false); }}
-                  icon={<FileText className="w-6 h-6" />}
+                  icon={<FileText className="w-7 h-7" />}
                   label={t('nav.pages')}
+                />
+
+                {/* Row 3: الباقات | الإعدادات */}
+                <MobileMenuButton
+                  onClick={() => { router.push('/pricing'); setMobileMenuOpen(false); }}
+                  icon={<CreditCard className="w-7 h-7" />}
+                  label={t('pricing.title') || 'Pricing'}
                 />
                 <MobileMenuButton
                   onClick={() => { router.push('/settings'); setMobileMenuOpen(false); }}
-                  icon={<Settings className="w-6 h-6" />}
+                  icon={<Settings className="w-7 h-7" />}
                   label={t('nav.settings')}
-                />
-                <MobileMenuButton
-                  onClick={() => { router.push('/pricing'); setMobileMenuOpen(false); }}
-                  icon={<CreditCard className="w-6 h-6" />}
-                  label={t('pricing.title') || 'Pricing'}
                 />
               </div>
 
-              {/* Logout - Separated Row */}
-              <div className="grid grid-cols-3 gap-4">
-                <MobileMenuButton
-                  onClick={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
-                  icon={<LogOut className="w-6 h-6 text-red-500" />}
-                  label={t('nav.logout')}
-                  className="hover:border-red-200 hover:bg-red-50/30 col-start-3"
-                />
-              </div>
+              {/* Row 4: تسجيل الخروج (full width) */}
+              <MobileMenuButton
+                onClick={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
+                icon={<LogOut className="w-7 h-7" />}
+                label={t('nav.logout')}
+                className="logout-button"
+                fullWidth
+              />
             </div>
           </div>
         )}
@@ -313,19 +313,23 @@ function MobileNavButton({ onClick, icon, label, active }: {
   );
 }
 
-function MobileMenuButton({ onClick, icon, label, className }: {
+function MobileMenuButton({ onClick, icon, label, className, fullWidth }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   className?: string;
+  fullWidth?: boolean;
 }) {
-  const isLogout = className?.includes('red');
+  const isLogout = className?.includes('logout');
 
   return (
     <button
       onClick={onClick}
       className={clsx(
-        "flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-surface-100/40 shadow-[0_8px_20px_rgba(0,0,0,0.06)] active:scale-95 transition-all h-[100px]",
+        "flex flex-col items-center justify-center p-4 rounded-2xl bg-white border active:scale-95 transition-all min-h-[96px]",
+        isLogout
+          ? "border-red-100 shadow-[0_6px_20px_rgba(239,68,68,0.12)] col-span-2"
+          : "border-surface-100/40 shadow-[0_8px_20px_rgba(0,0,0,0.06)]",
         className
       )}
     >
@@ -335,7 +339,10 @@ function MobileMenuButton({ onClick, icon, label, className }: {
       )}>
         {icon}
       </div>
-      <span className="text-[13px] font-medium text-surface-900 leading-snug text-center w-full px-1 line-clamp-2">
+      <span className={clsx(
+        "text-[14px] font-medium text-center w-full px-1 line-clamp-2 leading-snug",
+        isLogout ? "text-red-600" : "text-surface-900"
+      )}>
         {label}
       </span>
     </button>
