@@ -276,7 +276,6 @@
   "settings.title": "Settings",
   "settings.description": "Control your account settings",
   "settings.pageContext": "Configure how Jawab24 responds to your page activity.",
-  "settings.languageDescription": "Dashboard and default reply language",
   "settings.advancedDescription": "Customize business hours, replies and more",
   "settings.templatesCardDesc": "Create ready-made replies to use in rules",
   "settings.viewTemplates": "View Templates",

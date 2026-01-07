@@ -192,9 +192,6 @@ export default function SettingsPage() {
               </div>
               <div className="text-start">
                 <h3 className="font-bold text-surface-900 text-base">{t('settings.language')}</h3>
-                <p className="text-surface-500 text-xs font-medium">
-                  {t('settings.languageDescription')}
-                </p>
               </div>
             </div>
 
@@ -206,8 +203,8 @@ export default function SettingsPage() {
                   setLanguage('ar');
                 }}
                 className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'ar'
-                    ? 'bg-white text-brand-600 shadow-sm'
-                    : 'text-surface-600 hover:text-surface-900'
+                  ? 'bg-white text-brand-600 shadow-sm'
+                  : 'text-surface-600 hover:text-surface-900'
                   }`}
               >
                 العربية
@@ -218,8 +215,8 @@ export default function SettingsPage() {
                   setLanguage('en');
                 }}
                 className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'en'
-                    ? 'bg-white text-brand-600 shadow-sm'
-                    : 'text-surface-600 hover:text-surface-900'
+                  ? 'bg-white text-brand-600 shadow-sm'
+                  : 'text-surface-600 hover:text-surface-900'
                   }`}
               >
                 English

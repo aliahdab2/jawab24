@@ -121,7 +121,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             }}
           >
             <Link href="/dashboard" className="flex items-center p-2 -m-2 min-w-[44px] min-h-[44px] justify-center">
-              <BrandLogo variant="vector" className="w-9 h-9" />
+              <BrandLogo variant="vector" className="w-10 h-10" />
             </Link>
           </div>
         )}

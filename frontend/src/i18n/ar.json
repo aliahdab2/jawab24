@@ -278,7 +278,6 @@
   "settings.title": "الإعدادات",
   "settings.description": "تحكم في إعدادات حسابك وتفضيلات الرد",
   "settings.pageContext": "قم بتهيئة كيفية استجابة جواب24 لنشاط صفحتك.",
-  "settings.languageDescription": "اختر لغة لوحة التحكم والردود الافتراضية",
   "settings.advancedDescription": "تخصيص ساعات العمل والردود والمزيد",
   "settings.templatesCardDesc": "إنشاء ردود جاهزة لاستخدامها في القواعد",
   "settings.viewTemplates": "عرض القوالب",
