@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X, LogOut, CreditCard } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X, LogOut, CreditCard, Zap, BookTemplate } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -175,6 +175,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         )}
 
         {/* Mobile full menu overlay - 2 columns, stronger shadow, 40-50% backdrop */}
+        {/* Mobile full menu overlay - 2 columns, stronger shadow, 40-50% backdrop */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 bg-black/45 z-50 backdrop-blur-sm animate-in fade-in" onClick={() => setMobileMenuOpen(false)}>
             <div
@@ -198,7 +199,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                 </button>
               </div>
 
-              {/* Menu Grid - 2 columns, specific Arabic order */}
+              {/* Menu Grid - 2 columns, Minimalist Focus (4 items) */}
               <div className="grid grid-cols-2 gap-3 mb-4">
                 {/* Row 1: الرئيسية | التعليقات */}
                 <MobileMenuButton
@@ -212,23 +213,11 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                   label={t('nav.comments')}
                 />
 
-                {/* Row 2: الرسائل | إدارة الصفحات */}
+                {/* Row 2: الرسائل | الإعدادات */}
                 <MobileMenuButton
                   onClick={() => { router.push('/messages'); setMobileMenuOpen(false); }}
                   icon={<MessageCircle className="w-7 h-7" />}
                   label={t('nav.messages')}
-                />
-                <MobileMenuButton
-                  onClick={() => { router.push('/pages'); setMobileMenuOpen(false); }}
-                  icon={<FileText className="w-7 h-7" />}
-                  label={t('nav.pages')}
-                />
-
-                {/* Row 3: الباقات | الإعدادات */}
-                <MobileMenuButton
-                  onClick={() => { router.push('/pricing'); setMobileMenuOpen(false); }}
-                  icon={<CreditCard className="w-7 h-7" />}
-                  label={t('pricing.title') || 'Pricing'}
                 />
                 <MobileMenuButton
                   onClick={() => { router.push('/settings'); setMobileMenuOpen(false); }}
@@ -237,7 +226,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                 />
               </div>
 
-              {/* Row 4: تسجيل الخروج (full width) */}
+              {/* Row 3: تسجيل الخروج (full width) */}
               <MobileMenuButton
                 onClick={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
                 icon={<LogOut className="w-7 h-7" />}

@@ -183,48 +183,48 @@ export default function SettingsPage() {
 
       {/* Main Settings - Simplified */}
       <div className="space-y-6 mb-8">
-        {/* Language Selection */}
-        <Card className="border-none shadow-lg shadow-surface-200/30 p-4">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center">
-              <Globe className="w-4 h-4 opacity-50" />
+        {/* Language Selection - Compact Segmented Control */}
+        <Card className="border-none shadow-lg shadow-surface-200/30 p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center">
+                <Globe className="w-5 h-5" />
+              </div>
+              <div className="text-start">
+                <h3 className="font-bold text-surface-900 text-base">{t('settings.language')}</h3>
+                <p className="text-surface-500 text-xs font-medium">
+                  {t('settings.languageDescription')}
+                </p>
+              </div>
             </div>
-            <div className="text-start">
-              <h3 className="font-bold text-surface-900 text-xl">{t('settings.language')}</h3>
-              <p className="text-surface-500 text-sm font-medium">
-                {t('settings.languageDescription')}
-              </p>
+
+            {/* Segmented Control */}
+            <div className="flex gap-1 p-1 bg-surface-100 rounded-xl">
+              <button
+                onClick={() => {
+                  setSettings({ ...settings, dashboardLanguage: 'ar' });
+                  setLanguage('ar');
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'ar'
+                    ? 'bg-white text-brand-600 shadow-sm'
+                    : 'text-surface-600 hover:text-surface-900'
+                  }`}
+              >
+                العربية
+              </button>
+              <button
+                onClick={() => {
+                  setSettings({ ...settings, dashboardLanguage: 'en' });
+                  setLanguage('en');
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'en'
+                    ? 'bg-white text-brand-600 shadow-sm'
+                    : 'text-surface-600 hover:text-surface-900'
+                  }`}
+              >
+                English
+              </button>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              onClick={() => {
-                setSettings({ ...settings, dashboardLanguage: 'ar' });
-                setLanguage('ar');
-              }}
-              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${settings.dashboardLanguage === 'ar'
-                ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500'
-                : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
-                }`}
-            >
-              <span className={`font-bold ${settings.dashboardLanguage === 'ar' ? 'text-brand-900' : 'text-surface-600'}`}>العربية (Arabic)</span>
-              {settings.dashboardLanguage === 'ar' && <Check className="w-5 h-5 text-brand-500" />}
-            </button>
-
-            <button
-              onClick={() => {
-                setSettings({ ...settings, dashboardLanguage: 'en' });
-                setLanguage('en');
-              }}
-              className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${settings.dashboardLanguage === 'en'
-                ? 'border-brand-500 bg-brand-50/50 shadow-md ring-1 ring-brand-500'
-                : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
-                }`}
-            >
-              <span className={`font-bold ${settings.dashboardLanguage === 'en' ? 'text-brand-900' : 'text-surface-600'}`}>English</span>
-              {settings.dashboardLanguage === 'en' && <Check className="w-5 h-5 text-brand-500" />}
-            </button>
           </div>
         </Card>
 

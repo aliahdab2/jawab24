@@ -281,7 +281,7 @@ export default function MessagesPage() {
                 variant={filter === f ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => setFilter(f)}
-                className={`rounded-full whitespace-nowrap px-6 transition-all duration-300 ${filter === f ? 'shadow-sm shadow-brand-100' : ''
+                className={`rounded-full whitespace-nowrap flex-shrink-0 px-6 transition-all duration-300 ${filter === f ? 'shadow-sm shadow-brand-100' : ''
                   } ${f === 'needs_attention' && needsAttentionCount > 0 ? 'ring-2 ring-red-200' : ''}`}
               >
                 <div className="flex items-center gap-2">
