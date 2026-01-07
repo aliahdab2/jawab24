@@ -180,6 +180,22 @@
   .page-description {
     @apply text-surface-500 mt-1;
   }
+
+  /* Arabic text optimization - CSS-only, no JavaScript needed */
+  /* Remove uppercase and letter-spacing for Arabic to maintain character connectivity */
+  [dir="rtl"] .uppercase,
+  [dir="rtl"] .tracking-wide,
+  [dir="rtl"] .tracking-wider,
+  [dir="rtl"] .tracking-widest {
+    text-transform: none !important;
+    letter-spacing: normal !important;
+  }
+
+  /* Preserve uppercase for English text in RTL pages (mixed content) */
+  [dir="rtl"] [lang="en"] {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
 }
 
 @layer utilities {

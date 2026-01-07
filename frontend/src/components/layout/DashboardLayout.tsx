@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, FileText, MessageSquare, Settings, MoreHorizontal, X, LogOut, CreditCard, Zap, BookTemplate } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, MessageSquare, Settings, MoreHorizontal, X, LogOut } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';

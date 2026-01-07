@@ -2,14 +2,13 @@ import React from 'react';
 import { Card } from './Card';
 import { LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
-import { useTranslation } from '@/i18n';
 
 /**
  * KPI Card Component - Global Design DNA
  * 
  * SPECIFICATIONS:
  * - Number: 28px-32px, font-bold, text-surface-900
- * - Label: 10px-12px, font-bold, text-surface-500, uppercase
+ * - Label: 10px-12px, font-bold, text-surface-500
  * - Icon: 24px-28px inside 48px-56px container
  * - Decoration: Subtle background circle relative to color
  * - Shadow: 0 10px 30px rgba(0,0,0,0.04)
@@ -32,7 +31,6 @@ export function KpiCard({
     animationDelay,
     className
 }: KpiCardProps) {
-    const { language } = useTranslation();
     return (
         <Card
             className={clsx(
@@ -61,10 +59,7 @@ export function KpiCard({
                     <p className="text-[26px] sm:text-[32px] font-bold text-surface-900 leading-none tracking-tight mb-1.5 truncate">
                         {typeof value === 'number' ? value.toLocaleString() : value}
                     </p>
-                    <p className={clsx(
-                        "text-[10px] sm:text-xs font-bold text-surface-500 truncate leading-tight opacity-70",
-                        language !== 'ar' && "uppercase tracking-widest"
-                    )}>
+                    <p className="text-[10px] sm:text-xs font-bold text-surface-500 truncate leading-tight opacity-70">
                         {title}
                     </p>
                 </div>

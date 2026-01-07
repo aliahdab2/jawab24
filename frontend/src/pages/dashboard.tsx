@@ -21,14 +21,11 @@ import { ar, enUS } from 'date-fns/locale';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 
-function UsageProgress({ label, used, limit, percent, language }: { label: string; used: number; limit: number | null; percent: number; language: string }) {
+function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-end text-xs">
-        <span className={clsx(
-          "font-bold text-surface-500 opacity-80",
-          language !== 'ar' && "uppercase tracking-widest"
-        )}>
+        <span className="font-bold text-surface-500 opacity-80">
           {label}
         </span>
         <span className="font-bold text-surface-900 text-sm">
@@ -357,10 +354,7 @@ export default function DashboardPage() {
                   <h4 className="text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
                     {usage.subscription.plan.name}
                     {usage.subscription.status === 'trialing' && (
-                      <span className={clsx(
-                        "ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200",
-                        language !== 'ar' && "uppercase tracking-wider"
-                      )}>
+                      <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
                         {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
                       </span>
                     )}
@@ -376,14 +370,12 @@ export default function DashboardPage() {
                   used={usage.aiReplies.used}
                   limit={usage.aiReplies.limit}
                   percent={usage.aiReplies.percentUsed}
-                  language={language}
                 />
                 <UsageProgress
                   label={t('subscription.pagesUsed')}
                   used={usage.pages.used}
                   limit={usage.pages.limit}
                   percent={usage.pages.limit ? (usage.pages.used / usage.pages.limit) * 100 : 0}
-                  language={language}
                 />
               </div>
 
@@ -392,10 +384,7 @@ export default function DashboardPage() {
                   <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
                     <Zap className="w-4 h-4" />
                   </div>
-                  <span className={clsx(
-                    "text-xs font-bold leading-relaxed",
-                    language !== 'ar' && "uppercase tracking-widest"
-                  )}>
+                  <span className="text-xs font-bold leading-relaxed">
                     {t('subscription.trialEndsIn')} {usage.subscription.trialDaysRemaining} {t('subscription.days')}
                   </span>
                 </div>

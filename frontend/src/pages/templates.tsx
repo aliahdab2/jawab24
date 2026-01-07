@@ -18,7 +18,7 @@ import {
 import type { Template } from '@jawab24/shared';
 
 export default function TemplatesPage() {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { token } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -179,10 +179,7 @@ export default function TemplatesPage() {
                   <div className="text-start">
                     <h3 className="font-bold text-surface-900 text-lg leading-tight">{template.name}</h3>
                     {template.usageCount !== undefined && (
-                      <div className={clsx(
-                        "flex items-center gap-1.5 mt-1 text-[10px] font-bold text-surface-400",
-                        language !== 'ar' && "uppercase tracking-widest"
-                      )}>
+                      <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-surface-400">
                         <Zap className="w-3 h-3 text-amber-500" />
                         <span>{t('templates.usageCount')}: {template.usageCount}</span>
                       </div>
@@ -201,10 +198,7 @@ export default function TemplatesPage() {
                 {template.translations.ar && (
                   <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative overflow-hidden group/ar">
                     <div className="flex items-center justify-between mb-2">
-                      <div className={clsx(
-                        "flex items-center gap-1.5 text-[10px] font-bold text-brand-600",
-                        language !== 'ar' && "uppercase tracking-widest"
-                      )}>
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-brand-600">
                         <Globe className="w-3 h-3" />
                         <span>{t('templates.arabic')}</span>
                       </div>
@@ -218,10 +212,7 @@ export default function TemplatesPage() {
                 {template.translations.en && (
                   <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 relative overflow-hidden group/en">
                     <div className="flex items-center justify-between mb-2">
-                      <div className={clsx(
-                        "flex items-center gap-1.5 text-[10px] font-bold text-surface-400",
-                        language !== 'ar' && "uppercase tracking-widest"
-                      )}>
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-surface-400">
                         <Globe className="w-3 h-3" />
                         <span>{t('templates.english')}</span>
                       </div>
@@ -239,10 +230,7 @@ export default function TemplatesPage() {
                   <Tag className="w-3.5 h-3.5 text-surface-300" />
                   {(template.keywords || []).length > 0 ? (
                     (template.keywords || []).slice(0, 6).map((keyword) => (
-                      <span key={keyword} className={clsx(
-                        "px-2 py-0.5 rounded-md bg-surface-100 text-surface-600 text-[10px] font-bold",
-                        language !== 'ar' && "uppercase tracking-wider"
-                      )}>
+                      <span key={keyword} className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-600 text-[10px] font-bold">
                         {keyword}
                       </span>
                     ))
