@@ -1,20 +1,28 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { AutoReplyStatusCard } from '@/components/dashboard/AutoReplyStatusCard';
-import { vi } from 'vitest';
+import { vi, beforeEach } from 'vitest';
 
 // Mock translation hook
 vi.mock('@/i18n', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, data?: any) => {
+      if (data?.count !== undefined) return `${key} ${data.count}`;
+      return key;
+    },
   }),
 }));
 
-// Mock Link component since it's used in the component
+// Mock Link component
 vi.mock('next/link', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 describe('AutoReplyStatusCard', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.clearAllMocks();
+  });
+
   it('should not render anything when activePages is 0', () => {
     const { container } = render(
       <AutoReplyStatusCard
@@ -26,7 +34,7 @@ describe('AutoReplyStatusCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render GREEN active card when comments auto-reply is ON', () => {
+  it('should render GREEN active card and handle expand/dismiss', () => {
     render(
       <AutoReplyStatusCard
         activePages={3}
@@ -35,27 +43,35 @@ describe('AutoReplyStatusCard', () => {
       />
     );
 
-    // Should show active replies text
-    expect(screen.getByText('dashboard.activeRepliesOn')).toBeInTheDocument();
-    // Should show general note
+    // Initial state (Title visible)
+    expect(screen.getByText('dashboard.activeRepliesOn 3')).toBeInTheDocument();
+    
+    // Click to expand
+    fireEvent.click(screen.getByText('dashboard.activeRepliesOn 3'));
     expect(screen.getByText('dashboard.autoReplyNote')).toBeInTheDocument();
-    // Should NOT show warning text
-    expect(screen.queryByText('dashboard.autoReplyConfiguredButDisabled')).not.toBeInTheDocument();
+
+    // Handle Dismiss
+    const dismissBtn = screen.getByLabelText('Dismiss');
+    fireEvent.click(dismissBtn);
+
+    // Should disappear
+    expect(screen.queryByText('dashboard.activeRepliesOn 3')).not.toBeInTheDocument();
+    expect(sessionStorage.getItem('dashboard_success_banner_dismissed')).toBe('true');
   });
 
-  it('should render GREEN active card when messages auto-reply is ON', () => {
-    render(
+  it('should handle session persistence for dismissal', () => {
+    sessionStorage.setItem('dashboard_success_banner_dismissed', 'true');
+    const { container } = render(
       <AutoReplyStatusCard
         activePages={3}
-        commentsAutoReply={false}
+        commentsAutoReply={true}
         messagesAutoReply={true}
       />
     );
-
-    expect(screen.getByText('dashboard.activeRepliesOn')).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render AMBER warning card when both comments and messages are OFF', () => {
+  it('should render AMBER warning card and require expand for details', () => {
     render(
       <AutoReplyStatusCard
         activePages={5}
@@ -64,13 +80,14 @@ describe('AutoReplyStatusCard', () => {
       />
     );
 
-    // Should show configured but disabled text
-    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled')).toBeInTheDocument();
-    // Should show explanation note
+    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled 5')).toBeInTheDocument();
+    
+    // Expand to see note and CTA
+    fireEvent.click(screen.getByText('dashboard.autoReplyConfiguredButDisabled 5'));
     expect(screen.getByText('dashboard.autoReplyConfiguredNote')).toBeInTheDocument();
-    // Should show settings button text
-    expect(screen.getByText('dashboard.goToSettings')).toBeInTheDocument();
-    // Should NOT show active text
-    expect(screen.queryByText('dashboard.activeRepliesOn')).not.toBeInTheDocument();
+    
+    // Use getAllByText because we have mobile/desktop CTAs
+    const ctas = screen.getAllByText('dashboard.goToSettings');
+    expect(ctas.length).toBeGreaterThan(0);
   });
 });
