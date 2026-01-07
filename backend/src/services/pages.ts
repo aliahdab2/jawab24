@@ -21,7 +21,7 @@ export class PagesService {
                 autoReplyEnabled: data.autoReplyEnabled ?? true,
             })
             .returning();
-        
+
         return newPage;
     }
 
@@ -44,7 +44,7 @@ export class PagesService {
             .select()
             .from(pages)
             .where(and(eq(pages.id, pageId), eq(pages.userId, userId)));
-        
+
         return result[0] || null;
     }
 
@@ -56,7 +56,7 @@ export class PagesService {
             .select()
             .from(pages)
             .where(eq(pages.facebookPageId, facebookPageId));
-        
+
         return result[0] || null;
     }
 
@@ -72,7 +72,7 @@ export class PagesService {
             })
             .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
             .returning();
-        
+
         return updatedPage;
     }
 
@@ -97,7 +97,7 @@ export class PagesService {
             })
             .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
             .returning();
-        
+
         return updatedPage;
     }
 
@@ -109,7 +109,7 @@ export class PagesService {
      */
     async syncFromFacebook(userId: string, userAccessToken: string, logger: Logger = noopLogger) {
         logger.info(`[Pages] Starting sync for user ${userId}`);
-        
+
         const fbPages = await facebookService.getUserPages(userAccessToken);
         const syncedPages = [];
 
@@ -122,14 +122,14 @@ export class PagesService {
 
         for (const fbPage of fbPages.data) {
             logger.info(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
-            
+
             // Try to fetch linked Instagram account
             let instagramAccountId: string | null = null;
             let instagramUsername: string | null = null;
-            
+
             try {
                 const igAccount = await instagramService.getLinkedInstagramAccount(
-                    fbPage.id, 
+                    fbPage.id,
                     fbPage.access_token
                 );
                 if (igAccount) {
@@ -140,10 +140,10 @@ export class PagesService {
             } catch {
                 logger.info(`[Pages] Could not fetch Instagram account (may not be linked)`);
             }
-            
+
             // Check if page already exists
             const existingPage = await this.getPageByFacebookId(fbPage.id);
-            
+
             if (existingPage) {
                 // Update existing page
                 logger.info(`[Pages] Updating existing page: ${fbPage.name}`);
@@ -172,7 +172,7 @@ export class PagesService {
                         autoReplyEnabled: true,
                         instagramAccountId,
                         instagramUsername,
-                        instagramAutoReplyEnabled: true,
+                        instagramAutoReplyEnabled: false, // Default to OFF so user must explicitly enable it
                     })
                     .returning();
                 syncedPages.push(created);
@@ -195,7 +195,7 @@ export class PagesService {
             })
             .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
             .returning();
-        
+
         return updatedPage;
     }
 
@@ -207,7 +207,7 @@ export class PagesService {
             .select()
             .from(pages)
             .where(eq(pages.instagramAccountId, instagramAccountId));
-        
+
         return result[0] || null;
     }
 }
