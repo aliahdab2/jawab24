@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -215,7 +216,11 @@ export default function RulesPage() {
             <Card
               key={rule.id}
               hover
-              className={`animate-slide-up border-none shadow-lg shadow-surface-200/50 flex flex-col h-full rounded-2xl overflow-hidden group ${!rule.active ? 'opacity-75' : ''}`}
+              className={clsx(
+                "animate-slide-up border-none transition-all duration-300 rounded-3xl overflow-hidden group flex flex-col h-full",
+                !rule.active ? 'opacity-75 grayscale-[0.5]' : 'bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
+              )}
+              padding="none"
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
               <div className="flex flex-col lg:flex-row">

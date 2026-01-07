@@ -93,7 +93,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="twitter:description" content="Smart AI auto-replies for Facebook & Instagram. الرد الذكي التلقائي لفيسبوك وإنستغرام." />
         <meta name="twitter:image" content="https://jawab24.com/brand/og-social.png" />
 
-        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </Head>
       <div className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable}`}>

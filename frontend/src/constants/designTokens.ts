@@ -14,12 +14,12 @@ export const DESIGN_TOKENS = {
      * Used for all card components across the application
      */
     card: {
-        /** Standard border radius for all cards */
-        radius: '20px',
-        /** Standard shadow for cards (soft, professional) */
-        shadow: '0 10px 30px rgba(0, 0, 0, 0.05)',
-        /** Hover shadow (slightly elevated) */
-        shadowHover: '0 12px 36px rgba(0, 0, 0, 0.08)',
+        /** Standard border radius for all cards - Refined for premium feel */
+        radius: '24px',
+        /** Standard shadow for cards (extremely soft, modern) */
+        shadow: '0 10px 30px rgba(0, 0, 0, 0.04)',
+        /** Hover shadow (more pronounced lift) */
+        shadowHover: '0 20px 48px rgba(0, 0, 0, 0.08)',
         /** Background color */
         background: '#FFFFFF',
     },
@@ -29,8 +29,8 @@ export const DESIGN_TOKENS = {
      * Specifications for all KPI/stat cards
      */
     kpi: {
-        /** Number font size (primary metric) */
-        numberSize: '30px',
+        /** Number font size (primary metric) - Refined for impact */
+        numberSize: '32px',
         /** Number font weight */
         numberWeight: 700,
         /** Number color */
@@ -39,13 +39,13 @@ export const DESIGN_TOKENS = {
         /** Label font size */
         labelSize: '12px', // text-xs
         /** Label font weight */
-        labelWeight: 500,
-        /** Label color (~70% opacity) */
-        labelColor: 'text-surface-500',
+        labelWeight: 700,
+        /** Label color - Uppercase and tracking */
+        labelColor: 'text-surface-500 uppercase tracking-widest opacity-70',
 
         /** Icon size */
         iconSize: '24px', // w-6 h-6
-        /** Icon opacity (prominent role) */
+        /** Icon opacity */
         iconOpacity: 1.0,
         /** Icon opacity on hover */
         iconOpacityHover: 1.0,
@@ -53,10 +53,10 @@ export const DESIGN_TOKENS = {
         /** Card padding horizontal */
         paddingX: '20px', // px-5
         /** Card padding vertical */
-        paddingY: '16px', // py-4
+        paddingY: '20px', // py-5
 
-        /** Icon background opacity (if used) */
-        iconBackgroundOpacity: 1.0, // Fully colored container
+        /** Icon background opacity */
+        iconBackgroundOpacity: 1.0,
     },
 
     /**
@@ -71,7 +71,7 @@ export const DESIGN_TOKENS = {
         /** Search input padding vertical */
         searchPaddingY: '12px', // py-3
         /** Search input border radius */
-        searchRadius: '12px', // rounded-xl
+        searchRadius: '14px', // rounded-2xl-ish
     },
 
     /**
@@ -80,22 +80,22 @@ export const DESIGN_TOKENS = {
      */
     emptyState: {
         /** Container padding vertical */
-        paddingY: '40px', // py-10
+        paddingY: '56px', // py-14
         /** Icon size */
         iconSize: '32px', // w-8 h-8
-        /** Icon opacity (muted, not dominant) */
-        iconOpacity: 0.6,
+        /** Icon opacity */
+        iconOpacity: 0.4,
         /** Icon container size */
-        iconContainerSize: '64px', // w-16 h-16
+        iconContainerSize: '72px', // w-[72px]
         /** Icon container radius */
-        iconContainerRadius: '16px', // rounded-2xl
+        iconContainerRadius: '24px', // rounded-3xl
         /** Title font size */
-        titleSize: '16px', // text-base
+        titleSize: '18px', // text-lg
         /** Title font weight */
-        titleWeight: 600,
+        titleWeight: 700,
         /** Description font size */
         descriptionSize: '14px', // text-sm
-        /** Vertical center position (not true center) */
+        /** Vertical center position */
         verticalCenter: '45%',
     },
 
@@ -105,57 +105,50 @@ export const DESIGN_TOKENS = {
      */
     interaction: {
         /** Hover lift distance */
-        hoverLift: '-2px', // -translate-y-0.5
-        /** Transition duration */
-        transitionDuration: '150ms',
+        hoverLift: '-4px', // -translate-y-1
+        /** Transition duration - Smoother for premium feel */
+        transitionDuration: '300ms',
         /** Transition easing */
-        transitionEasing: 'ease',
+        transitionEasing: 'cubic-bezier(0.4, 0, 0.2, 1)',
     },
 
     /**
      * ACTION ICONS
-     * Shared spec for functional icons (Home buttons, Empty states, CTAs)
+     * Shared spec for functional icons
      */
     actionIcon: {
         desktop: {
+            size: 22,
+            containerSize: 44,
+            radius: 14,
+            shadow: '0 8px 24px rgba(0,0,0,0.06)',
+        },
+        mobile: {
             size: 20,
             containerSize: 40,
             radius: 12,
-            shadow: '0 8px 24px rgba(0,0,0,0.08)',
-        },
-        mobile: {
-            size: 18,
-            containerSize: 36,
-            radius: 12,
-            shadow: '0 6px 18px rgba(0,0,0,0.08)',
+            shadow: '0 6px 18px rgba(0,0,0,0.06)',
         }
     },
 
     /**
      * KPI ICONS (Quiet)
-     * Explicitly distinct from Action Icons
      */
     kpiIcon: {
-        size: 24,
+        size: 28,
         opacity: 1.0,
-        shadow: 'standard',
+        shadow: '0 10px 20px rgba(0,0,0,0.1)',
     },
 
     /**
      * SPACING SCALE
-     * Consistent spacing across components
      */
     spacing: {
-        /** Extra small gap */
         xs: '8px',
-        /** Small gap */
         sm: '12px',
-        /** Medium gap (default) */
         md: '16px',
-        /** Large gap */
         lg: '24px',
-        /** Extra large gap */
-        xl: '32px',
+        xl: '40px',
     },
 } as const;
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Toggle, PageHeader, PageSkeleton, Modal } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -204,7 +205,7 @@ export default function SettingsPage() {
       {/* Main Settings - Simplified */}
       <div className="space-y-6 mb-8">
         {/* Language Selection - Compact Segmented Control */}
-        <Card className="border-none shadow-lg shadow-surface-200/30 p-5">
+        <Card className="border-none shadow-[0_10_30px_rgba(0,0,0,0.04)] p-5">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center">
@@ -250,7 +251,10 @@ export default function SettingsPage() {
 
 
         {/* Comments Automation Card with Nested Logic - MOST IMPORTANT */}
-        <Card className={`border-none transition-all duration-300 ${settings.commentsAutoReply ? 'ring-1 ring-brand-200/50' : 'shadow-surface-200/50'} p-4`} style={settings.commentsAutoReply ? { boxShadow: '0 10px 30px rgba(16,185,129,0.12)' } : {}}>
+        <Card className={clsx(
+          "border-none transition-all duration-300 p-4",
+          settings.commentsAutoReply ? 'ring-1 ring-brand-200/50 shadow-[0_10px_30px_rgba(16,185,129,0.12)]' : 'shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
+        )}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>

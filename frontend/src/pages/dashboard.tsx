@@ -18,23 +18,32 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center text-xs">
-        <span className="font-bold text-surface-500 uppercase tracking-widest">{label}</span>
-        <span className="font-bold text-surface-900">
-          {used.toLocaleString()} <span className="text-surface-400">/ {limit ? limit.toLocaleString() : '∞'}</span>
+    <div className="space-y-3">
+      <div className="flex justify-between items-end text-xs">
+        <span className="font-bold text-surface-500 uppercase tracking-widest opacity-80">{label}</span>
+        <span className="font-bold text-surface-900 text-sm">
+          {used.toLocaleString()} <span className="text-surface-400 font-medium">/ {limit ? limit.toLocaleString() : '∞'}</span>
         </span>
       </div>
-      <div className="h-2 w-full bg-surface-100 rounded-full overflow-hidden">
+      <div className="h-2.5 w-full bg-surface-100 rounded-full overflow-hidden shadow-inner p-0.5">
         <div
-          className={`h-full rounded-full transition-all duration-1000 ${percent > 90 ? 'bg-red-500' : percent > 75 ? 'bg-amber-500' : 'bg-brand-500'
-            }`}
+          className={clsx(
+            "h-full rounded-full transition-all duration-1000 relative",
+            percent > 90 ? 'bg-gradient-to-r from-red-500 to-red-600' :
+              percent > 75 ? 'bg-gradient-to-r from-amber-500 to-amber-600' :
+                'bg-gradient-to-r from-brand-500 to-brand-600'
+          )}
           style={{ width: `${Math.min(percent, 100)}%` }}
-        ></div>
+        >
+          {percent > 20 && (
+            <div className="absolute inset-0 bg-white/20 animate-pulse-soft"></div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -80,10 +89,10 @@ export default function DashboardPage() {
         setUsage(usageRes.data.data);
       }
 
-      const comments: Comment[] = commentsRes.data;
-      const fetchedPages: Page[] = pagesRes.data;
-      const templates = templatesRes.data;
-      const rules = rulesRes.data;
+      const comments: Comment[] = Array.isArray(commentsRes.data) ? commentsRes.data : (commentsRes.data?.data || []);
+      const fetchedPages: Page[] = Array.isArray(pagesRes.data) ? pagesRes.data : (pagesRes.data?.data || []);
+      const templates = Array.isArray(templatesRes.data) ? templatesRes.data : (templatesRes.data?.data || []);
+      const rules = Array.isArray(rulesRes.data) ? rulesRes.data : (rulesRes.data?.data || []);
 
       setRecentComments(comments.slice(0, 5));
       setPages(fetchedPages);
@@ -198,42 +207,47 @@ export default function DashboardPage() {
       />
 
 
-      {/* Stats Grid - Best Practice KPI Layout */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      {/* Stats Grid - Best Practice KPI Layout - Dense 2-col on mobile */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
         {stats.map((stat, i) => (
           <Card
             key={stat.nameKey}
             hover
-            className="animate-slide-up relative overflow-hidden group border-none bg-white transition-all duration-150 hover:-translate-y-0.5"
+            className={clsx(
+              "animate-slide-up relative overflow-hidden group border-none bg-white transition-all duration-300 hover:-translate-y-1",
+              i === 2 ? "col-span-2 sm:col-span-1" : "col-span-1"
+            )}
             style={{
               animationDelay: `${i * 0.1}s`,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.04)'
+              boxShadow: '0 10px 30px rgba(0,0,0,0.04)'
             } as React.CSSProperties}
             padding="none"
           >
             {/* Subtle background decoration */}
-            <div className={`absolute -end-4 -bottom-4 w-20 h-20 rounded-full opacity-[0.08] transition-all duration-700 group-hover:scale-110 group-hover:opacity-[0.12] ${stat.color === 'brand' ? 'bg-brand-500' :
-              stat.color === 'emerald' ? 'bg-emerald-500' :
-                'bg-amber-500'
-              }`}></div>
+            <div className={clsx(
+              "absolute -end-4 -bottom-4 w-20 h-20 rounded-full opacity-[0.08] transition-all duration-700 group-hover:scale-125 group-hover:opacity-[0.15]",
+              stat.color === 'brand' ? 'bg-brand-500' :
+                stat.color === 'emerald' ? 'bg-emerald-500' :
+                  'bg-amber-500'
+            )}></div>
 
-            {/* Number-first layout: Vertical stack with icon as supporting element */}
-            {/* Prominent Icon Layout */}
-            <div className="relative z-10 px-5 py-4 flex items-center justify-between">
+            <div className="relative z-10 px-4 py-4 sm:px-5 sm:py-5 flex items-center justify-between">
               <div>
-                <p className="text-[30px] font-bold text-surface-900 leading-none tracking-tight mb-1">
+                <p className="text-[26px] sm:text-[32px] font-bold text-surface-900 leading-none tracking-tight mb-1.5">
                   {stat.value}
                 </p>
-                <p className="text-xs font-medium text-surface-500 truncate leading-tight">
+                <p className="text-[11px] sm:text-xs font-bold text-surface-500 uppercase tracking-widest truncate leading-tight opacity-70">
                   {t(stat.nameKey)}
                 </p>
               </div>
 
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${stat.color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/20' :
-                stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/20' :
-                  'bg-amber-50 text-amber-600 shadow-amber-500/20'
-                }`}>
-                <stat.icon className="w-6 h-6" />
+              <div className={clsx(
+                "w-11 h-11 sm:w-13 sm:h-13 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
+                stat.color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
+                  stat.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
+                    'bg-amber-50 text-amber-600 shadow-amber-500/10'
+              )}>
+                <stat.icon className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
             </div>
           </Card>

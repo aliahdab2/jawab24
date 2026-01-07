@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -204,21 +205,36 @@ export default function MessagesPage() {
   };
 
   const StatCard = ({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) => (
-    <Card className="border-none hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5 group" padding="none" style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
-      <div className="px-5 py-4 flex items-center justify-between">
+    <Card
+      className="border-none hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group relative overflow-hidden"
+      padding="none"
+      style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.04)' }}
+    >
+      <div className={clsx(
+        "absolute -end-4 -bottom-4 w-16 h-16 rounded-full opacity-[0.06] transition-all duration-700 group-hover:scale-125 group-hover:opacity-[0.1]",
+        color === 'brand' ? 'bg-brand-500' :
+          color === 'emerald' ? 'bg-emerald-500' :
+            color === 'amber' ? 'bg-amber-500' :
+              'bg-red-500'
+      )}></div>
+
+      <div className="px-4 py-4 sm:px-5 sm:py-5 flex items-center justify-between relative z-10">
         <div>
-          <p className="text-[30px] font-bold text-surface-900 leading-none tracking-tight mb-1">
+          <p className="text-[24px] sm:text-[28px] font-bold text-surface-900 leading-none tracking-tight mb-1.5">
             {value.toLocaleString()}
           </p>
-          <p className="text-xs font-medium text-surface-500 truncate leading-tight">{title}</p>
+          <p className="text-[10px] sm:text-xs font-bold text-surface-500 uppercase tracking-widest truncate leading-tight opacity-70">{title}</p>
         </div>
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 group-hover:rotate-3 ${color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/20' :
-          color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/20' :
-            color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/20' :
-              color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/20' :
-                'bg-red-50 text-red-600 shadow-red-500/20'
-          }`}>
-          {icon}
+        <div className={clsx(
+          "w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:scale-110 group-hover:rotate-6",
+          color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
+            color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
+              color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/10' :
+                'bg-red-50 text-red-600 shadow-red-500/10'
+        )}>
+          {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<{ className?: string }>, {
+            className: 'w-5 h-5 sm:w-6 sm:h-6'
+          }) : icon}
         </div>
       </div>
     </Card>
@@ -251,12 +267,12 @@ export default function MessagesPage() {
         }
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard title={t('messages.totalMessages')} value={stats.total} icon={<MessageCircle className="w-6 h-6" />} color="brand" />
-        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle className="w-6 h-6" />} color="emerald" />
-        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock className="w-6 h-6" />} color="amber" />
-        <StatCard title={t('comments.needsAttention')} value={needsAttentionCount} icon={<AlertTriangle className="w-6 h-6" />} color="red" />
+      {/* Stats - Horizontal scroll on mobile if they don't fit, otherwise 2-col then 4-col */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
+        <StatCard title={t('messages.totalMessages')} value={stats.total} icon={<MessageCircle />} color="brand" />
+        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle />} color="emerald" />
+        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock />} color="amber" />
+        <StatCard title={t('comments.needsAttention')} value={needsAttentionCount} icon={<AlertTriangle />} color="red" />
       </div>
 
       {/* Filters & Search - Compact unified section */}
@@ -311,7 +327,7 @@ export default function MessagesPage() {
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
               onClick={() => setSelectedConversation(conv)}
             >
-              <div className="p-6">
+              <div className="p-4 sm:p-6">
                 <div className="flex flex-col lg:flex-row lg:items-start gap-6">
                   {/* User Avatar */}
                   <div className="flex-shrink-0 relative">

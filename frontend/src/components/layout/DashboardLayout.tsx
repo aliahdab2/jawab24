@@ -114,10 +114,10 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         ) : (
           /* Mobile APP Header - Final: h-16 (64px), Dark Gradient, Logo Left, Dynamic Icon Right */
           <div
-            className="md:hidden sticky top-0 left-0 right-0 h-16 flex items-center justify-between px-5 z-40"
+            className="md:hidden sticky top-0 left-0 right-0 h-20 flex items-center justify-between px-5 z-40"
             style={{
               paddingTop: 'env(safe-area-inset-top)',
-              background: 'linear-gradient(to bottom, #0f172a 0%, rgba(15, 23, 42, 0.85) 60%, rgba(15, 23, 42, 0) 100%)'
+              background: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 75%, transparent 100%)'
             }}
           >
             <Link href="/dashboard" className="flex items-center p-2 -ml-2 min-w-[44px] min-h-[44px] justify-center">
@@ -143,7 +143,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <main
           className={clsx(
             'transition-all duration-500 min-h-screen',
-            isCleanLayout ? 'pt-16 md:pt-20' : 'pt-14 md:pt-0',
+            isCleanLayout ? 'pt-16 md:pt-20' : 'pt-20 md:pt-0',
             !isCleanLayout && (sidebarOpen ? 'md:ms-64' : 'md:ms-20')
           )}
         >
@@ -328,27 +328,33 @@ function MobileMenuButton({ onClick, icon, label, className, fullWidth }: {
   fullWidth?: boolean;
 }) {
   const isLogout = className?.includes('logout');
+  const { language } = useTranslation();
+  const isRTL = language === 'ar';
 
   return (
     <button
       onClick={onClick}
       className={clsx(
-        "rounded-2xl bg-white border active:scale-95 transition-all",
+        "rounded-2xl transition-all duration-300 active:scale-95 outline-none border",
         isLogout
-          ? "flex items-center justify-start gap-4 p-4 mt-6 h-[52px] w-full border-red-200 bg-red-50 text-red-600 hover:bg-red-100/50"
-          : "flex flex-col items-center justify-center p-4 border-surface-100/40 shadow-[0_8px_20px_rgba(0,0,0,0.06)] min-h-[96px]",
+          ? "flex items-center justify-center gap-4 p-4 mt-8 h-[56px] w-full border-red-100 bg-gradient-to-r from-red-50 to-white text-red-600 shadow-sm hover:shadow-md hover:border-red-200"
+          : "flex flex-col items-center justify-center p-5 border-surface-100/60 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)] min-h-[110px]",
         className
       )}
     >
       <div className={clsx(
-        "flex items-center justify-center",
-        isLogout ? "text-red-500" : "w-12 h-12 rounded-full bg-brand-50/80 text-brand-600 mb-3"
+        "flex items-center justify-center transition-all duration-300",
+        isLogout
+          ? `text-red-500 ${isRTL ? 'rotate-180' : ''} group-hover:scale-110`
+          : "w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100/50 text-brand-600 mb-3.5 shadow-inner"
       )}>
-        {icon}
+        {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<{ className?: string }>, {
+          className: isLogout ? 'w-6 h-6' : 'w-7 h-7'
+        }) : icon}
       </div>
       <span className={clsx(
-        "font-medium leading-snug",
-        isLogout ? "text-red-600 text-sm" : "text-[14px] text-surface-900 text-center w-full px-1 line-clamp-2"
+        "font-bold tracking-tight transition-colors",
+        isLogout ? "text-red-600 text-sm whitespace-nowrap" : "text-[14px] text-surface-900 text-center w-full px-1 line-clamp-2 leading-tight"
       )}>
         {label}
       </span>

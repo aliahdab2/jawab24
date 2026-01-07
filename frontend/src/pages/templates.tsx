@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
-import { 
-  BookTemplate, 
+import {
+  BookTemplate,
   Plus,
   Edit,
   Trash2,
@@ -82,13 +83,13 @@ export default function TemplatesPage() {
 
     try {
       if (editingTemplate) {
-        const response = await axios.put(`${apiUrl}/templates/${editingTemplate.id}`, 
+        const response = await axios.put(`${apiUrl}/templates/${editingTemplate.id}`,
           templateData,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setTemplates(templates.map(t => t.id === editingTemplate.id ? response.data : t));
       } else {
-        const response = await axios.post(`${apiUrl}/templates`, 
+        const response = await axios.post(`${apiUrl}/templates`,
           templateData,
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -103,9 +104,9 @@ export default function TemplatesPage() {
   const handleToggle = async (id: string, active: boolean) => {
     // Optimistic update
     setTemplates(templates.map(t => t.id === id ? { ...t, active } : t));
-    
+
     try {
-      await axios.patch(`${apiUrl}/templates/${id}/active`, 
+      await axios.patch(`${apiUrl}/templates/${id}/active`,
         { active },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -142,8 +143,8 @@ export default function TemplatesPage() {
   return (
     <DashboardLayout title={t('templates.title')}>
       {/* Header */}
-      <PageHeader 
-        title={t('templates.title')} 
+      <PageHeader
+        title={t('templates.title')}
         description={t('templates.description')}
         action={
           <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
@@ -156,10 +157,14 @@ export default function TemplatesPage() {
       {templates.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
           {templates.map((template, i) => (
-            <Card 
+            <Card
               key={template.id}
               hover
-              className={`animate-slide-up border-none shadow-lg shadow-surface-200/50 flex flex-col h-full rounded-2xl overflow-hidden group ${!template.active ? 'opacity-75' : ''}`}
+              className={clsx(
+                "animate-slide-up border-none transition-all duration-300 rounded-3xl overflow-hidden group flex flex-col h-full",
+                !template.active ? 'opacity-75 grayscale-[0.5]' : 'bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
+              )}
+              padding="none"
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
               {/* Header */}
@@ -171,15 +176,15 @@ export default function TemplatesPage() {
                   <div className="text-start">
                     <h3 className="font-bold text-surface-900 text-lg leading-tight">{template.name}</h3>
                     {template.usageCount !== undefined && (
-                        <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
-                          <Zap className="w-3 h-3 text-amber-500" />
-                          <span>{t('templates.usageCount')}: {template.usageCount}</span>
-                        </div>
+                      <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
+                        <Zap className="w-3 h-3 text-amber-500" />
+                        <span>{t('templates.usageCount')}: {template.usageCount}</span>
+                      </div>
                     )}
                   </div>
                 </div>
-                <Toggle 
-                  enabled={template.active ?? false} 
+                <Toggle
+                  enabled={template.active ?? false}
                   onChange={(active) => handleToggle(template.id, active)}
                   size="sm"
                 />
@@ -200,7 +205,7 @@ export default function TemplatesPage() {
                     </p>
                   </div>
                 )}
-                
+
                 {template.translations.en && (
                   <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 relative overflow-hidden group/en">
                     <div className="flex items-center justify-between mb-2">
@@ -289,7 +294,7 @@ export default function TemplatesPage() {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           />
-          
+
           <Textarea
             label={t('templates.english')}
             placeholder="Thank you for your interest! ..."
@@ -297,7 +302,7 @@ export default function TemplatesPage() {
             onChange={(e) => setFormData({ ...formData, en: e.target.value })}
             helperText={t('templates.variablesDesc')}
           />
-          
+
           <Textarea
             label={t('templates.arabic')}
             placeholder="شكراً لاهتمامك! ..."
@@ -306,7 +311,7 @@ export default function TemplatesPage() {
             className="text-right"
             dir="rtl"
           />
-          
+
           <Input
             label={t('templates.keywords')}
             placeholder="price, cost, how much, سعر"

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -213,11 +214,11 @@ export default function PagesPage() {
             <Card
               key={page.id}
               hover
-              className="animate-slide-up border-none shadow-xl shadow-surface-200/50 flex flex-col h-full overflow-hidden"
+              className="animate-slide-up border-none shadow-xl shadow-surface-200/50 flex flex-col h-full overflow-hidden transition-all duration-300 hover:-translate-y-1"
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
               {/* Header with gradient background */}
-              <div className="p-6 bg-gradient-to-br from-surface-50 to-white border-b border-surface-100 flex items-start justify-between gap-4">
+              <div className="p-4 sm:p-6 bg-gradient-to-br from-surface-50 to-white border-b border-surface-100 flex items-start justify-between gap-4">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
                   <div className="w-14 h-14 rounded-2xl bg-brand-600 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-100">
                     <FileText className="w-7 h-7" />
@@ -250,7 +251,7 @@ export default function PagesPage() {
                 </div>
               </div>
 
-              <div className="p-6 flex-1 flex flex-col gap-6">
+              <div className="p-4 sm:p-6 flex-1 flex flex-col gap-6">
                 {/* Platform Toggles */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className={`p-4 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 border-blue-100 ring-1 ring-blue-100' : 'bg-surface-50 border-surface-100'}`}>
@@ -302,18 +303,18 @@ export default function PagesPage() {
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-4 p-4 rounded-2xl bg-surface-50 border border-surface-100">
-                  <div className="text-center">
-                    <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-1">{t('comments.title')}</p>
-                    <p className="text-xl font-bold text-surface-900">{(page.commentsCount || 0).toLocaleString()}</p>
+                <div className="grid grid-cols-3 gap-2 px-1 py-1 rounded-2xl bg-surface-50 border border-surface-100">
+                  <div className="py-3 text-center">
+                    <p className="text-[9px] font-bold text-surface-400 uppercase tracking-widest mb-1.5 opacity-70">{t('comments.title')}</p>
+                    <p className="text-lg font-bold text-surface-900 leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
                   </div>
-                  <div className="text-center border-x border-surface-200">
-                    <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-1">{t('dashboard.autoReplies')}</p>
-                    <p className="text-xl font-bold text-surface-900">{(page.repliesCount || 0).toLocaleString()}</p>
+                  <div className="py-3 text-center border-x border-surface-200">
+                    <p className="text-[9px] font-bold text-surface-400 uppercase tracking-widest mb-1.5 opacity-70">{t('dashboard.autoReplies')}</p>
+                    <p className="text-lg font-bold text-surface-900 leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
                   </div>
-                  <div className="text-center">
-                    <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-1">{t('dashboard.replyRate')}</p>
-                    <p className="text-xl font-bold text-emerald-600">{page.replyRate || 0}%</p>
+                  <div className="py-3 text-center">
+                    <p className="text-[9px] font-bold text-surface-400 uppercase tracking-widest mb-1.5 opacity-70">{t('dashboard.replyRate')}</p>
+                    <p className="text-lg font-bold text-emerald-600 leading-none">{page.replyRate || 0}%</p>
                   </div>
                 </div>
 
