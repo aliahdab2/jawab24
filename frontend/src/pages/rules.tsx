@@ -18,7 +18,7 @@ import {
 import type { Rule, Template } from '@jawab24/shared';
 
 export default function RulesPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { token } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -42,10 +42,18 @@ export default function RulesPage() {
         axios.get(`${apiUrl}/templates`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
+      const rulesData = Array.isArray(rulesRes.data)
+        ? rulesRes.data
+        : (Array.isArray(rulesRes.data?.data) ? rulesRes.data.data : []);
+
+      const templatesData = Array.isArray(templatesRes.data)
+        ? templatesRes.data
+        : (Array.isArray(templatesRes.data?.data) ? templatesRes.data.data : []);
+
       // Sort rules by priority
-      const sortedRules = rulesRes.data.sort((a: Rule, b: Rule) => (a.priority ?? 0) - (b.priority ?? 0));
+      const sortedRules = [...rulesData].sort((a: Rule, b: Rule) => (a.priority ?? 0) - (b.priority ?? 0));
       setRules(sortedRules);
-      setTemplates(templatesRes.data);
+      setTemplates(templatesData);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -277,13 +285,19 @@ export default function RulesPage() {
                   <div className="space-y-4">
                     {/* Condition Box */}
                     <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 relative group/condition">
-                      <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
+                      <div className={clsx(
+                        "flex items-center gap-2 mb-2 text-[10px] font-bold text-surface-400",
+                        language !== 'ar' && "uppercase tracking-widest"
+                      )}>
                         <Tag className="w-3 h-3" />
                         <span>{t('rules.condition')}</span>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         {(rule.keywords || []).map((keyword) => (
-                          <span key={keyword} className="px-2.5 py-1 rounded-lg bg-white border border-surface-200 text-surface-700 text-xs font-bold shadow-sm">
+                          <span key={keyword} className={clsx(
+                            "px-2 py-0.5 rounded-md bg-surface-100 text-surface-600 text-[10px] font-bold",
+                            language !== 'ar' && "uppercase tracking-wider"
+                          )}>
                             {keyword}
                           </span>
                         ))}
@@ -292,7 +306,10 @@ export default function RulesPage() {
 
                     {/* Action Box */}
                     <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative group/action">
-                      <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-brand-600 uppercase tracking-widest">
+                      <div className={clsx(
+                        "flex items-center gap-2 mb-2 text-[10px] font-bold text-brand-600",
+                        language !== 'ar' && "uppercase tracking-widest"
+                      )}>
                         <BookTemplate className="w-3 h-3" />
                         <span>{t('rules.action')}</span>
                       </div>

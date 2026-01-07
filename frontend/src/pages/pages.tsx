@@ -40,7 +40,10 @@ export default function PagesPage() {
       const response = await axios.get(`${apiUrl}/pages`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setPages(response.data);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : (Array.isArray(response.data?.data) ? response.data.data : []);
+      setPages(data);
     } catch (error) {
       console.error('Failed to fetch pages:', error);
     } finally {

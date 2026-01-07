@@ -21,11 +21,16 @@ import { ar, enUS } from 'date-fns/locale';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 
-function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
+function UsageProgress({ label, used, limit, percent, language }: { label: string; used: number; limit: number | null; percent: number; language: string }) {
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-end text-xs">
-        <span className="font-bold text-surface-500 uppercase tracking-widest opacity-80">{label}</span>
+        <span className={clsx(
+          "font-bold text-surface-500 opacity-80",
+          language !== 'ar' && "uppercase tracking-widest"
+        )}>
+          {label}
+        </span>
         <span className="font-bold text-surface-900 text-sm">
           {used.toLocaleString()} <span className="text-surface-400 font-medium">/ {limit ? limit.toLocaleString() : '∞'}</span>
         </span>
@@ -89,10 +94,21 @@ export default function DashboardPage() {
         setUsage(usageRes.data.data);
       }
 
-      const comments: Comment[] = Array.isArray(commentsRes.data) ? commentsRes.data : (commentsRes.data?.data || []);
-      const fetchedPages: Page[] = Array.isArray(pagesRes.data) ? pagesRes.data : (pagesRes.data?.data || []);
-      const templates = Array.isArray(templatesRes.data) ? templatesRes.data : (templatesRes.data?.data || []);
-      const rules = Array.isArray(rulesRes.data) ? rulesRes.data : (rulesRes.data?.data || []);
+      const comments: Comment[] = Array.isArray(commentsRes.data)
+        ? commentsRes.data
+        : (Array.isArray(commentsRes.data?.data) ? commentsRes.data.data : []);
+
+      const fetchedPages: Page[] = Array.isArray(pagesRes.data)
+        ? pagesRes.data
+        : (Array.isArray(pagesRes.data?.data) ? pagesRes.data.data : []);
+
+      const templates = Array.isArray(templatesRes.data)
+        ? templatesRes.data
+        : (Array.isArray(templatesRes.data?.data) ? templatesRes.data.data : []);
+
+      const rules = Array.isArray(rulesRes.data)
+        ? rulesRes.data
+        : (Array.isArray(rulesRes.data?.data) ? rulesRes.data.data : []);
 
       setRecentComments(comments.slice(0, 5));
       setPages(fetchedPages);
@@ -341,10 +357,14 @@ export default function DashboardPage() {
                   <h4 className="text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
                     {usage.subscription.plan.name}
                     {usage.subscription.status === 'trialing' && (
-                      <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] uppercase font-extrabold tracking-wider border border-amber-200">
+                      <span className={clsx(
+                        "ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200",
+                        language !== 'ar' && "uppercase tracking-wider"
+                      )}>
                         {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
                       </span>
                     )}
+
                   </h4>
                   <p className="text-sm font-medium text-surface-500 mt-1">{t('subscription.upgradeDesc')}</p>
                 </div>
@@ -356,12 +376,14 @@ export default function DashboardPage() {
                   used={usage.aiReplies.used}
                   limit={usage.aiReplies.limit}
                   percent={usage.aiReplies.percentUsed}
+                  language={language}
                 />
                 <UsageProgress
                   label={t('subscription.pagesUsed')}
                   used={usage.pages.used}
                   limit={usage.pages.limit}
                   percent={usage.pages.limit ? (usage.pages.used / usage.pages.limit) * 100 : 0}
+                  language={language}
                 />
               </div>
 
@@ -370,7 +392,10 @@ export default function DashboardPage() {
                   <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
                     <Zap className="w-4 h-4" />
                   </div>
-                  <span className="text-xs font-bold uppercase tracking-widest leading-relaxed">
+                  <span className={clsx(
+                    "text-xs font-bold leading-relaxed",
+                    language !== 'ar' && "uppercase tracking-widest"
+                  )}>
                     {t('subscription.trialEndsIn')} {usage.subscription.trialDaysRemaining} {t('subscription.days')}
                   </span>
                 </div>

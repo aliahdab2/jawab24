@@ -92,7 +92,10 @@ export default function CommentsPage() {
       const response = await axios.get(`${apiUrl}/comments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setComments(response.data);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : (Array.isArray(response.data?.data) ? response.data.data : []);
+      setComments(data);
     } catch (error) {
       console.error('Failed to fetch comments:', error);
     } finally {

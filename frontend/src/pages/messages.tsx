@@ -55,7 +55,10 @@ export default function MessagesPage() {
       const response = await axios.get(`${apiUrl}/messages`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setMessages(response.data);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : (Array.isArray(response.data?.data) ? response.data.data : []);
+      setMessages(data);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
     } finally {

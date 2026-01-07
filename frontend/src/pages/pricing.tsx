@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageSkeleton } from '@/components/ui';
 import { plansApi, subscriptionApi } from '@/lib/api';
@@ -23,6 +24,7 @@ function PlanCard({
   currentPlanPrice,
   subscriptionStatus,
   isSanctioned,
+  language,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
@@ -33,6 +35,7 @@ function PlanCard({
   currentPlanPrice: number;
   subscriptionStatus?: string;
   isSanctioned: boolean;
+  language: string;
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
@@ -76,7 +79,7 @@ function PlanCard({
           <span className="bg-green-100 text-green-700 text-[10px] font-bold px-3 py-1 rounded-full border border-green-200">
             {t('pricing.currentPlan')}
             {subscriptionStatus === 'trialing' && (
-              <span className="ms-1 px-1 bg-amber-500 text-white rounded text-[8px] font-black leading-none">
+              <span className="ms-2 px-2 py-0.5 bg-amber-500 text-white rounded text-[9px] font-black leading-none flex items-center">
                 {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
               </span>
             )}
@@ -183,7 +186,10 @@ function PlanCard({
               <div className="flex flex-col items-center gap-1">
                 <span>{t('pricing.currentPlan')}</span>
                 {(subscriptionStatus === 'trialing' || (isCurrentPlan && plan.price === 0 && plan.trialDays > 0)) && (
-                  <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded uppercase font-extrabold tracking-wider border border-amber-200">
+                  <span className={clsx(
+                    "text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded font-extrabold border border-amber-200",
+                    language !== 'ar' && "uppercase tracking-wider"
+                  )}>
                     {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
                   </span>
                 )}
@@ -246,7 +252,7 @@ function FeatureRow({
 
 export default function PricingPage() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -408,7 +414,10 @@ export default function PricingPage() {
                     ? t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey)
                     : usage.subscription.plan.name)}
                 {usage.subscription.status === 'trialing' && (
-                  <span className="ml-1 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-[10px] uppercase font-extrabold tracking-wider border border-amber-200">
+                  <span className={clsx(
+                    "ms-2 text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200",
+                    language !== 'ar' && "uppercase tracking-wider"
+                  )}>
                     {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
                   </span>
                 )}
@@ -442,6 +451,7 @@ export default function PricingPage() {
               currentPlanPrice={activePlans.find(p => p.id === currentPlanId)?.price || 0}
               subscriptionStatus={usage?.subscription?.status}
               t={t}
+              language={language}
               isSanctioned={isSanctioned === true}
             />
           ))}
