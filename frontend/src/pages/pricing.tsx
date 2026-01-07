@@ -7,9 +7,10 @@ import { plansApi, subscriptionApi } from '@/lib/api';
 import { extractArrayData, extractObjectData } from '@/lib/api-utils';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
-import { Check, X, Zap, Crown, Sparkles } from 'lucide-react';
+import { Check, X, Zap, Crown, Sparkles, AlertCircle } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
-import { isUserSanctioned } from '@/utils/geoCheck';
+import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
+import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 
 
 function PlanCard({
@@ -251,64 +252,60 @@ export default function PricingPage() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
-  const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null); // null = checking
+  const [isSanctioned, setIsSanctioned] = useState<boolean>(false); // Default: not sanctioned
+  const [usingFallback, setUsingFallback] = useState(false);
 
-  // SANCTIONS CHECK: Check geo on page load
-  useEffect(() => {
-    const checkGeo = async () => {
-      const sanctioned = await isUserSanctioned();
-      setIsSanctioned(sanctioned);
-    };
-    checkGeo();
-  }, []);
-
+  // OPTIMIZED: Parallel loading with non-blocking geo check
   useEffect(() => {
     const fetchData = async () => {
-      // If sanctioned, only fetch plans (public), do not fetch private usage data
-      if (!isAuthenticated || isSanctioned === true) {
-        setUsage(null);
-        try {
-          const plansRes = await plansApi.getAll();
-          setPlans(extractArrayData<Plan>(plansRes.data));
-        } catch (error) {
-          console.error('Failed to fetch plans:', error);
-        } finally {
-          setLoading(false);
-        }
-        return;
-      }
-
       try {
-        const [plansRes, usageRes] = await Promise.all([
-          plansApi.getAll(),
-          subscriptionApi.getUsage().catch(() => null),
+        // Run geo check and plans fetch in parallel (non-blocking)
+        const [geoResult, plansResult, usageResult] = await Promise.all([
+          // Geo check with 2s timeout (non-blocking for display)
+          isUserSanctionedNonBlocking(2000),
+          // Plans API with fallback
+          plansApi.getAll().catch(() => null),
+          // Usage API (only if authenticated)
+          isAuthenticated ? subscriptionApi.getUsage().catch(() => null) : Promise.resolve(null),
         ]);
 
-        // Use utility functions for safe response parsing
-        setPlans(extractArrayData<Plan>(plansRes.data));
+        // Update geo status
+        setIsSanctioned(geoResult.sanctioned);
 
-        if (usageRes?.data) {
-          setUsage(extractObjectData<UsageSummary>(usageRes.data));
+        // Handle plans (API or fallback)
+        if (plansResult?.data) {
+          setPlans(extractArrayData<Plan>(plansResult.data));
+          setUsingFallback(false);
         } else {
-          setUsage(null);
+          // Offline or API failed - use fallback plans
+          console.warn('Using fallback plans (offline or API unavailable)');
+          setPlans(FALLBACK_PLANS);
+          setUsingFallback(true);
+        }
+
+        // Handle usage
+        if (usageResult?.data) {
+          setUsage(extractObjectData<UsageSummary>(usageResult.data));
         }
       } catch (error) {
-        console.error('Failed to fetch plans:', error);
+        console.error('Failed to load pricing data:', error);
+        // Even on error, show fallback plans
+        setPlans(FALLBACK_PLANS);
+        setUsingFallback(true);
       } finally {
         setLoading(false);
       }
     };
 
-    // Wait for sanctions check to complete (isSanctioned !== null) before fetching
-    if (isSanctioned !== null) {
-      fetchData();
-    }
-  }, [isAuthenticated, isSanctioned]);
+    fetchData();
+  }, [isAuthenticated]);
 
   const handleSelectPlan = async (planId: string) => {
-    // SANCTIONS CHECK: Do not proceed if sanctioned
-    if (isSanctioned) {
-      console.warn('[Pricing] Blocked: user is in sanctioned jurisdiction');
+    // STRICT PAYMENT VALIDATION: Re-check sanctions before payment
+    // (Display is permissive, but payments are strict)
+    const sanctioned = await isUserSanctioned();
+    if (sanctioned) {
+      console.warn('[Pricing] Payment blocked: user is in sanctioned jurisdiction');
       return;
     }
 
@@ -345,12 +342,12 @@ export default function PricingPage() {
 
     setChangingPlan(planId);
 
-    // Navigate to checkout
+    // Navigate to checkout (backend will validate again)
     router.push(`/checkout?planId=${planId}`);
   };
 
-  // EARLY RETURN 1: Show loading while checking geo OR fetching plans
-  if (isSanctioned === null || loading) {
+  // Show loading skeleton
+  if (loading) {
     return (
       <DashboardLayout title={t('pricing.title')} isPublic>
         <PageSkeleton />
@@ -358,7 +355,7 @@ export default function PricingPage() {
     );
   }
 
-  // NORMAL PRICING FLOW - Only reachable if NOT sanctioned
+  // NORMAL PRICING FLOW
 
   const currentPlanId = usage?.subscription?.plan?.id;
   const hasActiveSubscription = Boolean(currentPlanId);
@@ -378,6 +375,25 @@ export default function PricingPage() {
         <meta property="og:url" content="https://jawab24.com/pricing" />
       </Head>
       <DashboardLayout title={t('pricing.title')} isPublic>
+        {/* Fallback Disclaimer - Only shown when using offline plans */}
+        {usingFallback && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-900 mb-1">
+                {t('pricing.fallbackTitle' as TranslationKey) !== 'pricing.fallbackTitle'
+                  ? t('pricing.fallbackTitle' as TranslationKey)
+                  : 'Displaying Cached Pricing'}
+              </p>
+              <p className="text-xs text-amber-700">
+                {t('pricing.fallbackMessage' as TranslationKey) !== 'pricing.fallbackMessage'
+                  ? t('pricing.fallbackMessage' as TranslationKey)
+                  : 'Prices may be temporarily unavailable or outdated. Final pricing is confirmed at checkout.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Usage Summary if subscribed - Inline */}
         {usage && (
           <div className="flex flex-wrap items-center justify-center gap-4 mb-6 py-2 px-3 bg-brand-50/50 rounded-xl border border-brand-100">

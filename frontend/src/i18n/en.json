@@ -429,6 +429,8 @@
   "pricing.featureRules": "{count} Rules",
   "pricing.usageReplies": "Replies: {used}/{limit}",
   "pricing.daysLeftCount": "{count} days left",
+  "pricing.fallbackTitle": "Displaying Cached Pricing",
+  "pricing.fallbackMessage": "Prices may be temporarily unavailable or outdated. Final pricing is confirmed at checkout.",
   "subscription.title": "Subscription",
   "subscription.currentPlan": "Current Plan",
   "subscription.usage": "Usage",

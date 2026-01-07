@@ -431,6 +431,8 @@
   "pricing.featureRules": "{count} قواعد رد",
   "pricing.usageReplies": "الردود: {used}/{limit}",
   "pricing.daysLeftCount": "متبقي {count} يوم",
+  "pricing.fallbackTitle": "عرض الأسعار المخزنة مؤقتاً",
+  "pricing.fallbackMessage": "قد تكون الأسعار غير متاحة مؤقتاً أو قديمة. يتم تأكيد السعر النهائي عند الدفع.",
   "subscription.title": "تفاصيل الاشتراك",
   "subscription.currentPlan": "الباقة الحالية",
   "subscription.usage": "إحصائيات الاستخدام",
