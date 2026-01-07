@@ -119,9 +119,13 @@ export const statsApi = {
   get: () => api.get('/stats'),
 };
 
+import { AxiosRequestConfig } from 'axios';
+
+// ... (rest of imports)
+
 // Plans API (Public - uses publicApi to avoid auth redirect issues)
 export const plansApi = {
-  getAll: () => publicApi.get('/plans'),
+  getAll: (config?: AxiosRequestConfig) => publicApi.get('/plans', config),
   getById: (id: string) => publicApi.get(`/plans/${id}`),
 };
 
@@ -135,11 +139,11 @@ export const plansAdminApi = {
 };
 
 // Subscription API
-// Subscription API
 export const subscriptionApi = {
   get: () => api.get('/subscription'),
-  getUsage: () => api.get('/subscription/usage'),
+  getUsage: (config?: AxiosRequestConfig) => api.get('/subscription/usage', config),
   changePlan: (planId: string) => api.post('/subscription/change-plan', { planId }),
+
   cancel: (reason?: string) => api.post('/subscription/cancel', { reason }),
   pause: () => api.post('/subscription/pause'),
   resume: () => api.post('/subscription/resume'),

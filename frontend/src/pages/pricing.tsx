@@ -265,10 +265,10 @@ export default function PricingPage() {
           // Reduced to 1s to make offline/slow network experience snappier
           // Reduced to 1s to make offline/slow network experience snappier
           isUserSanctionedNonBlocking(1000).catch(() => ({ sanctioned: false, cached: false, timedOut: true })),
-          // Plans API with fallback
-          plansApi.getAll().catch(() => null),
-          // Usage API (only if authenticated)
-          isAuthenticated ? subscriptionApi.getUsage().catch(() => null) : Promise.resolve(null),
+          // Plans API with fallback and 3s timeout
+          plansApi.getAll({ timeout: 3000 }).catch(() => null),
+          // Usage API (only if authenticated) with 3s timeout
+          isAuthenticated ? subscriptionApi.getUsage({ timeout: 3000 }).catch(() => null) : Promise.resolve(null),
         ]);
 
         // Update geo status
