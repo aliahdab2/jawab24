@@ -115,9 +115,21 @@ export default function App({ Component, pageProps }: AppProps) {
 
       // Handle deep links
       App.addListener('appUrlOpen', (data) => {
-        const slug = data.url.split(".com").pop() || data.url.split("://").pop() || "";
+        // Handle com.jawab24.app://host/path or https://localhost/path
+        let slug = "";
+        
+        if (data.url.includes("com.jawab24.app://")) {
+          slug = data.url.replace("com.jawab24.app://", "/");
+        } else if (data.url.includes("localhost/")) {
+          slug = data.url.split("localhost").pop() || "";
+        } else {
+          slug = data.url.split(".com").pop() || "";
+        }
+
         if (slug) {
-          routerRef.current.push(slug);
+          // Normalize slug (ensure starts with /)
+          const finalSlug = slug.startsWith("/") ? slug : `/${slug}`;
+          routerRef.current.push(finalSlug);
         }
       });
 

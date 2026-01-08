@@ -199,9 +199,12 @@ export default function LandingPage() {
         {/* Hero Section - Optimized for Mobile with Illustration */}
         <section className="relative pt-24 sm:pt-32 lg:pt-40 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
           {/* Animated Background Elements */}
-          <div className="absolute top-20 start-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
-          <div className="absolute bottom-0 end-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
-          <div className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
+          <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
+          <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
+          {/* Centered Glowing Background */}
+          <div className="absolute top-1/2 inset-x-0 flex justify-center -translate-y-1/2 pointer-events-none">
+            <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
+          </div>
 
           <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
             <div className="grid grid-cols-2 sm:grid-cols-2 items-center gap-3 sm:gap-8 lg:gap-12">
@@ -257,15 +260,15 @@ export default function LandingPage() {
 
                   {/* Phone Mockup - Titanium/Silver Frame instead of Black */}
                   <div className="relative bg-[#E5E7EB] rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5 shadow-2xl shadow-brand-900/20 border-[6px] border-[#F3F4F6]">
-                    {/* Notch - Smaller and subtle */}
-                    <div className="absolute top-4 sm:top-5 start-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 bg-[#1F2937] rounded-full z-10"></div>
+                    {/* Notch - Physical Centering */}
+                    <div className="absolute top-4 sm:top-5 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 bg-[#1F2937] rounded-full z-10"></div>
 
                     {/* Screen Content - Cleaner, more integrated look */}
                     <div className="bg-gradient-to-br from-white to-brand-50/30 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative border border-white/50">
                       {/* App Interface */}
                       <div className="p-2.5 sm:p-4 h-full flex flex-col justify-evenly">
                         {/* Status Bar */}
-                        <div className="flex items-center justify-between pt-1 sm:pt-2">
+                        <div className="flex items-center justify-between pt-1 sm:pt-2 px-4">
                           <div className="flex items-center gap-0.5 sm:gap-1">
                             <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-500 rounded-full" />
                             <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-300 rounded-full" />

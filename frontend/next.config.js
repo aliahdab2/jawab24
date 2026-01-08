@@ -14,6 +14,7 @@ const nextConfig = {
     defaultLocale: 'ar',         // Arabic is default
     localeDetection: false,     // Required in Next.js 15
   },
+  output: 'export',
   eslint: {
     ignoreDuringBuilds: true,
   },

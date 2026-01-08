@@ -90,12 +90,26 @@ const start = async () => {
 
         // Register plugins
         // CORS: Environment-based origin configuration
-        // - Production: Only allow FRONTEND_URL (required in production)
+        // - Production: Allow FRONTEND_URL and mobile app origins
         // - Development: Allow localhost ports
         const isProduction = process.env.NODE_ENV === 'production';
+        const mobileOrigins = [
+            'capacitor://localhost',
+            'http://localhost',
+            'https://localhost',
+            'com.jawab24.app'
+        ];
+
         const allowedOrigins = isProduction
-            ? (process.env.FRONTEND_URL || 'https://jawab24.com')
-            : ['http://localhost:3000', 'http://localhost:3001'];
+            ? [
+                (process.env.FRONTEND_URL || 'https://jawab24.com'),
+                ...mobileOrigins
+              ]
+            : [
+                'http://localhost:3000', 
+                'http://localhost:3001',
+                ...mobileOrigins
+              ];
 
         await server.register(cors, {
             origin: allowedOrigins,

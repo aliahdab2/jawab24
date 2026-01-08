@@ -43,7 +43,8 @@ export default function LoginPage() {
       // Arabic (default): /auth/callback
       // English: /en/auth/callback
       const localePath = language === 'ar' ? '' : `/${language}`;
-      const redirectUri = encodeURIComponent(`${window.location.origin}${localePath}/auth/callback`);
+      // Add trailing slash for Next.js static export compatibility (/auth/callback/)
+      const redirectUri = encodeURIComponent(`${window.location.origin}${localePath}/auth/callback/`);
       // Using minimal scopes that work in Development mode
       // - email: Get user's email address (required for account notifications)
       // - pages_show_list: View list of pages user manages

@@ -49,6 +49,11 @@ export default function AuthCallback() {
         setTimeout(() => reject(new Error(t('auth.loginTimeout'))), 15000);
       });
 
+      // Ensure redirectUri matches initial request exactly (including trailing slash)
+      const pathname = window.location.pathname;
+      const normalizedPathname = pathname.endsWith('/') ? pathname : `${pathname}/`;
+      const redirectUri = `${window.location.origin}${normalizedPathname}`;
+
       // Race between fetch and timeout
       const response = await Promise.race([
         fetch(`${apiUrl}/auth/facebook`, {
@@ -58,7 +63,7 @@ export default function AuthCallback() {
           },
           body: JSON.stringify({
             code,
-            redirectUri: `${window.location.origin}${window.location.pathname}`
+            redirectUri
           }),
           signal: abortSignal,
         }),
