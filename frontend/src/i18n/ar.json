@@ -2,6 +2,7 @@
   "common.appName": "Jawab24",
   "common.loading": "جاري التحميل...",
   "common.save": "حفظ",
+  "common.offline": "لا يوجد اتصال بالإنترنت",
   "common.saving": "جاري الحفظ...",
   "common.cancel": "إلغاء",
   "common.delete": "حذف",
