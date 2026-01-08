@@ -59,20 +59,27 @@ export default function AuthCallback() {
       });
 
       // Determine appropriate origin based on platform
-      // Mobile ALWAYS uses normalized production origin from config
+      // INDUSTRY STANDARD: Force Canonical Origin from environment variables
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-      const normalizedOrigin = siteUrl.replace(/\/+$/, ''); // Strip all trailing slashes
+      const canonicalOrigin = siteUrl.replace(/\/+$/, ''); // Strip all trailing slashes
       
-      const origin = platform === 'mobile' ? normalizedOrigin : window.location.origin.replace(/\/+$/, '');
+      // For mobile: ALWAYS use the canonical production origin
+      // For web: Still use canonical for production, fallback to window.location.origin only for dev
+      const origin = platform === 'mobile' ? canonicalOrigin : (window.location.hostname === 'localhost' ? window.location.origin.replace(/\/+$/, '') : canonicalOrigin);
 
       // Ensure redirectUri matches initial request exactly using shared constant
-      // We use the language from the store or detect from path to match login initiation
+      // Next.js i18n handles locales via path prefixes (/en or default /)
       const localePath = routerRef.current.locale === 'ar' ? '' : `/${routerRef.current.locale}`;
       const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
       const redirectUri = redirectUriClean;
 
-      // Verification log
-      console.log(`[Auth] Callback URL exchange: ${redirectUri}`); // eslint-disable-line no-console
+      // Verification log with granular parts for debugging
+      console.log(`[Auth] Exchange Debug:`, {
+        origin,
+        localePath,
+        callbackPath: FB_CALLBACK_PATH,
+        fullRedirectUri: redirectUri
+      });  
 
       // Race between fetch and timeout
       const response = await Promise.race([
