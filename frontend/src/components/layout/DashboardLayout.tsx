@@ -245,7 +245,6 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                 icon={<LogOut className="w-7 h-7" />}
                 label={t('nav.logout')}
                 className="logout-button"
-                fullWidth
               />
             </div>
           </div>
@@ -320,12 +319,11 @@ function MobileNavButton({ onClick, icon, label, active }: {
   );
 }
 
-function MobileMenuButton({ onClick, icon, label, className, fullWidth }: {
+function MobileMenuButton({ onClick, icon, label, className }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   className?: string;
-  fullWidth?: boolean;
 }) {
   const isLogout = className?.includes('logout');
   const { language } = useTranslation();

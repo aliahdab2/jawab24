@@ -36,10 +36,20 @@ export const useAuthStore = create<AuthState>()(
           console.error('Invalid auth data provided to setAuth:', { hasUser: !!user, hasUserId: !!user?.id, hasToken: !!token });
           return;
         }
+        // Sync to legacy key for compatibility with non-Zustand code and tests
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(user));
+        }
         // Zustand persist handles storage automatically
         set({ user, token, fbToken, isAuthenticated: true });
       },
       logout: () => {
+        // Clear legacy keys
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
         // Zustand persist handles storage cleanup automatically
         set({ user: null, token: null, fbToken: null, isAuthenticated: false });
       },
