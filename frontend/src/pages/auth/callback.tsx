@@ -88,16 +88,29 @@ export default function AuthCallback() {
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
         // Store the intended destination in query param
-        const returnUrl = state ? decodeURIComponent(state as string) : '/dashboard';
+        const stateStr = state ? decodeURIComponent(state as string) : '/dashboard';
+        // Parse state: format is "returnUrl|platform" (e.g., "/dashboard|mobile")
+        const [returnUrl = '/dashboard'] = stateStr.split('|');
         const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
         routerRef.current.push(`/complete-profile?redirect=${encodeURIComponent(safeUrl)}`);
         return;
       }
 
-      // Redirect to the original destination (from state param) or dashboard
-      const returnUrl = state ? decodeURIComponent(state as string) : '/dashboard';
+      // Parse state: format is "returnUrl|platform" (e.g., "/dashboard|mobile")
+      const stateStr = state ? decodeURIComponent(state as string) : '/dashboard|web';
+      const [returnUrl = '/dashboard', platform = 'web'] = stateStr.split('|');
       // Validate the URL is a relative path (security)
       const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
+      
+      // If request came from mobile app, redirect using custom URL scheme
+      // This will open the app directly instead of staying in the browser
+      if (platform === 'mobile') {
+        // Redirect to app using custom scheme
+        window.location.href = `com.jawab24.app://${safeUrl}`;
+        return;
+      }
+      
+      // Web: standard navigation
       routerRef.current.push(safeUrl);
     } catch (err) {
       // Don't show error if request was aborted (user navigated away)

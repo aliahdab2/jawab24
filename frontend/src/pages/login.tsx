@@ -67,8 +67,11 @@ export default function LoginPage() {
       // Use URLSearchParams directly for better static export compatibility
       const urlParams = new URLSearchParams(window.location.search);
       const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
-      // Encode the return URL in the state parameter so we can use it after OAuth
-      const state = encodeURIComponent(returnUrl);
+      
+      // Encode the return URL AND platform in state parameter
+      // Format: returnUrl|platform (e.g., "/dashboard|mobile" or "/dashboard|web")
+      const stateData = `${returnUrl}|${isMobile ? 'mobile' : 'web'}`;
+      const state = encodeURIComponent(stateData);
 
       const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
 

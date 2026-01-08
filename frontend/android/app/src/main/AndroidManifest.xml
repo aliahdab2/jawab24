@@ -57,6 +57,15 @@
           android:pathPrefix="/en/auth/callback"
         />
             </intent-filter>
+
+            <!-- Custom URL Scheme: com.jawab24.app:// -->
+            <!-- Used by web callback to redirect back to app after auth -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.jawab24.app" />
+            </intent-filter>
         </activity>
 
         <provider
