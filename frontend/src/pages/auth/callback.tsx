@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { PageSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
+import { FB_CALLBACK_PATH } from '@/constants/auth';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -57,24 +58,20 @@ export default function AuthCallback() {
         setTimeout(() => reject(new Error(t('auth.loginTimeout'))), 15000);
       });
 
-      // Normalize site URL (fallback to hardcoded only if env is missing)
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-      const normalizedOrigin = siteUrl.replace(/\/$/, '');
-
       // Determine appropriate origin based on platform
       // Mobile ALWAYS uses normalized production origin from config
-      const origin = platform === 'mobile' ? normalizedOrigin : window.location.origin;
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/+$/, ''); // Strip all trailing slashes
+      
+      const origin = platform === 'mobile' ? normalizedOrigin : window.location.origin.replace(/\/+$/, '');
 
       // Ensure redirectUri matches initial request exactly using shared constant
-      // Normalize pathname to handle trailing/missing slashes consistently
-      const pathname = window.location.pathname;
-      
-      // If the current path is the callback path, we can use it directly
-      // Otherwise we fall back to manual normalization
-      const redirectUriClean = `${origin}${pathname.endsWith('/') ? pathname : `${pathname}/`}`;
+      // We use the language from the store or detect from path to match login initiation
+      const localePath = routerRef.current.locale === 'ar' ? '' : `/${routerRef.current.locale}`;
+      const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
       const redirectUri = redirectUriClean;
 
-      // Temporary logging for verification
+      // Verification log
       console.log(`[Auth] Callback URL exchange: ${redirectUri}`); // eslint-disable-line no-console
 
       // Race between fetch and timeout
