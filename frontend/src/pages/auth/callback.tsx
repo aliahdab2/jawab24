@@ -86,10 +86,8 @@ export default function AuthCallback() {
         fullRedirectUri: redirectUri
       });
       
-      // DEBUG: TEMPORARY ALERT FOR MOBILE
-      if (platform === 'mobile') {
-        alert(`Debug URI: ${redirectUri}\nOrigin: ${origin}\nLocale: ${localePath}`);
-      }
+      // DEBUG: TEMPORARY ALERT - UNCONDITIONAL
+      alert(`Debug URI:\\n${redirectUri}\\n\\nPlatform: ${platform}\\nOrigin: ${origin}\\nLocale: ${localePath}`);
 
       // Race between fetch and timeout
       const response = await Promise.race([
