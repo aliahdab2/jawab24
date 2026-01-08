@@ -69,17 +69,27 @@ export default function AuthCallback() {
 
       // Ensure redirectUri matches initial request exactly using shared constant
       // Next.js i18n handles locales via path prefixes (/en or default /)
-      const localePath = routerRef.current.locale === 'ar' ? '' : `/${routerRef.current.locale}`;
+      // Fallback: Check pathname if router locale isn't ready
+      const currentPath = window.location.pathname;
+      const detectedLocalePath = currentPath.startsWith('/en/') ? '/en' : '';
+      const localePath = routerRef.current.locale ? (routerRef.current.locale === 'ar' ? '' : `/${routerRef.current.locale}`) : detectedLocalePath;
+      
       const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
       const redirectUri = redirectUriClean;
 
       // Verification log with granular parts for debugging
+      // eslint-disable-next-line no-console
       console.log(`[Auth] Exchange Debug:`, {
         origin,
         localePath,
         callbackPath: FB_CALLBACK_PATH,
         fullRedirectUri: redirectUri
-      });  
+      });
+      
+      // DEBUG: TEMPORARY ALERT FOR MOBILE
+      if (platform === 'mobile') {
+        alert(`Debug URI: ${redirectUri}\nOrigin: ${origin}\nLocale: ${localePath}`);
+      }
 
       // Race between fetch and timeout
       const response = await Promise.race([

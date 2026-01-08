@@ -149,46 +149,43 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         >
           <div className={clsx(
             'p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
-            isCleanLayout ? 'pb-12' : 'content-bottom-buffer md:pb-12'
+            isCleanLayout ? 'pb-12' : 'pb-24 md:pb-12'
           )}>
             {children}
           </div>
         </main>
 
         {/* Mobile bottom navigation - Final Spec: h-16 (64px), 4 items, proper sizing */}
+        {/* Mobile bottom navigation - Final Spec: h-16 (64px), 4 items, proper sizing */}
         {!isCleanLayout && (
-          <>
-            <nav
-              className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 mb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
-            >
-              <MobileNavButton
-                onClick={() => router.push('/dashboard')}
-                icon={<LayoutDashboard className="w-6 h-6" />}
-                label={t('nav.dashboard')}
-                active={router.pathname === '/dashboard'}
-              />
-              <MobileNavButton
-                onClick={() => router.push('/comments')}
-                icon={<MessageSquare className="w-6 h-6" />}
-                label={t('nav.comments')}
-                active={router.pathname === '/comments'}
-              />
-              <MobileNavButton
-                onClick={() => router.push('/messages')}
-                icon={<MessageCircle className="w-6 h-6" />}
-                label={t('nav.messages')}
-                active={router.pathname === '/messages'}
-              />
-              <MobileNavButton
-                onClick={() => setMobileMenuOpen(true)}
-                icon={<MoreHorizontal className="w-6 h-6" />}
-                label={t('nav.more') || 'More'}
-                active={mobileMenuOpen}
-              />
-            </nav>
-            {/* Industry Standard: Fixed safe area backdrop */}
-            <div className="md:hidden fixed-safe-bottom" />
-          </>
+          <nav
+            className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 pb-[env(safe-area-inset-bottom)] box-content shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
+          >
+            <MobileNavButton
+              onClick={() => router.push('/dashboard')}
+              icon={<LayoutDashboard className="w-6 h-6" />}
+              label={t('nav.dashboard')}
+              active={router.pathname === '/dashboard'}
+            />
+            <MobileNavButton
+              onClick={() => router.push('/comments')}
+              icon={<MessageSquare className="w-6 h-6" />}
+              label={t('nav.comments')}
+              active={router.pathname === '/comments'}
+            />
+            <MobileNavButton
+              onClick={() => router.push('/messages')}
+              icon={<MessageCircle className="w-6 h-6" />}
+              label={t('nav.messages')}
+              active={router.pathname === '/messages'}
+            />
+            <MobileNavButton
+              onClick={() => setMobileMenuOpen(true)}
+              icon={<MoreHorizontal className="w-6 h-6" />}
+              label={t('nav.more') || 'More'}
+              active={mobileMenuOpen}
+            />
+          </nav>
         )}
 
         {/* Mobile full menu overlay - 2 columns, stronger shadow, 40-50% backdrop */}

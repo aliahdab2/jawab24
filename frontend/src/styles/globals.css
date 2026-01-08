@@ -609,22 +609,6 @@
   flex-direction: column;
 }
 
-/* Fixed bottom safe area - industry standard for "native" feel */
-.fixed-safe-bottom {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: env(safe-area-inset-bottom, 0px);
-  background: white; /* Matches the nav bar */
-  z-index: 50;
-}
-
-/* Ensure main content doesn't get hidden behind fixed bars */
-.content-bottom-buffer {
-  padding-bottom: calc(64px + env(safe-area-inset-bottom, 16px));
-}
-
 /* Shimmer animation for loading states */
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
