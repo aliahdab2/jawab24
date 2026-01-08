@@ -267,7 +267,7 @@ export default function LoginPage() {
           </div>
 
           {/* Footer Info */}
-          <div className="p-4 border-t border-surface-100 flex items-center justify-center">
+          <div className="p-4 pb-safe border-t border-surface-100 flex items-center justify-center">
             <div className="text-[10px] font-medium text-surface-300 tracking-wider">
               © {new Date().getFullYear()} Jawab24
             </div>

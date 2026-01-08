@@ -572,8 +572,9 @@
 }
 
 /* Safe area insets for mobile devices (notches, gesture bars) */
+/* Safe area insets for mobile devices (notches, gesture bars) */
 .pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
 }
 
 .pt-safe {

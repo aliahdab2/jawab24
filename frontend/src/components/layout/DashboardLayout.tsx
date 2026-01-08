@@ -195,7 +195,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             <div
               className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[24px] p-5 animate-in slide-in-from-bottom overflow-y-auto"
               style={{
-                paddingBottom: 'max(1.25rem, calc(1.25rem + env(safe-area-inset-bottom, 0px)))',
+                paddingBottom: 'max(2rem, calc(2rem + env(safe-area-inset-bottom, 0px)))',
                 maxHeight: '85vh',
                 boxShadow: '0 -8px 32px rgba(0,0,0,0.16)'
               }}
