@@ -14,6 +14,7 @@ import { useTranslation } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { FB_CALLBACK_PATH } from '@/constants/auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -48,12 +49,21 @@ export default function LoginPage() {
       const cap = (window as any).Capacitor;
       const isMobile = cap?.isNativePlatform?.();
 
-      // For mobile: Use production domain, server will redirect back with custom scheme
+      // Normalize site URL (fallback to hardcoded only if env is missing)
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+
+      // For mobile: Use normalized production origin
       // For web: Use window.location.origin
-      const origin = isMobile ? 'https://jawab24.com' : window.location.origin;
+      const origin = isMobile ? normalizedOrigin : window.location.origin;
       
-      // Add trailing slash for Next.js static export compatibility (/auth/callback/)
-      const redirectUri = encodeURIComponent(`${origin}${localePath}/auth/callback/`);
+      // Construct redirect URI using shared constant
+      // Normalized to ensure no double slashes or missing slashes
+      const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
+      const redirectUri = encodeURIComponent(redirectUriClean);
+
+      // Temporary logging for verification
+      console.log(`[Auth] Initiating login with redirect_uri: ${redirectUriClean}`); // eslint-disable-line no-console
       // Using minimal scopes that work in Development mode
       // - email: Get user's email address (required for account notifications)
       // - pages_show_list: View list of pages user manages

@@ -25,6 +25,14 @@ export default function AuthCallback() {
 
     const { code, error: fbError, state } = routerRef.current.query;
 
+    // Parse state: format is "returnUrl|platform" (e.g., "/dashboard|mobile")
+    // or legacy "returnUrl"
+    const stateStr = state ? decodeURIComponent(state as string) : '/dashboard|web';
+    const parts = stateStr.split('|');
+    const returnUrlRaw = parts[0] || '/dashboard';
+    const platform = parts.length > 1 ? parts[1] : 'web';
+    const safeUrl = returnUrlRaw.startsWith('/') ? returnUrlRaw : '/dashboard';
+
     if (fbError) {
       authAttemptedRef.current = true;
       setError(t('auth.loginCancelled'));
@@ -49,10 +57,25 @@ export default function AuthCallback() {
         setTimeout(() => reject(new Error(t('auth.loginTimeout'))), 15000);
       });
 
-      // Ensure redirectUri matches initial request exactly (including trailing slash)
+      // Normalize site URL (fallback to hardcoded only if env is missing)
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+
+      // Determine appropriate origin based on platform
+      // Mobile ALWAYS uses normalized production origin from config
+      const origin = platform === 'mobile' ? normalizedOrigin : window.location.origin;
+
+      // Ensure redirectUri matches initial request exactly using shared constant
+      // Normalize pathname to handle trailing/missing slashes consistently
       const pathname = window.location.pathname;
-      const normalizedPathname = pathname.endsWith('/') ? pathname : `${pathname}/`;
-      const redirectUri = `${window.location.origin}${normalizedPathname}`;
+      
+      // If the current path is the callback path, we can use it directly
+      // Otherwise we fall back to manual normalization
+      const redirectUriClean = `${origin}${pathname.endsWith('/') ? pathname : `${pathname}/`}`;
+      const redirectUri = redirectUriClean;
+
+      // Temporary logging for verification
+      console.log(`[Auth] Callback URL exchange: ${redirectUri}`); // eslint-disable-line no-console
 
       // Race between fetch and timeout
       const response = await Promise.race([
@@ -87,20 +110,9 @@ export default function AuthCallback() {
 
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
-        // Store the intended destination in query param
-        const stateStr = state ? decodeURIComponent(state as string) : '/dashboard';
-        // Parse state: format is "returnUrl|platform" (e.g., "/dashboard|mobile")
-        const [returnUrl = '/dashboard'] = stateStr.split('|');
-        const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
         routerRef.current.push(`/complete-profile?redirect=${encodeURIComponent(safeUrl)}`);
         return;
       }
-
-      // Parse state: format is "returnUrl|platform" (e.g., "/dashboard|mobile")
-      const stateStr = state ? decodeURIComponent(state as string) : '/dashboard|web';
-      const [returnUrl = '/dashboard', platform = 'web'] = stateStr.split('|');
-      // Validate the URL is a relative path (security)
-      const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
       
       // If request came from mobile app, redirect using custom URL scheme
       // This will open the app directly instead of staying in the browser
