@@ -28,7 +28,7 @@ export default function LoginPage() {
 
   if (!mounted) return null;
 
-  const handleFacebookLogin = () => {
+  const handleFacebookLogin = async () => {
     try {
       // Build Facebook OAuth URL
       const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
@@ -43,8 +43,17 @@ export default function LoginPage() {
       // Arabic (default): /auth/callback
       // English: /en/auth/callback
       const localePath = language === 'ar' ? '' : `/${language}`;
+
+      // Check if running in Capacitor (mobile app)
+      const cap = (window as any).Capacitor;
+      const isMobile = cap?.isNativePlatform?.();
+
+      // For mobile: Use production domain, server will redirect back with custom scheme
+      // For web: Use window.location.origin
+      const origin = isMobile ? 'https://jawab24.com' : window.location.origin;
+      
       // Add trailing slash for Next.js static export compatibility (/auth/callback/)
-      const redirectUri = encodeURIComponent(`${window.location.origin}${localePath}/auth/callback/`);
+      const redirectUri = encodeURIComponent(`${origin}${localePath}/auth/callback/`);
       // Using minimal scopes that work in Development mode
       // - email: Get user's email address (required for account notifications)
       // - pages_show_list: View list of pages user manages
@@ -55,13 +64,23 @@ export default function LoginPage() {
       const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
 
       // Get the redirect URL from query params (e.g., /checkout?planId=xxx)
-      const returnUrl = router.query.redirect as string || '/dashboard';
+      // Use URLSearchParams directly for better static export compatibility
+      const urlParams = new URLSearchParams(window.location.search);
+      const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
       // Encode the return URL in the state parameter so we can use it after OAuth
       const state = encodeURIComponent(returnUrl);
 
       const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
 
-      window.location.href = facebookAuthUrl;
+      if (isMobile) {
+        // On mobile: Open Facebook login in system browser
+        // The redirect will be handled by production server, which redirects back to app
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: facebookAuthUrl });
+      } else {
+        // On web: Standard redirect
+        window.location.href = facebookAuthUrl;
+      }
     } catch (error) {
       console.error('Error initiating Facebook login:', error);
       alert('Failed to start login. Please try again.');

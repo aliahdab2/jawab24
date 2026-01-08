@@ -179,12 +179,12 @@ export default function LandingPage() {
                   </Link>
                 ) : (
                   <>
-                    <Link href="/login" className="hidden sm:block">
+                    <Link href="/login?redirect=%2Fdashboard" className="hidden sm:block">
                       <Button variant="secondary" size="sm" className="font-bold border-none bg-surface-100">
                         {t('landing.nav.login')}
                       </Button>
                     </Link>
-                    <Link href="/login">
+                    <Link href="/login?redirect=%2Fdashboard">
                       <Button size="sm" className="font-bold shadow-xl shadow-brand-500/20 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5">
                         {t('landing.nav.start')}
                       </Button>
@@ -225,7 +225,7 @@ export default function LandingPage() {
 
                 {/* CTA Buttons */}
                 <div className="flex flex-col items-stretch gap-2 sm:gap-4 mb-4 sm:mb-12 animate-slide-up animation-delay-200 px-2 sm:px-0">
-                  <Link href={isAuthenticated ? "/dashboard" : "/login"} className="w-full sm:w-auto">
+                  <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
                     <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95 whitespace-nowrap">
                       {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.hero.cta1')}
                     </Button>
@@ -395,7 +395,7 @@ export default function LandingPage() {
                   ))}
                 </div>
                 <div className="text-start">
-                  <Link href={isAuthenticated ? "/dashboard" : "/login"} className="inline-block mt-4 sm:mt-12">
+                  <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="inline-block mt-4 sm:mt-12">
                     <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
                       <span className="flex items-center gap-2">
                         {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.howItWorks.cta')}
@@ -614,7 +614,7 @@ export default function LandingPage() {
                 <h4 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.quickLinks')}</h4>
                 <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
                   <li><Link href="/pricing" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.pricingPlans')}</Link></li>
-                  <li><Link href={isAuthenticated ? "/dashboard" : "/login"} className="text-surface-400 hover:text-brand-400 transition-colors">{isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.footer.startTrial')}</Link></li>
+                  <li><Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="text-surface-400 hover:text-brand-400 transition-colors">{isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.footer.startTrial')}</Link></li>
                   <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.termsOfService')}</Link></li>
                   <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.privacyPolicy')}</Link></li>
                 </ul>

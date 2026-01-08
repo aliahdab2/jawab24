@@ -21,20 +21,41 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deep Link: https://localhost/auth/callback/ -->
+            <!-- Verified App Links: https://jawab24.com/auth/callback/ -->
+            <!-- Android will auto-verify using /.well-known/assetlinks.json -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="localhost" />
+                <data
+          android:scheme="https"
+          android:host="jawab24.com"
+          android:pathPrefix="/auth/callback"
+        />
             </intent-filter>
 
-            <!-- Custom Scheme: com.jawab24.app://auth/callback/ -->
-            <intent-filter>
+            <!-- Arabic locale callback -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="com.jawab24.app" />
+                <data
+          android:scheme="https"
+          android:host="jawab24.com"
+          android:pathPrefix="/ar/auth/callback"
+        />
+            </intent-filter>
+
+            <!-- English locale callback -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+          android:scheme="https"
+          android:host="jawab24.com"
+          android:pathPrefix="/en/auth/callback"
+        />
             </intent-filter>
         </activity>
 

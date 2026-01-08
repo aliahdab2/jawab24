@@ -116,9 +116,12 @@ export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Pro
             return result;
         }
 
+        // Get API URL from environment (required for mobile where origin is localhost)
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+        
         // Race between fetch and timeout
         const response = await Promise.race([
-            fetch('/api/geo/check', {
+            fetch(`${apiUrl}/geo/check`, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -178,7 +181,10 @@ export async function isUserSanctioned(): Promise<boolean> {
             return true;
         }
 
-        const response = await fetch('/api/geo/check', {
+        // Get API URL from environment (required for mobile where origin is localhost)
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+        
+        const response = await fetch(`${apiUrl}/geo/check`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -206,7 +212,8 @@ export async function isUserSanctioned(): Promise<boolean> {
  */
 export async function getUserCountry(): Promise<string | undefined> {
     try {
-        const response = await fetch('/api/geo/check');
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+        const response = await fetch(`${apiUrl}/geo/check`);
         if (!response.ok) return undefined;
 
         const data: GeoCheckResponse = await response.json();
