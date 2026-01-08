@@ -573,11 +573,11 @@
 
 /* Safe area insets for mobile devices (notches, gesture bars) */
 .pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
 }
 
 .pt-safe {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: max(1rem, env(safe-area-inset-top, 1rem));
 }
 
 .px-safe {
@@ -595,4 +595,21 @@
   body {
     padding-bottom: env(safe-area-inset-bottom);
   }
+}
+
+/* Full-page safe area wrapper - best practice with min padding fallback */
+.app-safe-area {
+  padding-top: max(1rem, env(safe-area-inset-top, 1rem));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Shimmer animation for loading states */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
 }

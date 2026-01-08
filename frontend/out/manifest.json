@@ -1,0 +1,26 @@
+{
+    "name": "Jawab24 جواب | AI Auto-Reply for Facebook & Instagram",
+    "short_name": "Jawab24",
+    "description": "Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7. جواب24 - أول نظام عربي للرد الذكي التلقائي على تعليقات ورسائل فيسبوك وإنستغرام. وفّر وقتك وزد مبيعاتك بردود دقيقة 24/7.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#0ea5e9",
+    "icons": [
+        {
+            "src": "/brand/logo-small.png",
+            "sizes": "128x128",
+            "type": "image/png"
+        },
+        {
+            "src": "/brand/apple-touch-icon.png",
+            "sizes": "180x180",
+            "type": "image/png"
+        },
+        {
+            "src": "/brand/logo-large.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

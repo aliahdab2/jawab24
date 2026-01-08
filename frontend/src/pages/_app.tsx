@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { useUIStore } from '@/lib/store';
+import { useUIStore, useAuthStore } from '@/lib/store';
 import type { Language } from '@/i18n';
 import { dmSans, cairo, tajawal } from '@/lib/fonts';
 
@@ -26,46 +26,150 @@ export default function App({ Component, pageProps }: AppProps) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 5 * 60 * 1000, // 5 minutes - reduce refetches on poor connections
-        gcTime: 10 * 60 * 1000, // 10 minutes - keep data in cache longer
-        refetchOnWindowFocus: false, // Don't refetch on window focus
-        refetchOnReconnect: true, // Do refetch when connection is restored
-        retry: 2, // Retry failed queries twice
-        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
+        retry: 2,
+        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
       },
     },
   }));
 
-  // Sync Next.js locale with our language store and handle redirects
-  const hasHydrated = useUIStore((state) => state._hasHydrated);
+  // Hydration state from both stores
+  const uiHasHydrated = useUIStore((state) => state._hasHydrated);
+  const authHasHydrated = useAuthStore((state) => state._hasHydrated);
+  const hasHydrated = uiHasHydrated && authHasHydrated;
 
+  // Sync Next.js locale with language store
   useEffect(() => {
     if (!locale || !hasHydrated) return;
 
     const storedLang = useUIStore.getState().language;
     const isDefaultLocale = locale === 'ar';
 
-    // If we are on the default locale (ar) but user prefers 'en', redirect
     if (isDefaultLocale && storedLang === 'en') {
       routerRef.current.replace(routerRef.current.pathname, routerRef.current.asPath, { locale: 'en' });
       return;
     }
 
-    // If we are on a non-default locale (en), trust the URL and update store
     if (!isDefaultLocale && storedLang !== locale) {
       setLanguage(locale as Language);
     }
 
-    // Update document direction and language
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = locale;
   }, [locale, hasHydrated, setLanguage]);
+
+  // Native platform initialization (only runs on mobile)
+  useEffect(() => {
+    const initNativePlatform = async () => {
+      if (typeof window === "undefined") return;
+      const cap = (window as any).Capacitor;
+      if (!cap?.isNativePlatform?.()) return;
+
+      const [{ StatusBar, Style }, { Keyboard }, { App }, { SplashScreen }, { Network }] = await Promise.all([
+        import("@capacitor/status-bar"),
+        import("@capacitor/keyboard"),
+        import("@capacitor/app"),
+        import("@capacitor/splash-screen"),
+        import("@capacitor/network")
+      ]);
+
+      // Configure native UI (non-critical - wrap in try/catch)
+      try {
+        await StatusBar.setOverlaysWebView({ overlay: false });
+        await StatusBar.setStyle({ style: Style.Dark });
+      } catch {
+        // StatusBar may not be available on all devices
+      }
+
+      try {
+        await Keyboard.setResizeMode({ mode: 'body' } as any);
+      } catch {
+        // Keyboard resize not implemented on all platforms
+      }
+
+      // Handle hardware back button (Android)
+      App.addListener('backButton', ({ canGoBack }) => {
+        if (canGoBack) {
+          window.history.back();
+        } else {
+          App.exitApp();
+        }
+      });
+
+      // Handle app resume - refresh data
+      App.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          queryClient.invalidateQueries();
+        }
+      });
+
+      // Handle network changes
+      Network.addListener('networkStatusChange', (status) => {
+        if (status.connected) {
+          queryClient.invalidateQueries();
+        }
+      });
+
+      // Handle deep links
+      App.addListener('appUrlOpen', (data) => {
+        const slug = data.url.split(".com").pop() || data.url.split("://").pop() || "";
+        if (slug) {
+          routerRef.current.push(slug);
+        }
+      });
+
+      // Handle external links - open in system browser
+      const handleExternalClick = async (e: MouseEvent) => {
+        const anchor = (e.target as HTMLElement).closest('a');
+        if (anchor?.href) {
+          try {
+            const url = new URL(anchor.href);
+            const isExternal = !url.hostname.includes('jawab24.com') && !url.hostname.includes('localhost');
+            if (isExternal) {
+              e.preventDefault();
+              const { Browser } = await import('@capacitor/browser');
+              await Browser.open({ url: anchor.href });
+            }
+          } catch {
+            // Invalid URL, ignore
+          }
+        }
+      };
+      document.addEventListener('click', handleExternalClick);
+
+      // ALWAYS hide splash - this is critical
+      await SplashScreen.hide();
+    };
+
+    if (hasHydrated) {
+      initNativePlatform().catch(console.error);
+    }
+  }, [hasHydrated, queryClient]);
+
+  // Hydration guard - show branded splash while loading secure storage
+  if (!hasHydrated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-center animate-pulse">
+          <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center">
+            <span className="text-white text-3xl font-bold">ج</span>
+          </div>
+          <div className="h-1 w-24 mx-auto bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-full w-1/2 bg-teal-500 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
       <Head>
         <title>Jawab24 جواب | AI Auto-Reply for Facebook & Instagram</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
         <meta name="theme-color" content="#18181b" />
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
@@ -96,7 +200,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </Head>
-      <div className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable}`}>
+      <div className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} app-safe-area`}>
         <ErrorBoundary>
           <Component {...pageProps} />
         </ErrorBoundary>
@@ -104,4 +208,3 @@ export default function App({ Component, pageProps }: AppProps) {
     </QueryClientProvider>
   );
 }
-
