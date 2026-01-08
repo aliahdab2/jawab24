@@ -22,6 +22,7 @@
     "type-check": "npm run type-check --workspaces --if-present",
     "pre-deploy": "./scripts/pre-deploy-check.sh",
     "check:esm": "grep -E '\"(uuid|node-fetch|chalk|ora|execa|got|globby)\":' backend/package.json && echo '⚠️  ESM-only packages found!' || echo '✅ No ESM-only packages'",
+    "postinstall": "npm run build --workspace=@jawab24/shared",
     "prepare": "husky"
   },
   "devDependencies": {
