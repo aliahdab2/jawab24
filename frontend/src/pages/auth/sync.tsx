@@ -27,7 +27,7 @@ export default function AuthSync() {
         let user;
         try {
             user = JSON.parse(decodeURIComponent(userStr));
-        } catch (e) {
+        } catch (_e) {
             throw new Error('Invalid user data');
         }
 
