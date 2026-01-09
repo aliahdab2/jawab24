@@ -129,12 +129,20 @@ export default function AuthCallback() {
       // This handles cases where Callback runs in Browser (App Link failed) 
       // by passing the session to the App via Deep Link.
       if (platform === 'mobile') {
+        const cap = (window as any).Capacitor;
+        const isNative = typeof window !== 'undefined' && !!cap?.isNativePlatform?.();
+        
+        if (isNative) {
+          routerRef.current.push(safeUrl);
+          return;
+        }
+
         const userStr = encodeURIComponent(JSON.stringify(data.user));
         const tokenStr = encodeURIComponent(data.token);
         const fbTokenStr = encodeURIComponent(data.fbAccessToken || '');
         const redirectStr = encodeURIComponent(safeUrl);
         
-        // Redirect to Bridge Page in App
+        alert(`Cloud: In Browser. Sending to App...`);
         window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&user=${userStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}`;
         return;
       }

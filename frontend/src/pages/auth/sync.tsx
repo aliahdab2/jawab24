@@ -14,6 +14,7 @@ export default function AuthSync() {
     const syncAuth = async () => {
       try {
         setStatus('Syncing session...');
+        alert(`Sync: Bridge Received. User in URL: ${router.query.user ? 'YES' : 'NO'}`);
         const { token, fbToken, user: userStr, redirect } = router.query;
 
         if (!token || typeof token !== 'string') {

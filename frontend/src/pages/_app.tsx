@@ -150,8 +150,10 @@ export default function App({ Component, pageProps }: AppProps) {
 
       // 1. Warm Start Listener
       listenerHandle = await App.addListener('appUrlOpen', (data) => {
+        alert(`App: Received Deep Link: ${data.url}`);
         const slug = handleDeepLink(data.url);
         if (slug) {
+            alert(`App: Navigating to: ${slug}`);
             // Force navigation with a small delay to ensure React is ready
             setTimeout(() => {
                 routerRef.current.push(slug).catch(console.error);

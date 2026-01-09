@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "<REPLACE_WITH_TEAM_ID>.com.jawab24.app",
+        "paths": [ "/auth/callback", "/auth/callback/*", "/auth/sync", "/dashboard/*" ]
+      }
+    ]
+  }
+}
