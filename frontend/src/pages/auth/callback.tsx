@@ -26,9 +26,6 @@ export default function AuthCallback() {
 
     const { code, error: fbError, state } = routerRef.current.query;
 
-    // EARLY DEBUG ALERT - Shows what we received from Facebook
-    alert(`Callback Debug:\nCode: ${code ? 'YES' : 'NO'}\nError: ${fbError || 'none'}\nState: ${state || 'none'}`);
-
     // Parse state: format is "returnUrl|platform" (e.g., "/dashboard|mobile")
     // or legacy "returnUrl"
     const stateStr = state ? decodeURIComponent(state as string) : '/dashboard|web';
@@ -89,9 +86,6 @@ export default function AuthCallback() {
         fullRedirectUri: redirectUri
       });
       
-      // DEBUG: TEMPORARY ALERT - UNCONDITIONAL
-      alert(`Debug URI:\\n${redirectUri}\\n\\nPlatform: ${platform}\\nOrigin: ${origin}\\nLocale: ${localePath}`);
-
       // Race between fetch and timeout
       const response = await Promise.race([
         fetch(`${apiUrl}/auth/facebook`, {
