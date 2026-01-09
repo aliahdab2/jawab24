@@ -113,45 +113,6 @@ export default function App({ Component, pageProps }: AppProps) {
         }
       });
 
-      // Handle deep links
-      App.addListener('appUrlOpen', (data) => {
-        // Handle com.jawab24.app://host/path or https://localhost/path
-        let slug = "";
-        
-        if (data.url.includes("com.jawab24.app://")) {
-          slug = data.url.replace("com.jawab24.app://", "/");
-        } else if (data.url.includes("localhost/")) {
-          slug = data.url.split("localhost").pop() || "";
-        } else {
-          slug = data.url.split(".com").pop() || "";
-        }
-
-        if (slug) {
-          // Normalize slug (ensure starts with /)
-          const finalSlug = slug.startsWith("/") ? slug : `/${slug}`;
-          routerRef.current.push(finalSlug);
-        }
-      });
-
-      // Handle external links - open in system browser
-      const handleExternalClick = async (e: MouseEvent) => {
-        const anchor = (e.target as HTMLElement).closest('a');
-        if (anchor?.href) {
-          try {
-            const url = new URL(anchor.href);
-            const isExternal = !url.hostname.includes('jawab24.com') && !url.hostname.includes('localhost');
-            if (isExternal) {
-              e.preventDefault();
-              const { Browser } = await import('@capacitor/browser');
-              await Browser.open({ url: anchor.href });
-            }
-          } catch {
-            // Invalid URL, ignore
-          }
-        }
-      };
-      document.addEventListener('click', handleExternalClick);
-
       // ALWAYS hide splash - this is critical
       await SplashScreen.hide();
     };
@@ -160,6 +121,63 @@ export default function App({ Component, pageProps }: AppProps) {
       initNativePlatform().catch(console.error);
     }
   }, [hasHydrated, queryClient]);
+
+  // Dedicated Deep Link Handling - Separate effect for reliability
+  useEffect(() => {
+    if (!hasHydrated || typeof window === "undefined") return;
+    const cap = (window as any).Capacitor;
+    if (!cap?.isNativePlatform?.()) return;
+
+    let listenerHandle: any;
+
+    const setupDeepLinks = async () => {
+      const { App } = await import("@capacitor/app");
+      
+      // Helper for URL parsing
+      const handleDeepLink = (url: string): string | null => {
+        if (url.includes("com.jawab24.app://")) {
+            const raw = url.replace("com.jawab24.app://", "/");
+            return raw.startsWith("/") ? raw : `/${raw}`;
+        } else if (url.includes("localhost/")) {
+            const raw = url.split("localhost").pop() || "";
+            return raw.startsWith("/") ? raw : `/${raw}`;
+        } else if (url.includes(".com")) {
+            const raw = url.split(".com").pop() || "";
+            return raw.startsWith("/") ? raw : `/${raw}`;
+        }
+        return null;
+      };
+
+      // 1. Warm Start Listener
+      listenerHandle = await App.addListener('appUrlOpen', (data) => {
+        const slug = handleDeepLink(data.url);
+        if (slug) {
+            // Force navigation with a small delay to ensure React is ready
+            setTimeout(() => {
+                routerRef.current.push(slug).catch(console.error);
+            }, 50);
+        }
+      });
+
+      // 2. Cold Start Check
+      const launchUrl = await App.getLaunchUrl();
+      if (launchUrl && launchUrl.url) {
+        const slug = handleDeepLink(launchUrl.url);
+        if (slug) {
+             routerRef.current.push(slug).catch(console.error);
+        }
+      }
+    };
+
+    setupDeepLinks();
+
+    return () => {
+      // Cleanup listener on unmount
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+    };
+  }, [hasHydrated]);
 
   // Hydration guard - show branded splash while loading secure storage
   if (!hasHydrated) {
