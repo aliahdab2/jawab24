@@ -150,9 +150,11 @@ export default function TemplatesPage() {
         title={t('templates.title')}
         description={t('templates.description')}
         action={
-          <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-            {t('templates.addTemplate')}
-          </Button>
+          templates.length > 0 ? (
+            <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
+              {t('templates.addTemplate')}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -290,12 +292,13 @@ export default function TemplatesPage() {
         title={editingTemplate ? t('templates.editTemplate') : t('templates.addTemplate')}
         size="lg"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 md:space-y-5">
           <Input
             label={t('templates.templateName')}
             placeholder={t('templates.templateNamePlaceholder')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            className="!py-3" 
           />
 
           <Textarea
@@ -304,6 +307,7 @@ export default function TemplatesPage() {
             value={formData.en}
             onChange={(e) => setFormData({ ...formData, en: e.target.value })}
             helperText={t('templates.variablesDesc')}
+            className="!py-3 min-h-[100px]"
           />
 
           <Textarea
@@ -311,7 +315,7 @@ export default function TemplatesPage() {
             placeholder="شكراً لاهتمامك! ..."
             value={formData.ar}
             onChange={(e) => setFormData({ ...formData, ar: e.target.value })}
-            className="text-right"
+            className="text-right !py-3 min-h-[100px]"
             dir="rtl"
           />
 
@@ -321,6 +325,7 @@ export default function TemplatesPage() {
             value={formData.keywords}
             onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
             helperText={t('templates.keywordsHelper')}
+            className="!py-3"
           />
 
           <div className="flex justify-end gap-3 pt-4">
