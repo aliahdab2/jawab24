@@ -18,6 +18,9 @@ export default function App({ Component, pageProps }: AppProps) {
   const routerRef = useRef(router);
   routerRef.current = router;
 
+  // Use ref for listeners to handle cleanup
+  const listenersRef = useRef<(() => void)[]>([]);
+
   // Memoize setLanguage to ensure stable reference
   const setLanguageStore = useUIStore((state) => state.setLanguage);
   const setLanguage = useCallback((lang: Language) => {
@@ -81,38 +84,45 @@ export default function App({ Component, pageProps }: AppProps) {
       try {
         await StatusBar.setOverlaysWebView({ overlay: false });
         await StatusBar.setStyle({ style: Style.Dark });
-      } catch {
-        // StatusBar may not be available on all devices
-      }
+      } catch {}
 
       try {
         await Keyboard.setResizeMode({ mode: 'body' } as any);
-      } catch {
-        // Keyboard resize not implemented on all platforms
-      }
+      } catch {}
+
+      // Clear existing listeners if any (prevent duplicates)
+      listenersRef.current.forEach(remove => remove());
+      listenersRef.current = [];
 
       // Handle hardware back button (Android)
-      App.addListener('backButton', ({ canGoBack }) => {
+      // Use router.back() which is safer for Next.js than window.history.back()
+      const backListener = await App.addListener('backButton', ({ canGoBack }) => {
+        // Close overlays if mobile menu is open (dispatched event or standard check)
+        // For now, simpler logic:
+        const router = routerRef.current;
         if (canGoBack) {
-          window.history.back();
+           router.back();
         } else {
-          App.exitApp();
+           App.exitApp();
         }
       });
+      listenersRef.current.push(() => backListener.remove());
 
       // Handle app resume - refresh data
-      App.addListener('appStateChange', ({ isActive }) => {
+      const resumeListener = await App.addListener('appStateChange', ({ isActive }) => {
         if (isActive) {
           queryClient.invalidateQueries();
         }
       });
+      listenersRef.current.push(() => resumeListener.remove());
 
       // Handle network changes
-      Network.addListener('networkStatusChange', (status) => {
+      const networkListener = await Network.addListener('networkStatusChange', (status) => {
         if (status.connected) {
           queryClient.invalidateQueries();
         }
       });
+      listenersRef.current.push(() => networkListener.remove());
 
       // ALWAYS hide splash - this is critical
       await SplashScreen.hide();
@@ -121,6 +131,11 @@ export default function App({ Component, pageProps }: AppProps) {
     if (hasHydrated) {
       initNativePlatform().catch(console.error);
     }
+
+    return () => {
+      listenersRef.current.forEach(remove => remove());
+      listenersRef.current = [];
+    };
   }, [hasHydrated, queryClient]);
 
   // Dedicated Deep Link Handling - Separate effect for reliability
