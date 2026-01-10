@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Toggle, PageHeader, PageSkeleton, Modal } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
+import { toast } from 'sonner';
 import { useRouter } from 'next/router';
 import axios from 'axios';
 import {
@@ -22,7 +23,8 @@ import {
   ChevronRight,
   MessagesSquare,
   Send,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslation, useLanguage } from '@/i18n';
@@ -69,6 +71,7 @@ export default function SettingsPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [isDeleted, setIsDeleted] = useState(false);
 
   const [settings, setSettings] = useState({
     dashboardLanguage: language,
@@ -166,12 +169,22 @@ export default function SettingsPage() {
       await axios.delete(`${apiUrl}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      useAuthStore.getState().logout();
-      router.push('/');
+      
+      // Success state (Best Practice: Give user feedback before redirecting)
+      setIsDeleted(true);
+      setSaving(false);
+      
+      // Artificial delay to let the user see the success message
+      setTimeout(() => {
+        useAuthStore.getState().logout();
+        router.push('/');
+      }, 2500);
+      
     } catch (error) {
       console.error('Failed to delete account:', error);
       setSaving(false);
-      setShowDeleteModal(false);
+      // Don't show success, just close or stay
+      toast.error(t('common.error'));
     }
   };
 
@@ -633,47 +646,63 @@ export default function SettingsPage() {
         title={t('settings.deleteAccount')}
       >
         <div className="space-y-6">
-          <div className="p-4 rounded-xl bg-red-50 border border-red-100 text-red-800">
-            <p className="font-bold mb-2 flex items-center gap-2">
-              <span className="text-xl">⚠️</span>
-              {t('common.warning')}
-            </p>
-            <p className="text-sm leading-relaxed">{t('settings.deleteAccountWarning')}</p>
-          </div>
+          {isDeleted ? (
+            <div className="py-8 flex flex-col items-center text-center animate-In fade-in zoom-in duration-500">
+              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 animate-bounce-subtle">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+              <h3 className="text-2xl font-bold text-surface-900 mb-2">
+                {t('settings.deleteSuccess')}
+              </h3>
+              <p className="text-surface-500">
+                {t('settings.redirecting')}
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="p-4 rounded-xl bg-red-50 border border-red-100 text-red-800">
+                <p className="font-bold mb-2 flex items-center gap-2">
+                  <span className="text-xl">⚠️</span>
+                  {t('common.warning')}
+                </p>
+                <p className="text-sm leading-relaxed">{t('settings.deleteAccountWarning')}</p>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-surface-700 mb-2">
-              {language === 'ar' ? 'اكتب "DELETE" للتأكيد' : 'Type "DELETE" to confirm'}
-            </label>
-            <Input
-              value={deleteConfirmation}
-              onChange={(e) => setDeleteConfirmation(e.target.value)}
-              placeholder="DELETE"
-              className="border-red-200 focus:border-red-500 focus:ring-red-500"
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-2">
+                  {t('settings.deleteConfirmLabel')}
+                </label>
+                <Input
+                  value={deleteConfirmation}
+                  onChange={(e) => setDeleteConfirmation(e.target.value)}
+                  placeholder="DELETE"
+                  className="border-red-200 focus:border-red-500 focus:ring-red-500"
+                />
+              </div>
 
-          <div className="flex gap-4">
-            <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => {
-                setShowDeleteModal(false);
-                setDeleteConfirmation('');
-              }}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="danger"
-              className="flex-1"
-              onClick={handleDeleteAccount}
-              loading={saving}
-              disabled={deleteConfirmation.trim().toUpperCase() !== 'DELETE'}
-            >
-              {t('settings.deleteAccount')}
-            </Button>
-          </div>
+              <div className="flex gap-4">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setDeleteConfirmation('');
+                  }}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  variant="danger"
+                  className="flex-1"
+                  onClick={handleDeleteAccount}
+                  loading={saving}
+                  disabled={deleteConfirmation.trim().toUpperCase() !== 'DELETE'}
+                >
+                  {t('settings.deleteAccount')}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Modal>
     </DashboardLayout >
