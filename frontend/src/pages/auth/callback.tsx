@@ -123,6 +123,7 @@ export default function AuthCallback() {
         return;
       }
       
+      
       // If request came from mobile app, redirect using custom URL scheme
       // to open the app directly. We ONLY pass critical tokens here.
       // The app will fetch the full user profile using the token.
@@ -139,8 +140,8 @@ export default function AuthCallback() {
         const fbTokenStr = encodeURIComponent(data.fbAccessToken || '');
         const redirectStr = encodeURIComponent(safeUrl);
         
-        // Debug alert - can be removed later
-        // alert(`Cloud: Sending token to App...`);
+        // Debug alert - Identifying failure point
+        alert(`Mobile Auth Success!\nState: ${stateStr}\nRedirecting to App...`);
         
         // Simplified Deep Link: No User Object!
         window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}`;
@@ -148,6 +149,7 @@ export default function AuthCallback() {
       }
       
       // Web: standard navigation
+      // alert(`Web Login Success. Redirecting...`); // Optional debug
       routerRef.current.push(safeUrl);
     } catch (err) {
       // Don't show error if request was aborted (user navigated away)
