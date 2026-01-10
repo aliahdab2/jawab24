@@ -146,11 +146,12 @@ export default function CheckoutPage() {
         <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4">
           <div className="max-w-3xl mx-auto">
             {/* Header */}
-            <div className="text-center mb-8">
-              <Link href="/">
-                <BrandLogo variant="main" className="w-10 h-10 mx-auto mb-4" />
+            <div className="text-center mb-10 sm:mb-12">
+              <Link href="/" className="flex justify-center items-center gap-3 mb-8 sm:mb-10 group">
+                <BrandLogo variant="main" className="w-9 h-9 sm:w-10 sm:h-10 transition-transform group-hover:scale-105" />
+                <span className="font-display font-semibold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
               </Link>
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">
+              <h1 className="text-2xl sm:text-3xl font-semibold text-surface-900 mb-3 tracking-tight">
                 {t('checkout.title')}
               </h1>
             </div>
@@ -195,18 +196,18 @@ export default function CheckoutPage() {
       <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
-          <div className="text-center mb-8">
-            <Link href="/" className="flex items-center gap-3">
+          <div className="text-center mb-10 sm:mb-12">
+            <Link href="/" className="flex justify-center items-center gap-3 mb-8 sm:mb-10 group">
               <BrandLogo
                 variant="main"
-                className="w-10 h-10"
+                className="w-9 h-9 sm:w-10 sm:h-10 transition-transform group-hover:scale-105"
               />
-              <span className="font-display font-bold text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+              <span className="font-display font-semibold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
-            <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-surface-900 mb-3 tracking-tight">
               {t('checkout.title')}
             </h1>
-            <p className="text-surface-600">
+            <p className="text-surface-600 font-medium">
               {t('checkout.subtitle')}
             </p>
           </div>
