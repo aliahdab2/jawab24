@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
-import { PageSpinner, VersionBadge, BrandLogo } from '@/components/ui';
+import { PageSpinner, VersionBadge, WhatsAppHelpButton, BrandLogo } from '@/components/ui';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 
@@ -123,24 +123,16 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </Link>
 
             {/* Dynamic Active Page Icon */}
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={() => window.open('https://wa.me/46700224720', '_blank')}
-                className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/80 hover:text-white"
-              >
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/90">
+              {router.pathname.includes('/comments') ? (
+                <MessageSquare className="w-5 h-5" />
+              ) : router.pathname.includes('/messages') ? (
                 <MessageCircle className="w-5 h-5" />
-              </button>
-              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/90">
-                {router.pathname.includes('/comments') ? (
-                  <MessageSquare className="w-5 h-5" />
-                ) : router.pathname.includes('/messages') ? (
-                  <MessageCircle className="w-5 h-5" />
-                ) : router.pathname.includes('/settings') ? (
-                  <Settings className="w-5 h-5" />
-                ) : (
-                  <LayoutDashboard className="w-5 h-5" />
-                )}
-              </div>
+              ) : router.pathname.includes('/settings') ? (
+                <Settings className="w-5 h-5" />
+              ) : (
+                <LayoutDashboard className="w-5 h-5" />
+              )}
             </div>
           </div>
         )}
@@ -245,12 +237,6 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                   icon={<Settings className="w-7 h-7" />}
                   label={t('nav.settings')}
                 />
-                <MobileMenuButton
-                  onClick={() => { window.open('https://wa.me/46700224720', '_blank'); setMobileMenuOpen(false); }}
-                  icon={<MessageCircle className="w-7 h-7" />}
-                  label={t('common.needHelp') || 'Support'}
-                  className="border-emerald-100 bg-emerald-50/50"
-                />
               </div>
 
               {/* Row 3: تسجيل الخروج (full width) */}
@@ -296,6 +282,9 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
 
         {/* Version badge - subtle indicator in corner */}
         <VersionBadge />
+
+        {/* WhatsApp help button - floating */}
+        <WhatsAppHelpButton hidden={mobileMenuOpen || showLogoutCheck} />
       </div>
     </>
   );

@@ -450,7 +450,7 @@ export default function PricingPage() {
         )}
 
         {/* Plans Grid - Responsive grid based on count */}
-        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0 pt-2 md:pt-4`}>
+        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0 pt-6 sm:pt-10 md:pt-12`}>
           {activePlans.map((plan) => (
             <PlanCard
               key={plan.id}
