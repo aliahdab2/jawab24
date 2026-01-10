@@ -654,9 +654,6 @@ export default function SettingsPage() {
               <h3 className="text-2xl font-bold text-surface-900 mb-2">
                 {t('settings.deleteSuccess')}
               </h3>
-              <p className="text-surface-500">
-                {t('settings.redirecting')}
-              </p>
             </div>
           ) : (
             <>

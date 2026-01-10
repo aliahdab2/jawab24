@@ -316,7 +316,6 @@
   "settings.deleteAccountWarning": "تنبيه: سيؤدي هذا الإجراء إلى حذف حسابك وكافة البيانات المرتبطة به بشكل نهائي، بما في ذلك الصفحات المتصلة والقوالب والقواعد. لا يمكن التراجع عن هذا الإجراء.",
   "settings.deleteConfirmLabel": "اكتب \"DELETE\" للتأكيد",
   "settings.deleteSuccess": "تم حذف الحساب بنجاح",
-  "settings.redirecting": "يتم توجيهك الآن...",
   "settings.autoReplySettings": "إعدادات الرد التلقائي",
   "settings.autoReplyDescription": "تحكم في تفعيل الردود التلقائية لصفحاتك",
   "settings.webhookRetries": "محاولات إعادة الإرسال",
