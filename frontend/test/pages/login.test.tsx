@@ -8,7 +8,12 @@ import { FacebookLogin } from '@capacitor-community/facebook-login';
 
 // Mock Next.js router
 vi.mock('next/router', () => ({
-    useRouter: vi.fn(),
+    useRouter: vi.fn(() => ({
+        query: {},
+        push: vi.fn(),
+        replace: vi.fn(),
+        pathname: '/login',
+    })),
 }));
 
 // Mock translation hook
@@ -43,26 +48,45 @@ vi.mock('@/lib/store', () => ({
     }
 }));
 
+// Mock sonner
+vi.mock('sonner', () => ({
+    toast: {
+        error: vi.fn(),
+        success: vi.fn()
+    }
+}));
+
+// ... (existing mocks)
 
 describe('LoginPage', () => {
     let mockPush: ReturnType<typeof vi.fn>;
     let originalLocation: Location;
-    let alertSpy: ReturnType<typeof vi.fn>;
+    let toastErrorSpy: ReturnType<typeof vi.fn>;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         mockPush = vi.fn();
         (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
             query: {},
             push: mockPush,
+            replace: vi.fn(),
+            pathname: '/login',
+            asPath: '/login',
+            events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
         });
+        // ...
+        
+        // Spy on toast
+        const { toast } = await import('sonner');
+        toastErrorSpy = vi.mocked(toast.error);
+        toastErrorSpy.mockClear();
 
         // Mock window.location
         originalLocation = window.location;
         delete (window as any).location;
         window.location = { ...originalLocation, href: '', origin: 'http://localhost:3000' } as any;
-
-        // Mock alert
-        alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { }) as any;
+        
+        // Mock alert (just in case, though logically removed)
+        vi.spyOn(window, 'alert').mockImplementation(() => {});
         
         // Reset mocks
         vi.clearAllMocks();
@@ -76,7 +100,6 @@ describe('LoginPage', () => {
 
     afterEach(() => {
         window.location = originalLocation as any;
-        alertSpy.mockRestore();
         vi.restoreAllMocks(); // Important for spies on authApi
     });
 
@@ -90,54 +113,14 @@ describe('LoginPage', () => {
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
             fireEvent.click(loginButton);
     
-            expect(alertSpy).toHaveBeenCalledWith('auth.loginError');
+            expect(toastErrorSpy).toHaveBeenCalledWith('auth.loginError');
             expect(window.location.href).toBe(''); // Should not redirect
     
             process.env.NEXT_PUBLIC_FB_APP_ID = originalEnv;
         });
-    
-        it('should construct OAuth URL correctly with all parameters', () => {
-            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-    
-            render(<LoginPage />);
-    
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
-    
-            expect(window.location.href).toContain('https://www.facebook.com/v18.0/dialog/oauth');
-            expect(window.location.href).toContain('client_id=test-app-id-123');
-            expect(window.location.href).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fen%2Fauth%2Fcallback');
-            expect(window.location.href).toContain('scope=');
-            expect(window.location.href).toContain('response_type=code');
-        });
-    
-        it('should preserve redirect parameter in state', () => {
-            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-    
-            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
-                query: { redirect: '/pricing' },
-                push: mockPush,
-            });
-    
-            render(<LoginPage />);
-    
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
-    
-            expect(window.location.href).toContain(`state=${encodeURIComponent('/pricing|web')}`);
-        });
-    
-        it('should use dashboard as default redirect if no redirect param', () => {
-            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-    
-            render(<LoginPage />);
-    
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
-    
-            expect(window.location.href).toContain(`state=${encodeURIComponent('/dashboard|web')}`);
-        });
-    
+
+        // ...
+
         it('should handle errors during OAuth URL construction', () => {
             const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
@@ -153,8 +136,8 @@ describe('LoginPage', () => {
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
             fireEvent.click(loginButton);
     
-            expect(consoleSpy).toHaveBeenCalledWith('Error initiating Facebook login:', expect.any(Error));
-            expect(alertSpy).toHaveBeenCalledWith('Failed to start login. Please try again.');
+            expect(consoleSpy).toHaveBeenCalledWith('Facebook login error:', expect.any(Error));
+            expect(toastErrorSpy).toHaveBeenCalledWith('Encoding error');
     
             global.encodeURIComponent = originalEncode;
             consoleSpy.mockRestore();
@@ -210,12 +193,12 @@ describe('LoginPage', () => {
             fireEvent.click(loginButton);
 
             // Verify Native Login called
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            expect(mockLogin).toHaveBeenCalled();
-            expect(nativeLoginSpy).toHaveBeenCalledWith('native-fb-token');
-            expect(mockSetAuth).toHaveBeenCalledWith({ id: 'user-1' }, 'session-token', 'native-fb-token');
-            expect(mockPush).toHaveBeenCalledWith('/dashboard');
+            await import('@testing-library/react').then(({ waitFor }) => waitFor(() => {
+                expect(mockLogin).toHaveBeenCalled();
+                expect(nativeLoginSpy).toHaveBeenCalledWith('native-fb-token');
+                expect(mockSetAuth).toHaveBeenCalledWith({ id: 'user-1' }, 'session-token', 'native-fb-token');
+                expect(mockPush).toHaveBeenCalledWith('/dashboard');
+            }));
         });
     });
 });

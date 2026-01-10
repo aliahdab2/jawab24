@@ -44,7 +44,8 @@ export default function LoginPage() {
       // Check for Facebook App ID
       const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
       if (!fbAppId) {
-        alert(t('auth.loginError'));
+        toast.error(t('auth.loginError'));
+        setIsLoading(false);
         return;
       }
 
@@ -84,7 +85,8 @@ export default function LoginPage() {
 
           } catch (error) {
               console.error('Backend Login Error:', error);
-              alert(t('auth.loginError'));
+              toast.error(t('auth.loginError'));
+              setIsLoading(false);
           }
 
         } else {
