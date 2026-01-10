@@ -349,10 +349,12 @@ export default function RulesPage() {
             title={t('rules.noRules')}
             description={t('rules.noRulesDesc')}
             action={
+              <div className="hidden sm:block">
               <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
                 {t('rules.addRule')}
               </Button>
-            }
+            </div>
+          }
           />
         </Card>
       )}

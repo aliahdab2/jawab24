@@ -275,10 +275,12 @@ export default function TemplatesPage() {
             title={t('templates.noTemplates')}
             description={t('templates.noTemplatesDesc')}
             action={
+              <div className="hidden sm:block">
               <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
                 {t('templates.addTemplate')}
               </Button>
-            }
+            </div>
+          }
           />
         </Card>
       )}
