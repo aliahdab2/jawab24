@@ -5,6 +5,21 @@ export default function Document() {
     // Default to LTR, client-side will update based on user preference
     <Html lang="ar" dir="rtl">
       <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var isNative = window.location.href.includes('localhost') || window.location.protocol === 'file:';
+                if (isNative) {
+                  document.documentElement.classList.add('is-native');
+                  // Pre-set some safe area variables for immediate paint
+                  document.documentElement.style.setProperty('--sat', '24px');
+                }
+              })();
+            `
+          }}
+        />
         {/* Favicon & Icons - SVG for modern browsers, PNG fallbacks */}
         <link rel="icon" type="image/svg+xml" href="/brand/icon-vector.svg?v=3" />
         <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32x32.png" />

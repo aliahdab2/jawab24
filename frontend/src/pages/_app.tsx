@@ -72,6 +72,8 @@ export default function App({ Component, pageProps }: AppProps) {
       const cap = (window as any).Capacitor;
       if (!cap?.isNativePlatform?.()) return;
 
+      document.body.classList.add('is-native');
+
       const [{ StatusBar, Style }, { Keyboard }, { App }, { SplashScreen }, { Network }] = await Promise.all([
         import("@capacitor/status-bar"),
         import("@capacitor/keyboard"),
@@ -83,9 +85,15 @@ export default function App({ Component, pageProps }: AppProps) {
       // Configure native UI (non-critical - wrap in try/catch)
       try {
         await StatusBar.setOverlaysWebView({ overlay: true });
-        // Use auto style to let the OS handle it, or specific style based on theme
         await StatusBar.setStyle({ style: Style.Default });
-      } catch {}
+        
+        // --- INDUSTRY BEST PRACTICE: Native Height Sync ---
+        // Some devices don't report env(safe-area-inset-top) correctly on cold starts.
+        // We set a stable fallback for native platforms that we can refine.
+        document.documentElement.style.setProperty('--sat', '24px');
+      } catch (err) {
+        console.error('StatusBar Sync Error:', err);
+      }
 
       try {
         await Keyboard.setResizeMode({ mode: 'body' } as any);
@@ -229,7 +237,6 @@ export default function App({ Component, pageProps }: AppProps) {
     <QueryClientProvider client={queryClient}>
       <Head>
         <title>Jawab24 جواب | AI Auto-Reply for Facebook & Instagram</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
         <meta name="theme-color" content="#18181b" />
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />

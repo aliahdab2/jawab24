@@ -16,7 +16,7 @@ const config: CapacitorConfig = {
       resize: KeyboardResize.Body,
     },
     StatusBar: {
-      overlaysWebView: false,
+      overlaysWebView: true,
     },
     SplashScreen: {
       launchAutoHide: false, // We'll hide it manually after hydration

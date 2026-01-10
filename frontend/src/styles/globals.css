@@ -624,7 +624,13 @@
 }
 
 .pt-safe {
-  padding-top: env(safe-area-inset-top, 0px);
+  /* Use the system safe area if available, otherwise the pre-calculated variable, otherwise 0 */
+  padding-top: env(safe-area-inset-top, var(--sat, 0px));
+}
+
+/* Specific adjustment for native devices to ensure it never collapses */
+.is-native .pt-safe {
+  padding-top: max(24px, env(safe-area-inset-top));
 }
 
 .px-safe {
