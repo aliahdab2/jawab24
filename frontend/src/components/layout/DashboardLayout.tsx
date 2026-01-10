@@ -148,7 +148,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         >
           <div className={clsx(
             'p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
-            isCleanLayout ? 'pb-12' : 'pb-24 md:pb-12'
+            isCleanLayout ? 'pb-12' : 'pb-32 md:pb-12'
           )}>
             {children}
           </div>
