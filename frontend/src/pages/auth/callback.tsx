@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { PageSpinner } from '@/components/ui';
+import { PremiumSpinner } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 
@@ -188,8 +188,10 @@ export default function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-50">
       <div className="text-center">
-        <PageSpinner />
-        <p className="mt-4 text-surface-500">{t('auth.loggingIn')}</p>
+        <div className="mb-4">
+          <PremiumSpinner size="lg" color="var(--brand-600)" />
+        </div>
+        <p className="text-surface-500 font-medium animate-pulse">{t('auth.loggingIn')}</p>
       </div>
     </div>
   );

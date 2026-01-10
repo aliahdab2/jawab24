@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
-import { PageSpinner } from '@/components/ui';
+import { PremiumSpinner } from '@/components/ui';
 import axios from 'axios';
 
 export default function AuthSync() {
@@ -63,8 +63,10 @@ export default function AuthSync() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-50">
       <div className="text-center">
-        <PageSpinner />
-        <p className="mt-4 text-surface-500 text-sm font-medium">{status}</p>
+        <div className="mb-4">
+          <PremiumSpinner size="lg" color="var(--brand-600)" />
+        </div>
+        <p className="text-surface-500 text-sm font-medium animate-pulse">{status}</p>
       </div>
     </div>
   );
