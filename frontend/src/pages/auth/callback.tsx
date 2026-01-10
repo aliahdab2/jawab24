@@ -124,10 +124,8 @@ export default function AuthCallback() {
       }
       
       // If request came from mobile app, redirect using custom URL scheme
-      // This will open the app directly instead of staying in the browser
-      // If request came from mobile app, redirect using custom URL scheme with Auth Bridge
-      // This handles cases where Callback runs in Browser (App Link failed) 
-      // by passing the session to the App via Deep Link.
+      // to open the app directly. We ONLY pass critical tokens here.
+      // The app will fetch the full user profile using the token.
       if (platform === 'mobile') {
         const cap = (window as any).Capacitor;
         const isNative = typeof window !== 'undefined' && !!cap?.isNativePlatform?.();
@@ -137,13 +135,15 @@ export default function AuthCallback() {
           return;
         }
 
-        const userStr = encodeURIComponent(JSON.stringify(data.user));
         const tokenStr = encodeURIComponent(data.token);
         const fbTokenStr = encodeURIComponent(data.fbAccessToken || '');
         const redirectStr = encodeURIComponent(safeUrl);
         
-        alert(`Cloud: In Browser. Sending to App...`);
-        window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&user=${userStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}`;
+        // Debug alert - can be removed later
+        // alert(`Cloud: Sending token to App...`);
+        
+        // Simplified Deep Link: No User Object!
+        window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}`;
         return;
       }
       
