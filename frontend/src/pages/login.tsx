@@ -163,7 +163,6 @@ export default function LoginPage() {
     <>
       <Head>
         <title>{BRAND_ASSETS.meta.appTitle} - {t('auth.login')}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content={t('auth.seoDescription')} />
         <meta name="keywords" content={t('auth.seoKeywords')} />
         <link rel="canonical" href="https://jawab24.com/login" />
@@ -233,7 +232,7 @@ export default function LoginPage() {
         {/* Right Side: Login Form */}
         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
           {/* Mobile Nav */}
-          <div className="flex items-center justify-between p-6 lg:p-12">
+          <div className="flex items-center justify-between p-6 lg:p-12 pt-safe box-content">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"

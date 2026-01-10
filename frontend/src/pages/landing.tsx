@@ -121,8 +121,6 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
       <Head>
         <title>{BRAND_ASSETS.meta.appTitle}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="description" content={t('landing.seoDescription')} />
         <meta name="keywords" content={t('landing.seoKeywords')} />
         <link rel="canonical" href="https://jawab24.com/landing" />

@@ -76,7 +76,6 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
     <>
       <Head>
         <title>{pageTitle} | Jawab24</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
       </Head>
 
       <div className="min-h-screen bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -89,7 +88,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
 
         {/* Mobile header - Clean version for public pages */}
         {isCleanLayout ? (
-          <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 z-40 border-b border-surface-100 shadow-sm">
+          <div className="fixed top-0 left-0 right-0 h-16 sm:h-20 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 z-40 border-b border-surface-100 shadow-sm pt-safe box-content">
             <Link href="/landing" className="flex items-center gap-2 group">
               <BrandLogo
                 variant="vector"

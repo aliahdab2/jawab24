@@ -82,8 +82,9 @@ export default function App({ Component, pageProps }: AppProps) {
 
       // Configure native UI (non-critical - wrap in try/catch)
       try {
-        await StatusBar.setOverlaysWebView({ overlay: false });
-        await StatusBar.setStyle({ style: Style.Dark });
+        await StatusBar.setOverlaysWebView({ overlay: true });
+        // Use auto style to let the OS handle it, or specific style based on theme
+        await StatusBar.setStyle({ style: Style.Default });
       } catch {}
 
       try {
@@ -97,8 +98,6 @@ export default function App({ Component, pageProps }: AppProps) {
       // Handle hardware back button (Android)
       // Use router.back() which is safer for Next.js than window.history.back()
       const backListener = await App.addListener('backButton', ({ canGoBack }) => {
-        // Close overlays if mobile menu is open (dispatched event or standard check)
-        // For now, simpler logic:
         const router = routerRef.current;
         if (canGoBack) {
            router.back();
@@ -108,10 +107,25 @@ export default function App({ Component, pageProps }: AppProps) {
       });
       listenersRef.current.push(() => backListener.remove());
 
+      // Track route changes to update status bar style dynamically (Best Practice)
+      const handleRouteChange = (url: string) => {
+        const isDarkPage = url.includes('/dashboard') || url.includes('/zinc') || url.includes('/auth');
+        StatusBar.setStyle({ style: isDarkPage ? Style.Dark : Style.Default }).catch(() => {});
+      };
+      
+      router.events.on('routeChangeComplete', handleRouteChange);
+      listenersRef.current.push(() => router.events.off('routeChangeComplete', handleRouteChange));
+      
+      // Set initial style
+      handleRouteChange(router.asPath);
+
       // Handle app resume - refresh data
       const resumeListener = await App.addListener('appStateChange', ({ isActive }) => {
         if (isActive) {
           queryClient.invalidateQueries();
+          // Ensure overlay and style are correct on resume (Best Practice for cold starts)
+          StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
+          handleRouteChange(routerRef.current.asPath);
         }
       });
       listenersRef.current.push(() => resumeListener.remove());
@@ -136,7 +150,7 @@ export default function App({ Component, pageProps }: AppProps) {
       listenersRef.current.forEach(remove => remove());
       listenersRef.current = [];
     };
-  }, [hasHydrated, queryClient]);
+  }, [hasHydrated, queryClient, router]);
 
   // Dedicated Deep Link Handling - Separate effect for reliability
   useEffect(() => {
@@ -166,11 +180,8 @@ export default function App({ Component, pageProps }: AppProps) {
 
       // 1. Warm Start Listener
       listenerHandle = await App.addListener('appUrlOpen', (data) => {
-        // alert(`App: Received Deep Link: ${data.url}`);
         const slug = handleDeepLink(data.url);
         if (slug) {
-            // alert(`App: Navigating to: ${slug}`);
-            // Force navigation with a small delay to ensure React is ready
             setTimeout(() => {
                 routerRef.current.push(slug).catch(console.error);
             }, 50);
@@ -190,7 +201,6 @@ export default function App({ Component, pageProps }: AppProps) {
     setupDeepLinks();
 
     return () => {
-      // Cleanup listener on unmount
       if (listenerHandle) {
         listenerHandle.remove();
       }
@@ -248,7 +258,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </Head>
-      <div className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} app-safe-area`}>
+      <div className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} app-container`}>
         <ErrorBoundary>
           <Component {...pageProps} />
           <Toaster richColors position="top-center" closeButton />
