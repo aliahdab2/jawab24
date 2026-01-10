@@ -23,6 +23,7 @@ import {
   ChevronRight,
   MessagesSquare,
   Send,
+  AlertTriangle,
   CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
@@ -607,26 +608,30 @@ export default function SettingsPage() {
         )
       }
 
-      {/* Delete Account - Now outside Advanced Toggle */}
-      {/* Danger Zone - Industry-Standard Low Salience */}
+      {/* Danger Zone - Aesthetic but Low Salience */}
       <div className="mt-20 pt-10 border-t border-surface-100 mb-20 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-        <div className="max-w-xl">
-          <h4 className="font-bold text-surface-900 text-lg mb-2 flex items-center gap-2">
-            {t('settings.dangerZone')}
-          </h4>
-          <p className="text-sm text-surface-500 font-medium leading-relaxed mb-6">
-            {t('settings.deleteAccountWarning')}
-          </p>
+        <Card className="border-none bg-red-50/30 p-6 flex flex-col sm:flex-row items-center justify-between gap-6 overflow-hidden">
+          <div className="flex-1 text-start">
+            <h4 className="font-bold text-red-900 text-lg mb-2 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              {t('settings.dangerZone')}
+            </h4>
+            <p className="text-sm text-red-700/70 font-medium leading-relaxed max-w-xl">
+              {t('settings.deleteAccountWarning')}
+            </p>
+          </div>
           <button
             onClick={() => setShowDeleteModal(true)}
             className="
               inline-flex items-center 
+              whitespace-nowrap
               rounded-xl 
               border border-red-200 
               bg-white 
               px-6 py-3 
               text-sm font-bold 
               text-red-500 
+              shadow-sm
               transition-all 
               hover:bg-red-50 
               hover:border-red-300 
@@ -637,7 +642,7 @@ export default function SettingsPage() {
           >
             {t('settings.deleteAccount')}
           </button>
-        </div>
+        </Card>
       </div>
 
       {/* Delete Account Confirmation Modal */}
