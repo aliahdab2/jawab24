@@ -21,7 +21,8 @@ import {
   Zap,
   ChevronRight,
   MessagesSquare,
-  Send
+  Send,
+  AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslation, useLanguage } from '@/i18n';
@@ -589,25 +590,38 @@ export default function SettingsPage() {
               </Card>
             </div>
 
-            {/* Delete Account */}
-            <Card className="border-none shadow-lg shadow-red-100/50 bg-red-50/30 p-8">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-                <div className="text-center sm:text-start">
-                  <h4 className="font-bold text-red-700 text-lg">{t('settings.dangerZone')}</h4>
-                  <p className="text-sm text-red-600/80 font-medium mt-1">{t('settings.deleteAccountWarning')}</p>
-                </div>
-                <Button
-                  variant="danger"
-                  className="px-8 py-4 shadow-lg shadow-red-200"
-                  onClick={() => setShowDeleteModal(true)}
-                >
-                  {t('settings.deleteAccount')}
-                </Button>
-              </div>
-            </Card>
           </div>
         )
       }
+
+      {/* Delete Account - Now outside Advanced Toggle */}
+      <div className="mt-12 mb-20 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+        <Card className="border-none shadow-xl shadow-red-200/50 bg-gradient-to-br from-red-50 to-white p-8 relative overflow-hidden group">
+          {/* Subtle background icon */}
+          <AlertTriangle className="absolute -right-8 -bottom-8 w-40 h-40 text-red-500/5 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-0" />
+          
+          <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-8">
+            <div className="text-center sm:text-start max-w-lg">
+              <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-red-700 text-xl">{t('settings.dangerZone')}</h4>
+              </div>
+              <p className="text-sm text-red-600 font-medium leading-relaxed">
+                {t('settings.deleteAccountWarning')}
+              </p>
+            </div>
+            <Button
+              variant="danger"
+              className="px-10 py-5 shadow-2xl shadow-red-500/20 text-lg sm:w-auto w-full group transition-all hover:scale-105 active:scale-95"
+              onClick={() => setShowDeleteModal(true)}
+            >
+              {t('settings.deleteAccount')}
+            </Button>
+          </div>
+        </Card>
+      </div>
 
       {/* Delete Account Confirmation Modal */}
       <Modal
@@ -655,7 +669,7 @@ export default function SettingsPage() {
               className="flex-1"
               onClick={handleDeleteAccount}
               loading={saving}
-              disabled={deleteConfirmation !== 'DELETE'}
+              disabled={deleteConfirmation.trim().toUpperCase() !== 'DELETE'}
             >
               {t('settings.deleteAccount')}
             </Button>

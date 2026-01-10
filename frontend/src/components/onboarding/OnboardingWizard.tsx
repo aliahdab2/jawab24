@@ -12,6 +12,8 @@ import {
 import { Button } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 
+import { useSwipe } from '@/hooks/useSwipe';
+
 interface OnboardingWizardProps {
   onComplete: () => void;
   onSkip: () => void;
@@ -98,9 +100,22 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     }
   };
 
+  // Implement swipe using reusable hook (Best Practice)
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: isRTL ? handlePrev : handleNext,
+    onSwipeRight: isRTL ? handleNext : handlePrev,
+    minSwipeDistance: 50
+  });
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden animate-slide-up">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" 
+      dir={isRTL ? 'rtl' : 'ltr'}
+    >
+      <div 
+        className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden animate-In slide-in-from-bottom-4 duration-300"
+        {...swipeHandlers}
+      >
         {/* Skip button */}
         <div className="flex justify-end p-4 pb-0">
           <button 
@@ -112,8 +127,11 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
           </button>
         </div>
 
-        {/* Content */}
-        <div className="px-8 pb-8 pt-4 text-center">
+        {/* Content with transition based on currentStep */}
+        <div 
+          key={currentStep}
+          className="px-8 pb-8 pt-4 text-center animate-In fade-in slide-in-from-right-4 duration-300 ltr:animate-In rtl:animate-In rtl:slide-in-from-left-4"
+        >
           {/* Visual */}
           <div className="mb-6">
             {currentStepData.visual}

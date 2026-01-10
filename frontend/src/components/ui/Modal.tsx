@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -11,7 +12,10 @@ interface ModalProps {
 }
 
 export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     if (isOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -22,49 +26,54 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const sizeClasses = {
     sm: 'max-w-md',
-    md: 'max-w-lg',
+    md: 'max-w-xl',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
   };
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-surface-900/60 backdrop-blur-sm transition-opacity animate-fade-in"
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity animate-fade-in" 
         onClick={onClose}
       />
       
-      {/* Modal */}
-      <div className="flex min-h-full items-center justify-center p-4">
+      {/* Modal Container */}
+      <div className="flex min-h-screen items-center justify-center p-4">
         <div 
           className={clsx(
-            'relative w-full bg-white rounded-[2.5rem] shadow-2xl animate-slide-up overflow-hidden border border-surface-100',
+            "relative w-full bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up",
             sizeClasses[size]
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-8 py-6 border-b border-surface-100 bg-surface-50/50">
-            <h2 className="text-2xl font-display font-bold text-surface-900 tracking-tight">{title}</h2>
+          <div className="flex items-center justify-between p-6 border-b border-surface-100">
+            <h3 className="text-xl font-bold text-surface-900">
+              {title}
+            </h3>
             <button
               onClick={onClose}
-              className="p-3 rounded-2xl text-surface-400 hover:text-red-600 hover:bg-red-50 transition-all active:scale-90"
+              className="p-2 rounded-xl text-surface-400 hover:bg-surface-50 hover:text-surface-600 transition-all"
             >
-              <X className="w-6 h-6" />
+              <X className="w-5 h-5" />
             </button>
           </div>
-          
-          {/* Content */}
-          <div className="p-8">
+
+          {/* Body */}
+          <div className="p-6">
             {children}
           </div>
         </div>
       </div>
     </div>
   );
-}
 
+  // Return with portal
+  const target = typeof document !== 'undefined' ? document.getElementById('modal-root') : null;
+  return target ? createPortal(modalContent, target) : modalContent;
+}
