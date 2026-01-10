@@ -223,11 +223,18 @@ export default function LandingPage() {
 
                 {/* CTA Buttons */}
                 <div className="flex flex-col items-stretch gap-2 sm:gap-4 mb-4 sm:mb-12 animate-slide-up animation-delay-200 px-2 sm:px-0">
-                  <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
-                    <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95 whitespace-nowrap">
-                      {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.hero.cta1')}
-                    </Button>
-                  </Link>
+                  <div className="flex flex-col items-center sm:items-start gap-2">
+                    <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
+                      <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95 whitespace-nowrap">
+                        {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.hero.cta1')}
+                      </Button>
+                    </Link>
+                    {!isAuthenticated && (
+                      <p className="text-[10px] sm:text-sm text-surface-500 font-medium">
+                        {t('landing.cta.note')}
+                      </p>
+                    )}
+                  </div>
                   {!isAuthenticated && (
                     <Link href="/pricing" className="w-full sm:w-auto">
                       <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-3 sm:px-8 py-2.5 sm:py-5 text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg whitespace-nowrap">

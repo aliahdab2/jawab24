@@ -200,9 +200,9 @@ function PlanCard({
             }
           </Button>
         )}
-        {isFree && !isSanctioned && (
+        {((isFree || (plan.trialDays > 0 && !hasActiveSubscription)) && !isSanctioned && !isCurrentPlan) && (
           <p className="text-xs text-surface-400 text-center mt-3 font-medium">
-            {t('pricing.noCreditCardNote')}
+            {t('pricing.noCreditCard')}
           </p>
         )}
       </div>
