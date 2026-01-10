@@ -97,15 +97,14 @@ export default function LoginPage() {
       } else {
         // --- WEB BROWSER LOGIN FLOW (Legacy) ---
         // Use locale-specific callback URL (standard best practice)
-        const localePath = language === 'ar' ? '' : `/${language}`;
-
         // Normalize site URL
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
         const normalizedOrigin = siteUrl.replace(/\/$/, '');
-        
-        // Use canonical origin for production
+
+        const localePath = language === 'ar' ? '' : `/${language}`;
+
+        // INDUSTRY STANDARD: Use locale-specific callback URL (matches whitelist)
         const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
-        
         const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
         const redirectUri = encodeURIComponent(redirectUriClean);
 
@@ -114,7 +113,8 @@ export default function LoginPage() {
         const urlParams = new URLSearchParams(window.location.search);
         const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
         
-        const stateData = `${returnUrl}|web`;
+        // Pass language in state so we can restore it after callback
+        const stateData = `${returnUrl}|web|${language}`;
         const state = encodeURIComponent(stateData);
 
         const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;

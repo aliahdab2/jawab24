@@ -28,10 +28,11 @@ export default function AuthCallback() {
 
     // Parse state: format is "returnUrl|platform" (e.g., "/dashboard|mobile")
     // or legacy "returnUrl"
-    const stateStr = state ? decodeURIComponent(state as string) : '/dashboard|web';
+    const stateStr = state ? decodeURIComponent(state as string) : '/dashboard|web|ar';
     const parts = stateStr.split('|');
     const returnUrlRaw = parts[0] || '/dashboard';
     const platform = parts.length > 1 ? parts[1] : 'web';
+    const preferredLocale = parts.length > 2 ? parts[2] : 'ar';
     const safeUrl = returnUrlRaw.startsWith('/') ? returnUrlRaw : '/dashboard';
 
     if (fbError) {
@@ -68,12 +69,8 @@ export default function AuthCallback() {
       const origin = platform === 'mobile' ? canonicalOrigin : (window.location.hostname === 'localhost' ? window.location.origin.replace(/\/+$/, '') : canonicalOrigin);
 
       // Ensure redirectUri matches initial request exactly using shared constant
-      // Next.js i18n handles locales via path prefixes (/en or default /)
-      // Fallback: Check pathname if router locale isn't ready
-      const currentPath = window.location.pathname;
-      const detectedLocalePath = currentPath.startsWith('/en/') ? '/en' : '';
-      const localePath = routerRef.current.locale ? (routerRef.current.locale === 'ar' ? '' : `/${routerRef.current.locale}`) : detectedLocalePath;
-      
+      // INDUSTRY STANDARD: Use locale-specific callback URL (matches what Facebook received)
+      const localePath = preferredLocale === 'ar' ? '' : `/${preferredLocale}`;
       const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
       const redirectUri = redirectUriClean;
 
@@ -81,7 +78,7 @@ export default function AuthCallback() {
       // eslint-disable-next-line no-console
       console.log(`[Auth] Exchange Debug:`, {
         origin,
-        localePath,
+        preferredLocale,
         callbackPath: FB_CALLBACK_PATH,
         fullRedirectUri: redirectUri
       });
@@ -113,9 +110,9 @@ export default function AuthCallback() {
       setAuthRef.current(data.user, data.token, data.fbAccessToken);
 
       // Apply language setting if available
-      if (data.settings?.dashboardLanguage) {
-        useUIStore.getState().setLanguage(data.settings.dashboardLanguage);
-      }
+      // Priority: 1. User Profile Settings, 2. Preferred Locale from State, 3. Default
+      const finalLocale = data.settings?.dashboardLanguage || preferredLocale || 'ar';
+      useUIStore.getState().setLanguage(finalLocale as any);
 
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
