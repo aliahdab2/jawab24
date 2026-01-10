@@ -1,5 +1,9 @@
 apply plugin: 'com.android.application'
 
+def getTimestamp() {
+    return new Date().format('yyyyMMdd-HHmm')
+}
+
 android {
     namespace = "com.jawab24.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -20,6 +24,13 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            def date = getTimestamp()
+            outputFileName = "Jawab24-${variant.name}-${date}.apk"
         }
     }
 }
