@@ -175,9 +175,10 @@ export default function SettingsPage() {
       setSaving(false);
       
       // Artificial delay to let the user see the success message
-      setTimeout(() => {
-        useAuthStore.getState().logout();
-        router.push('/');
+      setTimeout(async () => {
+        await useAuthStore.getState().logout();
+        // Use replace instead of push to prevent going back to settings after deletion
+        router.replace('/');
       }, 2500);
       
     } catch (error) {

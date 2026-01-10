@@ -45,24 +45,25 @@ export const useAuthStore = create<AuthState>()(
         set({ user, token, fbToken, isAuthenticated: true });
       },
       logout: async () => {
-        // Clear legacy keys
+        // 1. Immediately clear reactive state to prevent UI flickers or auto-redirects
+        set({ user: null, token: null, fbToken: null, isAuthenticated: false });
+
+        // 2. Perform background cleanups
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           
-          // Clear Native Facebook Session
-          const { Capacitor } = await import('@capacitor/core');
-          if (Capacitor.isNativePlatform()) {
-             try {
-               const { FacebookLogin } = await import('@capacitor-community/facebook-login');
-               await FacebookLogin.logout();
-             } catch (e) {
-               console.error('Failed to logout from Facebook SDK:', e);
-             }
+          // Clear Native Facebook Session (non-blocking but we import Capacitor)
+          try {
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+              const { FacebookLogin } = await import('@capacitor-community/facebook-login');
+              await FacebookLogin.logout();
+            }
+          } catch (e) {
+            console.error('Failed to logout from Facebook SDK:', e);
           }
         }
-        // Zustand persist handles storage cleanup automatically
-        set({ user: null, token: null, fbToken: null, isAuthenticated: false });
       },
       setHasHydrated: (state) => {
         set({ _hasHydrated: state });
