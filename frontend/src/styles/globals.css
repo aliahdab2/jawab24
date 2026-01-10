@@ -664,10 +664,4 @@
   0% { transform: translateX(-100%); }
   100% { transform: translateX(200%); }
 }
-  /* Safe Area Utilities */
-  .pt-safe {
-    padding-top: max(env(safe-area-inset-top), var(--sat, 24px));
-  }
-  .pb-safe {
-    padding-bottom: max(env(safe-area-inset-bottom), 24px);
-  }
+

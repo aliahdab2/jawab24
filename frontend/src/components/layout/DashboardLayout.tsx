@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
-import { PageSpinner, VersionBadge, WhatsAppHelpButton, BrandLogo } from '@/components/ui';
+import { VersionBadge, WhatsAppHelpButton, BrandLogo } from '@/components/ui';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 
@@ -53,16 +53,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
 
   // Don't render anything until hydration is complete
   if (!mounted || !_hasHydrated) {
-    return (
-      <>
-        <Head>
-          <title>{pageTitle} | Jawab24</title>
-        </Head>
-        <div className="min-h-screen bg-surface-50 flex items-center justify-center">
-          <PageSpinner />
-        </div>
-      </>
-    );
+    return null; // Don't show full page spinner here, rely on _app.tsx or just blank slate to avoid double-spin
   }
 
   // If not public and not authenticated, we're redirecting, so show nothing

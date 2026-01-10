@@ -198,8 +198,8 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative">
-        <div className="max-w-3xl mx-auto relative">
+      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative pt-safe">
+        <div className="max-w-3xl mx-auto relative pt-4 sm:pt-0">
           {/* Top Back Link */}
           <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
             <Link href="/pricing" className="p-3 text-surface-400 hover:text-brand-600 transition-colors group">
@@ -207,8 +207,8 @@ export default function CheckoutPage() {
             </Link>
           </div>
 
-          <div className="sm:hidden mb-6">
-            <Link href="/pricing" className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors">
+          <div className="sm:hidden mb-8">
+            <Link href="/pricing" className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors px-2 py-2 -ml-2">
               <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
               {t('checkout.backToPricing')}
             </Link>

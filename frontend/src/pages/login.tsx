@@ -274,18 +274,21 @@ export default function LoginPage() {
                 <Button
                   onClick={handleFacebookLogin}
                   size="lg"
-                  className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
+                  className={`w-full bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95 ${isLoading ? 'py-4 opacity-90 cursor-wait' : 'py-8'}`}
                   disabled={isLoading}
                 >
                   <div className="flex items-center justify-center gap-3">
                     {isLoading ? (
-                      <PremiumSpinner size="md" color="white" />
+                      <>
+                        <PremiumSpinner size="sm" color="white" />
+                        <span className="text-base font-medium animate-pulse">{t('auth.redirecting')}</span>
+                      </>
                     ) : (
-                      <FacebookIcon className="w-6 h-6" />
+                      <>
+                        <FacebookIcon className="w-6 h-6" />
+                        <span>{t('auth.loginWithFacebook')}</span>
+                      </>
                     )}
-                    <span>
-                      {isLoading ? t('auth.loggingIn') : t('auth.loginWithFacebook')}
-                    </span>
                   </div>
                 </Button>
 
