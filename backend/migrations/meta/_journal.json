@@ -8,6 +8,13 @@
       "when": 1767719096632,
       "tag": "0000_broad_warbird",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1768010424512,
+      "tag": "0001_strange_zaran",
+      "breakpoints": true
     }
   ]
 }

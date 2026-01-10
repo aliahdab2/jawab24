@@ -63,6 +63,62 @@ export class AuthController {
     }
 
     /**
+     * Handle Native Mobile Facebook Login
+     * POST /auth/facebook/native
+     */
+    async nativeLogin(request: FastifyRequest<{ Body: { accessToken: string } }>, reply: FastifyReply) {
+        const { accessToken } = request.body;
+
+        if (!accessToken) {
+            return reply.status(400).send({ error: 'Access token is required' });
+        }
+
+        try {
+            // 1. Verify the provided token (Security Check: App Match)
+            await facebookService.verifyAccessToken(accessToken);
+
+            // 2. Exchange for Long-Lived Token (Critical for Background Jobs)
+            const { token: longLivedToken, expiresAt } = await facebookService.getLongLivedToken(accessToken);
+
+            // 3. Get user profile from Facebook (using the secure long-lived token)
+            const fbProfile = await facebookService.getUserProfile(longLivedToken);
+
+            // 4. Find or create user in our DB (Store the long-lived token!)
+            const user = await authService.findOrCreateUser(
+                fbProfile.id,
+                fbProfile.name,
+                fbProfile.email,
+                longLivedToken,
+                expiresAt
+            );
+
+            // 5. Generate Internal JWT
+            const token = authService.generateToken(user);
+
+            // 6. Auto-sync pages (Non-blocking)
+            pagesService.syncFromFacebook(user.id, longLivedToken).catch((err) => {
+                request.log.error({ err }, 'Auto-sync pages failed (Native Flow)');
+            });
+
+            // 7. Fetch user settings
+            const userSettings = await settingsService.getSettings(user.id);
+
+            // 8. Return response
+            const response = authService.createAuthResponse(user, token, longLivedToken, {
+                dashboardLanguage: userSettings.dashboardLanguage,
+            });
+            return reply.send(response);
+
+        } catch (error) {
+            request.log.error({ err: error }, 'Native Facebook login failed');
+            return reply.status(401).send({
+                error: 'Authentication failed',
+                message: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+
+    /**
      * Get current user
      * GET /auth/me
      */

@@ -56,6 +56,9 @@ export const authApi = {
   loginWithFacebook: (code: string) =>
     api.post('/auth/facebook', { code }),
 
+  nativeFacebookLogin: (accessToken: string) =>
+    api.post('/auth/facebook/native', { accessToken }),
+
   getProfile: () =>
     api.get('/auth/profile'),
 };

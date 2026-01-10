@@ -35,10 +35,44 @@ export class FacebookService {
             throw error;
         }
     }
-
+    
     /**
-     * Get user profile from Facebook
+     * Verify access token validity and metadata
      */
+    async verifyAccessToken(accessToken: string): Promise<{ isValid: boolean; userId: string; expiresAt: number; scopes: string[] }> {
+        try {
+            const appAccessToken = `${config.facebook.appId}|${config.facebook.appSecret}`;
+            const response = await axios.get(`${FACEBOOK_GRAPH_API}/debug_token`, {
+                params: {
+                    input_token: accessToken,
+                    access_token: appAccessToken,
+                },
+            });
+
+            const data = response.data.data;
+
+            if (!data.is_valid) {
+                 throw new Error('Invalid access token');
+            }
+
+            // Security check: Ensure token was issued to OUR app
+            if (data.app_id !== config.facebook.appId) {
+                throw new Error('Token issued to a different app');
+            }
+
+            return {
+                isValid: data.is_valid,
+                userId: data.user_id,
+                expiresAt: data.expires_at,
+                scopes: data.scopes,
+            };
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                throw new Error(`Facebook Token Verification failed: ${error.response?.data?.error?.message || error.message}`);
+            }
+            throw error;
+        }
+    }
     async getUserProfile(accessToken: string): Promise<FacebookUserProfile> {
         try {
             const response = await axios.get<FacebookUserProfile>(`${FACEBOOK_GRAPH_API}/me`, {
@@ -91,9 +125,9 @@ export class FacebookService {
     /**
      * Exchange short-lived token for long-lived token (60 days)
      */
-    async getLongLivedToken(shortLivedToken: string): Promise<string> {
+    async getLongLivedToken(shortLivedToken: string): Promise<{ token: string; expiresAt: Date }> {
         try {
-            const response = await axios.get<FacebookTokenResponse>(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
+            const response = await axios.get(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
                 params: {
                     grant_type: 'fb_exchange_token',
                     client_id: config.facebook.appId,
@@ -102,7 +136,13 @@ export class FacebookService {
                 },
             });
 
-            return response.data.access_token;
+            const data = response.data;
+            const expiresIn = data.expires_in ? data.expires_in * 1000 : 60 * 24 * 60 * 60 * 1000; // Default 60 days if missing
+
+            return {
+                token: data.access_token,
+                expiresAt: new Date(Date.now() + expiresIn)
+            };
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);

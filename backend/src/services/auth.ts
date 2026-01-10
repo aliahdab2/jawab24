@@ -15,30 +15,40 @@ export class AuthService {
     /**
      * Find or create user by Facebook ID
      */
-    async findOrCreateUser(facebookId: string, name: string, email?: string): Promise<User> {
+    async findOrCreateUser(
+        facebookId: string,
+        name: string,
+        email?: string,
+        facebookAccessToken?: string,
+        facebookTokenExpiresAt?: Date
+    ): Promise<User> {
         // Check if user exists
         const existingUsers = await db.select().from(users).where(eq(users.facebookId, facebookId));
 
         if (existingUsers.length > 0) {
             // Update user info if changed
             const user = existingUsers[0];
-            if (user.name !== name || user.email !== email) {
-                await db
-                    .update(users)
-                    .set({
-                        name,
-                        email,
-                        updatedAt: new Date(),
-                    })
-                    .where(eq(users.id, user.id));
+            // Update only if data changed to minimize writes
+            // Always update access token if provided
+            await db
+                .update(users)
+                .set({
+                    name,
+                    email,
+                    facebookAccessToken: facebookAccessToken || user.facebookAccessToken,
+                    facebookTokenExpiresAt: facebookTokenExpiresAt || user.facebookTokenExpiresAt,
+                    updatedAt: new Date(),
+                })
+                .where(eq(users.id, user.id));
 
-                return { ...user, name, email: email ?? null, updatedAt: new Date() };
-            }
-
-            // Ensure existing user has a subscription
-            await this.ensureSubscription(user.id);
-
-            return user;
+            return {
+                ...user,
+                name,
+                email: email ?? null,
+                facebookAccessToken: facebookAccessToken || user.facebookAccessToken,
+                facebookTokenExpiresAt: facebookTokenExpiresAt || user.facebookTokenExpiresAt,
+                updatedAt: new Date()
+            };
         }
 
         // Create new user
@@ -48,6 +58,8 @@ export class AuthService {
                 facebookId,
                 name,
                 email,
+                facebookAccessToken,
+                facebookTokenExpiresAt,
             })
             .returning();
 

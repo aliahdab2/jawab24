@@ -10,6 +10,8 @@ export interface User {
     email: string | null;
     createdAt: Date | null;
     updatedAt: Date | null;
+    facebookAccessToken?: string | null;
+    facebookTokenExpiresAt?: Date | null;
 }
 
 // JWT payload

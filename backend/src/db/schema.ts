@@ -7,6 +7,8 @@ export const users = pgTable('users', {
     facebookId: varchar('facebook_id', { length: 255 }).unique().notNull(),
     name: varchar('name', { length: 255 }),
     email: varchar('email', { length: 255 }),
+    facebookAccessToken: text('facebook_access_token'),
+    facebookTokenExpiresAt: timestamp('facebook_token_expires_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 });

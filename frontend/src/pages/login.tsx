@@ -16,9 +16,13 @@ import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 
+import { authApi } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
+
 export default function LoginPage() {
   const router = useRouter();
   const { t, language, setLanguage } = useTranslation();
+  const setAuth = useAuthStore((state) => state.setAuth);
 
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
@@ -59,19 +63,29 @@ export default function LoginPage() {
           // We have the Facebook Token directly! No redirect needed.
           const fbAccessToken = result.accessToken.token;
           
-          // TODO: Call backend to swap fbAccessToken for Session Token
-          // For now, alerting result to prove functionality
-          // eslint-disable-next-line no-console
-          console.log('Native Token:', fbAccessToken);
-          alert(`Login Success! Validating Token...`);
           
-          // TEMPORARY PROOF OF CONCEPT:
-          // We need a new backend endpoint: POST /auth/facebook/native { accessToken }
-          // This will be implemented in the next step.
-          
+          try {
+              // 3. Call backend to swap fbAccessToken for Session Token
+              const response = await authApi.nativeFacebookLogin(fbAccessToken);
+              const { user, token } = response.data;
+              
+              // 4. Set Auth State (Client Side)
+              setAuth(user, token, fbAccessToken);
+              
+              // 5. Handle Redirect
+              // Check if we have a saved return URL in URL params? 
+              // Note: Native flow doesn't use 'state' param in URL like web flow.
+              // But we can check the router query.
+              const returnUrl = router.query.redirect as string || '/dashboard';
+              router.push(returnUrl);
+
+          } catch (error) {
+              console.error('Backend Login Error:', error);
+              alert(t('auth.loginError'));
+          }
+
         } else {
           // User cancelled
-          console.log('Login cancelled');
         }
 
       } else {

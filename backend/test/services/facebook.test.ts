@@ -216,9 +216,10 @@ describe('Facebook Service', () => {
 
             vi.mocked(axios.get).mockResolvedValue(mockResponse);
 
-            const token = await service.getLongLivedToken('short_lived_token');
+            const result = await service.getLongLivedToken('short_lived_token');
 
-            expect(token).toBe('long_lived_token');
+            expect(result.token).toBe('long_lived_token');
+            expect(result.expiresAt).toBeInstanceOf(Date);
             expect(axios.get).toHaveBeenCalledWith(
                 'https://graph.facebook.com/v18.0/oauth/access_token',
                 expect.objectContaining({

@@ -7,7 +7,8 @@
     "build": "tsc",
     "watch": "tsc -w",
     "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix"
+    "lint:fix": "eslint src/ --fix",
+    "test": "echo 'No tests yet for shared package'"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
