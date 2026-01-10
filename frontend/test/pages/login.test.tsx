@@ -41,10 +41,16 @@ vi.mock('@capacitor-community/facebook-login', () => ({
 
 // Mock Store
 const mockSetAuth = vi.fn();
+const mockSetLanguage = vi.fn();
 vi.mock('@/lib/store', () => ({
     useAuthStore: (selector: any) => {
         const store = { setAuth: mockSetAuth };
         return selector(store);
+    },
+    useUIStore: {
+        getState: () => ({
+            setLanguage: mockSetLanguage
+        })
     }
 }));
 
@@ -197,7 +203,9 @@ describe('LoginPage', () => {
                 expect(mockLogin).toHaveBeenCalled();
                 expect(nativeLoginSpy).toHaveBeenCalledWith('native-fb-token');
                 expect(mockSetAuth).toHaveBeenCalledWith({ id: 'user-1' }, 'session-token', 'native-fb-token');
-                expect(mockPush).toHaveBeenCalledWith('/dashboard');
+                // Expect explicit language preservation
+                expect(mockSetLanguage).toHaveBeenCalledWith('en');
+                expect(mockPush).toHaveBeenCalledWith('/dashboard', '/dashboard', { locale: 'en' });
             }));
         });
     });
