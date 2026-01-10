@@ -66,6 +66,7 @@ export default function LoginPage() {
           // 2. Login Logic
           // We have the Facebook Token directly! No redirect needed.
           const fbAccessToken = result.accessToken.token;
+          alert(`GOT FB TOKEN: ${fbAccessToken.substring(0, 5)}...`);
           
           
           try {
@@ -93,8 +94,14 @@ export default function LoginPage() {
               // Must reload/replace to force language context update if needed
               await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
-          } catch (error) {
+          } catch (error: any) {
               console.error('Backend Login Error:', error);
+              // DEBUG: Show exact error
+              const status = error.response?.status || 'Unknown';
+              const data = error.response?.data;
+              const msg = data?.message || data?.error || error.message;
+              alert(`LOGIN FAIL: ${status}\n${JSON.stringify(msg)}`);
+
               toast.error(t('auth.loginError'));
               setIsLoading(false);
           }
@@ -311,9 +318,12 @@ export default function LoginPage() {
           </div>
 
           {/* Footer Info */}
-          <div className="p-4 pb-safe border-t border-surface-100 flex items-center justify-center">
+          <div className="p-4 pb-safe border-t border-surface-100 flex flex-col items-center justify-center gap-1">
             <div className="text-[10px] font-medium text-surface-300 tracking-wider">
               © {new Date().getFullYear()} Jawab24
+            </div>
+            <div className="text-[10px] font-mono text-surface-200">
+              v{process.env.NEXT_PUBLIC_BUILD_TIME ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleString() : 'Dev'}
             </div>
           </div>
         </div>
