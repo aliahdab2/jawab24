@@ -29,71 +29,77 @@ export default function LoginPage() {
 
   if (!mounted) return null;
 
+  // Import dynamically to avoid SSR issues
+  // import { FacebookLogin, FacebookLoginResponse } from '@capacitor-community/facebook-login';
+
   const handleFacebookLogin = async () => {
     try {
-      // Build Facebook OAuth URL
+      // Check for Facebook App ID
       const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
-
       if (!fbAppId) {
-        console.error('FB_APP_ID is not configured');
-        alert('Login is not configured. Please contact support.');
+        alert(t('auth.loginError'));
         return;
       }
 
-      // Use locale-specific callback URL (standard best practice)
-      // Arabic (default): /auth/callback
-      // English: /en/auth/callback
-      const localePath = language === 'ar' ? '' : `/${language}`;
-
-      // Check if running in Capacitor (mobile app)
+      // Check if running in Native Mobile App
       const cap = (window as any).Capacitor;
       const isMobile = cap?.isNativePlatform?.();
 
-      // Normalize site URL (fallback to hardcoded only if env is missing)
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-      const normalizedOrigin = siteUrl.replace(/\/$/, '');
-
-      // For mobile: ALWAYS use normalized production origin
-      // For web: Use canonical origin for production (to avoid www mismatch), fallback to window.location.origin only for localhost
-      const origin = isMobile 
-        ? normalizedOrigin 
-        : (window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin);
-      
-      // Construct redirect URI using shared constant
-      // Normalized to ensure no double slashes or missing slashes
-      const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
-      const redirectUri = encodeURIComponent(redirectUriClean);
-
-      // Temporary logging for verification
-      console.log(`[Auth] Initiating login with redirect_uri: ${redirectUriClean}`); // eslint-disable-line no-console
-      // Using minimal scopes that work in Development mode
-      // - email: Get user's email address (required for account notifications)
-      // - pages_show_list: View list of pages user manages
-      // - pages_read_engagement: Read page engagement data (comments, posts)
-      // - pages_messaging: Send messages on behalf of pages
-      // NOTE: Instagram scopes (instagram_basic, instagram_manage_comments, instagram_manage_messages)
-      // are temporarily removed until Facebook app permissions are configured properly
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
-
-      // Get the redirect URL from query params (e.g., /checkout?planId=xxx)
-      // Use URLSearchParams directly for better static export compatibility
-      const urlParams = new URLSearchParams(window.location.search);
-      const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
-      
-      // Encode the return URL AND platform in state parameter
-      // Format: returnUrl|platform (e.g., "/dashboard|mobile" or "/dashboard|web")
-      const stateData = `${returnUrl}|${isMobile ? 'mobile' : 'web'}`;
-      const state = encodeURIComponent(stateData);
-
-      const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
-
       if (isMobile) {
-        // On mobile: Open Facebook login in system browser
-        // The redirect will be handled by production server, which redirects back to app
-        const { Browser } = await import('@capacitor/browser');
-        await Browser.open({ url: facebookAuthUrl });
+        // --- NATIVE MOBILE LOGIN FLOW ---
+        const { FacebookLogin } = await import('@capacitor-community/facebook-login');
+        
+        // 1. Request Native Login
+        // Using same permissions as web
+        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
+        const result = await FacebookLogin.login({ permissions });
+
+        if (result.accessToken) {
+          // 2. Login Logic
+          // We have the Facebook Token directly! No redirect needed.
+          const fbAccessToken = result.accessToken.token;
+          
+          // TODO: Call backend to swap fbAccessToken for Session Token
+          // For now, alerting result to prove functionality
+          // eslint-disable-next-line no-console
+          console.log('Native Token:', fbAccessToken);
+          alert(`Login Success! Validating Token...`);
+          
+          // TEMPORARY PROOF OF CONCEPT:
+          // We need a new backend endpoint: POST /auth/facebook/native { accessToken }
+          // This will be implemented in the next step.
+          
+        } else {
+          // User cancelled
+          console.log('Login cancelled');
+        }
+
       } else {
-        // On web: Standard redirect
+        // --- WEB BROWSER LOGIN FLOW (Legacy) ---
+        // Use locale-specific callback URL (standard best practice)
+        const localePath = language === 'ar' ? '' : `/${language}`;
+
+        // Normalize site URL
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+        const normalizedOrigin = siteUrl.replace(/\/$/, '');
+        
+        // Use canonical origin for production
+        const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
+        
+        const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
+        const redirectUri = encodeURIComponent(redirectUriClean);
+
+        const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
+        
+        const stateData = `${returnUrl}|web`;
+        const state = encodeURIComponent(stateData);
+
+        const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
+
+        // Standard Web Redirect
         window.location.href = facebookAuthUrl;
       }
     } catch (error) {
