@@ -60,7 +60,13 @@ export default function LoginPage() {
         // 1. Request Native Login
         // Using same permissions as web
         const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
-        const result = await FacebookLogin.login({ permissions });
+        let result;
+        try {
+            result = await FacebookLogin.login({ permissions });
+        } catch (fbError: any) {
+            alert(`FB SDK ERROR: ${fbError.message || JSON.stringify(fbError)}`);
+            throw fbError;
+        }
 
         if (result.accessToken) {
           // 2. Login Logic
@@ -134,13 +140,20 @@ export default function LoginPage() {
         const stateData = `${returnUrl}|web|${language}`;
         const state = encodeURIComponent(stateData);
 
-        const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
+        // Check for Mobile Browser (not Native App)
+        const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const displayMode = isMobileWeb ? 'touch' : 'page';
+
+        const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}`;
 
         // Standard Web Redirect
         window.location.href = facebookAuthUrl;
       }
       } catch (error: any) {
         console.error('Facebook login error:', error);
+        // CRITICAL DEBUG:
+        alert(`OUTER ERROR: ${error.message}\n${JSON.stringify(error)}`);
+        
         const errorMsg = error.response?.data?.message || error.message || t('auth.loginError');
         toast.error(errorMsg);
         setIsLoading(false); // Only stop loading on error
