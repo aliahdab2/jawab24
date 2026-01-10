@@ -17,3 +17,4 @@ env/*.env
 !env/*.env.example
 *.backup
 *.tsbuildinfo
+frontend/out/
