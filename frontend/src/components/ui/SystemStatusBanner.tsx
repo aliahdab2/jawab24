@@ -87,7 +87,7 @@ export function SystemStatusBanner({
           isWarning ? "border-amber-200 hover:bg-white text-amber-900" : 
           isError ? "border-red-200 hover:bg-white text-red-900" :
           "border-emerald-200 hover:bg-white text-emerald-700",
-          isMobile ? "text-xs" : "text-sm"
+          isMobile ? "text-xs px-2 py-1" : "text-sm"
         )}
         onClick={cta.onClick}
       >
@@ -113,15 +113,15 @@ export function SystemStatusBanner({
         "mb-8 relative group overflow-hidden transition-all duration-300",
         canExpand && "cursor-pointer select-none",
         bgClass,
-        // Rule #2: Precise mobile height control
-        isExpanded ? "h-[96px] p-4" : "h-[56px] sm:h-auto p-3 sm:p-5",
+        // Rule #2: Flexible mobile height control to prevent text cutting
+        isExpanded ? "min-h-[96px] h-auto p-4" : "min-h-[56px] h-auto p-3 sm:p-5",
         className
       )}
       padding="none"
     >
       <div className="flex items-center gap-3 sm:gap-4 h-full">
         <div className={clsx(
-          "w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0",
+          "w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 self-center",
           iconBgClass
         )}>
           <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -130,7 +130,7 @@ export function SystemStatusBanner({
         <div className="flex-1 min-w-0 flex flex-col justify-center">
           <div className="flex items-center justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm sm:text-base truncate leading-tight">
+              <p className="font-bold text-sm sm:text-base leading-tight break-words">
                 {title}
               </p>
               
