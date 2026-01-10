@@ -58,7 +58,7 @@ describe('AuthController - Native Login', () => {
         // Setup Mocks
         const expiresAt = new Date();
         vi.mocked(facebookService.verifyAccessToken).mockResolvedValue({ 
-            isValid: true, userId: 'fb-user', expiresAt: 123456, scopes: [] 
+            isValid: true, userId: 'fb-user', expiresAt: 123456, scopes: ['pages_show_list', 'email'] 
         });
         vi.mocked(facebookService.getLongLivedToken).mockResolvedValue({ 
             token: 'long-lived-token', expiresAt 

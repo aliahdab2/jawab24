@@ -8,6 +8,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useUIStore, useAuthStore } from '@/lib/store';
 import type { Language } from '@/i18n';
 import { dmSans, cairo, tajawal } from '@/lib/fonts';
+import { Toaster } from 'sonner';
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
@@ -235,6 +236,7 @@ export default function App({ Component, pageProps }: AppProps) {
       <div className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} app-safe-area`}>
         <ErrorBoundary>
           <Component {...pageProps} />
+          <Toaster richColors position="top-center" closeButton />
         </ErrorBoundary>
       </div>
     </QueryClientProvider>

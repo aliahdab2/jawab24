@@ -74,8 +74,17 @@ export class AuthController {
         }
 
         try {
-            // 1. Verify the provided token (Security Check: App Match)
-            await facebookService.verifyAccessToken(accessToken);
+            // 1. Verify the provided token (Security Check: App Match & Scopes)
+            const { scopes } = await facebookService.verifyAccessToken(accessToken);
+
+            // Enforce critical permissions
+            if (!scopes.includes('pages_show_list')) {
+                return reply.status(403).send({
+                    error: 'Missing Permissions',
+                    code: 'MISSING_PERMISSIONS',
+                    message: 'We need permission to view your pages to manage auto-replies. Please try logging in again and grant "Manage Pages" access.'
+                });
+            }
 
             // 2. Exchange for Long-Lived Token (Critical for Background Jobs)
             const { token: longLivedToken, expiresAt } = await facebookService.getLongLivedToken(accessToken);

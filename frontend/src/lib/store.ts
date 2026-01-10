@@ -44,11 +44,22 @@ export const useAuthStore = create<AuthState>()(
         // Zustand persist handles storage automatically
         set({ user, token, fbToken, isAuthenticated: true });
       },
-      logout: () => {
+      logout: async () => {
         // Clear legacy keys
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          
+          // Clear Native Facebook Session
+          const { Capacitor } = await import('@capacitor/core');
+          if (Capacitor.isNativePlatform()) {
+             try {
+               const { FacebookLogin } = await import('@capacitor-community/facebook-login');
+               await FacebookLogin.logout();
+             } catch (e) {
+               console.error('Failed to logout from Facebook SDK:', e);
+             }
+          }
         }
         // Zustand persist handles storage cleanup automatically
         set({ user: null, token: null, fbToken: null, isAuthenticated: false });
