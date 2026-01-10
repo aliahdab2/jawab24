@@ -143,8 +143,21 @@ export default function CheckoutPage() {
           <meta name="robots" content="noindex, follow" />
         </Head>
 
-        <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4">
-          <div className="max-w-3xl mx-auto">
+        <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative">
+          <div className="max-w-3xl mx-auto relative">
+            {/* Top Back Link */}
+            <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
+              <Link href="/pricing" className="p-3 text-surface-400 hover:text-brand-600 transition-colors group">
+                <ArrowLeft className="w-6 h-6 transition-transform group-hover:-translate-x-1 rtl:rotate-180 rtl:group-hover:translate-x-1" />
+              </Link>
+            </div>
+
+            <div className="sm:hidden mb-6">
+              <Link href="/pricing" className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors">
+                <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+                {t('checkout.backToPricing')}
+              </Link>
+            </div>
             {/* Header */}
             <div className="text-center mb-10 sm:mb-12">
               <Link href="/" className="flex justify-center items-center gap-3 mb-8 sm:mb-10 group">
@@ -193,8 +206,21 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4">
-        <div className="max-w-3xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative">
+        <div className="max-w-3xl mx-auto relative">
+          {/* Top Back Link */}
+          <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
+            <Link href="/pricing" className="p-3 text-surface-400 hover:text-brand-600 transition-colors group">
+              <ArrowLeft className="w-6 h-6 transition-transform group-hover:-translate-x-1 rtl:rotate-180 rtl:group-hover:translate-x-1" />
+            </Link>
+          </div>
+
+          <div className="sm:hidden mb-6">
+            <Link href="/pricing" className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors">
+              <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+              {t('checkout.backToPricing')}
+            </Link>
+          </div>
           {/* Header */}
           <div className="text-center mb-10 sm:mb-12">
             <Link href="/" className="flex justify-center items-center gap-3 mb-8 sm:mb-10 group">
@@ -292,9 +318,9 @@ export default function CheckoutPage() {
           )}
 
           {/* Back Link */}
-          <div className="text-center">
-            <Link href="/pricing" className="text-brand-600 hover:text-brand-700 font-medium inline-flex items-center gap-2">
-              <ArrowLeft className="w-4 h-4 transition-transform rtl:rotate-180" />
+          <div className="text-center mt-2">
+            <Link href="/pricing" className="text-surface-500 hover:text-brand-600 font-semibold inline-flex items-center gap-2 transition-colors py-2">
+              <ArrowLeft className="w-4 h-4 transition-transform rtl:rotate-180 group-hover:-translate-x-1" />
               {t('checkout.backToPricing')}
             </Link>
           </div>
