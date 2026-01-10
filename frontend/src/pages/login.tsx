@@ -18,7 +18,7 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 
 import { authApi } from '@/lib/api';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -71,17 +71,21 @@ export default function LoginPage() {
           try {
               // 3. Call backend to swap fbAccessToken for Session Token
               const response = await authApi.nativeFacebookLogin(fbAccessToken);
-              const { user, token } = response.data;
+              const { user, token, settings } = response.data;
               
               // 4. Set Auth State (Client Side)
               setAuth(user, token, fbAccessToken);
               
-              // 5. Handle Redirect
-              // Check if we have a saved return URL in URL params? 
-              // Note: Native flow doesn't use 'state' param in URL like web flow.
-              // But we can check the router query.
+              // 4.5. Apply language setting
+              // Priority: Settings from backend -> Current UI Language -> 'ar'
+              const finalLocale = settings?.dashboardLanguage || language || 'ar';
+              useUIStore.getState().setLanguage(finalLocale);
+
+              // 5. Handle Redirect with correct locale
               const returnUrl = router.query.redirect as string || '/dashboard';
-              router.push(returnUrl);
+              
+              // Must reload/replace to force language context update if needed
+              await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
           } catch (error) {
               console.error('Backend Login Error:', error);
