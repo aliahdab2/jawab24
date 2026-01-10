@@ -195,9 +195,11 @@ export default function RulesPage() {
         title={t('rules.title')}
         description={t('rules.description')}
         action={
-          <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-            {t('rules.addRule')}
-          </Button>
+          rules.length > 0 ? (
+            <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
+              {t('rules.addRule')}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -363,12 +365,13 @@ export default function RulesPage() {
         onClose={() => setIsModalOpen(false)}
         title={editingRule ? t('rules.editRule') : t('rules.addRule')}
       >
-        <div className="space-y-4">
+        <div className="space-y-4 md:space-y-5">
           <Input
             label={t('rules.ruleName')}
             placeholder={t('rules.ruleNamePlaceholder')}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            className="!py-3"
           />
 
           <Input
@@ -377,12 +380,13 @@ export default function RulesPage() {
             value={formData.keywords}
             onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
             helperText={t('templates.variablesDesc')}
+            className="!py-3"
           />
 
           <div>
             <label className="label">{t('templates.title')}</label>
             <select
-              className="input"
+              className="input !py-3"
               value={formData.templateId}
               onChange={(e) => setFormData({ ...formData, templateId: e.target.value })}
             >
