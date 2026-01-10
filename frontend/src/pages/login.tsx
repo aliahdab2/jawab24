@@ -53,9 +53,11 @@ export default function LoginPage() {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const normalizedOrigin = siteUrl.replace(/\/$/, '');
 
-      // For mobile: Use normalized production origin
-      // For web: Use window.location.origin
-      const origin = isMobile ? normalizedOrigin : window.location.origin;
+      // For mobile: ALWAYS use normalized production origin
+      // For web: Use canonical origin for production (to avoid www mismatch), fallback to window.location.origin only for localhost
+      const origin = isMobile 
+        ? normalizedOrigin 
+        : (window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin);
       
       // Construct redirect URI using shared constant
       // Normalized to ensure no double slashes or missing slashes
