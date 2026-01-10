@@ -141,6 +141,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <main
           className={clsx(
             'transition-all duration-500 min-h-screen',
+            'pt-safe', // Ensures main content respects safe area top
             isCleanLayout ? 'pt-16 md:pt-20' : 'pt-20 md:pt-0',
             !isCleanLayout && (sidebarOpen ? 'md:ms-64' : 'md:ms-20')
           )}
