@@ -23,7 +23,6 @@ import {
   ChevronRight,
   MessagesSquare,
   Send,
-  AlertTriangle,
   CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
@@ -609,32 +608,36 @@ export default function SettingsPage() {
       }
 
       {/* Delete Account - Now outside Advanced Toggle */}
-      <div className="mt-12 mb-20 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-        <Card className="border-none shadow-xl shadow-red-200/50 bg-gradient-to-br from-red-50 to-white p-8 relative overflow-hidden group">
-          {/* Subtle background icon */}
-          <AlertTriangle className="absolute -right-8 -bottom-8 w-40 h-40 text-red-500/5 rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-0" />
-          
-          <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-8">
-            <div className="text-center sm:text-start max-w-lg">
-              <div className="flex items-center justify-center sm:justify-start gap-3 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <h4 className="font-bold text-red-700 text-xl">{t('settings.dangerZone')}</h4>
-              </div>
-              <p className="text-sm text-red-600 font-medium leading-relaxed">
-                {t('settings.deleteAccountWarning')}
-              </p>
-            </div>
-            <Button
-              variant="danger"
-              className="px-10 py-5 shadow-2xl shadow-red-500/20 text-lg sm:w-auto w-full group transition-all hover:scale-105 active:scale-95"
-              onClick={() => setShowDeleteModal(true)}
-            >
-              {t('settings.deleteAccount')}
-            </Button>
-          </div>
-        </Card>
+      {/* Danger Zone - Industry-Standard Low Salience */}
+      <div className="mt-20 pt-10 border-t border-surface-100 mb-20 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+        <div className="max-w-xl">
+          <h4 className="font-bold text-surface-900 text-lg mb-2 flex items-center gap-2">
+            {t('settings.dangerZone')}
+          </h4>
+          <p className="text-sm text-surface-500 font-medium leading-relaxed mb-6">
+            {t('settings.deleteAccountWarning')}
+          </p>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="
+              inline-flex items-center 
+              rounded-xl 
+              border border-red-200 
+              bg-white 
+              px-6 py-3 
+              text-sm font-bold 
+              text-red-500 
+              transition-all 
+              hover:bg-red-50 
+              hover:border-red-300 
+              hover:text-red-600 
+              active:scale-95
+              focus:outline-none focus:ring-2 focus:ring-red-50
+            "
+          >
+            {t('settings.deleteAccount')}
+          </button>
+        </div>
       </div>
 
       {/* Delete Account Confirmation Modal */}
