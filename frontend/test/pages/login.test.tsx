@@ -60,7 +60,7 @@ describe('LoginPage - error handling', () => {
         const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
         fireEvent.click(loginButton);
 
-        expect(alertSpy).toHaveBeenCalledWith('Login is not configured. Please contact support.');
+        expect(alertSpy).toHaveBeenCalledWith('auth.loginError');
         expect(window.location.href).toBe(''); // Should not redirect
 
         process.env.NEXT_PUBLIC_FB_APP_ID = originalEnv;
@@ -94,7 +94,7 @@ describe('LoginPage - error handling', () => {
         const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
         fireEvent.click(loginButton);
 
-        expect(window.location.href).toContain(`state=${encodeURIComponent('/pricing')}`);
+        expect(window.location.href).toContain(`state=${encodeURIComponent('/pricing|web')}`);
     });
 
     it('should use dashboard as default redirect if no redirect param', () => {
@@ -105,7 +105,7 @@ describe('LoginPage - error handling', () => {
         const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
         fireEvent.click(loginButton);
 
-        expect(window.location.href).toContain(`state=${encodeURIComponent('/dashboard')}`);
+        expect(window.location.href).toContain(`state=${encodeURIComponent('/dashboard|web')}`);
     });
 
     it('should handle errors during OAuth URL construction', () => {
