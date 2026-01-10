@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "npm run lint && next build",
+    "build:mobile": "IS_MOBILE_BUILD=true next build",
     "start": "next start -p 3001",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
