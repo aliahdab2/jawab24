@@ -109,8 +109,10 @@ export default function App({ Component, pageProps }: AppProps) {
 
       // Track route changes to update status bar style dynamically (Best Practice)
       const handleRouteChange = (url: string) => {
+        // Style.Dark creates white icons for dark backgrounds
+        // Style.Light creates dark icons for light backgrounds
         const isDarkPage = url.includes('/dashboard') || url.includes('/zinc') || url.includes('/auth');
-        StatusBar.setStyle({ style: isDarkPage ? Style.Dark : Style.Default }).catch(() => {});
+         StatusBar.setStyle({ style: isDarkPage ? Style.Dark : Style.Light }).catch(() => {});
       };
       
       router.events.on('routeChangeComplete', handleRouteChange);
