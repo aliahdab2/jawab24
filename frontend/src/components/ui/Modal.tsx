@@ -47,7 +47,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       <div className="flex min-h-screen items-center justify-center p-4">
         <div 
           className={clsx(
-            "relative w-full bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up",
+            "relative w-full bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[85vh]",
             sizeClasses[size]
           )}
         >
@@ -65,7 +65,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
           </div>
 
           {/* Body */}
-          <div className="p-6">
+          <div className="p-6 overflow-y-auto pb-safe">
             {children}
           </div>
         </div>
