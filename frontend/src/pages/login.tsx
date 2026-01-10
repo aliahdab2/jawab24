@@ -27,6 +27,7 @@ export default function LoginPage() {
 
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -39,6 +40,7 @@ export default function LoginPage() {
 
   const handleFacebookLogin = async () => {
     try {
+      setIsLoading(true);
       // Check for Facebook App ID
       const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
       if (!fbAppId) {
@@ -87,6 +89,7 @@ export default function LoginPage() {
 
         } else {
           // User cancelled
+          setIsLoading(false);
         }
 
       } else {
@@ -117,11 +120,14 @@ export default function LoginPage() {
         // Standard Web Redirect
         window.location.href = facebookAuthUrl;
       }
-    } catch (error) {
-      console.error('Error initiating Facebook login:', error);
-      alert('Failed to start login. Please try again.');
+      } catch (error: any) {
+        console.error('Facebook login error:', error);
+        const errorMsg = error.response?.data?.message || error.message || t('auth.loginError');
+        toast.error(errorMsg);
+        setIsLoading(false); // Only stop loading on error
+      }
     }
-  };
+    // Removed finally block to prevent flash on success redirect
 
   const toggleLanguage = () => {
     setLanguage(language === 'ar' ? 'en' : 'ar');
@@ -258,8 +264,12 @@ export default function LoginPage() {
                   size="lg"
                   className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
                 >
-                  <Facebook className="w-6 h-6 ltr:mr-2 rtl:ml-2" />
-                  {t('auth.loginWithFacebook')}
+                  {isLoading ? (
+                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin ltr:mr-2 rtl:ml-2" />
+                  ) : (
+                    <Facebook className="w-6 h-6 ltr:mr-2 rtl:ml-2" />
+                  )}
+                  {isLoading ? t('auth.loggingIn') : t('auth.loginWithFacebook')}
                 </Button>
 
                 <div className="p-6 rounded-3xl bg-brand-50/50 border border-brand-100 mt-8">
