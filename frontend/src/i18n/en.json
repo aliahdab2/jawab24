@@ -101,7 +101,7 @@
   "auth.loginCancelled": "Facebook login was cancelled or failed",
   "auth.loginTimeout": "Login request timed out. Please try again.",
   "auth.redirecting": "Redirecting...",
-  "auth.loggingIn": "Logging in...",
+  "auth.loggingIn": "Signing you in...",
   "auth.systemsActive": "Systems Active",
   "auth.nextGenAutoReplies": "Next-Gen Auto Replies",
   "auth.startYourJourney": "Start Your",

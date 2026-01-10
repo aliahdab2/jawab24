@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import {
-  Facebook,
   Zap,
   ShieldCheck,
   Sparkles,
@@ -12,7 +11,7 @@ import {
   Star
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { Button, BrandLogo } from '@/components/ui';
+import { Button, BrandLogo, PremiumSpinner, FacebookIcon } from '@/components/ui';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
@@ -276,13 +275,18 @@ export default function LoginPage() {
                   onClick={handleFacebookLogin}
                   size="lg"
                   className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
+                  disabled={isLoading}
                 >
-                  {isLoading ? (
-                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin ltr:mr-2 rtl:ml-2" />
-                  ) : (
-                    <Facebook className="w-6 h-6 ltr:mr-2 rtl:ml-2" />
-                  )}
-                  {isLoading ? t('auth.loggingIn') : t('auth.loginWithFacebook')}
+                  <div className="flex items-center justify-center gap-3">
+                    {isLoading ? (
+                      <PremiumSpinner size="md" color="white" />
+                    ) : (
+                      <FacebookIcon className="w-6 h-6" />
+                    )}
+                    <span>
+                      {isLoading ? t('auth.loggingIn') : t('auth.loginWithFacebook')}
+                    </span>
+                  </div>
                 </Button>
 
                 <div className="p-6 rounded-3xl bg-brand-50/50 border border-brand-100 mt-8">

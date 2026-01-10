@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { 
-  Facebook, 
   FileText, 
   Zap, 
   CheckCircle2,
@@ -9,7 +8,7 @@ import {
   X,
   Sparkles
 } from 'lucide-react';
-import { Button } from '@/components/ui';
+import { Button, FacebookIcon } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 
 import { useSwipe } from '@/hooks/useSwipe';
@@ -37,13 +36,13 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       ),
     },
     {
-      icon: Facebook,
+      icon: FacebookIcon,
       color: 'blue',
       title: t('onboarding.step1Title'),
       description: t('onboarding.step1Desc'),
       visual: (
         <div className="w-32 h-32 mx-auto bg-blue-100 rounded-3xl flex items-center justify-center">
-          <Facebook className="w-16 h-16 text-blue-600" />
+          <FacebookIcon className="w-16 h-16 text-blue-600" />
         </div>
       ),
     },
