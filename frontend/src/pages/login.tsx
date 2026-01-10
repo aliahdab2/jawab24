@@ -64,7 +64,6 @@ export default function LoginPage() {
         try {
             result = await FacebookLogin.login({ permissions });
         } catch (fbError: any) {
-            alert(`FB SDK ERROR: ${fbError.message || JSON.stringify(fbError)}`);
             throw fbError;
         }
 
@@ -72,7 +71,6 @@ export default function LoginPage() {
           // 2. Login Logic
           // We have the Facebook Token directly! No redirect needed.
           const fbAccessToken = result.accessToken.token;
-          alert(`GOT FB TOKEN: ${fbAccessToken.substring(0, 5)}...`);
           
           
           try {
@@ -102,12 +100,6 @@ export default function LoginPage() {
 
           } catch (error: any) {
               console.error('Backend Login Error:', error);
-              // DEBUG: Show exact error
-              const status = error.response?.status || 'Unknown';
-              const data = error.response?.data;
-              const msg = data?.message || data?.error || error.message;
-              alert(`LOGIN FAIL: ${status}\n${JSON.stringify(msg)}`);
-
               toast.error(t('auth.loginError'));
               setIsLoading(false);
           }
@@ -151,8 +143,6 @@ export default function LoginPage() {
       }
       } catch (error: any) {
         console.error('Facebook login error:', error);
-        // CRITICAL DEBUG:
-        alert(`OUTER ERROR: ${error.message}\n${JSON.stringify(error)}`);
         
         const errorMsg = error.response?.data?.message || error.message || t('auth.loginError');
         toast.error(errorMsg);
