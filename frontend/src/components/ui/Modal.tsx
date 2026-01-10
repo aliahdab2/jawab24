@@ -21,10 +21,21 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
     } else {
       document.body.style.overflow = 'unset';
     }
+
+    // Handle ESC key
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    
+    if (isOpen) {
+      window.addEventListener('keydown', handleEsc);
+    }
+
     return () => {
       document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleEsc);
     };
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !mounted) return null;
 
