@@ -71,6 +71,9 @@ export default function LoginPage() {
           try {
               // 3. Call backend to swap fbAccessToken for Session Token
               const response = await authApi.nativeFacebookLogin(fbAccessToken);
+              // DEBUG: Check what backend returns
+              // alert(`Backend: ${JSON.stringify(response.data.settings)}`); 
+              
               const { user, token, settings } = response.data;
               
               // 4. Set Auth State (Client Side)
@@ -79,6 +82,9 @@ export default function LoginPage() {
               // 4.5. Apply language setting
               // Priority: Settings from backend -> Current UI Language -> 'ar'
               const finalLocale = settings?.dashboardLanguage || language || 'ar';
+              // DEBUG: Check what we are setting
+              // alert(`Setting Language: ${finalLocale}`);
+              
               useUIStore.getState().setLanguage(finalLocale);
 
               // 5. Handle Redirect with correct locale
