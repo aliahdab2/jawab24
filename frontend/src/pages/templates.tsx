@@ -150,11 +150,9 @@ export default function TemplatesPage() {
         title={t('templates.title')}
         description={t('templates.description')}
         action={
-          templates.length > 0 ? (
-            <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-              {t('templates.addTemplate')}
-            </Button>
-          ) : undefined
+          <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
+            {t('templates.addTemplate')}
+          </Button>
         }
       />
 

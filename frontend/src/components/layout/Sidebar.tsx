@@ -139,6 +139,19 @@ export function Sidebar() {
             </div>
           </div>
         )}
+        
+        {/* Support Button */}
+        <button
+          onClick={() => window.open('https://wa.me/46700224720', '_blank')}
+          className={clsx(
+            "w-full flex items-center gap-3 px-3 py-3 mb-2 rounded-2xl text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300 transition-all duration-300 group border border-emerald-500/10",
+            !sidebarOpen && "justify-center"
+          )}
+        >
+          <MessageCircle className="w-5 h-5 flex-shrink-0 transition-transform group-hover:scale-110" />
+          {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('common.needHelp') || 'Support'}</span>}
+        </button>
+
         <button
           onClick={handleLogout}
           className={clsx(

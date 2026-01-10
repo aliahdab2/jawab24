@@ -195,11 +195,9 @@ export default function RulesPage() {
         title={t('rules.title')}
         description={t('rules.description')}
         action={
-          rules.length > 0 ? (
-            <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-              {t('rules.addRule')}
-            </Button>
-          ) : undefined
+          <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
+            {t('rules.addRule')}
+          </Button>
         }
       />
 

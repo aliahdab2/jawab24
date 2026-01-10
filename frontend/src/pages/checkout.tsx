@@ -143,7 +143,7 @@ export default function CheckoutPage() {
           <meta name="robots" content="noindex, follow" />
         </Head>
 
-        <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative">
+        <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-6 md:py-10 px-4 relative">
           <div className="max-w-3xl mx-auto relative">
             {/* Top Back Link */}
             <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
@@ -172,14 +172,6 @@ export default function CheckoutPage() {
             {/* Blocked Message */}
             <div className="py-12">
               <PaymentsUnavailableNotice />
-              <div className="mt-8 text-center">
-                <Link href="/pricing">
-                  <Button variant="secondary">
-                    <ArrowLeft className="w-4 h-4 ltr:mr-2 rtl:ml-2" />
-                    {t('checkout.backToPricing')}
-                  </Button>
-                </Link>
-              </div>
             </div>
           </div>
         </div>
@@ -316,17 +308,8 @@ export default function CheckoutPage() {
               </p>
             </div>
           )}
-
-          {/* Back Link */}
-          <div className="text-center mt-2">
-            <Link href="/pricing" className="text-surface-500 hover:text-brand-600 font-semibold inline-flex items-center gap-2 transition-colors py-2">
-              <ArrowLeft className="w-4 h-4 transition-transform rtl:rotate-180 group-hover:-translate-x-1" />
-              {t('checkout.backToPricing')}
-            </Link>
-          </div>
         </div>
       </div>
     </>
   );
 }
-
