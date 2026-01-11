@@ -27,8 +27,6 @@ export default function LoginPage() {
 
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
-  // isLoggingIn: true while waiting for Facebook dialog or redirect
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
   // isProcessing: true after Facebook returns, while we authenticate with backend
   // This shows a blank screen instead of the login page to avoid flashing
   const [isProcessing, setIsProcessing] = useState(false);
@@ -49,18 +47,12 @@ export default function LoginPage() {
   // import { FacebookLogin, FacebookLoginResponse } from '@capacitor-community/facebook-login';
 
   const handleFacebookLogin = async () => {
-    // Prevent double-clicks
-    if (isLoggingIn) return;
-    
     // Check for Facebook App ID
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     if (!fbAppId) {
       toast.error(t('auth.loginError'));
       return;
     }
-
-    // Show loading spinner immediately
-    setIsLoggingIn(true);
 
     // Check if running in Native Mobile App
     const isMobile = Capacitor.isNativePlatform();
@@ -77,19 +69,17 @@ export default function LoginPage() {
           // May already be initialized - that's OK
         }
         
-        // Open native Facebook login dialog
+        // Open native Facebook login dialog immediately - no loading spinner
         const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
         const result = await FacebookLogin.login({ permissions });
 
         if (!result.accessToken) {
-          // User cancelled - stop loading, stay on login page
-          setIsLoggingIn(false);
+          // User cancelled - stay on login page
           return;
         }
 
         // Facebook returned! Show dashboard skeleton while we authenticate with backend
         setIsProcessing(true);
-        setIsLoggingIn(false);
 
         // Exchange FB token for our session token
         const response = await authApi.nativeFacebookLogin(result.accessToken.token);
@@ -108,14 +98,12 @@ export default function LoginPage() {
       } catch (error: any) {
         console.error('Native login error:', error);
         toast.error(error.response?.data?.message || t('auth.loginError'));
-        setIsLoggingIn(false);
         setIsProcessing(false);
       }
 
     } else {
       // --- WEB BROWSER LOGIN FLOW ---
-      // Build Facebook OAuth URL and redirect
-      // Keep spinner showing until browser navigates away
+      // Redirect immediately to Facebook - no loading spinner
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const normalizedOrigin = siteUrl.replace(/\/$/, '');
       const localePath = language === 'ar' ? '' : `/${language}`;
@@ -267,13 +255,11 @@ export default function LoginPage() {
                 <Button
                   onClick={handleFacebookLogin}
                   size="lg"
-                  loading={isLoggingIn}
-                  disabled={isLoggingIn}
                   className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
                 >
                   <div className="flex items-center justify-center gap-3">
                     <FacebookIcon className="w-6 h-6" />
-                    <span>{isLoggingIn ? t('auth.loggingIn') : t('auth.loginWithFacebook')}</span>
+                    <span>{t('auth.loginWithFacebook')}</span>
                   </div>
                 </Button>
 
