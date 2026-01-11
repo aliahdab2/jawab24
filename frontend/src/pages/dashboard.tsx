@@ -4,7 +4,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Badge, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import axios from 'axios';
 import { subscriptionApi } from '@/lib/api';
 import {
@@ -58,6 +58,7 @@ const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
 export default function DashboardPage() {
   const { t, language } = useTranslation();
   const { token } = useAuthStore();
+  const { setOnboardingVisible } = useUIStore();
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [recentComments, setRecentComments] = useState<Comment[]>([]);
@@ -125,6 +126,7 @@ export default function DashboardPage() {
       const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
       if (fetchedPages.length === 0 && !onboardingComplete) {
         setShowOnboarding(true);
+        setOnboardingVisible(true); // Hide floating elements during onboarding
       }
 
       // Calculate stats
@@ -205,11 +207,13 @@ export default function DashboardPage() {
   const handleOnboardingComplete = () => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setShowOnboarding(false);
+    setOnboardingVisible(false); // Show floating elements again
   };
 
   const handleOnboardingSkip = () => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setShowOnboarding(false);
+    setOnboardingVisible(false); // Show floating elements again
   };
 
   // Dashboard Skeleton Loading State

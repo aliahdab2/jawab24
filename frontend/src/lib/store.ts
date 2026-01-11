@@ -96,10 +96,12 @@ interface UIState {
   sidebarOpen: boolean;
   language: Language;
   _hasHydrated: boolean;
+  isOnboardingVisible: boolean;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setLanguage: (lang: Language) => void;
   setHasHydrated: (state: boolean) => void;
+  setOnboardingVisible: (visible: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -108,10 +110,12 @@ export const useUIStore = create<UIState>()(
       sidebarOpen: true,
       language: 'ar' as Language,
       _hasHydrated: false,
+      isOnboardingVisible: false,
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setLanguage: (lang) => set({ language: lang }),
       setHasHydrated: (state) => set({ _hasHydrated: state }),
+      setOnboardingVisible: (visible) => set({ isOnboardingVisible: visible }),
     }),
     {
       name: 'ui-storage',

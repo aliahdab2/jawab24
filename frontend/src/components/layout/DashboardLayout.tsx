@@ -21,7 +21,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
   const { t, language, setLanguage } = useTranslation();
   const isRTL = language === 'ar';
   const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
-  const { sidebarOpen } = useUIStore();
+  const { sidebarOpen, isOnboardingVisible } = useUIStore();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
@@ -223,8 +223,8 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {/* Version badge - subtle indicator in corner */}
         <VersionBadge />
 
-        {/* WhatsApp help button - floating */}
-        <WhatsAppHelpButton hidden={mobileMenuOpen || showLogoutCheck} />
+        {/* WhatsApp help button - floating (hidden during modals and onboarding) */}
+        <WhatsAppHelpButton hidden={mobileMenuOpen || showLogoutCheck || isOnboardingVisible} />
       </div>
     </>
   );
