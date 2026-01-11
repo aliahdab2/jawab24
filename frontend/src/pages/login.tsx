@@ -248,8 +248,8 @@ export default function LoginPage() {
 
         {/* Right Side: Login Form */}
         <div className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden">
-          {/* Header - Fixed + pt-safe + box-content so safe area increases total height (native status bar overlay) */}
-          <div className="flex-shrink-0 bg-white flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
+          {/* Header - Sticky so it stays visible when content scrolls + pt-safe for safe area */}
+          <div className="sticky top-0 z-10 flex-shrink-0 bg-white flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
@@ -331,6 +331,13 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
+
+        {/* Fixed top safe area background - prevents content from showing through status bar when scrolling */}
+        <div
+          className="lg:hidden fixed top-0 left-0 right-0 bg-white z-[39] pointer-events-none"
+          style={{ height: 'max(var(--min-safe-top, 24px), env(safe-area-inset-top, 0px))' }}
+          aria-hidden="true"
+        />
       </div>
     </>
   );
