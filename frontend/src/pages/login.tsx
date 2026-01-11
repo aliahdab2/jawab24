@@ -70,7 +70,6 @@ export default function LoginPage() {
 
         if (result.accessToken) {
           // 2. Login Logic
-          // We have the Facebook Token directly! No redirect needed.
           const fbAccessToken = result.accessToken.token;
           
           
@@ -88,7 +87,7 @@ export default function LoginPage() {
               // 5. Handle Redirect with correct locale
               const returnUrl = router.query.redirect as string || '/dashboard';
               
-              // Must reload/replace to force language context update if needed
+              // 6. Navigate
               await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
           } catch (error: any) {
@@ -276,12 +275,12 @@ export default function LoginPage() {
                 <Button
                   onClick={handleFacebookLogin}
                   size="lg"
-                  className={`w-full bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95 ${isLoading ? 'py-4 opacity-90 cursor-wait' : 'py-8'}`}
+                  className={`w-full bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95 ${isLoading ? 'py-4 cursor-wait' : 'py-8'}`}
                   disabled={isLoading}
                 >
                   <div className="flex items-center justify-center gap-3">
                     {isLoading ? (
-                      <div className="flex items-center gap-3 animate-pulse opacity-80">
+                      <div className="flex items-center gap-3">
                         <FacebookIcon className="w-6 h-6" />
                         <span className="text-base font-medium">{t('auth.redirecting')}</span>
                       </div>
