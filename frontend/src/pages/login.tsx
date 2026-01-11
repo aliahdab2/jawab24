@@ -12,7 +12,7 @@ import {
   Star
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { Button, BrandLogo, FacebookIcon } from '@/components/ui';
+import { Button, BrandLogo, FacebookIcon, AppSkeleton } from '@/components/ui';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
@@ -37,10 +37,10 @@ export default function LoginPage() {
 
   if (!mounted) return null;
 
-  // Show blank screen while processing auth (after Facebook returns)
-  // This prevents the login page from flashing before navigating to dashboard
+  // Show dashboard skeleton while processing auth (after Facebook returns)
+  // This gives a preview of the dashboard they're about to see
   if (isProcessing) {
-    return <div className="min-h-screen bg-white" />;
+    return <AppSkeleton variant="dashboard" />;
   }
 
   // Import dynamically to avoid SSR issues

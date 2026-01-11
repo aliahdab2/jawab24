@@ -9,6 +9,7 @@ import { useUIStore, useAuthStore } from '@/lib/store';
 import type { Language } from '@/i18n';
 import { dmSans, cairo, tajawal } from '@/lib/fonts';
 import { Toaster } from 'sonner';
+import { AppSkeleton } from '@/components/ui';
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter();
@@ -217,11 +218,9 @@ export default function App({ Component, pageProps }: AppProps) {
     };
   }, [hasHydrated]);
 
-  // Hydration guard - show minimal white screen while loading
+  // Hydration guard - show skeleton while loading for better UX
   if (!hasHydrated) {
-    return (
-      <div className="min-h-screen bg-white" />
-    );
+    return <AppSkeleton />;
   }
 
   return (

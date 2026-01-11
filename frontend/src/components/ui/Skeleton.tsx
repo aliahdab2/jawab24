@@ -37,6 +37,92 @@ export function Skeleton({
 }
 
 // ----------------------------------------------------------------------
+// App-level skeleton for initial hydration/loading states
+// This mimics a general page layout to reduce perceived loading time
+
+export function AppSkeleton({ variant = 'default' }: { variant?: 'default' | 'dashboard' | 'landing' }) {
+    if (variant === 'dashboard') {
+        return (
+            <div className="min-h-screen bg-surface-50">
+                {/* Sidebar skeleton */}
+                <div className="hidden lg:block fixed inset-y-0 start-0 w-64 bg-white border-e border-surface-100">
+                    <div className="p-6 animate-pulse">
+                        <Skeleton height={40} width={120} className="mb-8 rounded-xl" />
+                        <div className="space-y-3">
+                            {[1, 2, 3, 4, 5].map(i => (
+                                <Skeleton key={i} height={44} className="rounded-xl" />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                {/* Main content skeleton */}
+                <div className="lg:ms-64 p-6 lg:p-8 animate-pulse">
+                    <div className="max-w-6xl mx-auto space-y-8">
+                        {/* Header */}
+                        <div className="flex justify-between items-center">
+                            <div className="space-y-2">
+                                <Skeleton width={200} height={32} className="rounded-xl" />
+                                <Skeleton width={300} height={16} className="rounded-lg" />
+                            </div>
+                        </div>
+                        {/* Stats grid */}
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                            {[1, 2, 3].map(i => (
+                                <Skeleton key={i} height={100} className="rounded-2xl" />
+                            ))}
+                        </div>
+                        {/* Content cards */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <Skeleton height={320} className="lg:col-span-2 rounded-3xl" />
+                            <Skeleton height={320} className="rounded-3xl" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (variant === 'landing') {
+        return (
+            <div className="min-h-screen bg-white">
+                {/* Nav skeleton */}
+                <div className="border-b border-surface-100 px-6 py-4 animate-pulse">
+                    <div className="max-w-6xl mx-auto flex justify-between items-center">
+                        <Skeleton width={140} height={40} className="rounded-xl" />
+                        <div className="flex gap-3">
+                            <Skeleton width={80} height={36} className="rounded-lg hidden sm:block" />
+                            <Skeleton width={100} height={36} className="rounded-xl" />
+                        </div>
+                    </div>
+                </div>
+                {/* Hero skeleton */}
+                <div className="px-6 py-16 animate-pulse">
+                    <div className="max-w-4xl mx-auto text-center space-y-6">
+                        <Skeleton width={120} height={28} className="mx-auto rounded-full" />
+                        <Skeleton width="80%" height={48} className="mx-auto rounded-xl" />
+                        <Skeleton width="60%" height={24} className="mx-auto rounded-lg" />
+                        <div className="flex justify-center gap-4 pt-4">
+                            <Skeleton width={160} height={48} className="rounded-xl" />
+                            <Skeleton width={140} height={48} className="rounded-xl hidden sm:block" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Default - simple centered loading
+    return (
+        <div className="min-h-screen bg-white flex items-center justify-center animate-pulse">
+            <div className="text-center space-y-4">
+                <Skeleton variant="circular" width={64} height={64} className="mx-auto" />
+                <Skeleton width={120} height={16} className="mx-auto rounded-lg" />
+            </div>
+        </div>
+    );
+}
+
+// ----------------------------------------------------------------------
 
 export function PageSkeleton({ type = 'default' }: { type?: 'default' | 'grid' | 'list' | 'dashboard' }) {
     if (type === 'dashboard') {

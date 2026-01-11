@@ -14,5 +14,5 @@ export { Toggle } from './Toggle';
 export { VersionBadge } from './VersionBadge';
 export { WhatsAppHelpButton } from './WhatsAppHelpButton';
 export { KpiCard } from './KpiCard';
-export { Skeleton, PageSkeleton } from './Skeleton';
+export { Skeleton, PageSkeleton, AppSkeleton } from './Skeleton';
 export { SystemStatusBanner } from './SystemStatusBanner';

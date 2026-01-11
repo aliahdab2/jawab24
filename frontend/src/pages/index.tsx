@@ -2,11 +2,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
+import { AppSkeleton } from '@/components/ui';
 
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, _hasHydrated } = useAuthStore();
-  const { t, language } = useTranslation();
+  const { language } = useTranslation();
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
   
@@ -41,8 +42,6 @@ export default function Home() {
     }
   }, [isAuthenticated, _hasHydrated, mounted]);
 
-  // Minimal loading - just white screen while redirecting
-  return (
-    <div className="min-h-screen bg-white" dir={isRTL ? 'rtl' : 'ltr'} />
-  );
+  // Show skeleton while redirecting - contextual based on auth state
+  return <AppSkeleton variant={isAuthenticated ? 'dashboard' : 'landing'} />;
 }
