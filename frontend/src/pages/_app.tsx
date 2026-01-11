@@ -46,6 +46,17 @@ export default function App({ Component, pageProps }: AppProps) {
   const authHasHydrated = useAuthStore((state) => state._hasHydrated);
   const hasHydrated = uiHasHydrated && authHasHydrated;
 
+  // Add is-native class IMMEDIATELY on first render (before hydration completes)
+  // This ensures CSS safe area rules apply from the start
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const cap = (window as any).Capacitor;
+    if (cap?.isNativePlatform?.()) {
+      document.documentElement.classList.add('is-native');
+      document.body.classList.add('is-native');
+    }
+  }, []); // Empty deps = runs once on mount
+
   // Sync Next.js locale with language store
   useEffect(() => {
     if (!locale || !hasHydrated) return;
@@ -73,7 +84,7 @@ export default function App({ Component, pageProps }: AppProps) {
       const cap = (window as any).Capacitor;
       if (!cap?.isNativePlatform?.()) return;
 
-      document.body.classList.add('is-native');
+      // Note: is-native class is already added in the earlier useEffect
 
       const [{ StatusBar, Style }, { Keyboard }, { App }, { SplashScreen }, { Network }] = await Promise.all([
         import("@capacitor/status-bar"),
