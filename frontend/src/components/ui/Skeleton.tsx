@@ -111,14 +111,9 @@ export function AppSkeleton({ variant = 'default' }: { variant?: 'default' | 'da
         );
     }
 
-    // Default - simple centered loading
+    // Default - minimal white screen (no spinner/circular elements)
     return (
-        <div className="min-h-screen bg-white flex items-center justify-center animate-pulse">
-            <div className="text-center space-y-4">
-                <Skeleton variant="circular" width={64} height={64} className="mx-auto" />
-                <Skeleton width={120} height={16} className="mx-auto rounded-lg" />
-            </div>
-        </div>
+        <div className="min-h-screen bg-white" />
     );
 }
 
