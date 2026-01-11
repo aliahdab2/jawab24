@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
+import { AppSkeleton } from '@/components/ui';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -184,11 +185,6 @@ export default function AuthCallback() {
     );
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-50">
-      <div className="text-center">
-        <p className="text-surface-500 font-medium">{t('auth.loggingIn')}</p>
-      </div>
-    </div>
-  );
+  // Show dashboard skeleton while processing - consistent with native app flow
+  return <AppSkeleton variant="dashboard" />;
 }
