@@ -389,7 +389,10 @@ export default function PagesPage() {
       {/* Knowledge Base Modal - Responsive for portrait, landscape, and desktop */}
       {editingPage && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden">
+          <div 
+            className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden"
+            style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom, 0px))' }}
+          >
             {/* Modal Header - Ultra compact in landscape */}
             <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-surface-100 flex-shrink-0">
               <div className="flex items-center gap-3 landscape:gap-2">

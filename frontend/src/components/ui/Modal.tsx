@@ -40,10 +40,10 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   if (!isOpen || !mounted) return null;
 
   const sizeClasses = {
-    sm: 'max-w-md',
-    md: 'max-w-xl',
-    lg: 'max-w-2xl',
-    xl: 'max-w-4xl',
+    sm: 'max-w-md landscape:max-w-lg',
+    md: 'max-w-xl landscape:max-w-2xl',
+    lg: 'max-w-2xl landscape:max-w-3xl',
+    xl: 'max-w-4xl landscape:max-w-5xl',
   };
 
   const modalContent = (
@@ -54,16 +54,23 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         onClick={onClose}
       />
       
-      {/* Modal Container */}
-      <div className="flex min-h-screen items-center justify-center p-4">
+      {/* Modal Container - Bottom sheet on mobile, centered on desktop/landscape */}
+      <div className="flex min-h-screen items-end sm:items-center landscape:items-center justify-center p-0 sm:p-4 landscape:p-4">
         <div 
           className={clsx(
-            "relative w-full bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-[92vh] sm:max-h-[85vh]",
+            "relative w-full bg-white shadow-2xl overflow-hidden animate-slide-up flex flex-col",
+            // Mobile portrait: bottom sheet with safe area
+            "rounded-t-3xl sm:rounded-3xl landscape:rounded-3xl",
+            "max-h-[92vh] sm:max-h-[85vh] landscape:max-h-[90vh]",
             sizeClasses[size]
           )}
+          style={{
+            // Ensure modal doesn't overlap with Android navigation
+            paddingBottom: 'max(20px, env(safe-area-inset-bottom, 0px))'
+          }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-5 sm:p-6 border-b border-surface-100">
+          <div className="flex items-center justify-between p-5 sm:p-6 border-b border-surface-100 flex-shrink-0">
             <h3 className="text-xl font-bold text-surface-900 leading-tight">
               {title}
             </h3>
@@ -75,8 +82,8 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
             </button>
           </div>
 
-          {/* Body */}
-          <div className="p-5 sm:p-6 overflow-y-auto pb-safe">
+          {/* Body - scrollable content */}
+          <div className="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0">
             {children}
           </div>
         </div>
