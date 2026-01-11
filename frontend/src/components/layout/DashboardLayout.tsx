@@ -146,12 +146,17 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           </div>
         </main>
 
-        {/* Mobile bottom navigation - h-16 (64px) + safe area for system navigation */}
-        {/* Uses max() to ensure minimum 12px padding on Android where env() returns 0 */}
+        {/* Mobile bottom navigation - h-16 (64px) + safe areas for system navigation */}
+        {/* Portrait: bottom padding for home indicator / nav buttons */}
+        {/* Landscape: side padding for notch + reduced bottom padding */}
         {!isCleanLayout && (
           <nav
             className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
-            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
+            style={{
+              paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))',
+              paddingLeft: 'max(8px, env(safe-area-inset-left, 0px))',
+              paddingRight: 'max(8px, env(safe-area-inset-right, 0px))'
+            }}
           >
             <MobileNavButton
               onClick={() => router.push('/dashboard')}

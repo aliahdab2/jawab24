@@ -689,6 +689,24 @@
   bottom: max(16px, var(--safe-area-bottom));
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   LANDSCAPE MODE SAFE AREAS
+   In landscape, notch moves to side, bottom nav needs side padding
+═══════════════════════════════════════════════════════════════════ */
+@media (orientation: landscape) {
+  /* Landscape: Add side safe areas for notch/cutout */
+  .is-native .px-safe-landscape {
+    padding-left: max(16px, var(--safe-area-left));
+    padding-right: max(16px, var(--safe-area-right));
+  }
+  
+  /* Landscape: Bottom safe area is typically smaller */
+  .is-native .pb-safe,
+  .is-native .pb-safe-min {
+    padding-bottom: max(8px, var(--safe-area-bottom));
+  }
+}
+
 /* Combined: header height + safe area (for content below fixed headers) */
 .pt-header {
   padding-top: calc(var(--header-height) + var(--safe-area-top));
