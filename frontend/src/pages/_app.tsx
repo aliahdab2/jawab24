@@ -104,14 +104,26 @@ export default function App({ Component, pageProps }: AppProps) {
       listenersRef.current.forEach(remove => remove());
       listenersRef.current = [];
 
-      // Handle hardware back button (Android)
-      // Use router.back() which is safer for Next.js than window.history.back()
-      const backListener = await App.addListener('backButton', ({ canGoBack }) => {
+      // Handle hardware back button (Android) - Industry Standard
+      // Exit app when on root screens, otherwise go back in history
+      const ROOT_SCREENS = ['/dashboard', '/login', '/landing', '/'];
+      
+      const backListener = await App.addListener('backButton', () => {
         const router = routerRef.current;
-        if (canGoBack) {
-           router.back();
+        const currentPath = router.pathname;
+        
+        // Check if we're on a root screen (no meaningful "back" destination)
+        const isRootScreen = ROOT_SCREENS.includes(currentPath);
+        
+        // Also check if browser history has somewhere to go
+        const hasHistory = window.history.length > 1;
+        
+        if (isRootScreen || !hasHistory) {
+          // On root screen or no history - exit app (like WhatsApp, Instagram)
+          App.exitApp();
         } else {
-           App.exitApp();
+          // Has history and not on root - go back
+          router.back();
         }
       });
       listenersRef.current.push(() => backListener.remove());
