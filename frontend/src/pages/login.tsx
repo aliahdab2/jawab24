@@ -188,7 +188,7 @@ export default function LoginPage() {
         <meta property="og:url" content="https://jawab24.com/login" />
       </Head>
 
-      <div className="min-h-[100svh] bg-white flex flex-col lg:flex-row overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="h-[100svh] bg-white flex flex-col lg:flex-row overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
         <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}
@@ -247,9 +247,9 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="flex-1 flex flex-col bg-white min-h-0">
-          {/* Header - Sticky + pt-safe + box-content so safe area increases total height (native status bar overlay) */}
-          <div className="sticky top-0 z-40 bg-white flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
+        <div className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden">
+          {/* Header - Fixed + pt-safe + box-content so safe area increases total height (native status bar overlay) */}
+          <div className="flex-shrink-0 bg-white flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
@@ -266,11 +266,11 @@ export default function LoginPage() {
           </div>
 
           {/* Content:
-              - Prevents whole-page scroll ("rubber band") by keeping outer container overflow-hidden
-              - Allows internal scroll ONLY if screen is too short (landscape)
-              - Minimal padding to avoid unnecessary scrolling when content fits */}
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6">
-            <div className="min-h-full flex items-center justify-center py-6">
+              - Fixed height layout - NO scrolling on the login page
+              - Uses flex to center content vertically
+              - Only scrolls internally if content truly doesn't fit (very small screens) */}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-6">
+            <div className="h-full flex items-center justify-center py-4">
               <div className="w-full max-w-md">
                 <div className="text-center lg:text-start mb-8">
                   <h2 className="text-4xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
@@ -322,7 +322,7 @@ export default function LoginPage() {
           </div>
 
           {/* Footer Info - pb-safe for system navigation */}
-          <div className="p-4 border-t border-surface-100 flex flex-col items-center justify-center gap-1 pb-safe">
+          <div className="flex-shrink-0 p-4 border-t border-surface-100 flex flex-col items-center justify-center gap-1 pb-safe">
             <div className="text-[10px] font-medium text-surface-300 tracking-wider">
               © {new Date().getFullYear()} Jawab24
             </div>
