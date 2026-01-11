@@ -14,7 +14,7 @@ export default function PaymentCancelPage() {
         <title>{t('payment.cancel.title')} - Jawab24</title>
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center px-4" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center px-4 pt-safe pb-safe" dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="max-w-md w-full">
           <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
             {/* Cancel Icon */}

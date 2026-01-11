@@ -111,7 +111,7 @@ export default function CompleteProfilePage() {
   // Loading state while checking user status
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4 pt-safe pb-safe">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full animate-pulse">
           <div className="flex flex-col items-center">
             <div className="w-16 h-16 bg-surface-200 rounded-full mb-4" />
@@ -129,7 +129,7 @@ export default function CompleteProfilePage() {
   if (success) {
     return (
       <div 
-        className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4" 
+        className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4 pt-safe pb-safe" 
         dir={isRTL ? 'rtl' : 'ltr'}
         role="main"
         aria-label={t('profile.complete')}
@@ -165,7 +165,7 @@ export default function CompleteProfilePage() {
       </Head>
 
       <div 
-        className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4 py-8" 
+        className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4 py-8 pt-safe pb-safe" 
         dir={isRTL ? 'rtl' : 'ltr'}
         role="main"
       >
