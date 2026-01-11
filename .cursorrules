@@ -52,6 +52,7 @@ cd frontend && npm run test:run  # Frontend only
 
 ### After Editing Files:
 - **ALWAYS** check for lint errors using the `read_lints` tool
+- **ALWAYS** run tests after changes: `npm run test` or `cd frontend && npm run test`
 - Fix any errors before committing
 - Use `lint:fix` for auto-fixable issues
 
@@ -394,7 +395,8 @@ When working on this codebase, follow these steps:
 
 3. **After editing:**
    - Call `read_lints` on modified files
-   - Fix any lint errors before proceeding
+   - **Run tests**: `npm run test` or `cd frontend && npm run test`
+   - Fix any lint/test errors before proceeding
    - Commit with descriptive messages
 
 4. **Commit message format:**

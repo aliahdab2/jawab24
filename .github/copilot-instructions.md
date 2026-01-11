@@ -75,8 +75,11 @@ Sanctioned: Cuba, Iran, North Korea, Syria, Crimea, etc.
 - Version: v20+
 - Package Manager: npm (workspaces)
 
-### After Editing
+### After Editing (REQUIRED)
 ```bash
 npm run lint      # Check for errors
 npm run lint:fix  # Auto-fix
+npm run test      # Run tests (REQUIRED after ANY change)
 ```
+
+**Never commit without running tests first!**

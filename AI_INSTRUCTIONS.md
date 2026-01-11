@@ -183,14 +183,16 @@ cd backend && npm run dev     # Port 3000
 npm run lint
 npm run lint:fix
 
+# Run tests (REQUIRED after ANY code change)
+npm run test
+# Or for frontend only:
+cd frontend && npm run test
+
 # Build mobile app
 cd frontend
 npm run build:mobile
 npx cap sync android
 cd android && ./gradlew assembleDebug
-
-# Run tests
-npm run test
 ```
 
 ---
