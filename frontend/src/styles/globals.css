@@ -685,6 +685,12 @@
   --min-safe-bottom: 20px;
 }
 
+/* Global bottom padding for ALL pages in native app */
+/* This ensures scrollable content can scroll past the system navigation */
+.is-native body {
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+}
+
 /* Basic safe area padding utilities */
 .pt-safe {
   padding-top: max(var(--min-safe-top), var(--safe-top));
