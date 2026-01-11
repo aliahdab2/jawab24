@@ -143,9 +143,19 @@ html.is-native body {
 // Sticky header - NEEDS pt-safe  
 <header className="sticky top-0 pt-safe">
 
-// Regular content - NO safe area classes needed
-<div className="min-h-screen">
+// Page header (at top of scrollable content) - NEEDS pt-safe
+<div className="flex items-center h-16 pt-safe">
+
+// Footer (at bottom of page) - NEEDS pb-safe
+<footer className="p-4 pb-safe">
+
+// Regular content in middle - NO safe area classes needed
+<div className="flex-1">
 ```
+
+### Every Page Needs:
+1. **Top element**: `pt-safe` (header, nav, or first visible element)
+2. **Bottom element**: `pb-safe` (footer, last content, or copyright)
 
 ---
 
