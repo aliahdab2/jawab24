@@ -625,11 +625,11 @@ export default function SettingsPage() {
             className="
               inline-flex items-center 
               whitespace-nowrap
-              rounded-xl 
+              rounded-lg
               border border-red-200 
               bg-white 
-              px-6 py-3 
-              text-sm font-bold 
+              px-3 py-1.5
+              text-xs font-bold 
               text-red-500 
               shadow-sm
               transition-all 
