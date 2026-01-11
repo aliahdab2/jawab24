@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -30,6 +30,8 @@ export default function LoginPage() {
   // isProcessing: true after Facebook returns, while we authenticate with backend
   // This shows a blank screen instead of the login page to avoid flashing
   const [isProcessing, setIsProcessing] = useState(false);
+  // Track if login is in progress to prevent double-clicks (using ref to avoid re-render/spinner)
+  const isLoginInProgress = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -47,10 +49,15 @@ export default function LoginPage() {
   // import { FacebookLogin, FacebookLoginResponse } from '@capacitor-community/facebook-login';
 
   const handleFacebookLogin = async () => {
+    // Prevent double-clicks (no visual change, just blocks the action)
+    if (isLoginInProgress.current) return;
+    isLoginInProgress.current = true;
+
     // Check for Facebook App ID
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     if (!fbAppId) {
       toast.error(t('auth.loginError'));
+      isLoginInProgress.current = false;
       return;
     }
 
@@ -75,6 +82,7 @@ export default function LoginPage() {
 
         if (!result.accessToken) {
           // User cancelled - stay on login page
+          isLoginInProgress.current = false;
           return;
         }
 
@@ -98,6 +106,7 @@ export default function LoginPage() {
       } catch (error: any) {
         console.error('Native login error:', error);
         toast.error(error.response?.data?.message || t('auth.loginError'));
+        isLoginInProgress.current = false;
         setIsProcessing(false);
       }
 
