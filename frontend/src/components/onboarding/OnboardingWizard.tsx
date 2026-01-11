@@ -214,7 +214,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               {!isFirstStep && (
                 <Button
                   variant="secondary"
-                  size={isLandscape ? 'default' : 'lg'}
+                  size={isLandscape ? 'md' : 'lg'}
                   onClick={handlePrev}
                   className="flex-1"
                 >
@@ -224,7 +224,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
                 </Button>
               )}
               <Button
-                size={isLandscape ? 'default' : 'lg'}
+                size={isLandscape ? 'md' : 'lg'}
                 onClick={handleNext}
                 className={`flex-1 ${isFirstStep ? 'w-full' : ''}`}
               >

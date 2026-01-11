@@ -152,7 +152,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl]);
+  }, [token, apiUrl, setOnboardingVisible]);
 
   useEffect(() => {
     if (token) {
