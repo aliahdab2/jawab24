@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   FileText, 
   Zap, 
@@ -18,10 +18,63 @@ interface OnboardingWizardProps {
   onSkip: () => void;
 }
 
+// Visual component that adapts to landscape
+function StepVisual({ 
+  icon: Icon, 
+  color, 
+  isLandscape,
+  isLastStep 
+}: { 
+  icon: React.ElementType; 
+  color: string; 
+  isLandscape: boolean;
+  isLastStep: boolean;
+}) {
+  const colorClasses: Record<string, string> = {
+    brand: 'bg-gradient-to-br from-brand-400 to-accent-500 shadow-2xl shadow-brand-500/30',
+    blue: 'bg-blue-100',
+    emerald: 'bg-emerald-100',
+    amber: 'bg-amber-100',
+  };
+
+  const iconColorClasses: Record<string, string> = {
+    brand: 'text-white',
+    blue: 'text-blue-600',
+    emerald: 'text-emerald-600',
+    amber: 'text-amber-600',
+  };
+
+  const size = isLandscape ? 'w-20 h-20' : 'w-32 h-32';
+  const iconSize = isLandscape ? 'w-10 h-10' : 'w-16 h-16';
+
+  return (
+    <div className={`${size} mx-auto ${colorClasses[color]} rounded-3xl flex items-center justify-center ${isLastStep ? 'animate-bounce' : ''}`}>
+      <Icon className={`${iconSize} ${iconColorClasses[color]}`} />
+    </div>
+  );
+}
+
 export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) {
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
   const [currentStep, setCurrentStep] = useState(0);
+  const [isLandscape, setIsLandscape] = useState(false);
+
+  // Detect orientation using matchMedia (industry standard)
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(orientation: landscape)');
+    setIsLandscape(mediaQuery.matches);
+    
+    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  // Prevent body scroll when wizard is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
 
   const steps = [
     {
@@ -29,55 +82,30 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       color: 'brand',
       title: t('onboarding.welcomeTitle'),
       description: t('onboarding.welcomeDesc'),
-      visual: (
-        <div className="w-32 h-32 mx-auto bg-gradient-to-br from-brand-400 to-accent-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-brand-500/30">
-          <Sparkles className="w-16 h-16 text-white" />
-        </div>
-      ),
     },
     {
       icon: FacebookIcon,
       color: 'blue',
       title: t('onboarding.step1Title'),
       description: t('onboarding.step1Desc'),
-      visual: (
-        <div className="w-32 h-32 mx-auto bg-blue-100 rounded-3xl flex items-center justify-center">
-          <FacebookIcon className="w-16 h-16 text-blue-600" />
-        </div>
-      ),
     },
     {
       icon: FileText,
       color: 'emerald',
       title: t('onboarding.step2Title'),
       description: t('onboarding.step2Desc'),
-      visual: (
-        <div className="w-32 h-32 mx-auto bg-emerald-100 rounded-3xl flex items-center justify-center">
-          <FileText className="w-16 h-16 text-emerald-600" />
-        </div>
-      ),
     },
     {
       icon: Zap,
       color: 'amber',
       title: t('onboarding.step3Title'),
       description: t('onboarding.step3Desc'),
-      visual: (
-        <div className="w-32 h-32 mx-auto bg-amber-100 rounded-3xl flex items-center justify-center">
-          <Zap className="w-16 h-16 text-amber-600" />
-        </div>
-      ),
     },
     {
       icon: CheckCircle2,
       color: 'emerald',
       title: t('onboarding.completeTitle'),
       description: t('onboarding.completeDesc'),
-      visual: (
-        <div className="w-32 h-32 mx-auto bg-emerald-100 rounded-3xl flex items-center justify-center animate-bounce">
-          <CheckCircle2 className="w-16 h-16 text-emerald-600" />
-        </div>
-      ),
     },
   ];
 
@@ -112,83 +140,103 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       dir={isRTL ? 'rtl' : 'ltr'}
     >
       <div 
-        className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden animate-In slide-in-from-bottom-4 duration-300"
+        className={`bg-white rounded-3xl shadow-2xl overflow-hidden animate-In slide-in-from-bottom-4 duration-300 ${
+          isLandscape ? 'max-w-2xl w-full max-h-[90vh]' : 'max-w-md w-full'
+        }`}
         {...swipeHandlers}
       >
         {/* Skip button */}
-        <div className="flex justify-end p-4 pb-0">
+        <div className={`flex justify-end ${isLandscape ? 'p-3 pb-0' : 'p-4 pb-0'}`}>
           <button 
             onClick={onSkip}
-            className="text-surface-400 hover:text-surface-600 text-sm flex items-center gap-1"
+            className="text-surface-400 hover:text-surface-600 text-sm flex items-center gap-1 min-h-[44px] min-w-[44px] justify-center"
           >
             {t('onboarding.skip')}
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Content with transition based on currentStep */}
+        {/* Content - Horizontal in landscape, Vertical in portrait */}
         <div 
           key={currentStep}
-          className="px-8 pb-8 pt-4 text-center animate-In fade-in slide-in-from-right-4 duration-300 ltr:animate-In rtl:animate-In rtl:slide-in-from-left-4"
+          className={`animate-In fade-in duration-300 ${
+            isLandscape 
+              ? 'flex items-center gap-6 px-6 pb-4 pt-2' 
+              : 'px-8 pb-8 pt-4 text-center'
+          }`}
         >
           {/* Visual */}
-          <div className="mb-6">
-            {currentStepData.visual}
+          <div className={isLandscape ? 'flex-shrink-0' : 'mb-6'}>
+            <StepVisual 
+              icon={currentStepData.icon} 
+              color={currentStepData.color} 
+              isLandscape={isLandscape}
+              isLastStep={isLastStep}
+            />
           </div>
 
-          {/* Title */}
-          <h2 className="text-2xl font-bold text-surface-900 mb-3">
-            {currentStepData.title}
-          </h2>
+          {/* Text content */}
+          <div className={isLandscape ? 'flex-1 min-w-0' : ''}>
+            {/* Title */}
+            <h2 className={`font-bold text-surface-900 ${
+              isLandscape ? 'text-xl mb-1 text-start' : 'text-2xl mb-3'
+            }`}>
+              {currentStepData.title}
+            </h2>
 
-          {/* Description */}
-          <p className="text-surface-600 text-lg mb-8 leading-relaxed">
-            {currentStepData.description}
-          </p>
+            {/* Description */}
+            <p className={`text-surface-600 leading-relaxed ${
+              isLandscape ? 'text-sm mb-3 text-start' : 'text-lg mb-8'
+            }`}>
+              {currentStepData.description}
+            </p>
 
-          {/* Progress dots */}
-          <div className="flex justify-center gap-2 mb-6">
-            {steps.map((_, index) => (
-              <div
-                key={index}
-                className={`w-2.5 h-2.5 rounded-full transition-all ${
-                  index === currentStep 
-                    ? 'bg-brand-500 w-8' 
-                    : index < currentStep 
-                    ? 'bg-brand-300' 
-                    : 'bg-surface-200'
-                }`}
-              />
-            ))}
-          </div>
+            {/* Progress dots */}
+            <div className={`flex gap-2 ${isLandscape ? 'mb-3 justify-start' : 'mb-6 justify-center'}`}>
+              {steps.map((_, index) => (
+                <div
+                  key={index}
+                  className={`h-2 rounded-full transition-all ${
+                    isLandscape ? 'w-2' : 'w-2.5 h-2.5'
+                  } ${
+                    index === currentStep 
+                      ? `bg-brand-500 ${isLandscape ? 'w-6' : 'w-8'}` 
+                      : index < currentStep 
+                      ? 'bg-brand-300' 
+                      : 'bg-surface-200'
+                  }`}
+                />
+              ))}
+            </div>
 
-          {/* Buttons */}
-          <div className="flex gap-3">
-            {!isFirstStep && (
-              <Button
-                variant="secondary"
-                size="lg"
-                onClick={handlePrev}
-                className="flex-1"
-              >
-                <span className="rtl:block ltr:hidden"><ArrowRight className="w-5 h-5" /></span>
-                <span className="ltr:block rtl:hidden"><ArrowLeft className="w-5 h-5" /></span>
-                {t('onboarding.previous')}
-              </Button>
-            )}
-            <Button
-              size="lg"
-              onClick={handleNext}
-              className={`flex-1 ${isFirstStep ? 'w-full' : ''}`}
-            >
-              {isLastStep ? t('onboarding.letsGo') : t('onboarding.next')}
-              {!isLastStep && (
-                <>
-                  <span className="rtl:block ltr:hidden"><ArrowLeft className="w-5 h-5" /></span>
-                  <span className="ltr:block rtl:hidden"><ArrowRight className="w-5 h-5" /></span>
-                </>
+            {/* Buttons */}
+            <div className={`flex gap-3 ${isLandscape ? '' : ''}`}>
+              {!isFirstStep && (
+                <Button
+                  variant="secondary"
+                  size={isLandscape ? 'default' : 'lg'}
+                  onClick={handlePrev}
+                  className="flex-1"
+                >
+                  <span className="rtl:block ltr:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                  <span className="ltr:block rtl:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                  {t('onboarding.previous')}
+                </Button>
               )}
-            </Button>
+              <Button
+                size={isLandscape ? 'default' : 'lg'}
+                onClick={handleNext}
+                className={`flex-1 ${isFirstStep ? 'w-full' : ''}`}
+              >
+                {isLastStep ? t('onboarding.letsGo') : t('onboarding.next')}
+                {!isLastStep && (
+                  <>
+                    <span className="rtl:block ltr:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                    <span className="ltr:block rtl:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
