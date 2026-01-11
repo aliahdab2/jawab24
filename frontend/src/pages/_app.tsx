@@ -217,19 +217,10 @@ export default function App({ Component, pageProps }: AppProps) {
     };
   }, [hasHydrated]);
 
-  // Hydration guard - show branded splash while loading secure storage
+  // Hydration guard - show minimal white screen while loading
   if (!hasHydrated) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-center animate-pulse">
-          <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center">
-            <span className="text-white text-3xl font-bold">ج</span>
-          </div>
-          <div className="h-1 w-24 mx-auto bg-zinc-800 rounded-full overflow-hidden">
-            <div className="h-full w-1/2 bg-teal-500 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]" />
-          </div>
-        </div>
-      </div>
+      <div className="min-h-screen bg-white" />
     );
   }
 

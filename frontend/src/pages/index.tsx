@@ -41,14 +41,8 @@ export default function Home() {
     }
   }, [isAuthenticated, _hasHydrated, mounted]);
 
-  // Show same branded splash as _app.tsx for consistency (no jarring transition)
+  // Minimal loading - just white screen while redirecting
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="text-center animate-pulse">
-        <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl flex items-center justify-center">
-          <span className="text-white text-3xl font-bold">ج</span>
-        </div>
-      </div>
-    </div>
+    <div className="min-h-screen bg-white" dir={isRTL ? 'rtl' : 'ltr'} />
   );
 }
