@@ -81,7 +81,30 @@ className="ps-4 pe-2 ms-auto text-start"
 </div>
 ```
 
-### 4. Translations
+### 4. Stripe & Sanctioned Countries (LEGAL REQUIREMENT)
+
+**Block Stripe API calls for users from sanctioned countries BEFORE making any request.**
+
+```tsx
+// ❌ WRONG - calling Stripe then checking country
+const paymentIntent = await stripe.paymentIntents.create({...});
+if (isSanctionedCountry(user.country)) throw new Error();
+
+// ✅ CORRECT - check BEFORE any Stripe call
+if (isSanctionedCountry(user.country)) {
+  throw new Error('Service not available in your region');
+}
+const paymentIntent = await stripe.paymentIntents.create({...});
+```
+
+**Sanctioned countries include**: Cuba, Iran, North Korea, Syria, Crimea region, and others per Stripe's restricted list.
+
+This check must happen:
+- On frontend before showing payment UI
+- On backend before ANY Stripe API call
+- Never bypass or delay this check
+
+### 5. Translations
 
 **Never hardcode user-facing strings.**
 
@@ -213,6 +236,7 @@ return (
 | Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
 | Ignoring landscape mode | Test both orientations, use `landscape:` |
 | Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |
+| Stripe call without country check | ALWAYS check sanctioned countries first |
 
 ---
 
@@ -267,3 +291,6 @@ refactor(css): consolidate safe areas
 - [ ] Content containers do NOT have `pt-safe`/`pb-safe`
 - [ ] Added `dir` attribute where needed
 - [ ] Tested in both English and Arabic
+- [ ] **Works in portrait mode**
+- [ ] **Works in landscape mode** (buttons visible, content scrollable)
+- [ ] Modals don't overflow screen in landscape

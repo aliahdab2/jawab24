@@ -55,6 +55,19 @@ className="block landscape:hidden"  // Hide in landscape
 <button>{t('common.save')}</button>
 ```
 
+### Stripe - Block Sanctioned Countries First (LEGAL)
+```tsx
+// ❌ NEVER call Stripe without checking first
+const intent = await stripe.paymentIntents.create({...});
+
+// ✅ ALWAYS check country before ANY Stripe call
+if (isSanctionedCountry(user.country)) {
+  throw new Error('Service not available in your region');
+}
+const intent = await stripe.paymentIntents.create({...});
+```
+Sanctioned: Cuba, Iran, North Korea, Syria, Crimea, etc.
+
 ### Node.js
 - Version: v20+
 - Package Manager: npm (workspaces)

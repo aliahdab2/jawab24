@@ -301,6 +301,32 @@ frontend/
 6. **Fixed heights in modals/overlays**: Use `max-h-[vh]` + `overflow-auto` for scrolling
 7. **Ignoring landscape mode**: Test BOTH orientations - buttons must stay visible
 8. **Non-scrollable modals**: Always use `flex-col` with scrollable body, fixed header/footer
+9. **Stripe without country check**: ALWAYS block sanctioned countries BEFORE any Stripe API call
+
+---
+
+## 💳 Stripe & Sanctions (LEGAL REQUIREMENT)
+
+**Block users from sanctioned countries BEFORE making any Stripe API call.**
+
+```tsx
+// ❌ WRONG - Stripe call without check
+const paymentIntent = await stripe.paymentIntents.create({...});
+
+// ✅ CORRECT - Check FIRST, then call Stripe
+if (isSanctionedCountry(user.country)) {
+  throw new Error('Service not available in your region');
+}
+const paymentIntent = await stripe.paymentIntents.create({...});
+```
+
+### Sanctioned Countries (per Stripe):
+Cuba, Iran, North Korea, Syria, Crimea region, and others per Stripe's restricted business list.
+
+### Where to Check:
+1. **Frontend**: Before showing payment UI/checkout
+2. **Backend**: Before ANY call to Stripe API
+3. **Never**: Bypass, delay, or skip this check
 
 ---
 
