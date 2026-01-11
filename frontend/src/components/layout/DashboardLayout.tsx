@@ -102,9 +102,10 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </div>
           </div>
         ) : (
-          /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+ */
+          /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+ 
+             Uses box-content so pt-safe adds to height rather than squishing content */
           <div
-            className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 z-40 pt-safe"
+            className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 z-40 pt-safe box-content"
             style={{
               background: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 75%, transparent 100%)'
             }}

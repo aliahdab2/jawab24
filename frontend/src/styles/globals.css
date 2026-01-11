@@ -812,43 +812,73 @@ body.is-native {
    In landscape, notch moves to side, needs side padding
 ═══════════════════════════════════════════════════════════════════ */
 @media (orientation: landscape) {
-  .is-native {
+  html.is-native,
+  body.is-native {
     --min-safe-bottom: 8px; /* Smaller in landscape */
   }
   
   /* Add side safe areas for notch/cutout in landscape */
   .px-safe-landscape,
-  .is-native .px-safe-auto {
+  html.is-native .px-safe-auto,
+  body.is-native .px-safe-auto {
     padding-left: max(12px, var(--safe-left));
     padding-right: max(12px, var(--safe-right));
   }
 }
 
-/* Combined: header height + safe area (for content below fixed headers) */
+/* Combined: header height + safe area (for content below sticky headers) 
+   Note: For native apps, header has box-content + pt-safe which adds safe area to height.
+   So pt-header should add header base height + safe area that pt-safe adds */
 .pt-header {
-  padding-top: calc(var(--header-height) + var(--safe-area-top));
+  padding-top: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+}
+
+/* Native apps: header uses max() for safe area, so we match */
+html.is-native .pt-header,
+body.is-native .pt-header {
+  padding-top: calc(var(--header-height) + max(24px, env(safe-area-inset-top, 0px)));
 }
 
 @media (min-width: 640px) {
   .pt-header {
-    padding-top: calc(var(--header-height-lg) + var(--safe-area-top));
+    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 0px));
+  }
+  
+  html.is-native .pt-header,
+  body.is-native .pt-header {
+    padding-top: calc(var(--header-height-lg) + max(24px, env(safe-area-inset-top, 0px)));
   }
 }
 
 /* Hero sections: header + extra breathing room */
 .pt-hero {
-  padding-top: calc(var(--header-height) + var(--safe-area-top) + 3rem);
+  padding-top: calc(var(--header-height) + env(safe-area-inset-top, 0px) + 3rem);
+}
+
+html.is-native .pt-hero,
+body.is-native .pt-hero {
+  padding-top: calc(var(--header-height) + max(24px, env(safe-area-inset-top, 0px)) + 3rem);
 }
 
 @media (min-width: 640px) {
   .pt-hero {
-    padding-top: calc(var(--header-height-lg) + var(--safe-area-top) + 3rem);
+    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 0px) + 3rem);
+  }
+  
+  html.is-native .pt-hero,
+  body.is-native .pt-hero {
+    padding-top: calc(var(--header-height-lg) + max(24px, env(safe-area-inset-top, 0px)) + 3rem);
   }
 }
 
 @media (min-width: 1024px) {
   .pt-hero {
-    padding-top: calc(var(--header-height-lg) + var(--safe-area-top) + 5rem);
+    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 0px) + 5rem);
+  }
+  
+  html.is-native .pt-hero,
+  body.is-native .pt-hero {
+    padding-top: calc(var(--header-height-lg) + max(24px, env(safe-area-inset-top, 0px)) + 5rem);
   }
 }
 
