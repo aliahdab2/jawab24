@@ -155,6 +155,9 @@ describe('LoginPage', () => {
             // Mock Capacitor for Mobile
             const { Capacitor } = await import('@capacitor/core');
             (Capacitor.isNativePlatform as any).mockReturnValue(true);
+            
+            // Setup Facebook Login mock BEFORE rendering (component pre-initializes SDK on mount)
+            (FacebookLogin.login as any).mockResolvedValue({ accessToken: { token: 'native-fb-token' } });
         });
 
         it('should use native SDK when on mobile platform', async () => {
@@ -169,11 +172,12 @@ describe('LoginPage', () => {
                 }
             } as any);
 
-            // Mock Facebook Login Plugin
-            const mockLogin = vi.fn().mockResolvedValue({ accessToken: { token: 'native-fb-token' } });
-            (FacebookLogin.login as any).mockImplementation(mockLogin);
-
             render(<LoginPage />);
+            
+            // Wait for pre-initialization to complete
+            await vi.waitFor(() => {
+                expect(FacebookLogin.initialize).toHaveBeenCalled();
+            });
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
             fireEvent.click(loginButton);
