@@ -653,57 +653,86 @@
   animation-delay: 1s;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   SAFE AREA UTILITIES - Centralized safe area handling
-   These use the CSS variables defined in :root
-═══════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   SAFE AREA STRATEGY - INDUSTRY BEST PRACTICES (Facebook, Instagram, WhatsApp)
+   
+   The key insight: Native apps have a FIXED safe area background that is 
+   always visible. Content scrolls WITHIN this safe zone.
+   
+   Strategy:
+   1. Root container fills viewport with safe area padding
+   2. Fixed elements (header, bottom nav) position relative to safe areas
+   3. Bottom nav sits ABOVE safe area, with its own safe area background below
+   4. All safe areas use max() to ensure minimum values on Android
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* CSS Variables for safe areas with fallbacks */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  
+  /* Minimum safe areas for Android (which often reports 0) */
+  --min-safe-top: 0px;
+  --min-safe-bottom: 0px;
+}
+
+/* Native apps need minimum safe areas since Android often returns 0 */
+.is-native {
+  --min-safe-top: 24px;
+  --min-safe-bottom: 12px;
+}
 
 /* Basic safe area padding utilities */
 .pt-safe {
-  padding-top: var(--safe-area-top);
+  padding-top: max(var(--min-safe-top), var(--safe-top));
 }
 
 .pb-safe {
-  padding-bottom: var(--safe-area-bottom);
+  padding-bottom: max(var(--min-safe-bottom), var(--safe-bottom));
 }
 
 .px-safe {
-  padding-left: var(--safe-area-left);
-  padding-right: var(--safe-area-right);
+  padding-left: max(0px, var(--safe-left));
+  padding-right: max(0px, var(--safe-right));
 }
 
-/* For native apps, ensure minimum safe areas */
-.is-native .pt-safe {
-  padding-top: max(24px, var(--safe-area-top));
-}
-
-/* CRITICAL: Android doesn't report safe-area-inset-bottom for gesture navigation
-   We need a minimum bottom safe area to prevent overlap with system navigation */
-.is-native .pb-safe,
-.is-native .pb-safe-min {
-  padding-bottom: max(16px, var(--safe-area-bottom));
+/* ═══════════════════════════════════════════════════════════════════
+   FIXED BOTTOM SAFE AREA BACKGROUND
+   Like Facebook: A fixed element at the very bottom that provides
+   a solid background behind the system navigation area
+═══════════════════════════════════════════════════════════════════ */
+.bottom-safe-bg {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: max(var(--min-safe-bottom), var(--safe-bottom));
+  background: inherit;
+  z-index: 39; /* Just below bottom nav (z-40) */
+  pointer-events: none;
 }
 
 /* Bottom inset utility - positions element above system navigation */
-.is-native .bottom-safe {
-  bottom: max(16px, var(--safe-area-bottom));
+.bottom-safe {
+  bottom: max(var(--min-safe-bottom), var(--safe-bottom));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
    LANDSCAPE MODE SAFE AREAS
-   In landscape, notch moves to side, bottom nav needs side padding
+   In landscape, notch moves to side, needs side padding
 ═══════════════════════════════════════════════════════════════════ */
 @media (orientation: landscape) {
-  /* Landscape: Add side safe areas for notch/cutout */
-  .is-native .px-safe-landscape {
-    padding-left: max(16px, var(--safe-area-left));
-    padding-right: max(16px, var(--safe-area-right));
+  .is-native {
+    --min-safe-bottom: 8px; /* Smaller in landscape */
   }
   
-  /* Landscape: Bottom safe area is typically smaller */
-  .is-native .pb-safe,
-  .is-native .pb-safe-min {
-    padding-bottom: max(8px, var(--safe-area-bottom));
+  /* Add side safe areas for notch/cutout in landscape */
+  .px-safe-landscape,
+  .is-native .px-safe-auto {
+    padding-left: max(12px, var(--safe-left));
+    padding-right: max(12px, var(--safe-right));
   }
 }
 

@@ -138,51 +138,76 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             !isCleanLayout && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >
-          <div className={clsx(
-            'p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
-            isCleanLayout ? 'pb-12' : 'pb-32 lg:pb-12'
-          )}>
+          <div 
+            className={clsx(
+              'p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
+              isCleanLayout ? 'pb-12' : 'lg:pb-12'
+            )}
+            style={!isCleanLayout ? {
+              // Mobile: padding = nav (64px) + safe area + extra 16px breathing room
+              paddingBottom: 'calc(80px + max(12px, env(safe-area-inset-bottom, 0px)))'
+            } : undefined}
+          >
             {children}
           </div>
         </main>
 
-        {/* Mobile bottom navigation - h-16 (64px) + safe areas for system navigation */}
-        {/* Portrait: bottom padding for home indicator / nav buttons */}
-        {/* Landscape: side padding for notch + reduced bottom padding */}
+        {/* ═══════════════════════════════════════════════════════════════
+            MOBILE BOTTOM NAVIGATION - Industry Best Practice (Facebook-style)
+            
+            Structure:
+            1. Fixed safe area background (z-39) - white bar behind system nav
+            2. Bottom nav (z-40) - positioned ABOVE the safe area
+            
+            This ensures system navigation buttons always have a white background
+        ═══════════════════════════════════════════════════════════════ */}
         {!isCleanLayout && (
-          <nav
-            className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
-            style={{
-              paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))',
-              paddingLeft: 'max(8px, env(safe-area-inset-left, 0px))',
-              paddingRight: 'max(8px, env(safe-area-inset-right, 0px))'
-            }}
-          >
-            <MobileNavButton
-              onClick={() => router.push('/dashboard')}
-              icon={<LayoutDashboard className="w-6 h-6" />}
-              label={t('nav.dashboard')}
-              active={router.pathname === '/dashboard'}
+          <>
+            {/* Fixed bottom safe area background - like Facebook */}
+            {/* This white bar is ALWAYS visible behind system navigation */}
+            <div 
+              className="lg:hidden fixed bottom-0 left-0 right-0 bg-white z-[39]"
+              style={{ height: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
+              aria-hidden="true"
             />
-            <MobileNavButton
-              onClick={() => router.push('/comments')}
-              icon={<MessageSquare className="w-6 h-6" />}
-              label={t('nav.comments')}
-              active={router.pathname === '/comments'}
-            />
-            <MobileNavButton
-              onClick={() => router.push('/messages')}
-              icon={<MessageCircle className="w-6 h-6" />}
-              label={t('nav.messages')}
-              active={router.pathname === '/messages'}
-            />
-            <MobileNavButton
-              onClick={() => setMobileMenuOpen(true)}
-              icon={<MoreHorizontal className="w-6 h-6" />}
-              label={t('nav.more') || 'More'}
-              active={mobileMenuOpen}
-            />
-          </nav>
+            
+            {/* Bottom navigation - sits ABOVE the safe area */}
+            <nav
+              className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
+              style={{
+                // Position nav ABOVE the safe area (not overlapping)
+                bottom: 'max(12px, env(safe-area-inset-bottom, 0px))',
+                // Side padding for landscape notch
+                paddingLeft: 'max(8px, env(safe-area-inset-left, 0px))',
+                paddingRight: 'max(8px, env(safe-area-inset-right, 0px))'
+              }}
+            >
+              <MobileNavButton
+                onClick={() => router.push('/dashboard')}
+                icon={<LayoutDashboard className="w-6 h-6" />}
+                label={t('nav.dashboard')}
+                active={router.pathname === '/dashboard'}
+              />
+              <MobileNavButton
+                onClick={() => router.push('/comments')}
+                icon={<MessageSquare className="w-6 h-6" />}
+                label={t('nav.comments')}
+                active={router.pathname === '/comments'}
+              />
+              <MobileNavButton
+                onClick={() => router.push('/messages')}
+                icon={<MessageCircle className="w-6 h-6" />}
+                label={t('nav.messages')}
+                active={router.pathname === '/messages'}
+              />
+              <MobileNavButton
+                onClick={() => setMobileMenuOpen(true)}
+                icon={<MoreHorizontal className="w-6 h-6" />}
+                label={t('nav.more') || 'More'}
+                active={mobileMenuOpen}
+              />
+            </nav>
+          </>
         )}
 
         {/* Mobile Menu Overlay - Industry Standard: Bottom sheet (portrait) / Centered modal (landscape) */}
