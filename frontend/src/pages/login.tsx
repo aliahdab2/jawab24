@@ -27,7 +27,9 @@ export default function LoginPage() {
 
   const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  // isProcessing: true after Facebook returns, while we authenticate with backend
+  // This shows a blank screen instead of the login page to avoid flashing
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -35,113 +37,90 @@ export default function LoginPage() {
 
   if (!mounted) return null;
 
+  // Show blank screen while processing auth (after Facebook returns)
+  // This prevents the login page from flashing before navigating to dashboard
+  if (isProcessing) {
+    return <div className="min-h-screen bg-white" />;
+  }
+
   // Import dynamically to avoid SSR issues
   // import { FacebookLogin, FacebookLoginResponse } from '@capacitor-community/facebook-login';
 
   const handleFacebookLogin = async () => {
-    try {
-      setIsLoading(true);
-      // Check for Facebook App ID
-      const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
-      if (!fbAppId) {
-        toast.error(t('auth.loginError'));
-        setIsLoading(false);
-        return;
-      }
+    // Check for Facebook App ID
+    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
+    if (!fbAppId) {
+      toast.error(t('auth.loginError'));
+      return;
+    }
 
-      // Check if running in Native Mobile App
-      const isMobile = Capacitor.isNativePlatform();
-      // eslint-disable-next-line no-console
-      console.log('[Login] Platform check:', { isMobile, platform: Capacitor.getPlatform() });
+    // Check if running in Native Mobile App
+    const isMobile = Capacitor.isNativePlatform();
 
-      if (isMobile) {
-        // --- NATIVE MOBILE LOGIN FLOW ---
+    if (isMobile) {
+      // --- NATIVE MOBILE LOGIN FLOW ---
+      try {
         const { FacebookLogin } = await import('@capacitor-community/facebook-login');
         
-        // 1. Request Native Login
-        // Using same permissions as web
-        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
-        let result;
+        // Initialize the plugin (required before any other call)
         try {
-            result = await FacebookLogin.login({ permissions });
-        } catch (fbError: any) {
-            throw fbError;
+          await FacebookLogin.initialize({ appId: fbAppId });
+        } catch {
+          // May already be initialized - that's OK
+        }
+        
+        // Open native Facebook login dialog
+        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
+        const result = await FacebookLogin.login({ permissions });
+
+        if (!result.accessToken) {
+          // User cancelled - do nothing, stay on login page
+          return;
         }
 
-        if (result.accessToken) {
-          // 2. Login Logic
-          const fbAccessToken = result.accessToken.token;
-          
-          
-          try {
-              // 3. Call backend to swap fbAccessToken for Session Token
-              const response = await authApi.nativeFacebookLogin(fbAccessToken);
-              const { user, token, settings } = response.data;
-              
-              // 4. Set Auth State (Client Side)
-              setAuth(user, token, fbAccessToken);
-              
-              const finalLocale = settings?.dashboardLanguage || language || 'ar';
-              useUIStore.getState().setLanguage(finalLocale);
+        // Facebook returned! Show blank screen while we authenticate with backend
+        setIsProcessing(true);
 
-              // 5. Handle Redirect with correct locale
-              const returnUrl = router.query.redirect as string || '/dashboard';
-              
-              // 6. Navigate
-              await router.push(returnUrl, returnUrl, { locale: finalLocale });
-
-          } catch (error: any) {
-              console.error('Backend Login Error:', error);
-              toast.error(t('auth.loginError'));
-              setIsLoading(false);
-          }
-
-        } else {
-          // User cancelled
-          setIsLoading(false);
-        }
-
-      } else {
-        // --- WEB BROWSER LOGIN FLOW (Legacy) ---
-        // Use locale-specific callback URL (standard best practice)
-        // Normalize site URL
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-        const normalizedOrigin = siteUrl.replace(/\/$/, '');
-
-        const localePath = language === 'ar' ? '' : `/${language}`;
-
-        // INDUSTRY STANDARD: Use locale-specific callback URL (matches whitelist)
-        const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
-        const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
-        const redirectUri = encodeURIComponent(redirectUriClean);
-
-        const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
+        // Exchange FB token for our session token
+        const response = await authApi.nativeFacebookLogin(result.accessToken.token);
+        const { user, token, settings } = response.data;
         
-        const urlParams = new URLSearchParams(window.location.search);
-        const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
+        // Set auth state
+        setAuth(user, token, result.accessToken.token);
         
-        // Pass language in state so we can restore it after callback
-        const stateData = `${returnUrl}|web|${language}`;
-        const state = encodeURIComponent(stateData);
+        const finalLocale = settings?.dashboardLanguage || language || 'ar';
+        useUIStore.getState().setLanguage(finalLocale);
 
-        // Check for Mobile Browser (not Native App)
-        const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        const displayMode = isMobileWeb ? 'touch' : 'page';
+        // Navigate to dashboard
+        const returnUrl = router.query.redirect as string || '/dashboard';
+        await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
-        const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}`;
-
-        // Standard Web Redirect
-        window.location.href = facebookAuthUrl;
-      }
       } catch (error: any) {
-        console.error('Facebook login error:', error);
-        
-        const errorMsg = error.response?.data?.message || error.message || t('auth.loginError');
-        toast.error(errorMsg);
-        setIsLoading(false); // Only stop loading on error
+        console.error('Native login error:', error);
+        toast.error(error.response?.data?.message || t('auth.loginError'));
+        setIsProcessing(false);
       }
+
+    } else {
+      // --- WEB BROWSER LOGIN FLOW ---
+      // Build Facebook OAuth URL and redirect (no loading state needed - browser navigates away)
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+      const localePath = language === 'ar' ? '' : `/${language}`;
+      const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
+      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
+      const state = encodeURIComponent(`${returnUrl}|web|${language}`);
+
+      const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const displayMode = isMobileWeb ? 'touch' : 'page';
+
+      window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}`;
     }
-    // Removed finally block to prevent flash on success redirect
+  }
 
   const toggleLanguage = () => {
     setLanguage(language === 'ar' ? 'en' : 'ar');
@@ -275,21 +254,11 @@ export default function LoginPage() {
                 <Button
                   onClick={handleFacebookLogin}
                   size="lg"
-                  className={`w-full bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95 ${isLoading ? 'py-4 cursor-wait' : 'py-8'}`}
-                  disabled={isLoading}
+                  className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
                 >
                   <div className="flex items-center justify-center gap-3">
-                    {isLoading ? (
-                      <div className="flex items-center gap-3">
-                        <FacebookIcon className="w-6 h-6" />
-                        <span className="text-base font-medium">{t('auth.redirecting')}</span>
-                      </div>
-                    ) : (
-                      <>
-                        <FacebookIcon className="w-6 h-6" />
-                        <span>{t('auth.loginWithFacebook')}</span>
-                      </>
-                    )}
+                    <FacebookIcon className="w-6 h-6" />
+                    <span>{t('auth.loginWithFacebook')}</span>
                   </div>
                 </Button>
 

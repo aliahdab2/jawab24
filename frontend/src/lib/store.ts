@@ -58,6 +58,15 @@ export const useAuthStore = create<AuthState>()(
             const { Capacitor } = await import('@capacitor/core');
             if (Capacitor.isNativePlatform()) {
               const { FacebookLogin } = await import('@capacitor-community/facebook-login');
+              // Initialize first (required before any SDK calls)
+              const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
+              if (fbAppId) {
+                try {
+                  await FacebookLogin.initialize({ appId: fbAppId });
+                } catch {
+                  // May already be initialized - ignore
+                }
+              }
               await FacebookLogin.logout();
             }
           } catch (e) {
