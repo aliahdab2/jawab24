@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -30,9 +30,31 @@ export default function LoginPage() {
   // isProcessing: true after Facebook returns, while we authenticate with backend
   // This shows a blank screen instead of the login page to avoid flashing
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Pre-loaded Facebook SDK reference to avoid delay on button tap
+  const fbSdkRef = useRef<any>(null);
 
   useEffect(() => {
     setMounted(true);
+    
+    // Pre-initialize Facebook SDK on native platforms
+    // This eliminates the delay when user taps the login button
+    const preInitFacebookSDK = async () => {
+      if (!Capacitor.isNativePlatform()) return;
+      
+      const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
+      if (!fbAppId) return;
+      
+      try {
+        const { FacebookLogin } = await import('@capacitor-community/facebook-login');
+        fbSdkRef.current = FacebookLogin;
+        await FacebookLogin.initialize({ appId: fbAppId });
+      } catch {
+        // Initialization failed or already initialized - that's OK
+      }
+    };
+    
+    preInitFacebookSDK();
   }, []);
 
   if (!mounted) return null;
@@ -60,13 +82,16 @@ export default function LoginPage() {
     if (isMobile) {
       // --- NATIVE MOBILE LOGIN FLOW ---
       try {
-        const { FacebookLogin } = await import('@capacitor-community/facebook-login');
-        
-        // Initialize the plugin (required before any other call)
-        try {
-          await FacebookLogin.initialize({ appId: fbAppId });
-        } catch {
-          // May already be initialized - that's OK
+        // Use pre-loaded SDK if available, otherwise load now
+        let FacebookLogin = fbSdkRef.current;
+        if (!FacebookLogin) {
+          const fbModule = await import('@capacitor-community/facebook-login');
+          FacebookLogin = fbModule.FacebookLogin;
+          try {
+            await FacebookLogin.initialize({ appId: fbAppId });
+          } catch {
+            // May already be initialized - that's OK
+          }
         }
         
         // Open native Facebook login dialog immediately - no loading spinner
