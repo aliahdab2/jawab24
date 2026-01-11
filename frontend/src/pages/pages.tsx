@@ -386,21 +386,21 @@ export default function PagesPage() {
         </Card>
       )}
 
-      {/* Knowledge Base Modal - Full-screen on mobile for maximum textarea space */}
+      {/* Knowledge Base Modal - Responsive for portrait, landscape, and desktop */}
       {editingPage && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl h-[85vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden">
-            {/* Modal Header - Compact */}
-            <div className="flex items-center justify-between px-4 py-3 sm:p-5 border-b border-surface-100 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden">
+            {/* Modal Header - Ultra compact in landscape */}
+            <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-surface-100 flex-shrink-0">
+              <div className="flex items-center gap-3 landscape:gap-2">
+                <div className="w-9 h-9 landscape:w-8 landscape:h-8 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center">
                   <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
                 </div>
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-surface-900">
                     {t('pages.businessInfo')}
                   </h2>
-                  <p className="text-xs sm:text-sm text-surface-500">{editingPage.name}</p>
+                  <p className="text-xs sm:text-sm text-surface-500 landscape:hidden">{editingPage.name}</p>
                 </div>
               </div>
               <button
@@ -412,16 +412,16 @@ export default function PagesPage() {
             </div>
 
             {/* Modal Body - Textarea takes maximum space */}
-            <div className="flex-1 flex flex-col min-h-0 p-4 sm:p-5">
-              {/* Brief hint - always visible */}
-              <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start">
+            <div className="flex-1 flex flex-col min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5">
+              {/* Brief hint - hidden in landscape to save vertical space */}
+              <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start landscape:hidden">
                 {t('pages.businessInfoModalDesc')}
               </p>
 
               {/* Textarea - THE HERO of the modal */}
               <div className="flex-1 flex flex-col min-h-0">
                 <textarea
-                  className="flex-1 w-full min-h-[200px] p-4 border-2 border-surface-200 rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
+                  className="flex-1 w-full min-h-[100px] landscape:min-h-0 sm:min-h-[200px] p-4 landscape:p-3 border-2 border-surface-200 rounded-2xl landscape:rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
                   placeholder={t('pages.writeBusinessInfo')}
                   value={knowledgeBase}
                   onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
@@ -430,12 +430,12 @@ export default function PagesPage() {
                   autoFocus
                 />
                 
-                {/* Character Counter - inline */}
-                <div className="flex items-center justify-between mt-2 px-1">
-                  <span className="text-xs text-surface-400">
+                {/* Character Counter - inline, simplified in landscape */}
+                <div className="flex items-center justify-between mt-2 landscape:mt-1 px-1">
+                  <span className="text-xs text-surface-400 landscape:hidden">
                     {t('pages.example')}: {language === 'ar' ? 'ساعات العمل، العنوان، المنتجات...' : 'Hours, location, products...'}
                   </span>
-                  <span className={`text-xs font-medium ${
+                  <span className={`text-xs font-medium landscape:ml-auto ${
                     knowledgeBase.length > 1900
                       ? 'text-red-500'
                       : knowledgeBase.length > 1500
@@ -448,8 +448,8 @@ export default function PagesPage() {
               </div>
             </div>
 
-            {/* Modal Footer - Compact */}
-            <div className="flex items-center justify-end gap-3 px-4 py-3 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
+            {/* Modal Footer - Compact, extra compact in landscape */}
+            <div className="flex items-center justify-end gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
               <Button variant="secondary" size="sm" onClick={closeKnowledgeBase}>
                 {t('common.cancel')}
               </Button>
