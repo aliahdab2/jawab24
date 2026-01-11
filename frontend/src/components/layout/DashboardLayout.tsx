@@ -135,14 +135,15 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           className={clsx(
             'transition-all duration-500 min-h-screen',
             // Clean layout (public pages): use pt-header for fixed header spacing
-            // Regular layout: mobile gets pt-header, desktop (with sidebar) gets no top padding
-            isCleanLayout ? 'pt-header' : 'pt-header lg:pt-0',
+            // Regular layout: sticky header is in document flow, no extra padding needed on mobile
+            // Desktop (with sidebar) still gets no top padding
+            isCleanLayout ? 'pt-header' : 'lg:pt-0',
             !isCleanLayout && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >
           <div 
             className={clsx(
-              // Horizontal padding + bottom padding, but minimal top padding since main already has pt-header
+              // Padding around content - top padding is minimal since sticky header is in document flow
               'px-4 pb-4 pt-3 landscape:px-2 landscape:pt-2 md:px-8 md:pb-8 md:pt-6 lg:px-12 lg:pb-12 lg:pt-12 max-w-[1600px] mx-auto',
               isCleanLayout ? 'pb-12' : 'lg:pb-12'
             )}
