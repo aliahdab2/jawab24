@@ -248,8 +248,8 @@ export default function LoginPage() {
 
         {/* Right Side: Login Form */}
         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
-          {/* Header - Consistent height across all pages, pt-safe for notch */}
-          <div className="flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe">
+          {/* Header - Sticky + pt-safe + box-content so safe area increases total height (native status bar overlay) */}
+          <div className="sticky top-0 z-40 bg-white flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
