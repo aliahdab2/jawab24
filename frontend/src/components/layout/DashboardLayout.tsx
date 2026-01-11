@@ -116,15 +116,15 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </Link>
 
             {/* Dynamic Active Page Icon */}
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/90">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/90">
               {router.pathname.includes('/comments') ? (
-                <MessageSquare className="w-5 h-5" />
+                <MessageSquare className="w-6 h-6" />
               ) : router.pathname.includes('/messages') ? (
-                <MessageCircle className="w-5 h-5" />
+                <MessageCircle className="w-6 h-6" />
               ) : router.pathname.includes('/settings') ? (
-                <Settings className="w-5 h-5" />
+                <Settings className="w-6 h-6" />
               ) : (
-                <LayoutDashboard className="w-5 h-5" />
+                <LayoutDashboard className="w-6 h-6" />
               )}
             </div>
           </div>
@@ -195,25 +195,25 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             >
               <MobileNavButton
                 onClick={() => router.push('/dashboard')}
-                icon={<LayoutDashboard className="w-6 h-6" />}
+                icon={<LayoutDashboard className="w-7 h-7" />}
                 label={t('nav.dashboard')}
                 active={router.pathname === '/dashboard'}
               />
               <MobileNavButton
                 onClick={() => router.push('/comments')}
-                icon={<MessageSquare className="w-6 h-6" />}
+                icon={<MessageSquare className="w-7 h-7" />}
                 label={t('nav.comments')}
                 active={router.pathname === '/comments'}
               />
               <MobileNavButton
                 onClick={() => router.push('/messages')}
-                icon={<MessageCircle className="w-6 h-6" />}
+                icon={<MessageCircle className="w-7 h-7" />}
                 label={t('nav.messages')}
                 active={router.pathname === '/messages'}
               />
               <MobileNavButton
                 onClick={() => setMobileMenuOpen(true)}
-                icon={<MoreHorizontal className="w-6 h-6" />}
+                icon={<MoreHorizontal className="w-7 h-7" />}
                 label={t('nav.more') || 'More'}
                 active={mobileMenuOpen}
               />
@@ -417,7 +417,7 @@ function MobileMenuOverlay({
             className="p-2 -m-2 rounded-full hover:bg-surface-100 text-surface-500 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label="Close menu"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
         </div>
 
@@ -440,7 +440,7 @@ function MobileMenuOverlay({
                     router.pathname === item.path && "bg-brand-50 border-brand-200 text-brand-700"
                   )}
                 >
-                  <item.icon className="w-5 h-5 text-brand-600 flex-shrink-0" />
+                  <item.icon className="w-6 h-6 text-brand-600 flex-shrink-0" />
                   <span className="font-medium text-sm text-surface-800 whitespace-nowrap">
                     {item.label}
                   </span>
@@ -486,7 +486,7 @@ function MobileMenuOverlay({
             <LogOut className={clsx(
               "text-red-500",
               isRTL && "rotate-180",
-              isLandscape ? "w-5 h-5" : "w-6 h-6"
+              isLandscape ? "w-6 h-6" : "w-7 h-7"
             )} />
       <span className={clsx(
               "font-semibold text-red-600",

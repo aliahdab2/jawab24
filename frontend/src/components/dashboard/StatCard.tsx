@@ -46,12 +46,12 @@ export function StatCard({ nameKey, value, icon: Icon, color, index }: StatCardP
         </div>
 
         <div className={clsx(
-          "w-11 h-11 sm:w-13 sm:h-13 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
+          "w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
           color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
             color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
               'bg-amber-50 text-amber-600 shadow-amber-500/10'
         )}>
-          <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+          <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
         </div>
       </div>
     </Card>

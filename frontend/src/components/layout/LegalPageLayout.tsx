@@ -1,5 +1,6 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 
 interface Section {
@@ -49,12 +50,19 @@ export function LegalPageLayout({
         <meta property="og:url" content={canonicalUrl} />
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-900 text-white pt-safe pb-safe">
-        <div className="max-w-4xl mx-auto px-4 py-12 px-safe">
+      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-900 text-white">
+        {/* Fixed top safe area background */}
+        <div
+          className="fixed-safe-bg top-safe-bg bg-slate-900"
+          aria-hidden="true"
+        />
+
+        <div className="max-w-4xl mx-auto px-6 sm:px-8 py-12 pt-safe pb-safe">
           <Link
             href="/landing"
-            className="inline-block mb-8 text-brand-400 hover:text-brand-300 transition-colors"
+            className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors"
           >
+            <ArrowLeft className="w-5 h-5 rtl:rotate-180" />
             {backToHomeLabel}
           </Link>
 
@@ -70,7 +78,7 @@ export function LegalPageLayout({
                 <p className="text-slate-300 leading-relaxed">{section.text}</p>
 
                 {section.items && (
-                  <ul className="mt-3 space-y-2 text-slate-300 ltr:pl-6 rtl:pr-6">
+                  <ul className="mt-3 space-y-2 text-slate-300 ps-6">
                     {section.items.map((item, i) => (
                       <li key={i} className="list-disc">{item}</li>
                     ))}

@@ -47,7 +47,7 @@ function SimpleToggle({
     <div className={`flex items-center justify-between gap-4 p-4 rounded-2xl border transition-all duration-300 ${enabled ? 'bg-brand-50/30 border-brand-100 shadow-sm' : 'bg-white border-surface-200'
       }`}>
       <div className="flex items-center gap-4 min-w-0 flex-1">
-        <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${enabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'
+        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${enabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'
           }`}>
           {icon}
         </div>
@@ -224,8 +224,8 @@ export default function SettingsPage() {
         <Card className="border-none shadow-[0_10_30px_rgba(0,0,0,0.04)] p-5 landscape:p-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center landscape:w-8 landscape:h-8 landscape:rounded-xl">
-                <Globe className="w-5 h-5 landscape:w-4 landscape:h-4" />
+              <div className="w-12 h-12 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
+                <Globe className="w-6 h-6 landscape:w-5 landscape:h-5" />
               </div>
               <div className="text-start">
                 <h3 className="font-bold text-surface-900 text-base landscape:text-sm">{t('settings.language')}</h3>
@@ -271,7 +271,7 @@ export default function SettingsPage() {
         )}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors landscape:w-8 landscape:h-8 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors landscape:w-10 landscape:h-10 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
                 <MessageSquare className="w-4 h-4 opacity-50" />
               </div>
               <div className="text-start">
@@ -303,7 +303,7 @@ export default function SettingsPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'public' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <MessageSquare className="w-5 h-5 landscape:w-4 landscape:h-4" />
+                      <MessageSquare className="w-6 h-6 landscape:w-5 landscape:h-5" />
                     </div>
                     <div className="text-start">
                       <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'public' ? 'text-brand-900' : 'text-surface-700'}`}>
@@ -324,7 +324,7 @@ export default function SettingsPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'private' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <Send className="w-5 h-5 landscape:w-4 landscape:h-4" />
+                      <Send className="w-6 h-6 landscape:w-5 landscape:h-5" />
                     </div>
                     <div className="text-start">
                       <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'private' ? 'text-brand-900' : 'text-surface-700'}`}>
@@ -345,7 +345,7 @@ export default function SettingsPage() {
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'dual' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <MessagesSquare className="w-5 h-5 landscape:w-4 landscape:h-4" />
+                      <MessagesSquare className="w-6 h-6 landscape:w-5 landscape:h-5" />
                     </div>
                     <div className="text-start">
                       <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'dual' ? 'text-brand-900' : 'text-surface-700'}`}>
@@ -365,8 +365,8 @@ export default function SettingsPage() {
                   <div className="absolute -top-2 start-1/2 -translate-x-1/2 sm:start-auto sm:translate-x-0 sm:end-12 w-4 h-4 bg-brand-50/20 border-t border-s border-brand-200/50 rotate-45 shadow-sm" />
                   
                   <div className="flex items-center gap-4 mb-4 landscape:mb-2">
-                    <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner landscape:w-8 landscape:h-8">
-                      <MessageSquare className="w-5 h-5 landscape:w-4 landscape:h-4" />
+                    <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner landscape:w-10 landscape:h-10">
+                      <MessageSquare className="w-6 h-6 landscape:w-5 landscape:h-5" />
                     </div>
                     <div className="text-start">
                       <h4 className="font-bold text-brand-900 text-base landscape:text-sm">{t('settings.dualReplyConfigTitle')}</h4>
@@ -391,14 +391,14 @@ export default function SettingsPage() {
         {/* Messages & AI Toggles - Lighter Visual Weight */}
         <div className="space-y-3 landscape:space-y-2">
           <SimpleToggle
-            icon={<MessageCircle className="w-5 h-5 landscape:w-4 landscape:h-4" />}
+            icon={<MessageCircle className="w-6 h-6 landscape:w-5 landscape:h-5" />}
             title={t('settings.messagesAutoReply')}
             description={t('settings.messagesAutoReplyDesc')}
             enabled={settings.messagesAutoReply}
             onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
           />
           <SimpleToggle
-            icon={<Bot className="w-5 h-5 landscape:w-4 landscape:h-4" />}
+            icon={<Bot className="w-6 h-6 landscape:w-5 landscape:h-5" />}
             title={t('settings.enableAI')}
             description={t('settings.aiDescription')}
             enabled={settings.aiEnabled}
@@ -415,7 +415,7 @@ export default function SettingsPage() {
       >
         <div className="flex items-center gap-4">
           <div className={`p-2 rounded-lg ${showAdvanced ? 'bg-surface-200 text-surface-600' : 'bg-surface-100 text-surface-500'}`}>
-            <Settings2 className="w-5 h-5 landscape:w-4 landscape:h-4" />
+            <Settings2 className="w-6 h-6 landscape:w-5 landscape:h-5" />
           </div>
           <div className="text-start">
             <span className={`block font-bold landscape:text-sm ${showAdvanced ? 'text-surface-900' : 'text-surface-700'}`}>
@@ -526,7 +526,7 @@ export default function SettingsPage() {
               {/* Reply Delay */}
               <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3">
                 <div className="flex items-center gap-4 mb-6 landscape:mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-8 landscape:h-8">
+                  <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
                     <Zap className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
@@ -568,7 +568,7 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-6 landscape:gap-4">
               <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
                 <div className="flex items-center gap-4 mb-4 landscape:mb-2">
-                  <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-8 landscape:h-8">
+                  <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
                     <MessageCircle className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
@@ -586,7 +586,7 @@ export default function SettingsPage() {
 
               <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
                 <div className="flex items-center gap-4 mb-4 landscape:mb-2">
-                  <div className="w-10 h-10 rounded-xl bg-surface-100 text-surface-600 flex items-center justify-center landscape:w-8 landscape:h-8">
+                  <div className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 flex items-center justify-center landscape:w-10 landscape:h-10">
                     <Clock className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">

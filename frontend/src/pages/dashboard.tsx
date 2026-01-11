@@ -392,7 +392,7 @@ export default function DashboardPage() {
                   variant="primary"
                   className="w-full py-6 text-base whitespace-nowrap"
                   style={{ boxShadow: '0 12px 32px rgba(20, 184, 166, 0.24)' }}
-                  icon={<Sparkles className="w-5 h-5" />}
+                  icon={<Sparkles className="w-6 h-6" />}
                 >
                   {t('subscription.upgradePlan')}
                 </Button>

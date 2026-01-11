@@ -110,7 +110,7 @@ export function Sidebar() {
               )}
             >
               <item.icon className={clsx(
-                "w-5 h-5 flex-shrink-0 transition-transform group-hover:scale-110",
+                "w-6 h-6 flex-shrink-0 transition-transform group-hover:scale-110",
                 isActive ? "text-white" : "text-surface-500 group-hover:text-brand-400"
               )} />
               {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
@@ -147,7 +147,7 @@ export function Sidebar() {
             !sidebarOpen && "justify-center"
           )}
         >
-          <LogOut className="w-5 h-5 flex-shrink-0 group-hover:-translate-x-1 transition-transform" />
+          <LogOut className="w-6 h-6 flex-shrink-0 group-hover:-translate-x-1 transition-transform" />
           {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('nav.logout' as TranslationKey)}</span>}
         </button>
       </div>

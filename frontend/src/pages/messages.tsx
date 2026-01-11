@@ -221,14 +221,14 @@ export default function MessagesPage() {
           <p className="text-[10px] sm:text-xs font-bold text-surface-500 uppercase tracking-widest truncate leading-tight opacity-70">{title}</p>
         </div>
         <div className={clsx(
-          "w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:scale-110 group-hover:rotate-6",
+          "w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:scale-110 group-hover:rotate-6",
           color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
             color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
               color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/10' :
                 'bg-red-50 text-red-600 shadow-red-500/10'
         )}>
           {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<{ className?: string }>, {
-            className: 'w-5 h-5 sm:w-6 sm:h-6'
+            className: 'w-6 h-6 sm:w-7 sm:h-7'
           }) : icon}
         </div>
       </div>
