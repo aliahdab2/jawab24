@@ -679,17 +679,26 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   GLOBAL SAFE AREA STRATEGY FOR NATIVE APPS
+   GLOBAL SAFE AREA STRATEGY - INDUSTRY BEST PRACTICE
    
-   This automatically applies safe areas to ALL pages without manual classes.
-   Android often returns 0 for env(safe-area-inset-*), so we enforce minimums.
+   Safe areas are ONLY applied to:
+   1. Native App (Capacitor) - has .is-native class
+   2. PWA Standalone Mode - detected via display-mode: standalone
    
-   Minimums:
-   - Top: 24px (status bar height)
-   - Bottom: 20px (gesture navigation)
-   - Sides (landscape): 24px (notch/cutout)
+   NOT applied to:
+   - Regular mobile browser - browser chrome handles safe areas
+   - Desktop browser - no notch, no gesture nav
+   
+   Why:
+   - Mobile browsers already account for notch/nav in their viewport
+   - Adding padding would create unnecessary extra space
+   - Only edge-to-edge apps (native/PWA) need manual safe areas
 ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ─────────────────────────────────────────────────────────────────
+   1. NATIVE APP (Capacitor - Android/iOS)
+   Enforces minimum values because Android often returns 0
+───────────────────────────────────────────────────────────────── */
 html.is-native,
 body.is-native {
   --min-safe-top: 24px;
@@ -697,33 +706,44 @@ body.is-native {
   --min-safe-side: 0px;
 }
 
-/* Landscape: Add side minimums for notch */
 @media (orientation: landscape) {
   html.is-native,
   body.is-native {
     --min-safe-side: 24px;
-    --min-safe-bottom: 12px; /* Smaller in landscape */
+    --min-safe-bottom: 12px;
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   AUTOMATIC SAFE AREAS FOR ALL PAGES IN NATIVE APP
-   No need to add classes - this applies globally!
-═══════════════════════════════════════════════════════════════════ */
-
-/* Portrait: Top and bottom safe areas */
+/* Apply safe area padding to body for native apps */
 html.is-native body,
 body.is-native {
   padding-top: max(var(--min-safe-top), env(safe-area-inset-top, 0px));
   padding-bottom: max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px));
 }
 
-/* Landscape: Add side safe areas for notch/cutout */
 @media (orientation: landscape) {
   html.is-native body,
   body.is-native {
     padding-left: max(var(--min-safe-side), env(safe-area-inset-left, 0px));
     padding-right: max(var(--min-safe-side), env(safe-area-inset-right, 0px));
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   2. PWA STANDALONE MODE (Added to Home Screen)
+   Uses env() values - browsers report these correctly in standalone
+───────────────────────────────────────────────────────────────── */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  
+  @media (orientation: landscape) {
+    body {
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+    }
   }
 }
 
