@@ -386,12 +386,12 @@ export default function PagesPage() {
         </Card>
       )}
 
-      {/* Knowledge Base Modal */}
+      {/* Knowledge Base Modal - Landscape-optimized */}
       {editingPage && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-surface-100">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header - Fixed */}
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-surface-100 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
                   <BookOpen className="w-5 h-5 text-brand-600" />
@@ -411,13 +411,15 @@ export default function PagesPage() {
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <p className="text-sm text-surface-600 mb-4 text-start">
+            {/* Modal Body - Scrollable, takes remaining space */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
+              {/* Description - hidden on small screens in landscape to save space */}
+              <p className="text-sm text-surface-600 mb-4 text-start hidden sm:block">
                 {t('pages.businessInfoModalDesc')}
               </p>
 
-              <div className="bg-surface-50 rounded-xl p-4 mb-4 text-start">
+              {/* Example - hidden on small screens to save space */}
+              <div className="bg-surface-50 rounded-xl p-3 sm:p-4 mb-4 text-start hidden sm:block">
                 <p className="text-sm font-medium text-surface-700 mb-2">
                   {t('pages.example')}
                 </p>
@@ -427,7 +429,7 @@ export default function PagesPage() {
               </div>
 
               <textarea
-                className="w-full h-64 p-4 border border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900"
+                className="w-full min-h-[120px] max-h-[40vh] sm:min-h-[200px] p-3 sm:p-4 border border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900"
                 placeholder={t('pages.writeBusinessInfo')}
                 value={knowledgeBase}
                 onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
@@ -449,8 +451,8 @@ export default function PagesPage() {
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-surface-100">
+            {/* Modal Footer - Fixed at bottom */}
+            <div className="flex items-center justify-end gap-3 p-4 sm:p-6 border-t border-surface-100 flex-shrink-0 bg-white">
               <Button variant="secondary" onClick={closeKnowledgeBase}>
                 {t('common.cancel')}
               </Button>
