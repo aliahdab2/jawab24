@@ -66,10 +66,11 @@ describe('AuthCallback - OAuth edge cases', () => {
             push: mockPush,
         });
 
-        render(<AuthCallback />);
+        const { container } = render(<AuthCallback />);
 
-        // Should show loading spinner
-        expect(screen.getByText('auth.loggingIn')).toBeInTheDocument();
+        // Should show skeleton loading state (not text anymore)
+        // The AppSkeleton renders a dashboard-like skeleton with animate-pulse elements
+        expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
 
         // Should not make API call
         expect(fetchMock).not.toHaveBeenCalled();
