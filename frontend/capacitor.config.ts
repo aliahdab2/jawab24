@@ -11,6 +11,10 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
     allowNavigation: ['jawab24.com', '*.jawab24.com']
   },
+  android: {
+    // Disable the loading spinner/indicator in WebView
+    webContentsDebuggingEnabled: false,
+  },
   plugins: {
     Keyboard: {
       resize: KeyboardResize.Body,
@@ -20,6 +24,7 @@ const config: CapacitorConfig = {
     },
     SplashScreen: {
       launchAutoHide: false, // We'll hide it manually after hydration
+      showSpinner: false,    // Explicitly disable spinner
     }
   }
 };
