@@ -1,6 +1,6 @@
 {
   "name": "jawab24-frontend",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Jawab24 - Smart Facebook Auto-Replies 24/7",
   "private": true,
   "overrides": {
