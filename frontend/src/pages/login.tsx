@@ -267,11 +267,12 @@ export default function LoginPage() {
 
           {/* Content:
               - Prevents whole-page scroll ("rubber band") by keeping outer container overflow-hidden
-              - Allows internal scroll ONLY if screen is too short (landscape) */}
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-8">
-            <div className="min-h-full flex items-center justify-center">
-              <div className="w-full max-w-md py-10">
-                <div className="text-center lg:text-start mb-12">
+              - Allows internal scroll ONLY if screen is too short (landscape)
+              - Minimal padding to avoid unnecessary scrolling when content fits */}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6">
+            <div className="min-h-full flex items-center justify-center py-6">
+              <div className="w-full max-w-md">
+                <div className="text-center lg:text-start mb-8">
                   <h2 className="text-4xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
                     {t('auth.welcomeBack')}
                   </h2>
@@ -307,7 +308,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="mt-12 text-center">
+                <div className="mt-8 text-center">
                   <p className="text-sm text-surface-400 font-medium">
                     {t('auth.termsAgreement')}
                     <br className="sm:hidden" />
