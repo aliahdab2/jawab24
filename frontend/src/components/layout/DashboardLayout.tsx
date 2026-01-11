@@ -142,7 +142,8 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         >
           <div 
             className={clsx(
-              'p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
+              // Responsive padding: less in landscape to maximize vertical space
+              'p-4 landscape:p-2 landscape:pt-3 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
               isCleanLayout ? 'pb-12' : 'lg:pb-12'
             )}
             style={{
