@@ -6,9 +6,9 @@ interface PageHeaderProps {
   action?: React.ReactNode;
 }
 
-export function PageHeader({ title, description, action }: PageHeaderProps) {
+export function PageHeader({ title, description, action, className }: PageHeaderProps & { className?: string }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 mb-6 sm:mb-12 animate-slide-up">
+    <div className={`flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 mb-6 sm:mb-12 animate-slide-up ${className || ''}`}>
       <div className="flex-1 text-start">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-extrabold text-surface-900 tracking-tight">
           {title}

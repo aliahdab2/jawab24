@@ -203,6 +203,7 @@ export default function SettingsPage() {
       <PageHeader
         title={t('settings.title')}
         description={t('settings.pageContext')}
+        className="landscape:mb-4 landscape:py-2"
         action={
           <Button
             onClick={handleSave}
@@ -210,7 +211,7 @@ export default function SettingsPage() {
             icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
             variant={saved ? 'secondary' : 'primary'}
             size="lg"
-            className="shadow-md hover:shadow-md hover:translate-y-0"
+            className="shadow-md hover:shadow-md hover:translate-y-0 landscape:py-2 landscape:text-sm landscape:h-10"
           >
             {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
           </Button>
@@ -218,16 +219,16 @@ export default function SettingsPage() {
       />
 
       {/* Main Settings - Simplified */}
-      <div className="space-y-6 mb-8">
+      <div className="space-y-6 landscape:space-y-4 mb-8 landscape:mb-4">
         {/* Language Selection - Compact Segmented Control */}
-        <Card className="border-none shadow-[0_10_30px_rgba(0,0,0,0.04)] p-5">
+        <Card className="border-none shadow-[0_10_30px_rgba(0,0,0,0.04)] p-5 landscape:p-3">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center">
-                <Globe className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center landscape:w-8 landscape:h-8 landscape:rounded-xl">
+                <Globe className="w-5 h-5 landscape:w-4 landscape:h-4" />
               </div>
               <div className="text-start">
-                <h3 className="font-bold text-surface-900 text-base">{t('settings.language')}</h3>
+                <h3 className="font-bold text-surface-900 text-base landscape:text-sm">{t('settings.language')}</h3>
               </div>
             </div>
 
@@ -238,7 +239,7 @@ export default function SettingsPage() {
                   setSettings({ ...settings, dashboardLanguage: 'ar' });
                   setLanguage('ar');
                 }}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'ar'
+                className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'ar'
                   ? 'bg-white text-brand-600 shadow-sm'
                   : 'text-surface-600 hover:text-surface-900'
                   }`}
@@ -250,7 +251,7 @@ export default function SettingsPage() {
                   setSettings({ ...settings, dashboardLanguage: 'en' });
                   setLanguage('en');
                 }}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'en'
+                className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'en'
                   ? 'bg-white text-brand-600 shadow-sm'
                   : 'text-surface-600 hover:text-surface-900'
                   }`}
@@ -263,22 +264,20 @@ export default function SettingsPage() {
 
         {/* Auto Reply Toggles */}
 
-
-
         {/* Comments Automation Card with Nested Logic - MOST IMPORTANT */}
         <Card className={clsx(
-          "border-none transition-all duration-300 p-4",
+          "border-none transition-all duration-300 p-4 landscape:p-3",
           settings.commentsAutoReply ? 'ring-1 ring-brand-200/50 shadow-[0_10px_30px_rgba(16,185,129,0.12)]' : 'shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
         )}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors landscape:w-8 landscape:h-8 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
                 <MessageSquare className="w-4 h-4 opacity-50" />
               </div>
               <div className="text-start">
-                <h3 className={`font-bold text-lg ${settings.commentsAutoReply ? 'text-brand-900' : 'text-surface-900'}`}>{t('settings.commentsAutoReply')}</h3>
-                <p className="text-sm text-surface-500 font-medium">{t('settings.commentsAutoReplyDesc')}</p>
-                <p className="text-xs text-surface-400 mt-1">{t('settings.commentsAutoReplyHelper')}</p>
+                <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900' : 'text-surface-900'}`}>{t('settings.commentsAutoReply')}</h3>
+                <p className="text-sm text-surface-500 font-medium landscape:text-xs">{t('settings.commentsAutoReplyDesc')}</p>
+                <p className="text-xs text-surface-400 mt-1 landscape:hidden">{t('settings.commentsAutoReplyHelper')}</p>
               </div>
             </div>
             <Toggle
@@ -289,89 +288,89 @@ export default function SettingsPage() {
 
           {/* Nested Reply Mode Options - Only visible if Comments Auto-Reply is ON */}
           {settings.commentsAutoReply && (
-            <div className="mt-6 pt-6 border-t border-surface-100 animate-in fade-in slide-in-from-top-2 duration-300">
-              <h4 className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <div className="mt-6 pt-6 landscape:mt-4 landscape:pt-4 border-t border-surface-100 animate-in fade-in slide-in-from-top-2 duration-300">
+              <h4 className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-4 landscape:mb-2 flex items-center gap-2">
                 <Settings2 className="w-4 h-4" />
                 {t('settings.commentReplyMode')}
               </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 landscape:gap-3">
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'public' })}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${settings.commentReplyMode === 'public'
+                  className={`flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'public'
                     ? 'border-brand-500 bg-brand-50/20 shadow-sm'
                     : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
                     }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'public' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <MessageSquare className="w-5 h-5" />
+                      <MessageSquare className="w-5 h-5 landscape:w-4 landscape:h-4" />
                     </div>
                     <div className="text-start">
-                      <span className={`block font-bold ${settings.commentReplyMode === 'public' ? 'text-brand-900' : 'text-surface-700'}`}>
+                      <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'public' ? 'text-brand-900' : 'text-surface-700'}`}>
                         {t('settings.publicReply')}
                       </span>
-                      <span className="text-xs text-surface-500">{t('settings.publicReplyDesc')}</span>
+                      <span className="text-xs text-surface-500 landscape:hidden lg:landscape:block">{t('settings.publicReplyDesc')}</span>
                     </div>
                   </div>
-                  {settings.commentReplyMode === 'public' && <Check className="w-5 h-5 text-brand-500" />}
+                  {settings.commentReplyMode === 'public' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
                 </button>
 
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'private' })}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${settings.commentReplyMode === 'private'
+                  className={`flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'private'
                     ? 'border-brand-500 bg-brand-50/20 shadow-sm'
                     : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
                     }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'private' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <Send className="w-5 h-5" />
+                      <Send className="w-5 h-5 landscape:w-4 landscape:h-4" />
                     </div>
                     <div className="text-start">
-                      <span className={`block font-bold ${settings.commentReplyMode === 'private' ? 'text-brand-900' : 'text-surface-700'}`}>
+                      <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'private' ? 'text-brand-900' : 'text-surface-700'}`}>
                         {t('settings.privateReply')}
                       </span>
-                      <span className="text-xs text-surface-500">{t('settings.privateReplyDesc')}</span>
+                      <span className="text-xs text-surface-500 landscape:hidden lg:landscape:block">{t('settings.privateReplyDesc')}</span>
                     </div>
                   </div>
-                  {settings.commentReplyMode === 'private' && <Check className="w-5 h-5 text-brand-500" />}
+                  {settings.commentReplyMode === 'private' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
                 </button>
 
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'dual' })}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${settings.commentReplyMode === 'dual'
+                  className={`flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'dual'
                     ? 'border-brand-500 bg-brand-50/20 shadow-sm'
                     : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
                     }`}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'dual' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <MessagesSquare className="w-5 h-5" />
+                      <MessagesSquare className="w-5 h-5 landscape:w-4 landscape:h-4" />
                     </div>
                     <div className="text-start">
-                      <span className={`block font-bold ${settings.commentReplyMode === 'dual' ? 'text-brand-900' : 'text-surface-700'}`}>
+                      <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'dual' ? 'text-brand-900' : 'text-surface-700'}`}>
                         {t('settings.dualReply')}
                       </span>
-                      <span className="text-xs text-surface-500">{t('settings.dualReplyDesc')}</span>
+                      <span className="text-xs text-surface-500 landscape:hidden lg:landscape:block">{t('settings.dualReplyDesc')}</span>
                     </div>
                   </div>
-                  {settings.commentReplyMode === 'dual' && <Check className="w-5 h-5 text-brand-500" />}
+                  {settings.commentReplyMode === 'dual' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
                 </button>
               </div>
 
               {/* Dual Reply Configuration - Connected to the 3rd option */}
               {settings.commentReplyMode === 'dual' && (
-                <div className="mt-4 p-5 rounded-2xl bg-brand-50/20 border border-brand-200/50 animate-slide-up relative shadow-sm">
+                <div className="mt-4 p-5 landscape:p-4 rounded-2xl bg-brand-50/20 border border-brand-200/50 animate-slide-up relative shadow-sm">
                   {/* Visual Connector Notch */}
                   <div className="absolute -top-2 start-1/2 -translate-x-1/2 sm:start-auto sm:translate-x-0 sm:end-12 w-4 h-4 bg-brand-50/20 border-t border-s border-brand-200/50 rotate-45 shadow-sm" />
                   
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner">
-                      <MessageSquare className="w-5 h-5" />
+                  <div className="flex items-center gap-4 mb-4 landscape:mb-2">
+                    <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner landscape:w-8 landscape:h-8">
+                      <MessageSquare className="w-5 h-5 landscape:w-4 landscape:h-4" />
                     </div>
                     <div className="text-start">
-                      <h4 className="font-bold text-brand-900 text-base">{t('settings.dualReplyConfigTitle')}</h4>
-                      <p className="text-xs text-brand-700/70 font-medium">{t('settings.dualReplyConfigDesc')}</p>
+                      <h4 className="font-bold text-brand-900 text-base landscape:text-sm">{t('settings.dualReplyConfigTitle')}</h4>
+                      <p className="text-xs text-brand-700/70 font-medium landscape:hidden">{t('settings.dualReplyConfigDesc')}</p>
                     </div>
                   </div>
                   <Input
@@ -381,7 +380,7 @@ export default function SettingsPage() {
                       dualReplyConfig: { en: e.target.value, ar: e.target.value }
                     })}
                     placeholder={t('settings.publicReplyPlaceholder')}
-                    className="bg-white"
+                    className="bg-white !py-3 landscape:!py-2"
                   />
                 </div>
               )}
@@ -390,16 +389,16 @@ export default function SettingsPage() {
         </Card>
 
         {/* Messages & AI Toggles - Lighter Visual Weight */}
-        <div className="space-y-3">
+        <div className="space-y-3 landscape:space-y-2">
           <SimpleToggle
-            icon={<MessageCircle className="w-5 h-5" />}
+            icon={<MessageCircle className="w-5 h-5 landscape:w-4 landscape:h-4" />}
             title={t('settings.messagesAutoReply')}
             description={t('settings.messagesAutoReplyDesc')}
             enabled={settings.messagesAutoReply}
             onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
           />
           <SimpleToggle
-            icon={<Bot className="w-5 h-5" />}
+            icon={<Bot className="w-5 h-5 landscape:w-4 landscape:h-4" />}
             title={t('settings.enableAI')}
             description={t('settings.aiDescription')}
             enabled={settings.aiEnabled}
@@ -411,18 +410,18 @@ export default function SettingsPage() {
       {/* Advanced Settings Toggle - Lighter Style */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all duration-300 mb-6 ${showAdvanced ? 'bg-surface-50 border-surface-200 shadow-sm' : 'bg-white border-surface-200 hover:border-surface-300 hover:bg-surface-50'
+        className={`w-full flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all duration-300 mb-6 landscape:mb-4 ${showAdvanced ? 'bg-surface-50 border-surface-200 shadow-sm' : 'bg-white border-surface-200 hover:border-surface-300 hover:bg-surface-50'
           }`}
       >
         <div className="flex items-center gap-4">
           <div className={`p-2 rounded-lg ${showAdvanced ? 'bg-surface-200 text-surface-600' : 'bg-surface-100 text-surface-500'}`}>
-            <Settings2 className="w-5 h-5" />
+            <Settings2 className="w-5 h-5 landscape:w-4 landscape:h-4" />
           </div>
           <div className="text-start">
-            <span className={`block font-bold ${showAdvanced ? 'text-surface-900' : 'text-surface-700'}`}>
+            <span className={`block font-bold landscape:text-sm ${showAdvanced ? 'text-surface-900' : 'text-surface-700'}`}>
               {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
             </span>
-            <p className={`text-xs ${showAdvanced ? 'text-surface-500' : 'text-surface-400'}`}>
+            <p className={`text-xs landscape:hidden ${showAdvanced ? 'text-surface-500' : 'text-surface-400'}`}>
               {t('settings.advancedDescription')}
             </p>
           </div>
@@ -437,17 +436,17 @@ export default function SettingsPage() {
       {/* Advanced Settings - Hidden by default */}
       {
         showAdvanced && (
-          <div className="space-y-6 animate-slide-up pb-12">
+          <div className="space-y-6 landscape:space-y-4 animate-slide-up pb-12">
             {/* Templates & Rules Links - Prominent Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 landscape:grid-cols-2 gap-4">
               <Link href="/templates" className="group">
-                <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 group-hover:bg-brand-50/10">
+                <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 landscape:p-4 group-hover:bg-brand-50/10">
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-inner">
-                      <BookTemplate className="w-8 h-8" />
+                    <div className="w-16 h-16 landscape:w-12 landscape:h-12 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center mb-4 landscape:mb-2 group-hover:scale-110 transition-transform shadow-inner">
+                      <BookTemplate className="w-8 h-8 landscape:w-6 landscape:h-6" />
                     </div>
-                    <h4 className="text-lg font-bold text-surface-900 mb-1">{t('nav.templates')}</h4>
-                    <p className="text-sm text-surface-500 mb-6">
+                    <h4 className="text-lg font-bold text-surface-900 mb-1 landscape:text-base">{t('nav.templates')}</h4>
+                    <p className="text-sm text-surface-500 mb-6 landscape:mb-3 landscape:text-xs">
                       {t('settings.templatesCardDesc')}
                     </p>
                     <div className="mt-auto flex items-center gap-1 text-violet-600 font-bold text-sm uppercase tracking-widest">
@@ -459,13 +458,13 @@ export default function SettingsPage() {
               </Link>
 
               <Link href="/rules" className="group">
-                <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 group-hover:bg-amber-50/10">
+                <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 landscape:p-4 group-hover:bg-amber-50/10">
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-inner">
-                      <Zap className="w-8 h-8" />
+                    <div className="w-16 h-16 landscape:w-12 landscape:h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-4 landscape:mb-2 group-hover:scale-110 transition-transform shadow-inner">
+                      <Zap className="w-8 h-8 landscape:w-6 landscape:h-6" />
                     </div>
-                    <h4 className="text-lg font-bold text-surface-900 mb-1">{t('nav.rules')}</h4>
-                    <p className="text-sm text-surface-500 mb-6">
+                    <h4 className="text-lg font-bold text-surface-900 mb-1 landscape:text-base">{t('nav.rules')}</h4>
+                    <p className="text-sm text-surface-500 mb-6 landscape:mb-3 landscape:text-xs">
                       {t('settings.rulesCardDesc')}
                     </p>
                     <div className="mt-auto flex items-center gap-1 text-amber-600 font-bold text-sm uppercase tracking-widest">
@@ -478,22 +477,22 @@ export default function SettingsPage() {
             </div>
 
             {/* Business Hours */}
-            <Card className="border-none shadow-md shadow-surface-200/30 p-4 overflow-hidden">
-              <div className="flex items-center justify-between mb-6">
+            <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 overflow-hidden">
+              <div className="flex items-center justify-between mb-6 landscape:mb-3">
                 <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
                     <Clock className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
-                    <h4 className="font-bold text-surface-900 text-lg">{t('settings.businessHours')}</h4>
-                    <p className="text-xs text-surface-500 font-medium">{t('settings.businessHoursDesc')}</p>
+                    <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.businessHours')}</h4>
+                    <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.businessHoursDesc')}</p>
                   </div>
                 </div>
                 <Toggle enabled={settings.businessHoursOnly} onChange={(enabled) => setSettings({ ...settings, businessHoursOnly: enabled })} />
               </div>
 
               {settings.businessHoursOnly && (
-                <div className="grid grid-cols-2 gap-6 p-5 rounded-2xl bg-surface-50 border border-surface-100 animate-slide-up">
+                <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100 animate-slide-up">
                   <div>
                     <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
                     <div className="relative">
@@ -502,7 +501,7 @@ export default function SettingsPage() {
                         type="time"
                         value={settings.businessHoursStart}
                         onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
-                        className="ps-10 py-4 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
+                        className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
                       />
                     </div>
                   </div>
@@ -514,7 +513,7 @@ export default function SettingsPage() {
                         type="time"
                         value={settings.businessHoursEnd}
                         onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
-                        className="ps-10 py-4 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
+                        className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
                       />
                     </div>
                   </div>
@@ -523,16 +522,16 @@ export default function SettingsPage() {
             </Card>
 
             {/* Compact Row: Reply Speed + Notifications */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4">
               {/* Reply Delay */}
-              <Card className="border-none shadow-md shadow-surface-200/30 p-4">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center">
+              <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3">
+                <div className="flex items-center gap-4 mb-6 landscape:mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-8 landscape:h-8">
                     <Zap className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
-                    <h4 className="font-bold text-surface-900 text-lg">{t('settings.responseTime')}</h4>
-                    <p className="text-xs text-surface-500 font-medium">{t('settings.replyDelay')}</p>
+                    <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.responseTime')}</h4>
+                    <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.replyDelay')}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -542,22 +541,22 @@ export default function SettingsPage() {
                     max={60}
                     value={settings.replyDelay}
                     onChange={(e) => setSettings({ ...settings, replyDelay: parseInt(e.target.value) || 0 })}
-                    className="w-full py-4 text-center font-bold text-lg border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
+                    className="w-full py-4 landscape:py-2.5 text-center font-bold text-lg border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
                   />
                   <span className="text-sm font-bold text-surface-400 uppercase tracking-widest">{t('settings.seconds')}</span>
                 </div>
               </Card>
 
               {/* Notifications */}
-              <Card className="border-none shadow-md shadow-surface-200/30 p-4 flex flex-col justify-between">
+              <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 flex flex-col justify-between">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
                       <Bell className="w-4 h-4 opacity-50" />
                     </div>
                     <div className="text-start">
-                      <h4 className="font-bold text-surface-900 text-lg">{t('settings.notifications')}</h4>
-                      <p className="text-xs text-surface-500 font-medium">{t('settings.emailNotifications')}</p>
+                      <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.notifications')}</h4>
+                      <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.emailNotifications')}</p>
                     </div>
                   </div>
                   <Toggle enabled={settings.notificationsEnabled} onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })} />
@@ -566,37 +565,37 @@ export default function SettingsPage() {
             </div>
 
             {/* Messaging */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="border-none shadow-lg shadow-surface-200/50 p-5">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-6 landscape:gap-4">
+              <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
+                <div className="flex items-center gap-4 mb-4 landscape:mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-8 landscape:h-8">
                     <MessageCircle className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
-                    <h4 className="font-bold text-surface-900 text-lg">{t('settings.greetingMessage')}</h4>
-                    <p className="text-xs text-surface-500 font-medium">{t('settings.greetingMessageDesc')}</p>
+                    <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.greetingMessage')}</h4>
+                    <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.greetingMessageDesc')}</p>
                   </div>
                 </div>
                 <textarea
-                  className="input min-h-[100px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
+                  className="input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
                   placeholder={t('settings.greetingMessagePlaceholder')}
                   value={settings.greetingMessage}
                   onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
                 />
               </Card>
 
-              <Card className="border-none shadow-lg shadow-surface-200/50 p-5">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-surface-100 text-surface-600 flex items-center justify-center">
+              <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
+                <div className="flex items-center gap-4 mb-4 landscape:mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-surface-100 text-surface-600 flex items-center justify-center landscape:w-8 landscape:h-8">
                     <Clock className="w-4 h-4 opacity-50" />
                   </div>
                   <div className="text-start">
-                    <h4 className="font-bold text-surface-900 text-lg">{t('settings.awayMessage')}</h4>
-                    <p className="text-xs text-surface-500 font-medium">{t('settings.awayMessageDesc')}</p>
+                    <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.awayMessage')}</h4>
+                    <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.awayMessageDesc')}</p>
                   </div>
                 </div>
                 <textarea
-                  className="input min-h-[100px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
+                  className="input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
                   placeholder={t('settings.awayMessagePlaceholder')}
                   value={settings.awayMessage}
                   onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
@@ -609,14 +608,14 @@ export default function SettingsPage() {
       }
 
       {/* Danger Zone - Aesthetic but Low Salience */}
-      <div className="mt-20 pt-10 border-t border-surface-100 mb-20 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-        <Card className="border-none bg-red-50/30 p-6 flex flex-col sm:flex-row items-center justify-between gap-6 overflow-hidden">
+      <div className="mt-20 pt-10 landscape:mt-8 landscape:pt-6 border-t border-surface-100 mb-20 landscape:mb-10 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+        <Card className="border-none bg-red-50/30 p-6 landscape:p-4 flex flex-col sm:flex-row items-center justify-between gap-6 overflow-hidden">
           <div className="flex-1 text-start">
-            <h4 className="font-bold text-red-900 text-lg mb-2 flex items-center gap-2">
+            <h4 className="font-bold text-red-900 text-lg landscape:text-base mb-2 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-500" />
               {t('settings.dangerZone')}
             </h4>
-            <p className="text-sm text-red-700/70 font-medium leading-relaxed max-w-xl">
+            <p className="text-sm text-red-700/70 font-medium leading-relaxed max-w-xl landscape:text-xs">
               {t('settings.deleteAccountWarning')}
             </p>
           </div>
@@ -711,6 +710,6 @@ export default function SettingsPage() {
           )}
         </div>
       </Modal>
-    </DashboardLayout >
+    </DashboardLayout>
   );
 }

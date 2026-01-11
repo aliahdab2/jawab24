@@ -72,7 +72,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
       <div className="min-h-screen bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Sidebar - hidden on mobile and on clean layouts */}
         {!isCleanLayout && (
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
             <Sidebar />
           </div>
         )}
@@ -104,7 +104,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         ) : (
           /* Mobile APP Header - Final: h-16 (64px), Dark Gradient, Logo Left, Dynamic Icon Right */
           <div
-            className="md:hidden sticky top-0 left-0 right-0 h-20 flex items-center justify-between px-5 z-40 pt-safe"
+            className="lg:hidden sticky top-0 left-0 right-0 h-20 flex items-center justify-between px-5 z-40 pt-safe"
             style={{
               background: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 75%, transparent 100%)'
             }}
@@ -133,13 +133,13 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           className={clsx(
             'transition-all duration-500 min-h-screen',
             'pt-safe', // Ensures main content respects safe area top
-            isCleanLayout ? 'pt-16 md:pt-20' : 'pt-20 md:pt-0',
-            !isCleanLayout && (sidebarOpen ? 'md:ms-64' : 'md:ms-20')
+            isCleanLayout ? 'pt-16 md:pt-20' : 'pt-20 lg:pt-0',
+            !isCleanLayout && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >
           <div className={clsx(
             'p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
-            isCleanLayout ? 'pb-12' : 'pb-32 md:pb-12'
+            isCleanLayout ? 'pb-12' : 'pb-32 lg:pb-12'
           )}>
             {children}
           </div>
@@ -149,7 +149,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {/* Mobile bottom navigation - Final Spec: h-16 (64px), 4 items, proper sizing */}
         {!isCleanLayout && (
           <nav
-            className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 pb-[env(safe-area-inset-bottom)] box-content shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
+            className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 pb-[env(safe-area-inset-bottom)] box-content shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
           >
             <MobileNavButton
               onClick={() => router.push('/dashboard')}
@@ -319,7 +319,7 @@ function MobileMenuOverlay({
 
   return (
     <div 
-      className="md:hidden fixed inset-0 z-50 animate-in fade-in duration-200"
+      className="lg:hidden fixed inset-0 z-50 animate-in fade-in duration-200"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
