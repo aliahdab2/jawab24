@@ -672,9 +672,21 @@
   padding-right: var(--safe-area-right);
 }
 
-/* For native apps, ensure minimum safe area */
+/* For native apps, ensure minimum safe areas */
 .is-native .pt-safe {
   padding-top: max(24px, var(--safe-area-top));
+}
+
+/* CRITICAL: Android doesn't report safe-area-inset-bottom for gesture navigation
+   We need a minimum bottom safe area to prevent overlap with system navigation */
+.is-native .pb-safe,
+.is-native .pb-safe-min {
+  padding-bottom: max(16px, var(--safe-area-bottom));
+}
+
+/* Bottom inset utility - positions element above system navigation */
+.is-native .bottom-safe {
+  bottom: max(16px, var(--safe-area-bottom));
 }
 
 /* Combined: header height + safe area (for content below fixed headers) */

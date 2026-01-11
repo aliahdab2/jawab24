@@ -53,7 +53,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
       {/* Floating button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-24 md:bottom-8 ltr:right-6 rtl:left-6 z-50 w-12 h-12 md:w-16 md:h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl md:rounded-[2rem] transition-all duration-300 flex items-center justify-center group active:scale-90 overflow-hidden ${hidden || !isVisible ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+        className={`fixed ltr:right-6 rtl:left-6 z-50 w-12 h-12 md:w-16 md:h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl md:rounded-[2rem] transition-all duration-300 flex items-center justify-center group active:scale-90 overflow-hidden [--btn-bottom:calc(80px+max(12px,env(safe-area-inset-bottom,0px)))] md:[--btn-bottom:2rem] bottom-[var(--btn-bottom)] ${hidden || !isVisible ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
           }`}
         style={{ boxShadow: '0 8px 16px rgba(16, 185, 129, 0.25)' }}
         aria-label={t('common.needHelp')}
@@ -69,7 +69,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
       {/* Popup card */}
       {isOpen && (
         <div
-          className="fixed bottom-44 md:bottom-28 ltr:right-8 rtl:left-8 z-50 bg-white rounded-[2.5rem] shadow-2xl p-8 w-80 animate-slide-up border border-surface-100 overflow-hidden"
+          className="fixed ltr:right-8 rtl:left-8 z-50 bg-white rounded-[2.5rem] shadow-2xl p-8 w-80 animate-slide-up border border-surface-100 overflow-hidden [--popup-bottom:calc(140px+max(12px,env(safe-area-inset-bottom,0px)))] md:[--popup-bottom:7rem] bottom-[var(--popup-bottom)]"
           dir={isRTL ? 'rtl' : 'ltr'}
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 -z-10"></div>
