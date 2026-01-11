@@ -644,6 +644,13 @@ export default function LandingPage() {
             </div>
           </div>
         </footer>
+
+        {/* Fixed bottom safe area background (native/PWA only via --min-safe-bottom) */}
+        <div
+          className="fixed bottom-0 left-0 right-0 bg-surface-900 z-[39] pointer-events-none"
+          style={{ height: 'max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px))' }}
+          aria-hidden="true"
+        />
       </div>
     </div>
   );
