@@ -71,6 +71,7 @@
   "auth.logout": "Logout",
   "auth.welcome": "Welcome",
   "auth.loginWithFacebook": "Login with Facebook",
+  "auth.loggingIn": "Logging in...",
   "auth.loginDescription": "Sign in with your Facebook account to continue",
   "auth.termsAgreement": "By signing in, you agree to our",
   "auth.termsOfService": "Terms of Service",

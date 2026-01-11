@@ -73,6 +73,7 @@
   "auth.logout": "تسجيل الخروج",
   "auth.welcome": "مرحباً بك مجدداً",
   "auth.loginWithFacebook": "تسجيل الدخول باستخدام فيسبوك",
+  "auth.loggingIn": "جاري تسجيل الدخول...",
   "auth.loginDescription": "سجل الدخول بحسابك على فيسبوك للبدء في إدارة صفحاتك",
   "auth.termsAgreement": "بتسجيل دخولك، أنت توافق على",
   "auth.termsOfService": "شروط الخدمة",
