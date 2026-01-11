@@ -386,21 +386,21 @@ export default function PagesPage() {
         </Card>
       )}
 
-      {/* Knowledge Base Modal - Landscape-optimized */}
+      {/* Knowledge Base Modal - Full-screen on mobile for maximum textarea space */}
       {editingPage && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-            {/* Modal Header - Fixed */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-surface-100 flex-shrink-0">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-2xl h-[85vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden">
+            {/* Modal Header - Compact */}
+            <div className="flex items-center justify-between px-4 py-3 sm:p-5 border-b border-surface-100 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
-                  <BookOpen className="w-5 h-5 text-brand-600" />
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-surface-900">
+                  <h2 className="text-base sm:text-lg font-semibold text-surface-900">
                     {t('pages.businessInfo')}
                   </h2>
-                  <p className="text-sm text-surface-500">{editingPage.name}</p>
+                  <p className="text-xs sm:text-sm text-surface-500">{editingPage.name}</p>
                 </div>
               </div>
               <button
@@ -411,52 +411,50 @@ export default function PagesPage() {
               </button>
             </div>
 
-            {/* Modal Body - Scrollable, takes remaining space */}
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
-              {/* Description - hidden on small screens in landscape to save space */}
-              <p className="text-sm text-surface-600 mb-4 text-start hidden sm:block">
+            {/* Modal Body - Textarea takes maximum space */}
+            <div className="flex-1 flex flex-col min-h-0 p-4 sm:p-5">
+              {/* Brief hint - always visible */}
+              <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start">
                 {t('pages.businessInfoModalDesc')}
               </p>
 
-              {/* Example - hidden on small screens to save space */}
-              <div className="bg-surface-50 rounded-xl p-3 sm:p-4 mb-4 text-start hidden sm:block">
-                <p className="text-sm font-medium text-surface-700 mb-2">
-                  {t('pages.example')}
-                </p>
-                <pre className="text-xs text-surface-500 whitespace-pre-wrap">
-                  {t('pages.businessInfoExample' as TranslationKey)}
-                </pre>
-              </div>
-
-              <textarea
-                className="w-full min-h-[120px] max-h-[40vh] sm:min-h-[200px] p-3 sm:p-4 border border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900"
-                placeholder={t('pages.writeBusinessInfo')}
-                value={knowledgeBase}
-                onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
-                maxLength={2000}
-                dir={language === 'ar' ? 'rtl' : 'ltr'}
-              />
-
-              {/* Character Counter */}
-              <div className="text-sm mt-2 text-end">
-                <span className={
-                  knowledgeBase.length > 1900
-                    ? 'text-red-500 font-medium'
-                    : knowledgeBase.length > 1500
-                      ? 'text-amber-500'
-                      : 'text-surface-400'
-                }>
-                  {knowledgeBase.length.toLocaleString()}/2,000 {t('pages.characters')}
-                </span>
+              {/* Textarea - THE HERO of the modal */}
+              <div className="flex-1 flex flex-col min-h-0">
+                <textarea
+                  className="flex-1 w-full min-h-[200px] p-4 border-2 border-surface-200 rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
+                  placeholder={t('pages.writeBusinessInfo')}
+                  value={knowledgeBase}
+                  onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
+                  maxLength={2000}
+                  dir={language === 'ar' ? 'rtl' : 'ltr'}
+                  autoFocus
+                />
+                
+                {/* Character Counter - inline */}
+                <div className="flex items-center justify-between mt-2 px-1">
+                  <span className="text-xs text-surface-400">
+                    {t('pages.example')}: {language === 'ar' ? 'ساعات العمل، العنوان، المنتجات...' : 'Hours, location, products...'}
+                  </span>
+                  <span className={`text-xs font-medium ${
+                    knowledgeBase.length > 1900
+                      ? 'text-red-500'
+                      : knowledgeBase.length > 1500
+                        ? 'text-amber-500'
+                        : 'text-surface-400'
+                  }`}>
+                    {knowledgeBase.length.toLocaleString()}/2,000
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Modal Footer - Fixed at bottom */}
-            <div className="flex items-center justify-end gap-3 p-4 sm:p-6 border-t border-surface-100 flex-shrink-0 bg-white">
-              <Button variant="secondary" onClick={closeKnowledgeBase}>
+            {/* Modal Footer - Compact */}
+            <div className="flex items-center justify-end gap-3 px-4 py-3 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
+              <Button variant="secondary" size="sm" onClick={closeKnowledgeBase}>
                 {t('common.cancel')}
               </Button>
               <Button
+                size="sm"
                 onClick={saveKnowledgeBase}
                 loading={saving}
                 icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
