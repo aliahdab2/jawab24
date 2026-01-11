@@ -149,7 +149,48 @@ html.is-native body {
 
 ---
 
-## 📱 Mobile-First Design
+## 📱 Mobile-First & Responsive Design (CRITICAL)
+
+### Every Feature MUST Work in Both Orientations
+
+Portrait and landscape have very different constraints:
+- **Portrait**: Narrow but tall - stack vertically, scroll down
+- **Landscape**: Wide but short - must keep buttons visible, content scrolls
+
+### Landscape-Safe Modal Pattern:
+```tsx
+// ❌ WRONG - buttons get cut off in landscape
+<div className="h-[500px]">
+  <div>Content</div>
+  <button>Save</button>  // User can't see this!
+</div>
+
+// ✅ CORRECT - scrollable body, fixed header/footer
+<div className="max-h-[85vh] sm:max-h-[90vh] flex flex-col">
+  <header className="flex-shrink-0 p-4">Title</header>
+  <main className="flex-1 overflow-y-auto p-4">
+    Scrollable content - can be any height
+  </main>
+  <footer className="flex-shrink-0 p-4">
+    <button>Save</button>  // Always visible!
+  </footer>
+</div>
+```
+
+### Landscape-Specific Styles:
+```tsx
+// Use Tailwind's landscape: prefix
+className="max-w-md landscape:max-w-2xl"      // Wider in landscape
+className="py-4 landscape:py-2"                // Less vertical padding
+className="block landscape:hidden"             // Hide in landscape
+className="hidden landscape:block"             // Show only in landscape
+className="min-h-[200px] landscape:min-h-0"   // Flexible height
+```
+
+### What to Hide/Show:
+- **In landscape, HIDE**: Long descriptions, examples, hints
+- **In landscape, KEEP**: Title, input fields, action buttons
+- **In landscape, MAKE WIDER**: Modals, forms, content areas
 
 ### Breakpoints (Tailwind):
 - `sm`: 640px (small tablets)
@@ -257,6 +298,9 @@ frontend/
 3. **Hardcoded strings**: Use `t('key')` for all user-facing text
 4. **Missing `dir` attribute**: Always set `dir={isRTL ? 'rtl' : 'ltr'}` on containers
 5. **Fixed elements without safe area**: Fixed headers need `pt-safe`
+6. **Fixed heights in modals/overlays**: Use `max-h-[vh]` + `overflow-auto` for scrolling
+7. **Ignoring landscape mode**: Test BOTH orientations - buttons must stay visible
+8. **Non-scrollable modals**: Always use `flex-col` with scrollable body, fixed header/footer
 
 ---
 

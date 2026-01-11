@@ -47,7 +47,41 @@ className="pl-4 pr-2 ml-auto text-left"
 className="ps-4 pe-2 ms-auto text-start"
 ```
 
-### 3. Translations
+### 3. Responsive & Landscape Mode
+
+**Every feature must work beautifully in portrait AND landscape.**
+
+```tsx
+// ❌ WRONG - only works in portrait
+<div className="h-screen overflow-hidden">
+  <div className="h-[400px]">Fixed height content</div>
+</div>
+
+// ✅ CORRECT - adapts to orientation
+<div className="h-screen overflow-auto">
+  <div className="max-h-[50vh] landscape:max-h-[70vh]">
+    Flexible content
+  </div>
+</div>
+```
+
+**Key patterns:**
+- Use `vh` units carefully - test in landscape where height is limited
+- Modals: scrollable body, fixed header/footer, wider in landscape
+- Forms: stack vertically in portrait, can go horizontal in landscape
+- Hide non-essential text in landscape to save vertical space
+- Test on both phone orientations AND tablet
+
+```tsx
+// Landscape-aware modal
+<div className="max-h-[85vh] sm:max-h-[90vh] landscape:max-w-2xl">
+  <header className="flex-shrink-0">Title</header>
+  <main className="flex-1 overflow-y-auto">Scrollable</main>
+  <footer className="flex-shrink-0">Buttons</footer>
+</div>
+```
+
+### 4. Translations
 
 **Never hardcode user-facing strings.**
 
@@ -176,6 +210,9 @@ return (
 | Hardcoded strings | Use `t('key')` |
 | Missing `dir` attribute | Add `dir={isRTL ? 'rtl' : 'ltr'}` |
 | Fixed header without `pt-safe` | Fixed elements need `pt-safe` |
+| Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
+| Ignoring landscape mode | Test both orientations, use `landscape:` |
+| Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |
 
 ---
 
