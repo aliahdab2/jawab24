@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, Input, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
@@ -383,26 +383,19 @@ export default function RulesPage() {
             />
           </div>
 
-          <div>
-            <label className="label">{t('templates.title')}</label>
-            <div className="relative">
-              <select
-                className="input !py-2.5 sm:!py-3 appearance-none pr-10"
-                value={formData.templateId}
-                onChange={(e) => setFormData({ ...formData, templateId: e.target.value })}
-              >
-                <option value="">{t('rules.actions.replyWithTemplate')}...</option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-surface-500">
-                <ArrowDown className="w-4 h-4" />
-              </div>
-            </div>
-          </div>
+          <Select
+            label={t('templates.title')}
+            placeholder={`${t('rules.actions.replyWithTemplate')}...`}
+            value={formData.templateId}
+            onChange={(value) => setFormData({ ...formData, templateId: value })}
+            options={[
+              { value: '', label: `${t('rules.actions.replyWithTemplate')}...` },
+              ...templates.map((template) => ({
+                value: template.id,
+                label: template.name
+              }))
+            ]}
+          />
 
           <div className="flex justify-end gap-3 pt-6 border-t border-surface-100 mt-6 pb-2 sm:pb-0">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
