@@ -8,7 +8,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, action, className }: PageHeaderProps & { className?: string }) {
   return (
-    <div className={`flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 mb-6 landscape:mb-3 sm:mb-12 animate-slide-up ${className || ''}`}>
+    <div className={`flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 mb-4 landscape:mb-2 sm:mb-8 lg:mb-12 animate-slide-up ${className || ''}`}>
       <div className="flex-1 text-start">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-extrabold text-surface-900 tracking-tight">
           {title}
