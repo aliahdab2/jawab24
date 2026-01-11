@@ -62,6 +62,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
   }
 
   const isCleanLayout = isPublic && !isAuthenticated;
+  const safeBottom = 'max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px))';
 
   return (
     <>
@@ -144,14 +145,31 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
               'p-4 md:p-8 lg:p-12 max-w-[1600px] mx-auto',
               isCleanLayout ? 'pb-12' : 'lg:pb-12'
             )}
-            style={!isCleanLayout ? {
-              // Mobile: padding = nav (64px) + safe area (20px min) + extra 16px breathing room
-              paddingBottom: 'calc(100px + max(20px, env(safe-area-inset-bottom, 0px)))'
-            } : undefined}
+            style={{
+              ...(isCleanLayout
+                ? {
+                    // Public pages (no bottom nav): still need bottom safe area + a bit of breathing room
+                    paddingBottom: `calc(16px + ${safeBottom})`,
+                  }
+                : {
+                    // Mobile app: padding = bottom nav (64px) + safe area + extra breathing room
+                    paddingBottom: `calc(100px + ${safeBottom})`,
+                  }),
+            }}
           >
             {children}
           </div>
         </main>
+
+        {/* Fixed bottom safe area background - ALWAYS on mobile (public + authenticated) */}
+        <div
+          className={clsx(
+            'lg:hidden fixed bottom-0 left-0 right-0 z-[39] pointer-events-none',
+            isCleanLayout ? 'bg-surface-50' : 'bg-white'
+          )}
+          style={{ height: safeBottom }}
+          aria-hidden="true"
+        />
 
         {/* ═══════════════════════════════════════════════════════════════
             MOBILE BOTTOM NAVIGATION - Industry Best Practice (Facebook-style)
@@ -164,21 +182,12 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         ═══════════════════════════════════════════════════════════════ */}
         {!isCleanLayout && (
           <>
-            {/* Fixed bottom safe area background - like Facebook */}
-            {/* Android gesture nav is ~48px, 3-button nav is ~48px, so we use 20px minimum */}
-            {/* This creates a white bar that's ALWAYS visible behind system navigation */}
-            <div 
-              className="lg:hidden fixed bottom-0 left-0 right-0 bg-white z-[39]"
-              style={{ height: 'max(20px, env(safe-area-inset-bottom, 0px))' }}
-              aria-hidden="true"
-            />
-            
             {/* Bottom navigation - sits ABOVE the safe area */}
             <nav
               className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
               style={{
-                // Position nav ABOVE the safe area (20px minimum for Android)
-                bottom: 'max(20px, env(safe-area-inset-bottom, 0px))',
+                // Position nav ABOVE the safe area (uses min fallback on Android)
+                bottom: safeBottom,
                 // Side padding for landscape notch
                 paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))',
                 paddingRight: 'max(16px, env(safe-area-inset-right, 0px))'
