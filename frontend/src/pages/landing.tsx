@@ -176,18 +176,11 @@ export default function LandingPage() {
                     </Button>
                   </Link>
                 ) : (
-                  <>
-                    <Link href="/login?redirect=%2Fdashboard" className="hidden sm:block">
-                      <Button variant="secondary" size="sm" className="font-bold border-none bg-surface-100">
-                        {t('landing.nav.login')}
-                      </Button>
-                    </Link>
-                    <Link href="/login?redirect=%2Fdashboard">
-                      <Button size="sm" className="font-bold shadow-xl shadow-brand-500/20 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5">
-                        {t('landing.nav.start')}
-                      </Button>
-                    </Link>
-                  </>
+                  <Link href="/login?redirect=%2Fdashboard">
+                    <Button variant="secondary" size="sm" className="font-bold border-none bg-surface-100">
+                      {t('landing.nav.login')}
+                    </Button>
+                  </Link>
                 )}
               </div>
             </div>

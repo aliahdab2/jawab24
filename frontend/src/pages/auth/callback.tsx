@@ -154,8 +154,23 @@ export default function AuthCallback() {
         return;
       }
       console.error('Auth error:', err);
-      // Use translation for generic error if custom message isn't set, mainly attempting fallback
-      setError(err instanceof Error ? err.message : t('auth.loginError'));
+      
+      // Provide user-friendly error messages
+      let errorMessage = t('auth.loginError');
+      if (err instanceof Error) {
+        if (err.message === 'Failed to fetch' || err.message.includes('NetworkError')) {
+          // Network connectivity issue
+          errorMessage = t('errors.networkError');
+        } else if (err.message === t('auth.loginTimeout')) {
+          // Timeout
+          errorMessage = err.message;
+        } else if (err.message) {
+          // API error message
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
       setTimeout(() => routerRef.current.push('/login'), 3000);
     }
   }, [t]);
