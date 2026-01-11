@@ -167,8 +167,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {/* Facebook-style: neutral light gray that works with any content */}
         {/* Landing page overrides this with its own dark safe area to match dark footer */}
         <div
-          className="lg:hidden fixed bottom-0 left-0 right-0 z-[39] pointer-events-none bg-surface-100"
-          style={{ height: safeBottom }}
+          className="lg:hidden fixed-safe-bg bottom-safe-bg bg-surface-100"
           aria-hidden="true"
         />
 

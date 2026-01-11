@@ -334,15 +334,13 @@ export default function LoginPage() {
 
         {/* Fixed top safe area background - prevents content from showing through status bar when scrolling */}
         <div
-          className="lg:hidden fixed top-0 left-0 right-0 bg-white z-[39] pointer-events-none"
-          style={{ height: 'max(var(--min-safe-top), env(safe-area-inset-top, 0px))' }}
+          className="lg:hidden fixed-safe-bg top-safe-bg bg-white"
           aria-hidden="true"
         />
 
         {/* Fixed bottom safe area background */}
         <div
-          className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface-100 z-[39] pointer-events-none"
-          style={{ height: 'max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px))' }}
+          className="lg:hidden fixed-safe-bg bottom-safe-bg bg-surface-100"
           aria-hidden="true"
         />
       </div>

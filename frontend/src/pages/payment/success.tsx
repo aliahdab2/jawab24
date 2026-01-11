@@ -82,6 +82,10 @@ export default function PaymentSuccessPage() {
             </div>
           </div>
         </div>
+
+        {/* Fixed safe area backgrounds */}
+        <div className="fixed-safe-bg top-safe-bg bg-white" aria-hidden="true" />
+        <div className="fixed-safe-bg bottom-safe-bg bg-surface-100" aria-hidden="true" />
       </div>
     </>
   );

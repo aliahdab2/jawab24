@@ -1,10 +1,8 @@
-import Head from 'next/head';
-import Link from 'next/link';
 import { useTranslation } from '@/i18n';
+import { LegalPageLayout } from '@/components/layout/LegalPageLayout';
 
 export default function TermsOfService() {
-  const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
+  const { t } = useTranslation();
 
   const sections = [
     { title: t('terms.acceptTitle'), text: t('terms.acceptText') },
@@ -51,67 +49,15 @@ export default function TermsOfService() {
   ];
 
   return (
-    <>
-      <Head>
-        <title>{t('terms.seoTitle')}</title>
-        <meta name="description" content={t('terms.metaDescription')} />
-        <link rel="canonical" href="https://jawab24.com/terms" />
-        <meta property="og:title" content={t('terms.seoTitle')} />
-        <meta property="og:url" content="https://jawab24.com/terms" />
-      </Head>
-
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-900 text-white pt-safe pb-safe">
-        <div className="max-w-4xl mx-auto px-4 py-12 px-safe">
-          <Link
-            href="/landing"
-            className="inline-block mb-8 text-brand-400 hover:text-brand-300 transition-colors"
-          >
-            {t('terms.backToHome')}
-          </Link>
-
-          <h1 className="text-4xl font-bold mb-2">{t('terms.title')}</h1>
-          <p className="text-slate-400 mb-8">
-            {t('terms.lastUpdated')} {t('terms.updateDate')}
-          </p>
-
-          <div className="space-y-8">
-            {sections.map((section, index) => (
-              <section key={index}>
-                <h2 className="text-xl font-semibold text-brand-400 mb-3">{section.title}</h2>
-                <p className="text-slate-300 leading-relaxed">{section.text}</p>
-
-                {section.items && (
-                  <ul className="mt-3 space-y-2 text-slate-300 ltr:pl-6 rtl:pr-6">
-                    {section.items.map((item, i) => (
-                      <li key={i} className="list-disc">{item}</li>
-                    ))}
-                  </ul>
-                )}
-
-                {section.email && (
-                  <p className="mt-3 text-brand-400">{section.email}</p>
-                )}
-
-                {section.corporate && (
-                  <div className="mt-3 text-slate-300 space-y-1">
-                    <p><strong>{section.corporate.name}</strong></p>
-                    <p>{section.corporate.type}</p>
-                    <p>{section.corporate.orgNr}</p>
-                    <p>{section.corporate.address}</p>
-                  </div>
-                )}
-              </section>
-            ))}
-          </div>
-        </div>
-
-        {/* Fixed bottom safe area background - matches dark page background */}
-        <div
-          className="fixed bottom-0 left-0 right-0 bg-slate-900 z-[39] pointer-events-none"
-          style={{ height: 'max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px))' }}
-          aria-hidden="true"
-        />
-      </div>
-    </>
+    <LegalPageLayout
+      title={t('terms.title')}
+      seoTitle={t('terms.seoTitle')}
+      metaDescription={t('terms.metaDescription')}
+      canonicalUrl="https://jawab24.com/terms"
+      lastUpdatedLabel={t('terms.lastUpdated')}
+      lastUpdatedDate={t('terms.updateDate')}
+      backToHomeLabel={t('terms.backToHome')}
+      sections={sections}
+    />
   );
 }

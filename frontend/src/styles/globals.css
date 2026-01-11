@@ -793,19 +793,50 @@ body.is-native {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   FIXED BOTTOM SAFE AREA BACKGROUND
-   Like Facebook: A fixed element at the very bottom that provides
-   a solid background behind the system navigation area
+   FIXED SAFE AREA BACKGROUNDS
+   Like Facebook: Fixed elements at top/bottom that provide
+   solid backgrounds behind system UI areas (notch, gesture nav)
 ═══════════════════════════════════════════════════════════════════ */
-.bottom-safe-bg {
+
+/* Base styles for fixed safe area backgrounds */
+.fixed-safe-bg {
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
-  height: max(var(--min-safe-bottom), var(--safe-bottom));
-  background: inherit;
-  z-index: 39; /* Just below bottom nav (z-40) */
+  z-index: 39; /* Just below nav (z-40) */
   pointer-events: none;
+}
+
+/* Top safe area background (for status bar) */
+.top-safe-bg {
+  top: 0;
+  height: max(var(--min-safe-top, 0px), env(safe-area-inset-top, 0px));
+}
+
+/* Native apps: ensure minimum top height */
+html.is-native .top-safe-bg,
+body.is-native .top-safe-bg {
+  height: max(24px, env(safe-area-inset-top, 0px));
+}
+
+/* Bottom safe area background (for gesture nav) */
+.bottom-safe-bg {
+  bottom: 0;
+  height: max(var(--min-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
+/* Native apps: ensure minimum bottom height */
+html.is-native .bottom-safe-bg,
+body.is-native .bottom-safe-bg {
+  height: max(20px, env(safe-area-inset-bottom, 0px));
+}
+
+/* Landscape: smaller bottom safe area */
+@media (orientation: landscape) {
+  html.is-native .bottom-safe-bg,
+  body.is-native .bottom-safe-bg {
+    height: max(4px, env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* Bottom inset utility - positions element above system navigation */
