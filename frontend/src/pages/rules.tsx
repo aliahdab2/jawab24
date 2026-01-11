@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Input, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
@@ -181,9 +181,7 @@ export default function RulesPage() {
   if (loading && rules.length === 0) {
     return (
       <DashboardLayout title={t('rules.title')}>
-        <div className="flex items-center justify-center h-64">
-          <PageSpinner />
-        </div>
+        <PageSkeleton />
       </DashboardLayout>
     );
   }
