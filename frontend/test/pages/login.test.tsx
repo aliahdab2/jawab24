@@ -43,6 +43,7 @@ vi.mock('@capacitor/core', () => ({
 // Mock Facebook Login Plugin (Global Mock for External Module)
 vi.mock('@capacitor-community/facebook-login', () => ({
     FacebookLogin: {
+        initialize: vi.fn().mockResolvedValue(undefined),
         login: vi.fn()
     }
 }));
@@ -76,7 +77,7 @@ describe('LoginPage', () => {
     let toastErrorSpy: ReturnType<typeof vi.fn>;
 
     beforeEach(async () => {
-        mockPush = vi.fn();
+        mockPush = vi.fn().mockResolvedValue(true);
         (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
             query: {},
             push: mockPush,
@@ -94,7 +95,7 @@ describe('LoginPage', () => {
         // Mock window.location
         originalLocation = window.location;
         delete (window as any).location;
-        window.location = { ...originalLocation, href: '', origin: 'http://localhost:3000' } as any;
+        window.location = { ...originalLocation, href: '', origin: 'http://localhost:3000', hostname: 'localhost' } as any;
 
         // Reset mocks
         vi.clearAllMocks();
@@ -127,27 +128,8 @@ describe('LoginPage', () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = originalEnv;
         });
 
-        it('should handle errors during OAuth URL construction', () => {
-            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
-            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-    
-            // Mock encodeURIComponent to throw
-            const originalEncode = global.encodeURIComponent;
-            global.encodeURIComponent = vi.fn(() => {
-                throw new Error('Encoding error');
-            });
-    
-            render(<LoginPage />);
-    
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
-    
-            expect(consoleSpy).toHaveBeenCalledWith('Facebook login error:', expect.any(Error));
-            expect(toastErrorSpy).toHaveBeenCalledWith('Encoding error');
-    
-            global.encodeURIComponent = originalEncode;
-            consoleSpy.mockRestore();
-        });
+        // NOTE: Error handling for web construction removed because login.tsx now uses a direct redirect 
+        // without a try-catch block for visual minimalism (as requested by user).
     
         it('should include required OAuth scopes', () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
@@ -158,11 +140,9 @@ describe('LoginPage', () => {
             fireEvent.click(loginButton);
     
             const href = window.location.href;
-            console.log('TEST HREF:', href);
-            const scopeMatch = href.match(/scope=([^&]+)/);
-            expect(scopeMatch).toBeTruthy();
+            expect(href).toContain('scope=');
     
-            const decodedScope = decodeURIComponent(scopeMatch![1]);
+            const decodedScope = decodeURIComponent(href.match(/scope=([^&]+)/)![1]);
             expect(decodedScope).toContain('email');
             expect(decodedScope).toContain('pages_show_list');
             expect(decodedScope).toContain('pages_read_engagement');
@@ -199,14 +179,17 @@ describe('LoginPage', () => {
             fireEvent.click(loginButton);
 
             // Verify Native Login called
-            await import('@testing-library/react').then(({ waitFor }) => waitFor(() => {
-                expect(mockLogin).toHaveBeenCalled();
+            await vi.waitFor(() => {
+                expect(FacebookLogin.login).toHaveBeenCalled();
                 expect(nativeLoginSpy).toHaveBeenCalledWith('native-fb-token');
                 expect(mockSetAuth).toHaveBeenCalledWith({ id: 'user-1' }, 'session-token', 'native-fb-token');
                 // Expect explicit language preservation
                 expect(mockSetLanguage).toHaveBeenCalledWith('en');
                 expect(mockPush).toHaveBeenCalledWith('/dashboard', '/dashboard', { locale: 'en' });
-            }));
+            });
+            
+            // Verify isProcessing logic (blank screen after success)
+            expect(screen.queryByRole('button')).toBeNull();
         });
     });
 });
