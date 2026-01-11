@@ -330,7 +330,7 @@ export default function TemplatesPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-surface-100 mt-2">
+          <div className="flex justify-end gap-3 pt-6 border-t border-surface-100 mt-4 pb-2 sm:pb-0">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>

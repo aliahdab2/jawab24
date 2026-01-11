@@ -385,21 +385,26 @@ export default function RulesPage() {
 
           <div>
             <label className="label">{t('templates.title')}</label>
-            <select
-              className="input !py-2.5 sm:!py-3"
-              value={formData.templateId}
-              onChange={(e) => setFormData({ ...formData, templateId: e.target.value })}
-            >
-              <option value="">{t('rules.actions.replyWithTemplate')}...</option>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                className="input !py-2.5 sm:!py-3 appearance-none pr-10"
+                value={formData.templateId}
+                onChange={(e) => setFormData({ ...formData, templateId: e.target.value })}
+              >
+                <option value="">{t('rules.actions.replyWithTemplate')}...</option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-surface-500">
+                <ArrowDown className="w-4 h-4" />
+              </div>
+            </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-surface-100 mt-4">
+          <div className="flex justify-end gap-3 pt-6 border-t border-surface-100 mt-6 pb-2 sm:pb-0">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>
