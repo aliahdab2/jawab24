@@ -13,17 +13,20 @@ ps-4, pe-4, ms-auto, me-0, text-start, rounded-s-lg
 pl-4, pr-4, ml-auto, mr-0, text-left, rounded-l-lg
 ```
 
-### Safe Areas - Body Handles It
+### Safe Areas - Every Page Needs Them
 ```tsx
-// ❌ Don't add pt-safe to content
-<div className="min-h-screen pt-safe">
+// ✅ TOP element (header/nav) - needs pt-safe
+<nav className="fixed top-0 w-full pt-safe">
+<div className="h-16 pt-safe">  // non-fixed header
 
-// ✅ Just use min-h-screen
-<div className="min-h-screen">
+// ✅ BOTTOM element (footer) - needs pb-safe
+<footer className="p-4 pb-safe">
 
-// ✅ Only fixed headers need pt-safe
-<nav className="fixed top-0 pt-safe">
+// ✅ MIDDLE content - NO safe area classes
+<div className="flex-1">
 ```
+
+**Rule**: Every page needs `pt-safe` on top + `pb-safe` on bottom
 
 ### Responsive & Landscape - Always Test Both
 ```tsx

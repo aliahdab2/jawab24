@@ -20,20 +20,29 @@
 
 ## 🚨 Critical Rules
 
-### 1. Safe Areas (Mobile App)
+### 1. Safe Areas (Mobile App) - CRITICAL
 
-**Body handles safe areas automatically for native apps. DO NOT add redundant padding.**
+**Every page needs explicit safe area classes. Body only handles bottom padding.**
 
 ```tsx
-// ❌ WRONG - causes double padding
-<div className="min-h-screen pt-safe pb-safe">
+// ✅ CORRECT - Every page needs these:
 
-// ✅ CORRECT - body already has padding
-<div className="min-h-screen">
+// TOP: Header/nav needs pt-safe (for notch/status bar)
+<nav className="fixed top-0 w-full pt-safe">
+// OR for non-fixed headers:
+<div className="flex items-center h-16 pt-safe">
 
-// ✅ EXCEPTION - Fixed/sticky headers need pt-safe
-<nav className="fixed top-0 pt-safe">
+// BOTTOM: Footer/last element needs pb-safe (for system nav)
+<footer className="p-4 pb-safe">
+
+// MIDDLE: Content between header and footer - NO safe area needed
+<div className="flex-1">
 ```
+
+**The Rule**: 
+- `pt-safe` → Top element of every page (header, nav, first visible element)
+- `pb-safe` → Bottom element of every page (footer, copyright, last content)
+- Middle content → No safe area classes needed
 
 ### 2. RTL Support (Arabic)
 
@@ -232,7 +241,8 @@ return (
 | Using `ml-*`/`mr-*` | Use `ms-*`/`me-*` for RTL |
 | Hardcoded strings | Use `t('key')` |
 | Missing `dir` attribute | Add `dir={isRTL ? 'rtl' : 'ltr'}` |
-| Fixed header without `pt-safe` | Fixed elements need `pt-safe` |
+| Missing `pt-safe` on page header | Every page's top element needs `pt-safe` |
+| Missing `pb-safe` on page footer | Every page's bottom element needs `pb-safe` |
 | Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
 | Ignoring landscape mode | Test both orientations, use `landscape:` |
 | Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |
