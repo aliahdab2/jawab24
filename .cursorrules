@@ -2,9 +2,118 @@
 
 ## Project Overview
 Jawab24 is a bilingual (Arabic/English) AI auto-reply service for Facebook & Instagram.
-- Frontend: Next.js + Tailwind CSS + Capacitor (Android/iOS)
+- Frontend: Next.js 15 + Tailwind CSS + Capacitor 8 (Android/iOS)
 - Backend: Node.js + Express + Drizzle ORM + PostgreSQL
 - AI Worker: OpenAI integration
+
+---
+
+## 🛠️ Development Environment
+
+### Required:
+- **Node.js**: v20+ (see `engines` in package.json)
+- **Package Manager**: npm (uses workspaces)
+- **Android Studio**: For building APK (with SDK 34+)
+
+### Setup:
+```bash
+# Install dependencies (root - installs all workspaces)
+npm install
+
+# Start frontend dev server
+cd frontend && npm run dev   # Runs on port 3001
+
+# Start backend dev server
+cd backend && npm run dev    # Runs on port 3000
+```
+
+---
+
+## ✅ Before Every Commit
+
+### Automatic (via Husky + lint-staged):
+Pre-commit hooks automatically run:
+1. **ESLint --fix** on staged files
+2. **TypeScript type check** on backend
+
+### Manual Checks:
+```bash
+# Run linting manually
+npm run lint              # All workspaces
+npm run lint:fix          # Fix auto-fixable issues
+
+# Type check
+npm run type-check        # All workspaces
+
+# Run tests
+npm run test              # All workspaces
+cd frontend && npm run test:run  # Frontend only
+```
+
+### After Editing Files:
+- **ALWAYS** check for lint errors using the `read_lints` tool
+- Fix any errors before committing
+- Use `lint:fix` for auto-fixable issues
+
+---
+
+## 📦 Monorepo Structure
+
+This is a **npm workspaces** monorepo:
+```
+/
+├── package.json          # Root - defines workspaces
+├── backend/              # Express API server
+├── frontend/             # Next.js + Capacitor
+├── ai-worker/            # OpenAI integration
+└── packages/
+    └── shared/           # Shared types (@jawab24/shared)
+```
+
+### Workspace Commands:
+```bash
+# Run command in specific workspace
+npm run build --workspace=frontend
+npm run test --workspace=backend
+
+# Run command in all workspaces
+npm run build             # Builds all
+npm run lint              # Lints all
+```
+
+---
+
+## 📱 Mobile App (Capacitor)
+
+### Build Flow:
+```bash
+cd frontend
+
+# 1. Build Next.js for mobile
+npm run build:mobile
+
+# 2. Sync to Android
+npx cap sync android
+
+# 3. Build APK
+cd android
+./gradlew assembleDebug
+
+# OR: Full clean rebuild
+npm run build:mobile:clean
+```
+
+### APK Location:
+```
+frontend/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Testing on Device:
+```bash
+# With device connected
+cd frontend/android
+./gradlew installDebug
+```
 
 ---
 
@@ -151,19 +260,73 @@ frontend/
 
 ---
 
-## 🔧 Development Commands
+## 🔧 Quick Reference Commands
 
 ```bash
-# Frontend
-cd frontend
-npm run dev          # Start dev server
-npm run build        # Build for production
-npx cap sync android # Sync to Android
+# ─────────────────────────────────────
+# DAILY DEVELOPMENT
+# ─────────────────────────────────────
+cd frontend && npm run dev     # Start frontend (port 3001)
+cd backend && npm run dev      # Start backend (port 3000)
 
-# Build APK
-cd android
-./gradlew assembleDebug
+# ─────────────────────────────────────
+# BEFORE COMMITTING
+# ─────────────────────────────────────
+npm run lint                   # Check all linting
+npm run lint:fix               # Auto-fix lint issues
+npm run type-check             # TypeScript check
+npm run test                   # Run all tests
+
+# ─────────────────────────────────────
+# MOBILE APP
+# ─────────────────────────────────────
+cd frontend
+npm run build:mobile           # Build for mobile
+npx cap sync android           # Sync to Android
+cd android && ./gradlew assembleDebug  # Build APK
+
+# Full rebuild (when things break):
+npm run build:mobile:clean
+
+# ─────────────────────────────────────
+# DATABASE (Backend)
+# ─────────────────────────────────────
+cd backend
+npm run db:generate            # Generate migrations
+npm run db:migrate             # Apply migrations
+npm run db:studio              # Open Drizzle Studio
 ```
+
+---
+
+## 🔍 AI Assistant Workflow
+
+When working on this codebase, follow these steps:
+
+1. **Before making changes:**
+   - Read relevant files to understand context
+   - Check existing patterns in similar files
+
+2. **When editing files:**
+   - Use `search_replace` for targeted edits
+   - Preserve existing code style and indentation
+   - Use logical properties for RTL (`ps-*`, `pe-*`, `ms-*`, `me-*`)
+
+3. **After editing:**
+   - Call `read_lints` on modified files
+   - Fix any lint errors before proceeding
+   - Commit with descriptive messages
+
+4. **Commit message format:**
+   ```
+   type(scope): description
+   
+   Examples:
+   feat(mobile): add bottom safe area
+   fix(login): prevent double-click
+   refactor(css): consolidate safe areas
+   docs: update cursorrules
+   ```
 
 ---
 
