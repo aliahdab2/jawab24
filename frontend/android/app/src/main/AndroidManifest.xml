@@ -1,5 +1,27 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Android 11+ package visibility requirements for Facebook SDK -->
+    <!-- Prevents "cannot call Facebook native apps unless the package visibility needs are declared" -->
+    <queries>
+        <!-- Facebook apps (native login / fallback) -->
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.facebook.lite" />
+        <package android:name="com.facebook.orca" />
+
+        <!-- Allow querying for Facebook-related URL schemes used by the SDK -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="fbapi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="fb-messenger-share-api" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="fbauth2" />
+        </intent>
+    </queries>
     <application
     android:allowBackup="true"
     android:icon="@mipmap/ic_launcher"
