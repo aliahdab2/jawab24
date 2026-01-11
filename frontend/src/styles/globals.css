@@ -679,30 +679,46 @@
 }
 
 /* Native apps need minimum safe areas since Android often returns 0 */
-/* Android gesture nav is ~48px, but we use 20px as a comfortable minimum */
-.is-native {
+/* Android gesture nav is ~48px, but we use 24px top, 20px bottom as comfortable minimums */
+html.is-native,
+body.is-native {
   --min-safe-top: 24px;
   --min-safe-bottom: 20px;
 }
 
 /* Global bottom padding for ALL pages in native app */
 /* This ensures scrollable content can scroll past the system navigation */
-.is-native body {
+html.is-native body,
+body.is-native {
   padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
 }
 
 /* Basic safe area padding utilities */
+/* Web: use env() only (no minimum forcing) */
 .pt-safe {
-  padding-top: max(var(--min-safe-top), var(--safe-top));
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .pb-safe {
-  padding-bottom: max(var(--min-safe-bottom), var(--safe-bottom));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .px-safe {
-  padding-left: max(0px, var(--safe-left));
-  padding-right: max(0px, var(--safe-right));
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Native apps: enforce minimum safe areas (Android returns 0) */
+html.is-native .pt-safe,
+body.is-native .pt-safe,
+.is-native .pt-safe {
+  padding-top: max(24px, env(safe-area-inset-top, 0px));
+}
+
+html.is-native .pb-safe,
+body.is-native .pb-safe,
+.is-native .pb-safe {
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
