@@ -15,6 +15,10 @@ const config: CapacitorConfig = {
     // Disable the loading spinner/indicator in WebView
     webContentsDebuggingEnabled: false,
   },
+  ios: {
+    scheme: 'Jawab24',
+    contentInset: 'automatic',
+  },
   plugins: {
     Keyboard: {
       resize: KeyboardResize.Body,
