@@ -7,11 +7,11 @@ import {
   ShieldCheck,
   Sparkles,
   MessageSquare,
-  Bot,
+
   Star
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { Button, BrandLogo, PremiumSpinner, FacebookIcon } from '@/components/ui';
+import { Button, PremiumSpinner, FacebookIcon } from '@/components/ui';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
@@ -240,41 +240,49 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Right Side: Login Form */}
+        {/* Right Side: Login Form (Redesigned) */}
         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
-          {/* Mobile Nav */}
-          <div className="flex items-center justify-between p-6 lg:p-12 pt-safe box-content">
-            <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
-              <BrandLogo
-                variant="main"
-                className="w-9 h-9 sm:w-12 sm:h-12 group-hover:rotate-6 transition-transform"
-              />
-              <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
-            </Link>
-            <button
+          {/* Mobile Header: Minimal - Just Language Toggle */}
+          <div className="w-full flex justify-end p-6 pt-safe">
+             <button
               onClick={toggleLanguage}
-              className="px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
+              className="text-xs font-bold text-surface-400 hover:text-brand-600 transition-colors uppercase tracking-widest"
             >
-              {language === 'ar' ? 'English' : 'العربية'}
+              {language === 'ar' ? 'EN | AR' : 'EN | AR'}
             </button>
           </div>
 
-          <div className="flex-1 flex items-center justify-center px-6 py-12">
+          <div className="flex-1 flex flex-col items-center px-6 pt-8 pb-12 sm:justify-center sm:pt-0">
             <div className="w-full max-w-md">
-              <div className="text-center lg:text-start mb-12">
-                <h2 className="text-4xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
+              
+              {/* Hero Brand Section */}
+              <div className="text-center mb-10">
+                 <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-6 bg-gradient-to-br from-brand-500 to-brand-600 rounded-[28px] shadow-2xl shadow-brand-500/20 flex items-center justify-center transform hover:scale-105 transition-transform duration-500">
+                    <span className="text-white text-4xl sm:text-5xl font-bold">ج</span>
+                 </div>
+                 <h1 className="text-2xl sm:text-3xl font-display font-bold text-surface-900 tracking-tight mb-2">
+                   Jawab24
+                 </h1>
+                 <p className="text-surface-400 font-medium text-sm sm:text-base">
+                   {t('auth.welcomeBackDesc')}
+                 </p>
+              </div>
+
+               <div className="text-center mb-10">
+                <h2 className="text-xl font-display font-bold text-surface-900">
                   {t('auth.welcomeBack')}
                 </h2>
-                <p className="text-lg text-surface-500 font-medium">
-                  {t('auth.welcomeBackDesc')}
+                <p className="text-sm text-surface-500 font-medium mt-1">
+                   Log in to continue your journey with us.
                 </p>
               </div>
+
 
               <div className="space-y-6">
                 <Button
                   onClick={handleFacebookLogin}
                   size="lg"
-                  className={`w-full bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95 ${isLoading ? 'py-4 opacity-90 cursor-wait' : 'py-8'}`}
+                  className={`w-full bg-[#1877F2] hover:bg-[#166fe5] text-white rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95 ${isLoading ? 'py-4 opacity-90 cursor-wait' : 'py-5'}`}
                   disabled={isLoading}
                 >
                   <div className="flex items-center justify-center gap-3">
@@ -292,40 +300,34 @@ export default function LoginPage() {
                   </div>
                 </Button>
 
-                <div className="p-6 rounded-3xl bg-brand-50/50 border border-brand-100 mt-8">
-                  <div className="flex gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-5 h-5 text-brand-600" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-brand-900 text-sm mb-1">{t('auth.didYouKnow')}</h4>
-                      <p className="text-brand-700/80 text-sm font-medium leading-relaxed">
+                {/* Trust Badge / Did you know */}
+                <div className="flex flex-col items-center gap-3 mt-8">
+                   <ShieldCheck className="w-6 h-6 text-emerald-500" />
+                   <div className="text-center">
+                      <h4 className="font-bold text-surface-900 text-sm mb-1">{t('auth.didYouKnow')}</h4>
+                      <p className="text-surface-500 text-xs font-medium max-w-xs mx-auto leading-relaxed">
                         {t('auth.didYouKnowDesc')}
                       </p>
-                    </div>
-                  </div>
+                   </div>
                 </div>
               </div>
 
               <div className="mt-12 text-center">
-                <p className="text-sm text-surface-400 font-medium">
+                <p className="text-xs text-surface-400 font-medium">
                   {t('auth.termsAgreement')}
                   <br className="sm:hidden" />
-                  <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
+                  <Link href="/terms" className="text-surface-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
                   {t('auth.and')}
-                  <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
+                  <Link href="/privacy" className="text-surface-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
                 </p>
               </div>
             </div>
           </div>
 
           {/* Footer Info */}
-          <div className="p-4 pb-safe border-t border-surface-100 flex flex-col items-center justify-center gap-1">
+          <div className="p-4 pb-safe border-t border-transparent flex flex-col items-center justify-center gap-1 opacity-50">
             <div className="text-[10px] font-medium text-surface-300 tracking-wider">
               © {new Date().getFullYear()} Jawab24
-            </div>
-            <div className="text-[10px] font-mono text-surface-200">
-              v{process.env.NEXT_PUBLIC_BUILD_TIME ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleString() : 'Dev'}
             </div>
           </div>
         </div>
