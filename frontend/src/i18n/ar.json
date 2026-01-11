@@ -103,7 +103,6 @@
   "auth.loginCancelled": "تم إلغاء تسجيل الدخول أو فشل",
   "auth.loginTimeout": "انتهت مهلة تسجيل الدخول. يرجى المحاولة مرة أخرى.",
   "auth.redirecting": "جاري إعادة التوجيه...",
-  "auth.loggingIn": "جاري تسجيل الدخول...",
   "auth.systemsActive": "الأنظمة تعمل",
   "auth.nextGenAutoReplies": "الجيل الجديد من الردود التلقائية",
   "auth.startYourJourney": "ابدأ رحلة",
