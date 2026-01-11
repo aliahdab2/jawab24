@@ -141,10 +141,24 @@ export default function App({ Component, pageProps }: AppProps) {
 
       // Track route changes to update status bar style dynamically (Best Practice)
       const handleRouteChange = (url: string) => {
-        // Style.Dark creates white icons for dark backgrounds
-        // Style.Light creates dark icons for light backgrounds
-        const isDarkPage = url.includes('/dashboard') || url.includes('/zinc') || url.includes('/auth');
-         StatusBar.setStyle({ style: isDarkPage ? Style.Dark : Style.Light }).catch(() => {});
+        // Style.Dark creates white icons for dark backgrounds (needed for dark header gradient)
+        // Style.Light creates dark icons for light backgrounds (for public pages)
+        // All authenticated dashboard pages have dark gradient header, need white status bar icons
+        const DARK_HEADER_PAGES = [
+          '/dashboard',
+          '/comments',
+          '/messages',
+          '/pages',
+          '/settings',
+          '/pricing',
+          '/templates',
+          '/rules',
+          '/auth',
+          '/terms',
+          '/privacy'
+        ];
+        const isDarkPage = DARK_HEADER_PAGES.some(page => url.includes(page));
+        StatusBar.setStyle({ style: isDarkPage ? Style.Dark : Style.Light }).catch(() => {});
       };
       
       router.events.on('routeChangeComplete', handleRouteChange);

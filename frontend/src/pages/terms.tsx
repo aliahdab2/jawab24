@@ -60,8 +60,8 @@ export default function TermsOfService() {
         <meta property="og:url" content="https://jawab24.com/terms" />
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-900 text-white">
-        <div className="max-w-4xl mx-auto px-4 py-12">
+      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-900 text-white pt-safe pb-safe">
+        <div className="max-w-4xl mx-auto px-4 py-12 px-safe">
           <Link
             href="/landing"
             className="inline-block mb-8 text-brand-400 hover:text-brand-300 transition-colors"

@@ -164,11 +164,11 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         </main>
 
         {/* Fixed bottom safe area background - ALWAYS on mobile (public + authenticated) */}
+        {/* Industry Standard: Safe area matches adjacent UI element */}
+        {/* - Authenticated: white to match bottom nav */}
+        {/* - Public/Clean: white to match light content (landing has its own dark safe area) */}
         <div
-          className={clsx(
-            'lg:hidden fixed bottom-0 left-0 right-0 z-[39] pointer-events-none',
-            isCleanLayout ? 'bg-surface-50' : 'bg-white'
-          )}
+          className="lg:hidden fixed bottom-0 left-0 right-0 z-[39] pointer-events-none bg-white"
           style={{ height: safeBottom }}
           aria-hidden="true"
         />
