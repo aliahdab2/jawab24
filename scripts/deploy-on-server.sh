@@ -92,11 +92,25 @@ start_new_env() {
     docker-compose up -d postgres redis nginx
 
     echo "🧹 Cleaning up old $DEPLOY_ENV containers..."
+    # Stop containers first
     docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml stop \
         backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV 2>/dev/null || true
-    sleep 3
+    
+    # Remove containers and wait for completion
     docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml rm -f \
         backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV 2>/dev/null || true
+    
+    # Wait for container removal to fully complete (avoids race condition)
+    echo "   Waiting for container cleanup to complete..."
+    for container in "jawab24-backend-$DEPLOY_ENV" "jawab24-frontend-$DEPLOY_ENV" "jawab24-ai-worker-$DEPLOY_ENV"; do
+        for i in {1..10}; do
+            if ! docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
+                break
+            fi
+            sleep 1
+        done
+    done
+    sleep 2  # Extra buffer for Docker to release resources
 
     echo "🚀 Starting new containers..."
     docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml up -d \
