@@ -679,9 +679,10 @@
 }
 
 /* Native apps need minimum safe areas since Android often returns 0 */
+/* Android gesture nav is ~48px, but we use 20px as a comfortable minimum */
 .is-native {
   --min-safe-top: 24px;
-  --min-safe-bottom: 12px;
+  --min-safe-bottom: 20px;
 }
 
 /* Basic safe area padding utilities */

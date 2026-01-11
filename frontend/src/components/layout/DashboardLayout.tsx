@@ -144,8 +144,8 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
               isCleanLayout ? 'pb-12' : 'lg:pb-12'
             )}
             style={!isCleanLayout ? {
-              // Mobile: padding = nav (64px) + safe area + extra 16px breathing room
-              paddingBottom: 'calc(80px + max(12px, env(safe-area-inset-bottom, 0px)))'
+              // Mobile: padding = nav (64px) + safe area (20px min) + extra 16px breathing room
+              paddingBottom: 'calc(100px + max(20px, env(safe-area-inset-bottom, 0px)))'
             } : undefined}
           >
             {children}
@@ -164,10 +164,11 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {!isCleanLayout && (
           <>
             {/* Fixed bottom safe area background - like Facebook */}
-            {/* This white bar is ALWAYS visible behind system navigation */}
+            {/* Android gesture nav is ~48px, 3-button nav is ~48px, so we use 20px minimum */}
+            {/* This creates a white bar that's ALWAYS visible behind system navigation */}
             <div 
               className="lg:hidden fixed bottom-0 left-0 right-0 bg-white z-[39]"
-              style={{ height: 'max(12px, env(safe-area-inset-bottom, 0px))' }}
+              style={{ height: 'max(20px, env(safe-area-inset-bottom, 0px))' }}
               aria-hidden="true"
             />
             
@@ -175,11 +176,11 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             <nav
               className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
               style={{
-                // Position nav ABOVE the safe area (not overlapping)
-                bottom: 'max(12px, env(safe-area-inset-bottom, 0px))',
+                // Position nav ABOVE the safe area (20px minimum for Android)
+                bottom: 'max(20px, env(safe-area-inset-bottom, 0px))',
                 // Side padding for landscape notch
-                paddingLeft: 'max(8px, env(safe-area-inset-left, 0px))',
-                paddingRight: 'max(8px, env(safe-area-inset-right, 0px))'
+                paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))',
+                paddingRight: 'max(16px, env(safe-area-inset-right, 0px))'
               }}
             >
               <MobileNavButton
