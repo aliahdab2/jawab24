@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import { Capacitor } from '@capacitor/core';
 import {
   Zap,
   ShieldCheck,
@@ -11,7 +12,7 @@ import {
   Star
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { Button, BrandLogo, PremiumSpinner, FacebookIcon } from '@/components/ui';
+import { Button, BrandLogo, FacebookIcon } from '@/components/ui';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
@@ -49,8 +50,9 @@ export default function LoginPage() {
       }
 
       // Check if running in Native Mobile App
-      const cap = (window as any).Capacitor;
-      const isMobile = cap?.isNativePlatform?.();
+      const isMobile = Capacitor.isNativePlatform();
+      // eslint-disable-next-line no-console
+      console.log('[Login] Platform check:', { isMobile, platform: Capacitor.getPlatform() });
 
       if (isMobile) {
         // --- NATIVE MOBILE LOGIN FLOW ---
@@ -279,10 +281,10 @@ export default function LoginPage() {
                 >
                   <div className="flex items-center justify-center gap-3">
                     {isLoading ? (
-                      <>
-                        <PremiumSpinner size="sm" color="white" />
-                        <span className="text-base font-medium animate-pulse">{t('auth.redirecting')}</span>
-                      </>
+                      <div className="flex items-center gap-3 animate-pulse opacity-80">
+                        <FacebookIcon className="w-6 h-6" />
+                        <span className="text-base font-medium">{t('auth.redirecting')}</span>
+                      </div>
                     ) : (
                       <>
                         <FacebookIcon className="w-6 h-6" />
