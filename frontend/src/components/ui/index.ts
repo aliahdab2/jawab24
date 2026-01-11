@@ -8,8 +8,6 @@ export { Textarea } from './Textarea';
 export { Modal } from './Modal';
 export { EmptyState } from './EmptyState';
 export { PageHeader } from './PageHeader';
-export { Spinner, PageSpinner } from './Spinner';
-export { PremiumSpinner } from './PremiumSpinner';
 export { FacebookIcon, InstagramIcon } from './BrandIcons';
 export { BrandLogo } from './BrandLogo';
 export { Toggle } from './Toggle';

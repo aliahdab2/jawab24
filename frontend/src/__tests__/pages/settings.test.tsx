@@ -40,7 +40,6 @@ vi.mock('@/components/ui', () => ({
         <button onClick={() => onChange(!enabled)}>{enabled ? 'ON' : 'OFF'}</button>
     ),
     PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
-    PageSpinner: () => <div>Loading...</div>,
     PageSkeleton: () => <div data-testid="page-skeleton">Loading...</div>,
     Modal: ({ children, isOpen }: { children: React.ReactNode; isOpen: boolean }) => (
         isOpen ? <div data-testid="modal">{children}</div> : null
