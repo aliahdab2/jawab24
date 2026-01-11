@@ -254,6 +254,8 @@ export default function LoginPage() {
                 <Button
                   onClick={handleFacebookLogin}
                   size="lg"
+                  loading={false}
+                  disabled={false}
                   className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
                 >
                   <div className="flex items-center justify-center gap-3">
