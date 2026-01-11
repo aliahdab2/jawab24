@@ -678,23 +678,65 @@
   --min-safe-bottom: 0px;
 }
 
-/* Native apps need minimum safe areas since Android often returns 0 */
-/* Android gesture nav is ~48px, but we use 24px top, 20px bottom as comfortable minimums */
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLOBAL SAFE AREA STRATEGY FOR NATIVE APPS
+   
+   This automatically applies safe areas to ALL pages without manual classes.
+   Android often returns 0 for env(safe-area-inset-*), so we enforce minimums.
+   
+   Minimums:
+   - Top: 24px (status bar height)
+   - Bottom: 20px (gesture navigation)
+   - Sides (landscape): 24px (notch/cutout)
+═══════════════════════════════════════════════════════════════════════════ */
+
 html.is-native,
 body.is-native {
   --min-safe-top: 24px;
   --min-safe-bottom: 20px;
+  --min-safe-side: 0px;
 }
 
-/* Global bottom padding for ALL pages in native app */
-/* This ensures scrollable content can scroll past the system navigation */
+/* Landscape: Add side minimums for notch */
+@media (orientation: landscape) {
+  html.is-native,
+  body.is-native {
+    --min-safe-side: 24px;
+    --min-safe-bottom: 12px; /* Smaller in landscape */
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   AUTOMATIC SAFE AREAS FOR ALL PAGES IN NATIVE APP
+   No need to add classes - this applies globally!
+═══════════════════════════════════════════════════════════════════ */
+
+/* Portrait: Top and bottom safe areas */
 html.is-native body,
 body.is-native {
-  padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  padding-top: max(var(--min-safe-top), env(safe-area-inset-top, 0px));
+  padding-bottom: max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px));
 }
 
-/* Basic safe area padding utilities */
-/* Web: use env() only (no minimum forcing) */
+/* Landscape: Add side safe areas for notch/cutout */
+@media (orientation: landscape) {
+  html.is-native body,
+  body.is-native {
+    padding-left: max(var(--min-safe-side), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--min-safe-side), env(safe-area-inset-right, 0px));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SAFE AREA UTILITY CLASSES
+   
+   These can be used for ADDITIONAL safe area padding on specific elements
+   (e.g., fixed headers, bottom navs, modals)
+   
+   Note: Global body padding is already applied automatically for native apps
+═══════════════════════════════════════════════════════════════════ */
+
+/* Web: use env() only */
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
 }
@@ -708,17 +750,20 @@ body.is-native {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-/* Native apps: enforce minimum safe areas (Android returns 0) */
-html.is-native .pt-safe,
-body.is-native .pt-safe,
+/* Native apps: enforce minimums (Android returns 0) */
 .is-native .pt-safe {
   padding-top: max(24px, env(safe-area-inset-top, 0px));
 }
 
-html.is-native .pb-safe,
-body.is-native .pb-safe,
 .is-native .pb-safe {
   padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+}
+
+@media (orientation: landscape) {
+  .is-native .px-safe {
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
