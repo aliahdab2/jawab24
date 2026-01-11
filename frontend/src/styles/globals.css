@@ -710,7 +710,7 @@ body.is-native {
   html.is-native,
   body.is-native {
     --min-safe-side: 24px;
-    --min-safe-bottom: 12px;
+    --min-safe-bottom: 4px; /* Minimal in landscape - gesture area is smaller */
   }
 }
 
@@ -820,7 +820,7 @@ body.is-native {
 @media (orientation: landscape) {
   html.is-native,
   body.is-native {
-    --min-safe-bottom: 8px; /* Smaller in landscape */
+    --min-safe-bottom: 4px; /* Minimal in landscape - more screen space */
   }
   
   /* Add side safe areas for notch/cutout in landscape */

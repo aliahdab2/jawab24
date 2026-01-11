@@ -112,7 +112,7 @@ export default function PrivacyPolicy() {
         {/* Fixed bottom safe area background - matches dark page background */}
         <div
           className="fixed bottom-0 left-0 right-0 bg-slate-900 z-[39] pointer-events-none"
-          style={{ height: 'max(var(--min-safe-bottom, 20px), env(safe-area-inset-bottom, 0px))' }}
+          style={{ height: 'max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px))' }}
           aria-hidden="true"
         />
       </div>
