@@ -147,7 +147,7 @@ export default function LandingPage() {
         {/* Navigation - Mobile optimized */}
         <nav className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-14 sm:h-20">
+            <div className="flex items-center justify-between h-16 sm:h-20">
               {/* Logo */}
               {/* Logo */}
               <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
@@ -187,8 +187,8 @@ export default function LandingPage() {
           </div>
         </nav>
 
-        {/* Hero Section - Optimized for Mobile with Illustration */}
-        <section className="relative pt-24 sm:pt-32 lg:pt-40 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
+        {/* Hero Section - Uses pt-hero for consistent spacing below fixed nav + breathing room */}
+        <section className="relative pt-hero pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
           {/* Animated Background Elements */}
           <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
           <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />

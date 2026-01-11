@@ -6,6 +6,33 @@
 
 @layer base {
   :root {
+    /* ═══════════════════════════════════════════════════════════════════
+       LAYOUT STRATEGY - Single source of truth for all spacing
+       All pages use these values for consistent appearance
+    ═══════════════════════════════════════════════════════════════════ */
+    
+    /* Header heights - used by all layouts */
+    --header-height: 4rem;      /* 64px on mobile */
+    --header-height-lg: 5rem;   /* 80px on larger screens */
+    
+    /* Bottom navigation height (mobile only, authenticated pages) */
+    --nav-bottom-height: 4rem;  /* 64px */
+    
+    /* Content padding */
+    --content-padding-x: 1rem;        /* 16px mobile */
+    --content-padding-x-md: 2rem;     /* 32px tablet */
+    --content-padding-x-lg: 3rem;     /* 48px desktop */
+    --content-padding-y: 1rem;        /* 16px */
+    
+    /* Safe areas - these get overridden by env() where supported */
+    --safe-area-top: 0px;
+    --safe-area-bottom: 0px;
+    --safe-area-left: 0px;
+    --safe-area-right: 0px;
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       COLOR TOKENS
+    ═══════════════════════════════════════════════════════════════════ */
     --background: 250 250 250;
     --foreground: 9 9 11;
     --card: 255 255 255;
@@ -22,6 +49,16 @@
     --destructive-foreground: 255 255 255;
     --border: 228 228 231;
     --ring: 13 148 136;
+  }
+  
+  /* Override safe area variables with actual values when available */
+  @supports (padding-top: env(safe-area-inset-top)) {
+    :root {
+      --safe-area-top: env(safe-area-inset-top, 0px);
+      --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-area-left: env(safe-area-inset-left, 0px);
+      --safe-area-right: env(safe-area-inset-right, 0px);
+    }
   }
 
   * {
@@ -616,34 +653,64 @@
   animation-delay: 1s;
 }
 
-/* Safe area insets for mobile devices (notches, gesture bars) */
-/* Safe area insets for mobile devices (notches, gesture bars) */
-/* Safe area insets for mobile devices (notches, gesture bars) */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
+/* ═══════════════════════════════════════════════════════════════════
+   SAFE AREA UTILITIES - Centralized safe area handling
+   These use the CSS variables defined in :root
+═══════════════════════════════════════════════════════════════════ */
 
+/* Basic safe area padding utilities */
 .pt-safe {
-  /* Use the system safe area if available, otherwise the pre-calculated variable, otherwise 0 */
-  padding-top: env(safe-area-inset-top, var(--sat, 0px));
+  padding-top: var(--safe-area-top);
 }
 
-/* Specific adjustment for native devices to ensure it never collapses */
-.is-native .pt-safe {
-  padding-top: max(24px, env(safe-area-inset-top));
+.pb-safe {
+  padding-bottom: var(--safe-area-bottom);
 }
 
 .px-safe {
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: var(--safe-area-left);
+  padding-right: var(--safe-area-right);
 }
 
-/* Mobile bottom nav safe area */
-.mobile-nav-safe {
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0.5rem));
+/* For native apps, ensure minimum safe area */
+.is-native .pt-safe {
+  padding-top: max(24px, var(--safe-area-top));
 }
 
-/* Ensure background covers everything but content is safe */
+/* Combined: header height + safe area (for content below fixed headers) */
+.pt-header {
+  padding-top: calc(var(--header-height) + var(--safe-area-top));
+}
+
+@media (min-width: 640px) {
+  .pt-header {
+    padding-top: calc(var(--header-height-lg) + var(--safe-area-top));
+  }
+}
+
+/* Hero sections: header + extra breathing room */
+.pt-hero {
+  padding-top: calc(var(--header-height) + var(--safe-area-top) + 3rem);
+}
+
+@media (min-width: 640px) {
+  .pt-hero {
+    padding-top: calc(var(--header-height-lg) + var(--safe-area-top) + 3rem);
+  }
+}
+
+@media (min-width: 1024px) {
+  .pt-hero {
+    padding-top: calc(var(--header-height-lg) + var(--safe-area-top) + 5rem);
+  }
+}
+
+/* Bottom nav safe padding */
+.pb-nav {
+  padding-bottom: calc(var(--nav-bottom-height) + var(--safe-area-bottom));
+}
+
+/* App container - full height with safe areas */
 .app-container {
   min-height: 100vh;
   min-height: 100dvh;
@@ -651,12 +718,12 @@
   flex-direction: column;
 }
 
-/* Use this for individual pages that want to be fully safe */
+/* Apply all safe paddings at once */
 .safe-paddings {
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  padding-top: var(--safe-area-top);
+  padding-bottom: var(--safe-area-bottom);
+  padding-left: var(--safe-area-left);
+  padding-right: var(--safe-area-right);
 }
 
 /* Shimmer animation for loading states */

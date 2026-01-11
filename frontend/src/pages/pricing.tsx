@@ -379,7 +379,7 @@ export default function PricingPage() {
         <meta property="og:url" content="https://jawab24.com/pricing" />
       </Head>
       <DashboardLayout title={t('pricing.title')} isPublic>
-        <div className="pt-8 md:pt-0">
+        <div>
         {/* Fallback Disclaimer - Only shown when using offline plans */}
         {usingFallback && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">

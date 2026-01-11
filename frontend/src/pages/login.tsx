@@ -222,8 +222,8 @@ export default function LoginPage() {
 
         {/* Right Side: Login Form */}
         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
-          {/* Mobile Nav */}
-          <div className="flex items-center justify-between p-6 lg:p-12 pt-safe box-content">
+          {/* Header - Consistent height across all pages */}
+          <div className="flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"

@@ -102,9 +102,9 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
             </div>
           </div>
         ) : (
-          /* Mobile APP Header - Final: h-16 (64px), Dark Gradient, Logo Left, Dynamic Icon Right */
+          /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+ */
           <div
-            className="lg:hidden sticky top-0 left-0 right-0 h-20 flex items-center justify-between px-5 z-40 pt-safe"
+            className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 z-40 pt-safe"
             style={{
               background: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 75%, transparent 100%)'
             }}
@@ -128,12 +128,13 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           </div>
         )}
 
-        {/* Main content */}
+        {/* Main content - uses centralized spacing from CSS variables */}
         <main
           className={clsx(
             'transition-all duration-500 min-h-screen',
-            'pt-safe', // Ensures main content respects safe area top
-            isCleanLayout ? 'pt-16 md:pt-20' : 'pt-20 lg:pt-0',
+            // Clean layout (public pages): use pt-header for fixed header spacing
+            // Regular layout: mobile gets pt-header, desktop (with sidebar) gets no top padding
+            isCleanLayout ? 'pt-header' : 'pt-header lg:pt-0',
             !isCleanLayout && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, Badge, Input, PageHeader, PageSkeleton, MessagesFilterButtons } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import {
@@ -106,14 +106,6 @@ export default function MessagesPage() {
     return matchesSearch && matchesFilter;
   });
 
-  const getFilterLabel = (f: FilterType) => {
-    switch (f) {
-      case 'all': return t('common.all' as TranslationKey);
-      case 'incoming': return t('messages.incoming');
-      case 'outgoing': return t('messages.outgoing');
-      case 'needs_attention': return t('comments.needsAttention');
-    }
-  };
 
   const formatTime = (dateValue: string | Date | null | undefined) => {
     if (!dateValue) return '-';
@@ -293,28 +285,18 @@ export default function MessagesPage() {
               className="py-3.5 ps-14 rounded-2xl bg-surface-50 border-none focus:ring-4 focus:ring-brand-500/10 focus:bg-white transition-all shadow-sm"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-hide">
-            {(['all', 'incoming', 'outgoing', 'needs_attention'] as FilterType[]).map((f) => (
-              <Button
-                key={f}
-                variant={filter === f ? 'primary' : 'secondary'}
-                size="sm"
-                onClick={() => setFilter(f)}
-                className={`rounded-full whitespace-nowrap flex-shrink-0 px-6 transition-all duration-300 ${filter === f ? 'shadow-sm shadow-brand-100' : ''
-                  } ${f === 'needs_attention' && needsAttentionCount > 0 ? 'ring-2 ring-red-200' : ''}`}
-              >
-                <div className="flex items-center gap-2">
-                  {f === 'needs_attention' && <AlertTriangle className="w-3.5 h-3.5" />}
-                  <span>{getFilterLabel(f)}</span>
-                  {f === 'needs_attention' && needsAttentionCount > 0 && (
-                    <span className="bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                      {needsAttentionCount}
-                    </span>
-                  )}
-                </div>
-              </Button>
-            ))}
-          </div>
+          {/* Filter buttons - 2x2 grid on mobile, row on larger screens */}
+          <MessagesFilterButtons
+            filter={filter}
+            onChange={setFilter}
+            needsAttentionCount={needsAttentionCount}
+            labels={{
+              all: t('common.all' as TranslationKey),
+              incoming: t('messages.incoming'),
+              outgoing: t('messages.outgoing'),
+              needsAttention: t('comments.needsAttention'),
+            }}
+          />
         </div>
       </Card>
 
