@@ -714,10 +714,15 @@ body.is-native {
   }
 }
 
-/* Apply safe area padding to body for native apps */
+/* Apply safe area padding to body for native apps
+   IMPORTANT: 
+   - TOP: NOT applied here - each page handles via pt-safe on fixed/sticky headers
+   - BOTTOM: Applied globally for system navigation 
+   - SIDES: Applied in landscape for notch
+*/
 html.is-native body,
 body.is-native {
-  padding-top: max(var(--min-safe-top), env(safe-area-inset-top, 0px));
+  /* NO top padding - headers with pt-safe handle this */
   padding-bottom: max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px));
 }
 
@@ -732,10 +737,11 @@ body.is-native {
 /* ─────────────────────────────────────────────────────────────────
    2. PWA STANDALONE MODE (Added to Home Screen)
    Uses env() values - browsers report these correctly in standalone
+   NO top padding - headers handle their own safe areas
 ───────────────────────────────────────────────────────────────── */
 @media (display-mode: standalone) {
   body {
-    padding-top: env(safe-area-inset-top, 0px);
+    /* NO top padding - headers with pt-safe handle this */
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   
