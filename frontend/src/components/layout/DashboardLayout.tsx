@@ -178,23 +178,22 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           </nav>
         )}
 
-        {/* Mobile full menu overlay - 2 columns, stronger shadow, 40-50% backdrop */}
-        {/* Mobile full menu overlay - 2 columns, stronger shadow, 40-50% backdrop */}
+        {/* Mobile full menu overlay - responsive to portrait/landscape */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 bg-black/45 z-50 backdrop-blur-sm animate-in fade-in" onClick={() => setMobileMenuOpen(false)}>
             <div
-              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[24px] p-5 animate-in slide-in-from-bottom overflow-y-auto"
+              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[24px] p-4 landscape:p-3 animate-in slide-in-from-bottom overflow-y-auto"
               style={{
-                paddingBottom: 'max(2rem, calc(2rem + env(safe-area-inset-bottom, 0px)))',
+                paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))',
                 maxHeight: '85vh',
                 boxShadow: '0 -8px 32px rgba(0,0,0,0.16)'
               }}
               onClick={(e) => e.stopPropagation()}
               dir={isRTL ? 'rtl' : 'ltr'}
             >
-              {/* Menu Header - RTL: القائمة (right), X (left), 48px height */}
-              <div className="flex items-center justify-between h-12 pb-4 mb-6 border-b border-surface-100">
-                <h3 className="font-semibold text-lg text-surface-900 text-start">{t('nav.menu') || 'القائمة'}</h3>
+              {/* Menu Header - Compact in landscape */}
+              <div className="flex items-center justify-between h-10 landscape:h-8 pb-3 landscape:pb-2 mb-4 landscape:mb-2 border-b border-surface-100">
+                <h3 className="font-semibold text-lg landscape:text-base text-surface-900 text-start">{t('nav.menu') || 'القائمة'}</h3>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
                   className="p-2 -m-2 rounded-full hover:bg-surface-100 text-surface-500"
@@ -203,39 +202,41 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                 </button>
               </div>
 
-              {/* Menu Grid - 2 columns, Minimalist Focus (4 items) */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {/* Row 1: الرئيسية | التعليقات */}
+              {/* Menu Grid - 2 cols portrait, 4 cols landscape */}
+              <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2 landscape:gap-3 mb-3 landscape:mb-2">
                 <MobileMenuButton
                   onClick={() => { router.push('/dashboard'); setMobileMenuOpen(false); }}
-                  icon={<LayoutDashboard className="w-7 h-7" />}
+                  icon={<LayoutDashboard className="w-7 h-7 landscape:w-5 landscape:h-5" />}
                   label={t('nav.dashboard')}
+                  landscape
                 />
                 <MobileMenuButton
                   onClick={() => { router.push('/comments'); setMobileMenuOpen(false); }}
-                  icon={<MessageSquare className="w-7 h-7" />}
+                  icon={<MessageSquare className="w-7 h-7 landscape:w-5 landscape:h-5" />}
                   label={t('nav.comments')}
+                  landscape
                 />
-
-                {/* Row 2: الرسائل | الإعدادات */}
                 <MobileMenuButton
                   onClick={() => { router.push('/messages'); setMobileMenuOpen(false); }}
-                  icon={<MessageCircle className="w-7 h-7" />}
+                  icon={<MessageCircle className="w-7 h-7 landscape:w-5 landscape:h-5" />}
                   label={t('nav.messages')}
+                  landscape
                 />
                 <MobileMenuButton
                   onClick={() => { router.push('/settings'); setMobileMenuOpen(false); }}
-                  icon={<Settings className="w-7 h-7" />}
+                  icon={<Settings className="w-7 h-7 landscape:w-5 landscape:h-5" />}
                   label={t('nav.settings')}
+                  landscape
                 />
               </div>
 
-              {/* Row 3: تسجيل الخروج (full width) */}
+              {/* Logout button - compact in landscape */}
               <MobileMenuButton
                 onClick={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
-                icon={<LogOut className="w-7 h-7" />}
+                icon={<LogOut className="w-7 h-7 landscape:w-5 landscape:h-5" />}
                 label={t('nav.logout')}
                 className="logout-button"
+                landscape
               />
             </div>
           </div>
@@ -310,11 +311,12 @@ function MobileNavButton({ onClick, icon, label, active }: {
   );
 }
 
-function MobileMenuButton({ onClick, icon, label, className }: {
+function MobileMenuButton({ onClick, icon, label, className, landscape }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   className?: string;
+  landscape?: boolean;
 }) {
   const isLogout = className?.includes('logout');
   const { language } = useTranslation();
@@ -324,10 +326,10 @@ function MobileMenuButton({ onClick, icon, label, className }: {
     <button
       onClick={onClick}
       className={clsx(
-        "rounded-2xl transition-all duration-300 active:scale-95 outline-none border",
+        "rounded-2xl landscape:rounded-xl transition-all duration-300 active:scale-95 outline-none border",
         isLogout
-          ? "flex items-center justify-center gap-4 p-4 mt-8 h-[56px] w-full border-red-100 bg-gradient-to-r from-red-50 to-white text-red-600 shadow-sm hover:shadow-md hover:border-red-200"
-          : "flex flex-col items-center justify-center p-5 border-surface-100/60 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)] min-h-[110px]",
+          ? "flex items-center justify-center gap-4 landscape:gap-2 p-4 landscape:p-2 mt-4 landscape:mt-2 h-[56px] landscape:h-[40px] w-full border-red-100 bg-gradient-to-r from-red-50 to-white text-red-600 shadow-sm hover:shadow-md hover:border-red-200"
+          : "flex flex-col items-center justify-center p-5 landscape:p-2 border-surface-100/60 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)] min-h-[110px] landscape:min-h-[60px]",
         className
       )}
     >
@@ -335,15 +337,15 @@ function MobileMenuButton({ onClick, icon, label, className }: {
         "flex items-center justify-center transition-all duration-300",
         isLogout
           ? `text-red-500 ${isRTL ? 'rotate-180' : ''} group-hover:scale-110`
-          : "w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100/50 text-brand-600 mb-3.5 shadow-inner"
+          : "w-14 h-14 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 text-brand-600 mb-3.5 landscape:mb-1.5 shadow-inner"
       )}>
-        {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<{ className?: string }>, {
-          className: isLogout ? 'w-6 h-6' : 'w-7 h-7'
-        }) : icon}
+        {icon}
       </div>
       <span className={clsx(
         "font-bold tracking-tight transition-colors",
-        isLogout ? "text-red-600 text-sm whitespace-nowrap" : "text-[14px] text-surface-900 text-center w-full px-1 line-clamp-2 leading-tight"
+        isLogout 
+          ? "text-red-600 text-sm landscape:text-xs whitespace-nowrap" 
+          : "text-[14px] landscape:text-[11px] text-surface-900 text-center w-full px-1 line-clamp-2 landscape:line-clamp-1 leading-tight"
       )}>
         {label}
       </span>
