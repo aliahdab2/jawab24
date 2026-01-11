@@ -32,6 +32,14 @@ vi.mock('@/lib/useVersion', () => ({
     }),
 }));
 
+// Mock Capacitor Core
+vi.mock('@capacitor/core', () => ({
+    Capacitor: {
+        isNativePlatform: vi.fn().mockReturnValue(false),
+        getPlatform: vi.fn().mockReturnValue('web')
+    }
+}));
+
 // Mock Facebook Login Plugin (Global Mock for External Module)
 vi.mock('@capacitor-community/facebook-login', () => ({
     FacebookLogin: {
@@ -62,8 +70,6 @@ vi.mock('sonner', () => ({
     }
 }));
 
-// ... (existing mocks)
-
 describe('LoginPage', () => {
     let mockPush: ReturnType<typeof vi.fn>;
     let originalLocation: Location;
@@ -79,8 +85,7 @@ describe('LoginPage', () => {
             asPath: '/login',
             events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
         });
-        // ...
-        
+
         // Spy on toast
         const { toast } = await import('sonner');
         toastErrorSpy = vi.mocked(toast.error);
@@ -90,18 +95,15 @@ describe('LoginPage', () => {
         originalLocation = window.location;
         delete (window as any).location;
         window.location = { ...originalLocation, href: '', origin: 'http://localhost:3000' } as any;
-        
-        // Mock alert (just in case, though logically removed)
-        vi.spyOn(window, 'alert').mockImplementation(() => {});
-        
+
         // Reset mocks
         vi.clearAllMocks();
         mockSetAuth.mockClear();
-        
-        // Default Capacitor mock (non-native)
-        (window as any).Capacitor = {
-            isNativePlatform: vi.fn().mockReturnValue(false)
-        };
+        mockSetLanguage.mockClear();
+
+        // Reset Capacitor mock to default (web)
+        const { Capacitor } = await import('@capacitor/core');
+        (Capacitor.isNativePlatform as any).mockReturnValue(false);
     });
 
     afterEach(() => {
@@ -124,8 +126,6 @@ describe('LoginPage', () => {
     
             process.env.NEXT_PUBLIC_FB_APP_ID = originalEnv;
         });
-
-        // ...
 
         it('should handle errors during OAuth URL construction', () => {
             const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
@@ -158,6 +158,7 @@ describe('LoginPage', () => {
             fireEvent.click(loginButton);
     
             const href = window.location.href;
+            console.log('TEST HREF:', href);
             const scopeMatch = href.match(/scope=([^&]+)/);
             expect(scopeMatch).toBeTruthy();
     
@@ -170,11 +171,10 @@ describe('LoginPage', () => {
     });
 
     describe('Native Mobile Login', () => {
-        beforeEach(() => {
+        beforeEach(async () => {
             // Mock Capacitor for Mobile
-            (window as any).Capacitor = {
-                isNativePlatform: vi.fn().mockReturnValue(true)
-            };
+            const { Capacitor } = await import('@capacitor/core');
+            (Capacitor.isNativePlatform as any).mockReturnValue(true);
         });
 
         it('should use native SDK when on mobile platform', async () => {

@@ -185,6 +185,12 @@ export default function LoginPage() {
       </Head>
 
       <div className="min-h-screen bg-white flex flex-col lg:flex-row" dir={isRTL ? 'rtl' : 'ltr'}>
+        {/* Loading Overlay - Masks the page during native auth transition */}
+        {isLoading && (
+          <div className="fixed inset-0 z-50 bg-white flex items-center justify-center animate-in fade-in duration-200">
+             <BrandLogo variant="main" className="w-16 h-16 animate-pulse" />
+          </div>
+        )}
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
         <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}
