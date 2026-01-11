@@ -290,43 +290,47 @@ export default function TemplatesPage() {
         title={editingTemplate ? t('templates.editTemplate') : t('templates.addTemplate')}
         size="lg"
       >
-        <div className="space-y-3 sm:space-y-5">
-          <Input
-            label={t('templates.templateName')}
-            placeholder={t('templates.templateNamePlaceholder')}
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="!py-2.5 sm:!py-3" 
-          />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 landscape:grid-cols-2 md:grid-cols-2 gap-4">
+            <Input
+              label={t('templates.templateName')}
+              placeholder={t('templates.templateNamePlaceholder')}
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="!py-2.5 sm:!py-3"
+            />
 
-          <Textarea
-            label={t('templates.english')}
-            placeholder="Thank you for your interest! ..."
-            value={formData.en}
-            onChange={(e) => setFormData({ ...formData, en: e.target.value })}
-            helperText={t('templates.variablesDesc')}
-            className="!py-2.5 sm:!py-3 min-h-[70px] sm:min-h-[100px]"
-          />
+            <Input
+              label={t('templates.keywords')}
+              placeholder="price, cost, how much, سعر"
+              value={formData.keywords}
+              onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
+              helperText={t('templates.keywordsHelper')}
+              className="!py-2.5 sm:!py-3"
+            />
+          </div>
 
-          <Textarea
-            label={t('templates.arabic')}
-            placeholder="شكراً لاهتمامك! ..."
-            value={formData.ar}
-            onChange={(e) => setFormData({ ...formData, ar: e.target.value })}
-            className="text-right !py-2.5 sm:!py-3 min-h-[70px] sm:min-h-[100px]"
-            dir="rtl"
-          />
+          <div className="grid grid-cols-1 landscape:grid-cols-2 gap-4">
+            <Textarea
+              label={t('templates.english')}
+              placeholder="Thank you for your interest! ..."
+              value={formData.en}
+              onChange={(e) => setFormData({ ...formData, en: e.target.value })}
+              helperText={t('templates.variablesDesc')}
+              className="!py-2.5 sm:!py-3 min-h-[80px] sm:min-h-[100px] landscape:min-h-[80px]"
+            />
 
-          <Input
-            label={t('templates.keywords')}
-            placeholder="price, cost, how much, سعر"
-            value={formData.keywords}
-            onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-            helperText={t('templates.keywordsHelper')}
-            className="!py-2.5 sm:!py-3"
-          />
+            <Textarea
+              label={t('templates.arabic')}
+              placeholder="شكراً لاهتمامك! ..."
+              value={formData.ar}
+              onChange={(e) => setFormData({ ...formData, ar: e.target.value })}
+              className="text-right !py-2.5 sm:!py-3 min-h-[80px] sm:min-h-[100px] landscape:min-h-[80px]"
+              dir="rtl"
+            />
+          </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-3 pt-4 border-t border-surface-100 mt-2">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>

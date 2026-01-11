@@ -363,28 +363,30 @@ export default function RulesPage() {
         onClose={() => setIsModalOpen(false)}
         title={editingRule ? t('rules.editRule') : t('rules.addRule')}
       >
-        <div className="space-y-4 md:space-y-5">
-          <Input
-            label={t('rules.ruleName')}
-            placeholder={t('rules.ruleNamePlaceholder')}
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="!py-3"
-          />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 landscape:grid-cols-2 md:grid-cols-2 gap-4">
+            <Input
+              label={t('rules.ruleName')}
+              placeholder={t('rules.ruleNamePlaceholder')}
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="!py-2.5 sm:!py-3"
+            />
 
-          <Input
-            label={t('rules.condition')}
-            placeholder={t('rules.keywordsPlaceholder' as TranslationKey)}
-            value={formData.keywords}
-            onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-            helperText={t('templates.variablesDesc')}
-            className="!py-3"
-          />
+            <Input
+              label={t('rules.condition')}
+              placeholder={t('rules.keywordsPlaceholder' as TranslationKey)}
+              value={formData.keywords}
+              onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
+              helperText={t('templates.variablesDesc')}
+              className="!py-2.5 sm:!py-3"
+            />
+          </div>
 
           <div>
             <label className="label">{t('templates.title')}</label>
             <select
-              className="input !py-3"
+              className="input !py-2.5 sm:!py-3"
               value={formData.templateId}
               onChange={(e) => setFormData({ ...formData, templateId: e.target.value })}
             >
@@ -397,7 +399,7 @@ export default function RulesPage() {
             </select>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-3 pt-4 border-t border-surface-100 mt-4">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>
