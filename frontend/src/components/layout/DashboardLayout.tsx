@@ -178,68 +178,16 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           </nav>
         )}
 
-        {/* Mobile full menu overlay - responsive to portrait/landscape */}
+        {/* Mobile Menu Overlay - Industry Standard: Bottom sheet (portrait) / Centered modal (landscape) */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 bg-black/45 z-50 backdrop-blur-sm animate-in fade-in" onClick={() => setMobileMenuOpen(false)}>
-            <div
-              className="absolute bottom-0 left-0 right-0 bg-white rounded-t-[24px] p-4 landscape:p-3 animate-in slide-in-from-bottom overflow-y-auto"
-              style={{
-                paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))',
-                maxHeight: '85vh',
-                boxShadow: '0 -8px 32px rgba(0,0,0,0.16)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-              dir={isRTL ? 'rtl' : 'ltr'}
-            >
-              {/* Menu Header - Compact in landscape */}
-              <div className="flex items-center justify-between h-10 landscape:h-8 pb-3 landscape:pb-2 mb-4 landscape:mb-2 border-b border-surface-100">
-                <h3 className="font-semibold text-lg landscape:text-base text-surface-900 text-start">{t('nav.menu') || 'القائمة'}</h3>
-                <button
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 -m-2 rounded-full hover:bg-surface-100 text-surface-500"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Menu Grid - 2 cols portrait, 4 cols landscape */}
-              <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2 landscape:gap-3 mb-3 landscape:mb-2">
-                <MobileMenuButton
-                  onClick={() => { router.push('/dashboard'); setMobileMenuOpen(false); }}
-                  icon={<LayoutDashboard className="w-7 h-7 landscape:w-5 landscape:h-5" />}
-                  label={t('nav.dashboard')}
-                  landscape
-                />
-                <MobileMenuButton
-                  onClick={() => { router.push('/comments'); setMobileMenuOpen(false); }}
-                  icon={<MessageSquare className="w-7 h-7 landscape:w-5 landscape:h-5" />}
-                  label={t('nav.comments')}
-                  landscape
-                />
-                <MobileMenuButton
-                  onClick={() => { router.push('/messages'); setMobileMenuOpen(false); }}
-                  icon={<MessageCircle className="w-7 h-7 landscape:w-5 landscape:h-5" />}
-                  label={t('nav.messages')}
-                  landscape
-                />
-                <MobileMenuButton
-                  onClick={() => { router.push('/settings'); setMobileMenuOpen(false); }}
-                  icon={<Settings className="w-7 h-7 landscape:w-5 landscape:h-5" />}
-                  label={t('nav.settings')}
-                  landscape
-                />
-              </div>
-
-              {/* Logout button - compact in landscape */}
-              <MobileMenuButton
-                onClick={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
-                icon={<LogOut className="w-7 h-7 landscape:w-5 landscape:h-5" />}
-                label={t('nav.logout')}
-                className="logout-button"
-                landscape
-              />
-            </div>
-          </div>
+          <MobileMenuOverlay
+            isOpen={mobileMenuOpen}
+            onClose={() => setMobileMenuOpen(false)}
+            isRTL={isRTL}
+            router={router}
+            t={t}
+            onLogout={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
+          />
         )}
 
         {/* Logout Confirmation Modal */}
@@ -311,44 +259,201 @@ function MobileNavButton({ onClick, icon, label, active }: {
   );
 }
 
-function MobileMenuButton({ onClick, icon, label, className, landscape }: {
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  className?: string;
-  landscape?: boolean;
+/**
+ * Mobile Menu Overlay Component
+ * 
+ * Industry Standards Applied:
+ * - iOS HIG: Bottom sheet in portrait, centered modal in landscape
+ * - Material Design: Proper elevation, backdrop blur
+ * - Safe area handling for notches and home indicators
+ * - Touch-friendly tap targets (min 44px)
+ * - Horizontal layout in landscape for better space utilization
+ * - Proper animation patterns (slide-up portrait, fade-in landscape)
+ */
+function MobileMenuOverlay({ 
+  isOpen, 
+  onClose, 
+  isRTL, 
+  router, 
+  t, 
+  onLogout 
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  isRTL: boolean;
+  router: ReturnType<typeof useRouter>;
+  t: (key: string) => string;
+  onLogout: () => void;
 }) {
-  const isLogout = className?.includes('logout');
-  const { language } = useTranslation();
-  const isRTL = language === 'ar';
+  const [isLandscape, setIsLandscape] = React.useState(false);
+
+  // Detect orientation using matchMedia (industry standard approach)
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia('(orientation: landscape)');
+    setIsLandscape(mediaQuery.matches);
+    
+    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  // Prevent body scroll when menu is open (iOS/Android best practice)
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [isOpen]);
+
+  const menuItems = [
+    { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
+    { path: '/comments', icon: MessageSquare, label: t('nav.comments') },
+    { path: '/messages', icon: MessageCircle, label: t('nav.messages') },
+    { path: '/settings', icon: Settings, label: t('nav.settings') },
+  ];
+
+  const handleNavigate = (path: string) => {
+    router.push(path);
+    onClose();
+  };
 
   return (
-    <button
-      onClick={onClick}
-      className={clsx(
-        "rounded-2xl landscape:rounded-xl transition-all duration-300 active:scale-95 outline-none border",
-        isLogout
-          ? "flex items-center justify-center gap-4 landscape:gap-2 p-4 landscape:p-2 mt-4 landscape:mt-2 h-[56px] landscape:h-[40px] w-full border-red-100 bg-gradient-to-r from-red-50 to-white text-red-600 shadow-sm hover:shadow-md hover:border-red-200"
-          : "flex flex-col items-center justify-center p-5 landscape:p-2 border-surface-100/60 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)] min-h-[110px] landscape:min-h-[60px]",
-        className
-      )}
+    <div 
+      className="md:hidden fixed inset-0 z-50 animate-in fade-in duration-200"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('nav.menu') || 'Menu'}
     >
+      {/* Backdrop - darker in landscape for better contrast */}
       <div className={clsx(
-        "flex items-center justify-center transition-all duration-300",
-        isLogout
-          ? `text-red-500 ${isRTL ? 'rotate-180' : ''} group-hover:scale-110`
-          : "w-14 h-14 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 text-brand-600 mb-3.5 landscape:mb-1.5 shadow-inner"
-      )}>
-        {icon}
+        "absolute inset-0 backdrop-blur-sm transition-colors",
+        isLandscape ? "bg-black/60" : "bg-black/45"
+      )} />
+
+      {/* Menu Container - Different layouts for portrait/landscape */}
+      <div
+        className={clsx(
+          "absolute bg-white overflow-hidden",
+          isLandscape
+            // Landscape: Centered modal (iOS/Android standard for landscape)
+            ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl w-[90vw] max-w-[600px] max-h-[85vh] animate-in zoom-in-95 duration-200"
+            // Portrait: Bottom sheet (iOS standard)
+            : "bottom-0 left-0 right-0 rounded-t-[24px] animate-in slide-in-from-bottom duration-300"
+        )}
+        style={{
+          boxShadow: isLandscape 
+            ? '0 25px 50px -12px rgba(0,0,0,0.25)' 
+            : '0 -8px 32px rgba(0,0,0,0.16)',
+          // Safe area padding for portrait bottom sheet
+          paddingBottom: !isLandscape ? 'max(1rem, env(safe-area-inset-bottom, 0px))' : undefined,
+        }}
+        onClick={(e) => e.stopPropagation()}
+        dir={isRTL ? 'rtl' : 'ltr'}
+      >
+        {/* Drag Handle - Portrait only (iOS standard) */}
+        {!isLandscape && (
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 rounded-full bg-surface-200" />
+          </div>
+        )}
+
+        {/* Header */}
+        <div className={clsx(
+          "flex items-center justify-between border-b border-surface-100",
+          isLandscape ? "px-5 py-3" : "px-5 py-3"
+        )}>
+          <h3 className={clsx(
+            "font-semibold text-surface-900",
+            isLandscape ? "text-base" : "text-lg"
+          )}>
+            {t('nav.menu') || 'Menu'}
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 -m-2 rounded-full hover:bg-surface-100 text-surface-500 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className={clsx(
+          "overflow-y-auto",
+          isLandscape ? "p-4" : "p-5"
+        )}>
+          {isLandscape ? (
+            // Landscape: Horizontal row layout (maximizes vertical space)
+            <div className="flex flex-wrap justify-center gap-3">
+              {menuItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => handleNavigate(item.path)}
+                  className={clsx(
+                    "flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200",
+                    "bg-surface-50 hover:bg-brand-50 border border-surface-100 hover:border-brand-200",
+                    "active:scale-95 min-h-[48px]",
+                    router.pathname === item.path && "bg-brand-50 border-brand-200 text-brand-700"
+                  )}
+                >
+                  <item.icon className="w-5 h-5 text-brand-600 flex-shrink-0" />
+                  <span className="font-medium text-sm text-surface-800 whitespace-nowrap">
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            // Portrait: Grid layout (iOS/Android standard)
+            <div className="grid grid-cols-2 gap-3">
+              {menuItems.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => handleNavigate(item.path)}
+                  className={clsx(
+                    "flex flex-col items-center justify-center p-5 rounded-2xl transition-all duration-200",
+                    "bg-white border border-surface-100/60",
+                    "shadow-[0_4px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
+                    "active:scale-95 min-h-[110px]",
+                    router.pathname === item.path && "border-brand-200 bg-brand-50/50"
+                  )}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-3 text-brand-600">
+                    <item.icon className="w-7 h-7" />
+                  </div>
+                  <span className="font-bold text-sm text-surface-900 text-center line-clamp-2">
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Logout Button */}
+          <button
+            onClick={onLogout}
+            className={clsx(
+              "w-full flex items-center justify-center gap-3 rounded-xl transition-all duration-200",
+              "bg-gradient-to-r from-red-50 to-white border border-red-100",
+              "hover:border-red-200 hover:shadow-md active:scale-[0.98]",
+              isLandscape ? "mt-4 py-3" : "mt-5 py-4"
+            )}
+          >
+            <LogOut className={clsx(
+              "text-red-500",
+              isRTL && "rotate-180",
+              isLandscape ? "w-5 h-5" : "w-6 h-6"
+            )} />
+            <span className={clsx(
+              "font-semibold text-red-600",
+              isLandscape ? "text-sm" : "text-base"
+            )}>
+              {t('nav.logout')}
+            </span>
+          </button>
+        </div>
       </div>
-      <span className={clsx(
-        "font-bold tracking-tight transition-colors",
-        isLogout 
-          ? "text-red-600 text-sm landscape:text-xs whitespace-nowrap" 
-          : "text-[14px] landscape:text-[11px] text-surface-900 text-center w-full px-1 line-clamp-2 landscape:line-clamp-1 leading-tight"
-      )}>
-        {label}
-      </span>
-    </button>
+    </div>
   );
 }
