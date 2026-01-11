@@ -1,0 +1,179 @@
+# Jawab24 Codebase Rules
+
+## Project Overview
+Jawab24 is a bilingual (Arabic/English) AI auto-reply service for Facebook & Instagram.
+- Frontend: Next.js + Tailwind CSS + Capacitor (Android/iOS)
+- Backend: Node.js + Express + Drizzle ORM + PostgreSQL
+- AI Worker: OpenAI integration
+
+---
+
+## 🎯 Safe Area Strategy (CRITICAL)
+
+### Native App (Capacitor)
+Safe areas are applied **automatically** via CSS on `body`:
+```css
+html.is-native body {
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+/* Landscape adds side padding: 24px */
+```
+
+### Rules:
+1. **DO NOT** add `pt-safe` or `pb-safe` to content containers - body handles it
+2. **DO** add `pt-safe` to **fixed/sticky headers** (they ignore body padding)
+3. **DO NOT** add safe areas for regular browser - browser handles it
+4. **DO** add safe areas for PWA standalone mode
+
+### Fixed Elements Pattern:
+```tsx
+// Fixed header - NEEDS pt-safe
+<nav className="fixed top-0 w-full pt-safe">
+
+// Sticky header - NEEDS pt-safe  
+<header className="sticky top-0 pt-safe">
+
+// Regular content - NO safe area classes needed
+<div className="min-h-screen">
+```
+
+---
+
+## 📱 Mobile-First Design
+
+### Breakpoints (Tailwind):
+- `sm`: 640px (small tablets)
+- `md`: 768px (tablets)
+- `lg`: 1024px (desktop - hide mobile nav, show sidebar)
+- `xl`: 1280px
+
+### Landscape Detection:
+```css
+@media (orientation: landscape) { }
+```
+Or in Tailwind: `landscape:` prefix
+
+### Bottom Navigation:
+- Height: 64px (`h-16`)
+- Positioned above safe area: `bottom: max(20px, env(safe-area-inset-bottom))`
+- Hidden on desktop: `lg:hidden`
+
+---
+
+## 🌐 RTL Support (Arabic)
+
+### Always use logical properties:
+```tsx
+// ✅ Good - works for RTL
+className="ps-4 pe-2 ms-auto me-0"
+className="text-start" // not text-left
+className="rounded-s-lg" // not rounded-l-lg
+
+// ❌ Bad - breaks RTL
+className="pl-4 pr-2 ml-auto mr-0"
+className="text-left"
+```
+
+### Direction attribute:
+```tsx
+<div dir={isRTL ? 'rtl' : 'ltr'}>
+```
+
+---
+
+## 🧩 Component Patterns
+
+### Page Layout:
+```tsx
+// Dashboard pages use DashboardLayout
+export default function MyPage() {
+  return (
+    <DashboardLayout>
+      {/* Content - no safe area classes needed */}
+    </DashboardLayout>
+  );
+}
+```
+
+### Modals:
+- Use the `Modal` component from `@/components/ui`
+- Modals have automatic bottom safe area padding
+- Portrait: Bottom sheet style
+- Landscape: Centered modal
+
+### Loading States:
+- Use `PageSkeleton` for full-page loading
+- Use `loading` prop on buttons
+- Use `AppSkeleton` for app-level loading
+
+---
+
+## 🎨 Design Tokens
+
+### Colors (Tailwind):
+- `brand-*`: Primary green (#0D9488)
+- `surface-*`: Grays for backgrounds/text
+- `accent-*`: Orange highlights
+
+### Fonts:
+- Display: `font-display` (Outfit)
+- Body: `font-sans` (DM Sans)
+- Arabic: Cairo/Tajawal (auto-loaded)
+
+---
+
+## 📂 File Structure
+
+```
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── layout/     # DashboardLayout, PublicLayout
+│   │   └── ui/         # Reusable components
+│   ├── pages/          # Next.js pages
+│   ├── styles/
+│   │   └── globals.css # CSS variables, safe areas
+│   └── i18n/           # Translations (en.json, ar.json)
+├── android/            # Capacitor Android project
+└── capacitor.config.ts
+```
+
+---
+
+## ⚠️ Common Mistakes to Avoid
+
+1. **Double safe area padding**: Don't add `pt-safe` to content if body already has it
+2. **Using `left`/`right` instead of `start`/`end`**: Breaks RTL
+3. **Hardcoded strings**: Use `t('key')` for all user-facing text
+4. **Missing `dir` attribute**: Always set `dir={isRTL ? 'rtl' : 'ltr'}` on containers
+5. **Fixed elements without safe area**: Fixed headers need `pt-safe`
+
+---
+
+## 🔧 Development Commands
+
+```bash
+# Frontend
+cd frontend
+npm run dev          # Start dev server
+npm run build        # Build for production
+npx cap sync android # Sync to Android
+
+# Build APK
+cd android
+./gradlew assembleDebug
+```
+
+---
+
+## 📱 Testing Checklist
+
+- [ ] Works in portrait mode
+- [ ] Works in landscape mode
+- [ ] Works in Arabic (RTL)
+- [ ] Works in English (LTR)
+- [ ] Safe areas visible on mobile app
+- [ ] No double padding on any page
+- [ ] Fixed headers clear status bar
+- [ ] Bottom nav clears Android navigation
