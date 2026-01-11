@@ -1,6 +1,6 @@
 {
     "name": "jawab24-ai-worker",
-    "version": "1.0.0",
+    "version": "2.0.1",
     "description": "Jawab24 AI Worker Service",
     "main": "dist/index.js",
     "scripts": {
