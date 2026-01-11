@@ -5,7 +5,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo } from '@/components/ui';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -282,7 +282,7 @@ function MobileMenuOverlay({
   onClose: () => void;
   isRTL: boolean;
   router: ReturnType<typeof useRouter>;
-  t: (key: string) => string;
+  t: (key: TranslationKey) => string;
   onLogout: () => void;
 }) {
   const [isLandscape, setIsLandscape] = React.useState(false);
@@ -427,7 +427,7 @@ function MobileMenuOverlay({
                   </span>
                 </button>
               ))}
-            </div>
+      </div>
           )}
 
           {/* Logout Button */}
@@ -445,13 +445,13 @@ function MobileMenuOverlay({
               isRTL && "rotate-180",
               isLandscape ? "w-5 h-5" : "w-6 h-6"
             )} />
-            <span className={clsx(
+      <span className={clsx(
               "font-semibold text-red-600",
               isLandscape ? "text-sm" : "text-base"
-            )}>
+      )}>
               {t('nav.logout')}
-            </span>
-          </button>
+      </span>
+    </button>
         </div>
       </div>
     </div>
