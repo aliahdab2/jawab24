@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSpinner } from '@/components/ui';
+import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
@@ -136,9 +136,7 @@ export default function TemplatesPage() {
   if (loading && templates.length === 0) {
     return (
       <DashboardLayout title={t('templates.title')}>
-        <div className="flex items-center justify-center h-64">
-          <PageSpinner />
-        </div>
+        <PageSkeleton />
       </DashboardLayout>
     );
   }

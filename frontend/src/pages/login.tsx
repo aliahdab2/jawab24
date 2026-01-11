@@ -39,12 +39,10 @@ export default function LoginPage() {
 
   const handleFacebookLogin = async () => {
     try {
-      setIsLoading(true);
       // Check for Facebook App ID
       const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
       if (!fbAppId) {
         toast.error(t('auth.loginError'));
-        setIsLoading(false);
         return;
       }
 
@@ -54,23 +52,24 @@ export default function LoginPage() {
 
       if (isMobile) {
         // --- NATIVE MOBILE LOGIN FLOW ---
+        // DO NOT set isLoading(true) here yet, as it triggers our button spinner 
+        // while the native system dialog is already visible ("Double Spinner" issue).
         const { FacebookLogin } = await import('@capacitor-community/facebook-login');
         
         // 1. Request Native Login
-        // Using same permissions as web
         const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
         let result;
         try {
             result = await FacebookLogin.login({ permissions });
         } catch (fbError: any) {
+            console.error('FB Native Login Error:', fbError);
             throw fbError;
         }
 
         if (result.accessToken) {
-          // 2. Login Logic
-          // We have the Facebook Token directly! No redirect needed.
+          // 2. NOW set loading state - The native dialog has closed, and we're starting our backend sync.
+          setIsLoading(true);
           const fbAccessToken = result.accessToken.token;
-          
           
           try {
               // 3. Call backend to swap fbAccessToken for Session Token
@@ -83,10 +82,8 @@ export default function LoginPage() {
               const finalLocale = settings?.dashboardLanguage || language || 'ar';
               useUIStore.getState().setLanguage(finalLocale);
 
-              // 5. Handle Redirect with correct locale
+              // 5. Handle Redirect
               const returnUrl = router.query.redirect as string || '/dashboard';
-              
-              // Must reload/replace to force language context update if needed
               await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
           } catch (error: any) {
@@ -96,20 +93,18 @@ export default function LoginPage() {
           }
 
         } else {
-          // User cancelled
+          // User cancelled or no token
           setIsLoading(false);
         }
 
       } else {
-        // --- WEB BROWSER LOGIN FLOW (Legacy) ---
-        // Use locale-specific callback URL (standard best practice)
-        // Normalize site URL
+        // --- WEB BROWSER LOGIN FLOW ---
+        setIsLoading(true); // Web redirect is fine to spin immediately
+        
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
         const normalizedOrigin = siteUrl.replace(/\/$/, '');
-
         const localePath = language === 'ar' ? '' : `/${language}`;
 
-        // INDUSTRY STANDARD: Use locale-specific callback URL (matches whitelist)
         const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
         const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
         const redirectUri = encodeURIComponent(redirectUriClean);
@@ -119,20 +114,17 @@ export default function LoginPage() {
         const urlParams = new URLSearchParams(window.location.search);
         const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
         
-        // Pass language in state so we can restore it after callback
         const stateData = `${returnUrl}|web|${language}`;
         const state = encodeURIComponent(stateData);
 
-        // Check for Mobile Browser (not Native App)
         const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const displayMode = isMobileWeb ? 'touch' : 'page';
 
         const facebookAuthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}`;
 
-        // Standard Web Redirect
         window.location.href = facebookAuthUrl;
       }
-      } catch (error: any) {
+    } catch (error: any) {
         console.error('Facebook login error:', error);
         
         const errorMsg = error.response?.data?.message || error.message || t('auth.loginError');
