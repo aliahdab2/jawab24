@@ -224,7 +224,7 @@ export default function LoginPage() {
         {/* Right Side: Login Form */}
         <div className="flex-1 flex flex-col bg-white overflow-y-auto">
           {/* Header - Consistent height across all pages */}
-          <div className="flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
+          <div className="flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
@@ -291,7 +291,7 @@ export default function LoginPage() {
           </div>
 
           {/* Footer Info */}
-          <div className="p-4 pb-safe border-t border-surface-100 flex flex-col items-center justify-center gap-1">
+          <div className="p-4 border-t border-surface-100 flex flex-col items-center justify-center gap-1">
             <div className="text-[10px] font-medium text-surface-300 tracking-wider">
               © {new Date().getFullYear()} Jawab24
             </div>

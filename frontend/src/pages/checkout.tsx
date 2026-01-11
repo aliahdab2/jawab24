@@ -198,7 +198,7 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative pt-safe">
+      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative">
         <div className="max-w-3xl mx-auto relative pt-4 sm:pt-0">
           {/* Top Back Link */}
           <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">

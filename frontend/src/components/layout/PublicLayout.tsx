@@ -136,7 +136,7 @@ export function PublicLayout({
         )}
 
         {variant === 'minimal' && (
-          <div className="flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
+          <div className="flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
