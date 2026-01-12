@@ -7,6 +7,7 @@ import { rulesService } from '../../src/services/rules';
 import { templatesService } from '../../src/services/templates';
 import { aiService } from '../../src/services/ai';
 import { settingsService } from '../../src/services/settings';
+import { redis } from '../../src/lib/redis';
 
 // Mock all services
 vi.mock('../../src/services/pages');
@@ -25,12 +26,14 @@ vi.mock('../../src/services/subscriptions', () => ({
     }
 }));
 
-// Mock Redis
+// Mock Redis with rate limiting support
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         get: vi.fn(),
         set: vi.fn(),
         quit: vi.fn(),
+        incr: vi.fn().mockResolvedValue(1),
+        expire: vi.fn().mockResolvedValue(1),
     },
 }));
 
@@ -64,6 +67,10 @@ describe('Reply Service', () => {
             businessHoursOnly: false,
             replyDelay: 0,
         } as any);
+
+        // Default Redis rate limiting mocks (within limit)
+        vi.mocked(redis.incr).mockResolvedValue(1);
+        vi.mocked(redis.expire).mockResolvedValue(1);
     });
 
     describe('processComment', () => {
@@ -220,6 +227,146 @@ describe('Reply Service', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Comment already replied');
+        });
+
+        it('should rate limit when user exceeds comment limit', async () => {
+            // Simulate 6th request (over limit of 5)
+            vi.mocked(redis.incr).mockResolvedValue(6);
+            vi.mocked(redis.expire).mockResolvedValue(1);
+
+            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
+                comment: mockComment as any,
+                isNew: true,
+            });
+
+            const result = await replyService.processComment(
+                'fb_page_123',
+                'fb_post_123',
+                'fb_comment_123',
+                'Great product!',
+                'user_123', // fromId is required for rate limiting
+                'John Doe'
+            );
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Rate limited');
+            expect(redis.incr).toHaveBeenCalledWith('rate:comment:fb_page_123:user_123');
+        });
+
+        it('should allow comment when within rate limit', async () => {
+            // Simulate 3rd request (within limit of 5)
+            vi.mocked(redis.incr).mockResolvedValue(3);
+            vi.mocked(redis.expire).mockResolvedValue(1);
+
+            const mockRule = { id: 'rule_1', templateId: 'template_1' };
+            const mockTemplate = {
+                id: 'template_1',
+                translations: { en: 'Thank you!' },
+            };
+
+            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
+                comment: mockComment as any,
+                isNew: true,
+            });
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
+            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
+
+            const axios = await import('axios');
+            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
+
+            const result = await replyService.processComment(
+                'fb_page_123',
+                'fb_post_123',
+                'fb_comment_123',
+                'Great product!',
+                'user_123',
+                'John Doe'
+            );
+
+            expect(result.success).toBe(true);
+            expect(redis.incr).toHaveBeenCalled();
+        });
+
+        it('should allow request when Redis fails (fail-open)', async () => {
+            // Simulate Redis failure
+            vi.mocked(redis.incr).mockRejectedValue(new Error('Redis connection failed'));
+
+            const mockRule = { id: 'rule_1', templateId: 'template_1' };
+            const mockTemplate = {
+                id: 'template_1',
+                translations: { en: 'Thank you!' },
+            };
+
+            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
+                comment: mockComment as any,
+                isNew: true,
+            });
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
+            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
+
+            const axios = await import('axios');
+            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
+
+            const result = await replyService.processComment(
+                'fb_page_123',
+                'fb_post_123',
+                'fb_comment_123',
+                'Great product!',
+                'user_123',
+                'John Doe'
+            );
+
+            // Should still succeed because fail-open
+            expect(result.success).toBe(true);
+        });
+
+        it('should set TTL on first rate limit increment', async () => {
+            // Simulate first request (count = 1)
+            vi.mocked(redis.incr).mockResolvedValue(1);
+            vi.mocked(redis.expire).mockResolvedValue(1);
+
+            const mockRule = { id: 'rule_1', templateId: 'template_1' };
+            const mockTemplate = {
+                id: 'template_1',
+                translations: { en: 'Thank you!' },
+            };
+
+            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
+                comment: mockComment as any,
+                isNew: true,
+            });
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
+            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
+
+            const axios = await import('axios');
+            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
+
+            await replyService.processComment(
+                'fb_page_123',
+                'fb_post_123',
+                'fb_comment_123',
+                'Great product!',
+                'user_123',
+                'John Doe'
+            );
+
+            // Should set expire on first increment
+            expect(redis.expire).toHaveBeenCalledWith('rate:comment:fb_page_123:user_123', 60);
         });
     });
 });

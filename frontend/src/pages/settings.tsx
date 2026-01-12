@@ -370,18 +370,30 @@ export default function SettingsPage() {
                     </div>
                     <div className="text-start">
                       <h4 className="font-bold text-brand-900 text-base landscape:text-sm">{t('settings.dualReplyConfigTitle')}</h4>
-                      <p className="text-xs text-brand-700/70 font-medium landscape:hidden">{t('settings.dualReplyConfigDesc')}</p>
+                      <p className="text-xs text-brand-700/70 font-medium">{t('settings.dualReplyConfigDesc')}</p>
                     </div>
                   </div>
-                  <Input
-                    value={settings.dualReplyConfig?.en || ''}
-                    onChange={(e) => setSettings({
-                      ...settings,
-                      dualReplyConfig: { en: e.target.value, ar: e.target.value }
-                    })}
-                    placeholder={t('settings.publicReplyPlaceholder')}
-                    className="bg-white !py-3 landscape:!py-2"
-                  />
+                  <div className="space-y-2">
+                    <Input
+                      value={settings.dualReplyConfig?.en || ''}
+                      onChange={(e) => {
+                        const value = e.target.value.slice(0, 80); // Max 80 chars
+                        setSettings({
+                          ...settings,
+                          dualReplyConfig: { en: value, ar: value }
+                        });
+                      }}
+                      placeholder={t('settings.publicReplyPlaceholder')}
+                      className="bg-white !py-3 landscape:!py-2"
+                      maxLength={80}
+                    />
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-brand-600/60 font-medium">{t('settings.dualReplyConfigHelper')}</span>
+                      <span className={`font-bold ${(settings.dualReplyConfig?.en?.length || 0) > 70 ? 'text-amber-500' : 'text-surface-400'}`}>
+                        {settings.dualReplyConfig?.en?.length || 0}/80
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

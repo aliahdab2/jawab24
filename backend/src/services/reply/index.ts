@@ -1,0 +1,298 @@
+import { pagesService } from '../pages';
+import { postsService } from '../posts';
+import { commentsService } from '../comments';
+import { facebookService } from '../facebook';
+import { settingsService } from '../settings';
+import { messagesService } from '../messages';
+import { rateLimiter } from '../protection';
+import { replyGenerator } from './generator';
+import { replySender, ReplyMode } from './sender';
+import { detectLanguageCode } from '../../utils/language';
+import { Logger, noopLogger, ReplyResult, MessageResult } from '../../types';
+
+/**
+ * Reply Service
+ * Main orchestration for processing incoming comments and messages
+ * Delegates generation and sending to specialized modules
+ */
+export class ReplyService {
+    private logger: Logger = noopLogger;
+
+    setLogger(logger: Logger): void {
+        this.logger = logger;
+        // Propagate logger to sub-services
+        rateLimiter.setLogger(logger);
+        replyGenerator.setLogger(logger);
+        replySender.setLogger(logger);
+    }
+
+    /**
+     * Process an incoming private message
+     */
+    async processMessage(
+        pageId: string,
+        senderId: string,
+        messageText: string,
+        messageId: string
+    ): Promise<MessageResult> {
+        try {
+            // 1. Validate page
+            const page = await pagesService.getPageByFacebookId(pageId);
+            if (!page) {
+                return { success: false, messageId, error: 'Page not found' };
+            }
+            if (!page.autoReplyEnabled) {
+                return { success: false, messageId, error: 'Auto-reply disabled for this page' };
+            }
+            if (!page.userId) {
+                return { success: false, messageId, error: 'Page has no associated user' };
+            }
+
+            const userId = page.userId;
+
+            // 2. Check user settings
+            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(userId);
+
+            // 3. Store the incoming message
+            const { message: storedMessage, isNew } = await messagesService.findOrCreateFromWebhook(
+                page.id,
+                messageId,
+                senderId,
+                messageText
+            );
+
+            // 4. Rate limit check
+            const rateCheck = await rateLimiter.check(pageId, senderId, 'message');
+            if (!rateCheck.allowed) {
+                this.logger.info('[Reply] Message rate limited', { senderId, count: rateCheck.count });
+                return { success: false, messageId, error: 'Rate limited' };
+            }
+
+            // 5. Handle disabled auto-reply (send away message if configured)
+            if (!isMessagesEnabled) {
+                const awayMessage = await settingsService.getAwayMessage(userId);
+                if (awayMessage && isNew) {
+                    await facebookService.sendPrivateMessage(page.accessToken, senderId, awayMessage);
+                    await messagesService.storeOutgoingMessage(page.id, senderId, awayMessage, 'template');
+                }
+                return { success: false, messageId, error: 'Messages auto-reply disabled' };
+            }
+
+            // 6. Skip if already replied
+            if (!isNew && storedMessage.replied) {
+                return { success: false, messageId, error: 'Message already replied' };
+            }
+
+            // 7. Apply reply delay
+            const replyDelay = await settingsService.getReplyDelay(userId);
+            if (replyDelay > 0) {
+                await this.delay(replyDelay * 1000);
+            }
+
+            // 8. Generate reply
+            const userSettings = await settingsService.getSettings(userId);
+            const { replyText, replyMethod } = await replyGenerator.generateForMessage(
+                {
+                    userId,
+                    text: messageText,
+                    pageName: page.name || undefined,
+                    knowledgeBase: page.knowledgeBase || undefined,
+                    pageId: page.id,
+                    senderId,
+                },
+                userSettings.aiEnabled ?? false
+            );
+
+            if (!replyText) {
+                return { success: false, messageId, error: 'No reply generated' };
+            }
+
+            // 9. Send reply
+            await facebookService.sendPrivateMessage(page.accessToken, senderId, replyText);
+
+            // 10. Update database
+            await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod);
+            await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
+
+            return { success: true, messageId, replyText, replyMethod };
+
+        } catch (error) {
+            this.logger.error('Error processing message', {
+                messageId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+            return {
+                success: false,
+                messageId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            };
+        }
+    }
+
+    /**
+     * Process an incoming comment
+     */
+    async processComment(
+        pageId: string,
+        postId: string,
+        facebookCommentId: string,
+        commentMessage: string,
+        fromId?: string,
+        fromName?: string
+    ): Promise<ReplyResult> {
+        try {
+            // 1. Validate page
+            const page = await pagesService.getPageByFacebookId(pageId);
+            if (!page) {
+                return { success: false, commentId: facebookCommentId, error: 'Page not found' };
+            }
+            if (!page.autoReplyEnabled) {
+                return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this page' };
+            }
+            if (!page.userId) {
+                return { success: false, commentId: facebookCommentId, error: 'Page has no associated user' };
+            }
+
+            const pageUserId = page.userId;
+
+            // 2. Check user settings
+            const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(pageUserId);
+
+            // 3. Find or create the post
+            const post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined);
+            if (!post.autoReplyEnabled) {
+                return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this post' };
+            }
+
+            // 4. Store the comment
+            const { comment, isNew } = await commentsService.findOrCreateFromWebhook(
+                post.id,
+                facebookCommentId,
+                commentMessage,
+                fromId,
+                fromName
+            );
+
+            // 5. Rate limit check
+            if (fromId) {
+                const rateCheck = await rateLimiter.check(pageId, fromId, 'comment');
+                if (!rateCheck.allowed) {
+                    this.logger.info('[Reply] Comment rate limited', { fromId, count: rateCheck.count });
+                    return { success: false, commentId: comment.id, error: 'Rate limited' };
+                }
+            }
+
+            // 6. Skip if auto-reply disabled or already replied
+            if (!isCommentsEnabled) {
+                return { success: false, commentId: comment.id, error: 'Comments auto-reply disabled' };
+            }
+            if (!isNew && comment.replied) {
+                return { success: false, commentId: comment.id, error: 'Comment already replied' };
+            }
+
+            // 7. Apply reply delay
+            const replyDelay = await settingsService.getReplyDelay(pageUserId);
+            if (replyDelay > 0) {
+                await this.delay(replyDelay * 1000);
+            }
+
+            // 8. Generate reply
+            const userSettings = await settingsService.getSettings(pageUserId);
+            const { replyText, replyMethod, templateId } = await replyGenerator.generateForComment(
+                {
+                    userId: pageUserId,
+                    text: commentMessage,
+                    pageName: page.name || undefined,
+                    knowledgeBase: page.knowledgeBase || undefined,
+                    postId,
+                    postMessage: post.message || undefined,
+                    pageId: page.id,
+                    accessToken: page.accessToken,
+                },
+                userSettings.aiEnabled ?? false
+            );
+
+            if (!replyText) {
+                return { success: false, commentId: comment.id, error: 'No reply generated' };
+            }
+
+            // 9. Send reply based on mode
+            const replyMode = (userSettings.commentReplyMode || 'public') as ReplyMode;
+            const sendResult = await replySender.sendCommentReply({
+                facebookCommentId,
+                replyText,
+                commentMessage,
+                accessToken: page.accessToken,
+                fromId,
+                replyMode,
+                dualReplyConfig: userSettings.dualReplyConfig as Record<string, string> | undefined,
+            });
+
+            if (!sendResult.success) {
+                return { success: false, commentId: comment.id, error: sendResult.error };
+            }
+
+            // 10. Mark as replied
+            const detectedLanguage = detectLanguageCode(commentMessage);
+            await commentsService.markAsReplied(
+                comment.id,
+                replyText,
+                replyMethod,
+                templateId,
+                detectedLanguage === 'unknown' ? 'en' : detectedLanguage
+            );
+
+            return { success: true, commentId: comment.id, replyText, replyMethod };
+
+        } catch (error) {
+            this.logger.error('Error processing comment', {
+                facebookCommentId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+            return {
+                success: false,
+                commentId: facebookCommentId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            };
+        }
+    }
+
+    /**
+     * Post a reply to a Facebook comment (legacy - use replySender instead)
+     */
+    async postReplyToFacebook(
+        commentId: string,
+        message: string,
+        accessToken: string
+    ): Promise<boolean> {
+        return replySender.postPublicReply(commentId, message, accessToken);
+    }
+
+    /**
+     * Process pending comments (batch processing)
+     */
+    async processPendingComments(userId: string, limit: number = 10): Promise<ReplyResult[]> {
+        const unrepliedComments = await commentsService.getUnrepliedComments(userId, limit);
+        const results: ReplyResult[] = [];
+
+        for (const comment of unrepliedComments) {
+            results.push({
+                success: false,
+                commentId: comment.id,
+                error: 'Batch processing not fully implemented',
+            });
+        }
+
+        return results;
+    }
+
+    private delay(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+}
+
+export const replyService = new ReplyService();
+
+// Re-export sub-modules for direct access if needed
+export { replyGenerator } from './generator';
+export { replySender } from './sender';
