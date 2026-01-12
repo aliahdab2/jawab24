@@ -143,7 +143,7 @@ export default function CheckoutPage() {
           <meta name="robots" content="noindex, follow" />
         </Head>
 
-        <div className="flex-1 bg-gradient-to-br from-sky-50 via-white to-violet-50 py-6 md:py-10 px-4 relative pt-safe pb-safe">
+        <div className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 py-6 md:py-10 px-4 relative pt-safe pb-safe">
           <div className="max-w-3xl mx-auto relative">
             {/* Top Back Link */}
             <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
@@ -198,7 +198,7 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="flex-1 bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative pt-safe pb-safe">
+      <div className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative pt-safe pb-safe">
         <div className="max-w-3xl mx-auto relative pt-4 sm:pt-0">
           {/* Top Back Link */}
           <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">

@@ -118,7 +118,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="flex-1 overflow-y-auto flex flex-col bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
       <Head>
         <title>{BRAND_ASSETS.meta.appTitle}</title>
         <meta name="description" content={t('landing.seoDescription')} />
@@ -143,7 +143,7 @@ export default function LandingPage() {
         />
       </Head>
 
-      <div className="flex-1 bg-white overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-white overflow-x-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Navigation - Mobile optimized */}
         <nav className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

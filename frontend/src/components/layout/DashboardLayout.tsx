@@ -70,7 +70,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <title>{pageTitle} | Jawab24</title>
       </Head>
 
-      <div className="flex-1 bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Sidebar - hidden on mobile and on clean layouts */}
         {!isCleanLayout && (
           <div className="hidden lg:block">

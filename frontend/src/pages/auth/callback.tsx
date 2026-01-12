@@ -189,7 +189,7 @@ export default function AuthCallback() {
 
   if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-surface-50">
+      <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50">
         <div className="text-center">
           <div className="text-red-500 text-xl mb-4">❌</div>
           <h1 className="text-xl font-semibold text-surface-900 mb-2">{t('auth.loginError')}</h1>

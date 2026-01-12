@@ -70,7 +70,7 @@
     background-image:
       radial-gradient(ellipse at 0% 0%, rgba(20, 184, 166, 0.05) 0%, transparent 50%),
       radial-gradient(ellipse at 100% 100%, rgba(249, 115, 22, 0.03) 0%, transparent 50%);
-    min-height: 100vh;
+    /* Height is set via html, body { height: 100% } in AppShell section */
   }
 
   /* RTL Arabic font */
@@ -844,67 +844,60 @@ body.is-native .bottom-safe-bg {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   APPSHELL - INDUSTRY STANDARD SAFE AREA HANDLING
+   INDUSTRY STANDARD: SAFE AREA HANDLING (Ionic/Capacitor Pattern)
    
-   Following React Native's SafeAreaProvider pattern:
-   - AppShell wraps the entire app at root level
-   - Handles ALL safe area padding in ONE place
-   - Children use flex-1 or h-full, NOT 100vh
-   
-   This is the SINGLE source of truth for safe areas.
+   1. Height chain: html → body → .app-shell (all 100%)
+   2. Safe areas applied at .app-shell level using env() with fallbacks
+   3. Top safe area: handled by fixed/sticky headers (pt-safe class)
+   4. Bottom/side safe areas: handled by AppShell padding
+   5. Children use flex: 1 + overflow-y: auto for scrolling
 ═══════════════════════════════════════════════════════════════════ */
 
-/* Base AppShell - fills viewport with flexbox */
+/* Step 1: Height chain */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Step 2: AppShell fills body height */
 .app-shell {
-  min-height: 100vh;
-  min-height: 100dvh; /* Dynamic viewport height - accounts for browser chrome */
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* Children handle their own scrolling */
+  
+  /* Web browsers: use env() values (they handle safe areas correctly) */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Native apps: Apply safe area padding to AppShell */
-html.is-native .app-shell,
-body.is-native .app-shell {
-  /* Top: handled by individual headers with pt-safe (they're fixed/sticky) */
-  /* Bottom: small safe area for gesture bar in portrait */
-  padding-bottom: var(--safe-bottom-capped, 8px);
+/* Step 3: Native apps - use max() to ensure minimum values
+   Android often returns 0 for env() so we need fallbacks */
+html.is-native .app-shell {
+  /* Portrait: 8px minimum bottom safe area */
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 }
 
-/* Native landscape: sides instead of bottom */
+/* Step 4: Landscape - sides instead of bottom */
 @media (orientation: landscape) {
-  html.is-native .app-shell,
-  body.is-native .app-shell {
-    padding-bottom: 0px;
-    padding-left: max(var(--min-safe-side), env(safe-area-inset-left, 0px));
-    padding-right: max(var(--min-safe-side), env(safe-area-inset-right, 0px));
+  .app-shell {
+    padding-bottom: 0;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  
+  html.is-native .app-shell {
+    padding-bottom: 0;
+    padding-left: max(32px, env(safe-area-inset-left, 0px));
+    padding-right: max(32px, env(safe-area-inset-right, 0px));
   }
 }
 
-/* PWA standalone: use env() values */
+/* Step 5: PWA standalone mode */
 @media (display-mode: standalone) {
   .app-shell {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  
-  @media (orientation: landscape) {
-    .app-shell {
-      padding-bottom: 0px;
-      padding-left: env(safe-area-inset-left, 0px);
-      padding-right: env(safe-area-inset-right, 0px);
-    }
-  }
-}
-
-/* Children of AppShell should use flex-1 to fill available space */
-.app-shell > * {
-  flex-shrink: 0; /* Prevent shrinking */
-}
-
-/* Utility class for main content that should grow */
-.app-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
