@@ -187,10 +187,10 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
               className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
               style={{
                 // Position nav ABOVE the safe area (uses min fallback on Android)
-                bottom: 0, // WhatsApp-style: nav at edge
+                bottom: 'var(--safe-bottom-capped, 0px)', // Above safe area in portrait, at edge in landscape
                 // Side padding for landscape notch
-                paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))',
-                paddingRight: 'max(16px, env(safe-area-inset-right, 0px))'
+                paddingLeft: 'max(32px, env(safe-area-inset-left, 0px))',
+                paddingRight: 'max(32px, env(safe-area-inset-right, 0px))'
               }}
             >
               <MobileNavButton
