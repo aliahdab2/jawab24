@@ -168,6 +168,7 @@ export interface CreateCommentDTO {
     fromId?: string;
     fromName?: string;
     createdTime?: Date;
+    repliedAt?: Date;
 }
 
 export interface UpdateCommentDTO {
