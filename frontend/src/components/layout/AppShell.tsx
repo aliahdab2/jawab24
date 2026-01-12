@@ -18,21 +18,7 @@ interface AppShellProps {
 
 export function AppShell({ children, className = '' }: AppShellProps) {
   return (
-    <div 
-      className={`app-shell ${className}`}
-      style={{
-        // Fill viewport
-        minHeight: '100dvh', // Dynamic viewport height (modern) with fallback
-        minHeight: '100vh',  // Fallback for older browsers
-        
-        // Flexbox column layout
-        display: 'flex',
-        flexDirection: 'column',
-        
-        // Safe area padding - handled by CSS for native apps
-        // See globals.css .app-shell rules
-      }}
-    >
+    <div className={`app-shell ${className}`}>
       {children}
     </div>
   );
