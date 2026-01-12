@@ -389,7 +389,7 @@ function MobileMenuOverlay({
             ? '0 25px 50px -12px rgba(0,0,0,0.25)' 
             : '0 -8px 32px rgba(0,0,0,0.16)',
           // Safe area padding for bottom sheet AND landscape modal
-          paddingBottom: 'max(20px, env(safe-area-inset-bottom, 0px))',
+          paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
         }}
         onClick={(e) => e.stopPropagation()}
         dir={isRTL ? 'rtl' : 'ltr'}

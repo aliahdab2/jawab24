@@ -702,7 +702,7 @@
 html.is-native,
 body.is-native {
   --min-safe-top: 24px;
-  --min-safe-bottom: 20px;
+  --min-safe-bottom: 8px;
   --min-safe-side: 0px;
 }
 
@@ -782,7 +782,7 @@ body.is-native {
 }
 
 .is-native .pb-safe {
-  padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
 }
 
 @media (orientation: landscape) {
@@ -828,7 +828,7 @@ body.is-native .top-safe-bg {
 /* Native apps: ensure minimum bottom height */
 html.is-native .bottom-safe-bg,
 body.is-native .bottom-safe-bg {
-  height: max(20px, env(safe-area-inset-bottom, 0px));
+  height: max(8px, env(safe-area-inset-bottom, 0px));
 }
 
 /* Landscape: smaller bottom safe area */
