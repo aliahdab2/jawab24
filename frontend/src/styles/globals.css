@@ -676,6 +676,9 @@
   /* Minimum safe areas for Android (which often reports 0) */
   --min-safe-top: 0px;
   --min-safe-bottom: 0px;
+  
+  /* WhatsApp-style: zero bottom safe area for native apps */
+  --safe-bottom-capped: 0px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -702,28 +705,30 @@
 html.is-native,
 body.is-native {
   --min-safe-top: 24px;
-  --min-safe-bottom: 8px;
+  --min-safe-bottom: 0px; /* WhatsApp-style: zero bottom safe area */
   --min-safe-side: 0px;
+  --safe-bottom-capped: 0px; /* WhatsApp-style: no visible bottom safe area */
 }
 
 @media (orientation: landscape) {
   html.is-native,
   body.is-native {
     --min-safe-side: 24px;
-    --min-safe-bottom: 4px; /* Minimal in landscape - gesture area is smaller */
+    --min-safe-bottom: 0px; /* WhatsApp-style: zero in landscape too */
   }
 }
 
 /* Apply safe area padding to body for native apps
    IMPORTANT: 
    - TOP: NOT applied here - each page handles via pt-safe on fixed/sticky headers
-   - BOTTOM: Applied globally for system navigation 
+   - BOTTOM: WhatsApp-style - zero padding, nav sits at edge
    - SIDES: Applied in landscape for notch
 */
 html.is-native body,
 body.is-native {
   /* NO top padding - headers with pt-safe handle this */
-  padding-bottom: max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px));
+  /* WhatsApp-style: zero bottom padding - nav handles its own positioning */
+  padding-bottom: 0px;
 }
 
 @media (orientation: landscape) {
@@ -782,7 +787,8 @@ body.is-native {
 }
 
 .is-native .pb-safe {
-  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  /* WhatsApp-style: zero bottom padding */
+  padding-bottom: 0px;
 }
 
 @media (orientation: landscape) {
@@ -819,24 +825,16 @@ body.is-native .top-safe-bg {
   height: max(24px, env(safe-area-inset-top, 0px));
 }
 
-/* Bottom safe area background (for gesture nav) */
+/* Bottom safe area background (for gesture nav) - capped to avoid excessive height */
 .bottom-safe-bg {
   bottom: 0;
-  height: max(var(--min-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+  height: min(24px, max(var(--min-safe-bottom, 0px), env(safe-area-inset-bottom, 0px)));
 }
 
-/* Native apps: ensure minimum bottom height */
+/* WhatsApp-style: hide bottom safe area background for native apps */
 html.is-native .bottom-safe-bg,
 body.is-native .bottom-safe-bg {
-  height: max(8px, env(safe-area-inset-bottom, 0px));
-}
-
-/* Landscape: smaller bottom safe area */
-@media (orientation: landscape) {
-  html.is-native .bottom-safe-bg,
-  body.is-native .bottom-safe-bg {
-    height: max(4px, env(safe-area-inset-bottom, 0px));
-  }
+  display: none; /* No visible safe area bar - like WhatsApp */
 }
 
 /* Bottom inset utility - positions element above system navigation */
@@ -847,11 +845,12 @@ body.is-native .bottom-safe-bg {
 /* ═══════════════════════════════════════════════════════════════════
    LANDSCAPE MODE SAFE AREAS
    In landscape, notch moves to side, needs side padding
+   Bottom: WhatsApp-style zero padding
 ═══════════════════════════════════════════════════════════════════ */
 @media (orientation: landscape) {
   html.is-native,
   body.is-native {
-    --min-safe-bottom: 4px; /* Minimal in landscape - more screen space */
+    --min-safe-bottom: 0px; /* WhatsApp-style: zero in landscape */
   }
   
   /* Add side safe areas for notch/cutout in landscape */

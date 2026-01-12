@@ -58,7 +58,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
         style={{
           boxShadow: '0 8px 16px rgba(16, 185, 129, 0.25)',
           // Mobile: Position above bottom nav (64px) + safe area (20px min) + 16px gap
-          bottom: 'calc(64px + max(20px, env(safe-area-inset-bottom, 0px)) + 16px)',
+          bottom: 'calc(64px + 16px)', // nav height + gap
           // Account for side safe area (notch in landscape)
           right: isRTL ? 'auto' : 'calc(1.5rem + env(safe-area-inset-right, 0px))',
           left: isRTL ? 'calc(1.5rem + env(safe-area-inset-left, 0px))' : 'auto'
@@ -80,7 +80,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
           dir={isRTL ? 'rtl' : 'ltr'}
           style={{
             // Position above the WhatsApp button (button is ~60px + 16px gap)
-            bottom: 'calc(64px + max(20px, env(safe-area-inset-bottom, 0px)) + 16px + 60px)',
+            bottom: 'calc(64px + 16px + 60px)', // nav + gap + button
             right: isRTL ? 'auto' : 'calc(2rem + env(safe-area-inset-right, 0px))',
             left: isRTL ? 'calc(2rem + env(safe-area-inset-left, 0px))' : 'auto'
           }}

@@ -62,7 +62,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
   }
 
   const isCleanLayout = isPublic && !isAuthenticated;
-  const safeBottom = 'max(var(--min-safe-bottom), env(safe-area-inset-bottom, 0px))';
+  // WhatsApp-style: no visible bottom safe area - nav at edge
 
   return (
     <>
@@ -151,11 +151,11 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
               ...(isCleanLayout
                 ? {
                     // Public pages (no bottom nav): still need bottom safe area + a bit of breathing room
-                    paddingBottom: `calc(16px + ${safeBottom})`,
+                    paddingBottom: '16px',
                   }
                 : {
                     // Mobile app: padding = bottom nav (64px) + safe area + extra breathing room
-                    paddingBottom: `calc(100px + ${safeBottom})`,
+                    paddingBottom: '80px', // nav height (64px) + breathing room
                   }),
             }}
           >
@@ -187,7 +187,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
               className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
               style={{
                 // Position nav ABOVE the safe area (uses min fallback on Android)
-                bottom: safeBottom,
+                bottom: 0, // WhatsApp-style: nav at edge
                 // Side padding for landscape notch
                 paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))',
                 paddingRight: 'max(16px, env(safe-area-inset-right, 0px))'
@@ -389,7 +389,7 @@ function MobileMenuOverlay({
             ? '0 25px 50px -12px rgba(0,0,0,0.25)' 
             : '0 -8px 32px rgba(0,0,0,0.16)',
           // Safe area padding for bottom sheet AND landscape modal
-          paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
+          paddingBottom: '8px', // minimal internal padding
         }}
         onClick={(e) => e.stopPropagation()}
         dir={isRTL ? 'rtl' : 'ltr'}

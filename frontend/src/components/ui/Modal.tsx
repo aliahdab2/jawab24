@@ -66,7 +66,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
           )}
           style={{
             // Ensure modal doesn't overlap with Android navigation
-            paddingBottom: 'max(20px, env(safe-area-inset-bottom, 0px))'
+            paddingBottom: '8px' // minimal internal padding
           }}
         >
           {/* Header */}
