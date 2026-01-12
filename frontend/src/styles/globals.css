@@ -719,27 +719,10 @@ body.is-native {
   }
 }
 
-/* Apply safe area padding to body for native apps
-   IMPORTANT: 
-   - TOP: NOT applied here - each page handles via pt-safe on fixed/sticky headers
-   - BOTTOM: Small padding in portrait for gesture bar, zero in landscape
-   - SIDES: Applied in landscape for notch
+/* Safe area padding is handled by AppShell component - not body
+   See: APPSHELL section below and src/components/layout/AppShell.tsx
+   Body padding removed to prevent double-padding with AppShell
 */
-html.is-native body,
-body.is-native {
-  /* NO top padding - headers with pt-safe handle this */
-  /* Portrait: 8px bottom for gesture bar */
-  padding-bottom: 8px;
-}
-
-@media (orientation: landscape) {
-  html.is-native body,
-  body.is-native {
-    padding-bottom: 0px; /* Zero bottom in landscape */
-    padding-left: max(var(--min-safe-side), env(safe-area-inset-left, 0px));
-    padding-right: max(var(--min-safe-side), env(safe-area-inset-right, 0px));
-  }
-}
 
 /* ─────────────────────────────────────────────────────────────────
    2. PWA STANDALONE MODE (Added to Home Screen)
@@ -858,6 +841,70 @@ body.is-native .bottom-safe-bg {
 /* Bottom inset utility - positions element above system navigation */
 .bottom-safe {
   bottom: max(var(--min-safe-bottom), var(--safe-bottom));
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   APPSHELL - INDUSTRY STANDARD SAFE AREA HANDLING
+   
+   Following React Native's SafeAreaProvider pattern:
+   - AppShell wraps the entire app at root level
+   - Handles ALL safe area padding in ONE place
+   - Children use flex-1 or h-full, NOT 100vh
+   
+   This is the SINGLE source of truth for safe areas.
+═══════════════════════════════════════════════════════════════════ */
+
+/* Base AppShell - fills viewport with flexbox */
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height - accounts for browser chrome */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Native apps: Apply safe area padding to AppShell */
+html.is-native .app-shell,
+body.is-native .app-shell {
+  /* Top: handled by individual headers with pt-safe (they're fixed/sticky) */
+  /* Bottom: small safe area for gesture bar in portrait */
+  padding-bottom: var(--safe-bottom-capped, 8px);
+}
+
+/* Native landscape: sides instead of bottom */
+@media (orientation: landscape) {
+  html.is-native .app-shell,
+  body.is-native .app-shell {
+    padding-bottom: 0px;
+    padding-left: max(var(--min-safe-side), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--min-safe-side), env(safe-area-inset-right, 0px));
+  }
+}
+
+/* PWA standalone: use env() values */
+@media (display-mode: standalone) {
+  .app-shell {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  
+  @media (orientation: landscape) {
+    .app-shell {
+      padding-bottom: 0px;
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+    }
+  }
+}
+
+/* Children of AppShell should use flex-1 to fill available space */
+.app-shell > * {
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Utility class for main content that should grow */
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

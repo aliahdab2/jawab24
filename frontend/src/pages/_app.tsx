@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { AppShell } from '@/components/layout/AppShell';
 import { useUIStore, useAuthStore } from '@/lib/store';
 import type { Language } from '@/i18n';
 import { dmSans, cairo, tajawal } from '@/lib/fonts';
@@ -294,12 +295,12 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </Head>
-      <div className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} app-container`}>
+      <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable}`}>
         <ErrorBoundary>
           <Component {...pageProps} />
           <Toaster richColors position="top-center" closeButton />
         </ErrorBoundary>
-      </div>
+      </AppShell>
     </QueryClientProvider>
   );
 }

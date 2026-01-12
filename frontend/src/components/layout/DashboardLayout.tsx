@@ -70,7 +70,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <title>{pageTitle} | Jawab24</title>
       </Head>
 
-      <div className="min-h-screen bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Sidebar - hidden on mobile and on clean layouts */}
         {!isCleanLayout && (
           <div className="hidden lg:block">
@@ -133,7 +133,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         {/* Main content - uses centralized spacing from CSS variables */}
         <main
           className={clsx(
-            'transition-all duration-500 min-h-screen',
+            'transition-all duration-500 flex-1',
             // Clean layout (public pages): use pt-header for fixed header spacing
             // Regular layout: sticky header is in document flow, no extra padding needed on mobile
             // Desktop (with sidebar) still gets no top padding

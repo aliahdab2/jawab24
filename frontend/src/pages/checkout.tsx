@@ -127,7 +127,7 @@ export default function CheckoutPage() {
   // EARLY RETURN 1: Show loading while checking geo
   if (isSanctioned === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center pt-safe pb-safe">
+      <div className="flex-1 flex items-center justify-center pt-safe pb-safe">
         <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
       </div>
     );
@@ -143,7 +143,7 @@ export default function CheckoutPage() {
           <meta name="robots" content="noindex, follow" />
         </Head>
 
-        <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-6 md:py-10 px-4 relative pt-safe pb-safe">
+        <div className="flex-1 bg-gradient-to-br from-sky-50 via-white to-violet-50 py-6 md:py-10 px-4 relative pt-safe pb-safe">
           <div className="max-w-3xl mx-auto relative">
             {/* Top Back Link */}
             <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
@@ -182,7 +182,7 @@ export default function CheckoutPage() {
   // EARLY RETURN 3: Show loading while fetching plan (only for allowed geos)
   if (!plan && !error) {
     return (
-      <div className="min-h-screen flex items-center justify-center pt-safe pb-safe">
+      <div className="flex-1 flex items-center justify-center pt-safe pb-safe">
         <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
       </div>
     );
@@ -198,7 +198,7 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative pt-safe pb-safe">
+      <div className="flex-1 bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative pt-safe pb-safe">
         <div className="max-w-3xl mx-auto relative pt-4 sm:pt-0">
           {/* Top Back Link */}
           <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
