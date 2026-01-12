@@ -321,15 +321,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Footer Info - pb-safe for system navigation */}
-          <div className="flex-shrink-0 p-4 border-t border-surface-100 flex flex-col items-center justify-center gap-1 pb-safe">
-            <div className="text-[10px] font-medium text-surface-300 tracking-wider">
-              © {new Date().getFullYear()} Jawab24
-            </div>
-            <div className="text-[10px] font-mono text-surface-200">
-              v{process.env.NEXT_PUBLIC_BUILD_TIME ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleString() : 'Dev'}
-            </div>
-          </div>
         </div>
 
         {/* Fixed top safe area background - prevents content from showing through status bar when scrolling */}

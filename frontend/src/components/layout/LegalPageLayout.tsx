@@ -100,6 +100,15 @@ export function LegalPageLayout({
               </section>
             ))}
           </div>
+
+          {/* Version Info */}
+          <div className="mt-12 pt-8 border-t border-slate-700 text-center">
+            <p className="text-xs text-slate-500">
+              © {new Date().getFullYear()} Jawab24 • v{process.env.NEXT_PUBLIC_BUILD_TIME 
+                ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleDateString() 
+                : 'Dev'}
+            </p>
+          </div>
         </div>
 
         {/* Fixed bottom safe area background - matches dark page background */}
