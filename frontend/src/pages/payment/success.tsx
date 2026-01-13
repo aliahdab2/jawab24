@@ -42,9 +42,9 @@ export default function PaymentSuccessPage() {
         <title>{t('payment.success.title')} - Jawab24</title>
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4 pt-safe pb-safe " dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="min-h-[100dvh] bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4 pt-safe pb-safe" dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="max-w-md w-full">
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+          <div className="bg-white rounded-3xl shadow-xl p-8 text-center">
             {/* Success Icon */}
             <div className="mb-6 flex justify-center">
               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
