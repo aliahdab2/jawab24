@@ -6,27 +6,26 @@ export default function Document() {
     <Html lang="ar" dir="rtl">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        {/* Early detection of Capacitor native platform - runs BEFORE React hydrates */}
+        {/* Early detection of Capacitor native platform - runs BEFORE React hydrates 
+            Industry standard: Check Capacitor.isNativePlatform() first (most reliable) */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                // Best practice: Check for Capacitor object (available immediately in native apps)
+                // Primary check: Capacitor object (most reliable - works in Capacitor 3+)
                 var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
                 
-                // Fallback: Also check for capacitor:// or file:// protocol (older Capacitor versions)
+                // Fallback: Protocol-based detection (for edge cases)
                 if (!isNative) {
                   var protocol = window.location.protocol;
-                  var href = window.location.href;
+                  // capacitor:// = iOS, file:// = older Android, https://localhost = Android WebView
                   isNative = protocol === 'capacitor:' || 
                              protocol === 'file:' || 
-                             href.includes('localhost') ||
-                             href.includes('capacitor://');
+                             (protocol === 'https:' && window.location.hostname === 'localhost');
                 }
                 
                 if (isNative) {
                   document.documentElement.classList.add('is-native');
-                  document.body && document.body.classList.add('is-native');
                 }
               })();
             `
