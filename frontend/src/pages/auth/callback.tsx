@@ -35,16 +35,6 @@ export default function AuthCallback() {
     const preferredLocale = parts.length > 2 ? parts[2] : 'ar';
     const safeUrl = returnUrlRaw.startsWith('/') ? returnUrlRaw : '/dashboard';
     
-    // DEBUG: Log state parsing
-    console.log('[Callback] State Debug:', {
-      rawState: state,
-      decodedState: stateStr,
-      parts,
-      returnUrlRaw,
-      platform,
-      preferredLocale,
-      safeUrl
-    });
 
     if (fbError) {
       authAttemptedRef.current = true;
@@ -157,10 +147,10 @@ export default function AuthCallback() {
       }
       
       // Web: standard navigation
-      console.log('[Callback] Redirecting to:', safeUrl);
-      // DEBUG ALERT - Remove after testing
-       
-      alert(`Auth Success!\nState: ${stateStr}\nRedirecting to: ${safeUrl}`);
+      // Small delay to ensure auth state is persisted before navigation
+      // This prevents race conditions where the target page loads before Zustand hydrates
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
       routerRef.current.push(safeUrl);
     } catch (err) {
       // Don't show error if request was aborted (user navigated away)
