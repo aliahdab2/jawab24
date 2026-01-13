@@ -333,13 +333,25 @@ export default function PagesPage() {
         title={t('pages.title')}
         description={t('pages.description')}
         action={
-          <Button
-            onClick={handleSync}
-            disabled={syncing}
-            icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
-          >
-            {syncing ? t('pages.syncing' as TranslationKey) : t('pages.connectPage')}
-          </Button>
+          <div className="flex gap-2">
+            {/* Sync existing pages (refresh) */}
+            <Button
+              onClick={handleSync}
+              disabled={syncing}
+              variant="secondary"
+              icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
+            >
+              {syncing ? t('pages.syncing' as TranslationKey) : t('pages.syncPages' as TranslationKey)}
+            </Button>
+            {/* Connect NEW page - triggers Facebook re-auth with page selection */}
+            <Button
+              onClick={handleReconnect}
+              disabled={syncing}
+              icon={<Plus className="w-4 h-4" />}
+            >
+              {t('pages.connectPage' as TranslationKey)}
+            </Button>
+          </div>
         }
       />
 
