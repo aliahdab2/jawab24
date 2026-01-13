@@ -785,8 +785,9 @@ body.is-native {
 
 @media (orientation: landscape) {
   .is-native .px-safe {
-    padding-left: max(32px, env(safe-area-inset-left, 0px));
-    padding-right: max(32px, env(safe-area-inset-right, 0px));
+    /* Use injected CSS variables for consistent side safe areas */
+    padding-left: var(--safe-area-left, env(safe-area-inset-left, 44px));
+    padding-right: var(--safe-area-right, env(safe-area-inset-right, 44px));
   }
 }
 
@@ -917,9 +918,29 @@ html.is-native .app-shell {
   .px-safe-landscape,
   html.is-native .px-safe-auto,
   body.is-native .px-safe-auto {
-    padding-left: max(32px, var(--safe-left));
-    padding-right: max(32px, var(--safe-right));
+    padding-left: var(--safe-area-left, env(safe-area-inset-left, 44px));
+    padding-right: var(--safe-area-right, env(safe-area-inset-right, 44px));
   }
+}
+
+/* Side safe area utility classes for fixed/sticky elements */
+.ps-safe {
+  padding-inline-start: var(--safe-area-left, env(safe-area-inset-left, 0px));
+}
+
+.pe-safe {
+  padding-inline-end: var(--safe-area-right, env(safe-area-inset-right, 0px));
+}
+
+/* Native apps: ensure side safe areas are applied */
+html.is-native .ps-safe,
+body.is-native .ps-safe {
+  padding-inline-start: var(--safe-area-left, env(safe-area-inset-left, 0px));
+}
+
+html.is-native .pe-safe,
+body.is-native .pe-safe {
+  padding-inline-end: var(--safe-area-right, env(safe-area-inset-right, 0px));
 }
 
 /* Combined: header height + safe area (for content below sticky headers) 
