@@ -783,8 +783,8 @@ body.is-native {
 }
 
 .is-native .pb-safe {
-  /* Portrait: 8px bottom padding */
-  padding-bottom: 8px;
+  /* Portrait: use same value as --sai-bottom for consistency */
+  padding-bottom: var(--sai-bottom);
 }
 
 @media (orientation: landscape) {

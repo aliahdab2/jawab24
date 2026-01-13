@@ -266,11 +266,10 @@ export default function LoginPage() {
           </div>
 
           {/* Content:
-              - Fixed height layout - NO scrolling on the login page
-              - Uses flex to center content vertically
-              - Only scrolls internally if content truly doesn't fit (very small screens) */}
+              - Portrait: Content flows from top with padding
+              - Landscape/Desktop: Centered vertically */}
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-6">
-            <div className="h-full flex items-center justify-center py-4">
+            <div className="h-full flex items-start lg:items-center justify-center py-6 lg:py-4">
               <div className="w-full max-w-md">
                 <div className="text-center lg:text-start mb-8">
                   <h2 className="text-4xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
@@ -331,7 +330,7 @@ export default function LoginPage() {
 
         {/* Fixed bottom safe area background */}
         <div
-          className="lg:hidden fixed-safe-bg bottom-safe-bg bg-surface-100"
+          className="lg:hidden fixed-safe-bg bottom-safe-bg bg-white"
           aria-hidden="true"
         />
       </div>
