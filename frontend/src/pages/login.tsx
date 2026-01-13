@@ -309,11 +309,11 @@ export default function LoginPage() {
           </div>
 
           {/* Content:
-              - Mobile: Content at top, terms at bottom
-              - Desktop: Content centered in upper area with terms right below */}
-          <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 lg:px-12 flex flex-col justify-center pb-safe">
-            {/* Main content wrapper - centered on desktop */}
-            <div className="w-full max-w-lg mx-auto pt-6 lg:pt-0">
+              - Mobile portrait: Content at top, terms below (no centering)
+              - Landscape/Desktop: Content centered */}
+          <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col landscape:justify-center lg:justify-center pb-safe">
+            {/* Main content wrapper */}
+            <div className="w-full max-w-lg mx-auto pt-6 landscape:pt-0 lg:pt-0">
               <div className="text-center lg:text-start mb-8">
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
                   {t('auth.welcomeBack')}

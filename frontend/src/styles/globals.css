@@ -38,8 +38,8 @@
     --sai-left: env(safe-area-inset-left, 0px);
     --sai-right: env(safe-area-inset-right, 0px);
     
-    /* Landscape side padding (minimum for system nav buttons) */
-    --sai-side-landscape: 24px;
+    /* Landscape side padding - uses actual safe area or minimum 32px */
+    --sai-side-landscape: 32px;
     
     /* ═══════════════════════════════════════════════════════════════════
        COLOR TOKENS

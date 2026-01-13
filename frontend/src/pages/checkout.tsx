@@ -144,7 +144,7 @@ export default function CheckoutPage() {
         </Head>
 
         <div className="flex-1 overflow-y-auto bg-gradient-to-br from-brand-50/30 via-white to-surface-50 min-h-full">
-          <div className="pt-safe pb-safe px-5 sm:px-6 py-6 sm:py-10 landscape:px-6">
+          <div className="pt-safe pb-safe px-5 sm:px-6 py-6 sm:py-10 px-safe-landscape">
             <div className="max-w-md mx-auto">
               
               {/* Header: Back link on one side, Logo on other */}
@@ -202,7 +202,7 @@ export default function CheckoutPage() {
 
       <div className="flex-1 overflow-y-auto bg-gradient-to-br from-brand-50/30 via-white to-surface-50 min-h-full">
         {/* Safe area padding container */}
-        <div className="pt-safe pb-safe px-5 sm:px-6 py-6 sm:py-10 landscape:px-6">
+        <div className="pt-safe pb-safe px-5 sm:px-6 py-6 sm:py-10 px-safe-landscape">
           <div className="max-w-md mx-auto">
             
             {/* Header: Back link on one side, Logo on other */}

@@ -129,16 +129,16 @@ All safe area values are defined as CSS variables in `globals.css`:
   --sai-bottom: env(safe-area-inset-bottom, 28px);
   --sai-left: env(safe-area-inset-left, 0px);
   --sai-right: env(safe-area-inset-right, 0px);
-  --sai-side-landscape: 24px;
+  --sai-side-landscape: 32px;  /* Single source of truth for landscape side padding */
 }
 ```
 
 ### Rules:
 1. **NEVER hardcode safe area values** in components - use `var(--sai-*)` or utility classes
 2. **Use CSS classes** for positioning, not inline styles with env()
-3. **Use `landscape:px-6`** for side padding in landscape mode (24px)
-4. **Portrait**: Bottom safe area visible (28px)
-5. **Landscape**: Bottom safe area = 0, side padding = 24px
+3. **Use `px-safe-landscape`** CSS class for side padding in landscape (uses `--sai-side-landscape` variable)
+4. **Portrait**: Bottom safe area visible (26px)
+5. **Landscape**: Bottom safe area = 0, side padding = 32px
 
 ### Fixed Elements Pattern:
 ```tsx
@@ -146,10 +146,10 @@ All safe area values are defined as CSS variables in `globals.css`:
 <nav className="fixed top-0 w-full pt-safe">
 
 // Fixed bottom nav - use CSS class for orientation-aware positioning
-<nav className="fixed left-0 right-0 bottom-nav-position landscape:px-6">
+<nav className="fixed left-0 right-0 bottom-nav-position px-safe-landscape">
 
-// Page content - use flex-1 and overflow-y-auto
-<div className="flex-1 overflow-y-auto landscape:px-6">
+// Page content - use flex-1 and overflow-y-auto + landscape side padding
+<div className="flex-1 overflow-y-auto px-safe-landscape">
 ```
 
 ### AppShell Pattern:
@@ -178,12 +178,12 @@ Use the `bottom-nav-position` CSS class:
 - ❌ Use `env(safe-area-inset-*, fallback)` directly in components
 - ❌ Use inline styles for safe area positioning
 - ❌ Add `min-h-screen` or `h-[100vh]` to page content (use `flex-1`)
-- ❌ Hardcode pixel values for safe areas
+- ❌ Hardcode pixel values for safe areas (like `landscape:px-8`)
 
 ### DO:
 - ✅ Use `var(--sai-*)` CSS variables
-- ✅ Use utility classes: `pt-safe`, `pb-safe`, `bottom-nav-position`
-- ✅ Use `landscape:px-6` for consistent side padding
+- ✅ Use utility classes: `pt-safe`, `pb-safe`, `bottom-nav-position`, `px-safe-landscape`
+- ✅ Use `px-safe-landscape` for landscape side padding (single source of truth)
 - ✅ Use `flex-1 overflow-y-auto` for scrollable content
 
 ---
@@ -246,10 +246,10 @@ Or in Tailwind: `landscape:` prefix
 ### Bottom Navigation:
 - Height: 64px (`h-16`)
 - Use `bottom-nav-position` CSS class for positioning
-- Add `landscape:px-6` for side padding in landscape
+- Add `px-safe-landscape` for side padding in landscape (uses CSS variable)
 - Hidden on desktop: `lg:hidden`
 ```tsx
-<nav className="fixed left-0 right-0 h-16 bottom-nav-position landscape:px-6 lg:hidden">
+<nav className="fixed left-0 right-0 h-16 bottom-nav-position px-safe-landscape lg:hidden">
 ```
 
 ---

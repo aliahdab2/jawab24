@@ -57,7 +57,7 @@ export function LegalPageLayout({
           aria-hidden="true"
         />
 
-        <div className="max-w-4xl mx-auto px-6 sm:px-8 py-12 pt-safe pb-safe">
+        <div className="max-w-4xl mx-auto px-6 sm:px-8 px-safe-landscape py-12 pt-safe pb-safe">
           <Link
             href="/landing"
             className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors"
