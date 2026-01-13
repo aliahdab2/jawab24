@@ -401,7 +401,7 @@ export default function RulesPage() {
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>
-            <Button onClick={handleSave} disabled={!formData.name || !formData.templateId}>
+            <Button onClick={handleSave} disabled={!formData.name.trim() || !formData.keywords.trim() || !formData.templateId}>
               {editingRule ? t('common.save') : t('common.add')}
             </Button>
           </div>

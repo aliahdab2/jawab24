@@ -18,19 +18,34 @@ import {
 import type { Template } from '@jawab24/shared';
 
 export default function TemplatesPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { token } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
-  const [activeLang, setActiveLang] = useState<'en' | 'ar'>('en');
+  
+  // Available template languages - add new ones here for future expansion
+  const templateLanguages: ('en' | 'ar')[] = ['en', 'ar'];
+  
+  // Default to interface language if supported
+  const getDefaultLang = (): 'en' | 'ar' => {
+    if (templateLanguages.includes(language as 'en' | 'ar')) {
+      return language as 'en' | 'ar';
+    }
+    return templateLanguages[0];
+  };
+  
+  const [activeLang, setActiveLang] = useState<'en' | 'ar'>(getDefaultLang());
   const [formData, setFormData] = useState({
     name: '',
     en: '',
     ar: '',
     keywords: '',
   });
+  
+  // Form validation: name required + at least one translation
+  const isFormValid = formData.name.trim() !== '' && (formData.en.trim() !== '' || formData.ar.trim() !== '');
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -69,7 +84,7 @@ export default function TemplatesPage() {
       setEditingTemplate(null);
       setFormData({ name: '', en: '', ar: '', keywords: '' });
     }
-    setActiveLang('en');
+    setActiveLang(getDefaultLang());
     setIsModalOpen(true);
   };
 
@@ -367,7 +382,7 @@ export default function TemplatesPage() {
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>
-            <Button onClick={handleSave}>
+            <Button onClick={handleSave} disabled={!isFormValid}>
               {editingTemplate ? t('common.save') : t('common.add')}
             </Button>
           </div>
