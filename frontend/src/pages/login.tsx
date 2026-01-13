@@ -311,7 +311,7 @@ export default function LoginPage() {
           {/* Content:
               - Mobile: Content at top, terms at bottom
               - Desktop: Content near top, terms below content */}
-          <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col pb-safe">
+          <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col lg:justify-center pb-safe">
             {/* Main content wrapper */}
             <div className="w-full max-w-lg mx-auto pt-6 lg:pt-8">
               <div className="text-center lg:text-start mb-8">
