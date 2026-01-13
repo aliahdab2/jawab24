@@ -106,7 +106,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+ 
              Uses box-content so pt-safe adds to height rather than squishing content */
           <div
-            className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 z-40 pt-safe box-content"
+            className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 landscape:px-6 z-40 pt-safe box-content"
             style={{
               background: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 75%, transparent 100%)'
             }}
@@ -144,7 +144,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           <div 
             className={clsx(
               // Padding around content - top padding is minimal since sticky header is in document flow
-              'px-4 pb-4 pt-4 landscape:px-2 landscape:pt-2 md:px-8 md:pb-8 md:pt-8 lg:px-16 lg:pb-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
+              'px-4 pb-4 pt-4 landscape:px-6 landscape:pt-2 md:px-8 md:pb-8 md:pt-8 lg:px-16 lg:pb-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
               isCleanLayout ? 'pb-12' : 'lg:pb-12'
             )}
             style={{
