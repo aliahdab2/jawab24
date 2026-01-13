@@ -15,10 +15,13 @@ import {
   ChevronRight,
   Clock,
   AlertTriangle,
-  Plus
+  Plus,
+  LogIn
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { Capacitor } from '@capacitor/core';
+import { FB_CALLBACK_PATH } from '@/constants/auth';
 import type { Page } from '@jawab24/shared';
 
 export default function PagesPage() {
@@ -56,17 +59,59 @@ export default function PagesPage() {
     toast.info(t('pages.openingFacebook' as TranslationKey));
   };
 
-  // Open Facebook Business Settings to manage page permissions
-  // This is the proper way until we implement Facebook Business Integration
-  const openFacebookSettings = () => {
-    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
-    // Link to Facebook's app settings page where user can manage page access
-    const settingsUrl = fbAppId 
-      ? `https://www.facebook.com/settings?tab=business_tools&app_id=${fbAppId}`
-      : 'https://www.facebook.com/settings?tab=business_tools';
+  // Re-authenticate with Facebook to add more pages
+  const handleReconnect = async () => {
+    setShowConnectionModal(false);
     
-    window.open(settingsUrl, '_blank');
-    toast.info(t('pages.openingFacebookSettings' as TranslationKey));
+    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
+    if (!fbAppId) {
+      toast.error(t('auth.loginError' as TranslationKey));
+      return;
+    }
+
+    const isMobile = Capacitor.isNativePlatform();
+
+    // For BOTH mobile and web: Use browser-based OAuth with auth_type=rerequest
+    // This is the only reliable way to show Facebook's page selection dialog again
+    // The native SDK doesn't properly support re-requesting page permissions
+    if (isMobile) {
+      // Mobile: Use in-app browser for OAuth (ensures auth_type=rerequest works)
+      const { Browser } = await import('@capacitor/browser');
+      
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+      const localePath = language === 'ar' ? '' : `/${language}`;
+      const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
+      
+      // Return to pages after auth
+      const returnUrl = '/pages';
+      const state = encodeURIComponent(`${returnUrl}|mobile|${language}`);
+      
+      // Open Facebook OAuth in browser with auth_type=rerequest
+      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=touch&auth_type=rerequest`;
+      
+      toast.info(t('auth.redirecting' as TranslationKey));
+      await Browser.open({ url: oauthUrl });
+    } else {
+      // Web: redirect to Facebook OAuth
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+      const localePath = language === 'ar' ? '' : `/${language}`;
+      const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
+      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
+      
+      // Use current page as return URL
+      const returnUrl = '/pages';
+      const state = encodeURIComponent(`${returnUrl}|web|${language}`);
+
+      const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const displayMode = isMobileWeb ? 'touch' : 'page';
+
+      // Add auth_type=rerequest to force Facebook to show page selection again
+      window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}&auth_type=rerequest`;
+    }
   };
 
   const fetchPages = useCallback(async () => {
@@ -260,14 +305,13 @@ export default function PagesPage() {
             >
               {syncing ? t('pages.syncing' as TranslationKey) : t('pages.syncPages' as TranslationKey)}
             </Button>
-            {/* Manage pages on Facebook - opens FB settings */}
+            {/* Connect NEW page - triggers Facebook re-auth with page selection */}
             <Button
-              onClick={openFacebookSettings}
+              onClick={handleReconnect}
               disabled={syncing}
-              variant="secondary"
-              icon={<ExternalLink className="w-4 h-4" />}
+              icon={<Plus className="w-4 h-4" />}
             >
-              {t('pages.manageOnFacebook' as TranslationKey)}
+              {t('pages.connectPage' as TranslationKey)}
             </Button>
           </div>
         }
@@ -443,8 +487,8 @@ export default function PagesPage() {
             description={t('pages.noPagesDesc')}
             action={
               <div className="flex flex-col gap-3">
-                <Button onClick={openFacebookSettings} icon={<ExternalLink className="w-4 h-4" />}>
-                  {t('pages.manageOnFacebook' as TranslationKey)}
+                <Button onClick={handleReconnect} icon={<RefreshCw className="w-4 h-4" />}>
+                  {t('pages.reconnectFacebook' as TranslationKey)}
                 </Button>
                 <Button variant="secondary" onClick={openCreatePageLink} icon={<Plus className="w-4 h-4" />}>
                   {t('pages.createPage' as TranslationKey)}
@@ -494,11 +538,11 @@ export default function PagesPage() {
             {/* Actions */}
             <div className="flex flex-col gap-3">
               <Button 
-                onClick={openFacebookSettings} 
-                icon={<ExternalLink className="w-4 h-4" />}
+                onClick={handleReconnect} 
+                icon={<LogIn className="w-4 h-4" />}
                 className="w-full"
               >
-                {t('pages.manageOnFacebook' as TranslationKey)}
+                {t('pages.reconnectFacebook' as TranslationKey)}
               </Button>
               <Button 
                 variant="secondary" 
@@ -517,7 +561,6 @@ export default function PagesPage() {
           </div>
         </div>
       )}
-
 
       {/* Knowledge Base Modal - Compact with fixed textarea height */}
       {editingPage && (
