@@ -373,16 +373,14 @@ function MobileMenuOverlay({
           "absolute bg-white overflow-hidden",
           isLandscape
             // Landscape: Centered modal (iOS/Android standard for landscape)
-            ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl w-[90vw] max-w-[600px] max-h-[85vh] animate-in zoom-in-95 duration-200"
-            // Portrait: Bottom sheet (iOS standard)
-            : "bottom-0 left-0 right-0 rounded-t-[24px] animate-in slide-in-from-bottom duration-300"
+            ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl w-[90vw] max-w-[600px] max-h-[85vh] animate-in zoom-in-95 duration-200 px-safe"
+            // Portrait: Bottom sheet (iOS standard) with bottom safe area
+            : "bottom-0 left-0 right-0 rounded-t-[24px] animate-in slide-in-from-bottom duration-300 pb-safe"
         )}
         style={{
           boxShadow: isLandscape 
             ? '0 25px 50px -12px rgba(0,0,0,0.25)' 
             : '0 -8px 32px rgba(0,0,0,0.16)',
-          // Safe area padding for bottom sheet AND landscape modal
-          paddingBottom: '8px', // minimal internal padding
         }}
         onClick={(e) => e.stopPropagation()}
         dir={isRTL ? 'rtl' : 'ltr'}

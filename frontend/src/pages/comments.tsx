@@ -470,8 +470,8 @@ export default function CommentsPage() {
 
       {/* Comment Detail Modal */}
       {selectedComment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col pb-safe landscape:pb-2 landscape:px-safe">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 md:p-6 border-b border-surface-100">
               <div className="flex items-center gap-3">

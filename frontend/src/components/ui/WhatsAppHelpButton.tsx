@@ -12,7 +12,17 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [isLandscape, setIsLandscape] = useState(false);
   const isRTL = language === 'ar';
+
+  // Detect orientation
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(orientation: landscape)');
+    setIsLandscape(mediaQuery.matches);
+    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
 
   // Auto-hide on scroll down, show on scroll up
   useEffect(() => {
@@ -57,11 +67,11 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
           }`}
         style={{
           boxShadow: '0 8px 16px rgba(16, 185, 129, 0.25)',
-          // Mobile: Position above bottom nav (64px) + safe area (20px min) + 16px gap
-          bottom: 'calc(64px + 16px)', // nav height + gap
-          // Account for side safe area (notch in landscape) - use injected CSS vars
-          right: isRTL ? 'auto' : 'calc(1.5rem + var(--sai-right))',
-          left: isRTL ? 'calc(1.5rem + var(--sai-left))' : 'auto'
+          // Portrait: above bottom nav + safe area, Landscape: lower (no bottom safe area)
+          bottom: isLandscape ? 'calc(64px + 8px)' : 'calc(64px + 26px)', // nav + gap/safe-area
+          // Account for side safe area (notch in landscape)
+          right: isRTL ? 'auto' : isLandscape ? 'calc(1.5rem + 24px)' : 'calc(1.5rem + var(--sai-right))',
+          left: isRTL ? (isLandscape ? 'calc(1.5rem + 24px)' : 'calc(1.5rem + var(--sai-left))') : 'auto'
         }}
         aria-label={t('common.needHelp')}
       >
@@ -73,13 +83,20 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
         )}
       </button>
 
-      {/* Popup card */}
+      {/* Popup card - centered in landscape, corner in portrait */}
       {isOpen && (
         <div
           className="fixed z-50 bg-white rounded-[2.5rem] shadow-2xl p-8 w-80 max-w-[calc(100vw-4rem)] animate-slide-up border border-surface-100 overflow-hidden"
           dir={isRTL ? 'rtl' : 'ltr'}
-          style={{
-            // Position above the WhatsApp button (button is ~60px + 16px gap)
+          style={isLandscape ? {
+            // Landscape: Center the popup
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            bottom: 'auto',
+            right: 'auto'
+          } : {
+            // Portrait: Position above the WhatsApp button
             bottom: 'calc(64px + 16px + 60px)', // nav + gap + button
             right: isRTL ? 'auto' : 'calc(2rem + var(--sai-right))',
             left: isRTL ? 'calc(2rem + var(--sai-left))' : 'auto'

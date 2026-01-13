@@ -55,19 +55,17 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       />
       
       {/* Modal Container - Bottom sheet on mobile, centered on desktop/landscape */}
-      <div className="flex min-h-screen items-end sm:items-center landscape:items-center justify-center p-0 sm:p-4 landscape:p-4">
+      <div className="flex min-h-screen items-end sm:items-center landscape:items-center justify-center p-0 sm:p-4 landscape:p-6">
         <div 
           className={clsx(
             "relative w-full bg-white shadow-2xl overflow-hidden animate-slide-up flex flex-col",
             // Mobile portrait: bottom sheet with safe area
             "rounded-t-3xl sm:rounded-3xl landscape:rounded-3xl",
             "max-h-[92vh] sm:max-h-[85vh] landscape:max-h-[90vh]",
+            // Safe area padding: portrait = bottom, landscape = sides
+            "pb-safe landscape:pb-2 landscape:px-safe",
             sizeClasses[size]
           )}
-          style={{
-            // Ensure modal doesn't overlap with Android navigation
-            paddingBottom: '8px' // minimal internal padding
-          }}
         >
           {/* Header */}
           <div className="flex items-center justify-between p-5 sm:p-6 border-b border-surface-100 flex-shrink-0">
