@@ -266,25 +266,26 @@ export default function LoginPage() {
           </div>
 
           {/* Content:
-              - Portrait: Content flows from top with padding
+              - Portrait: Main content centered, terms at bottom
               - Landscape/Desktop: Centered vertically */}
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-6">
-            <div className="h-full flex items-start lg:items-center justify-center py-6 lg:py-4">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-6 flex flex-col">
+            {/* Main content - centered */}
+            <div className="flex-1 flex items-center justify-center lg:py-4">
               <div className="w-full max-w-md">
-                <div className="text-center lg:text-start mb-8">
-                  <h2 className="text-4xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
+                <div className="text-center lg:text-start mb-6">
+                  <h2 className="text-3xl sm:text-4xl font-display font-extrabold text-surface-900 mb-3 tracking-tight">
                     {t('auth.welcomeBack')}
                   </h2>
-                  <p className="text-lg text-surface-500 font-medium">
+                  <p className="text-base sm:text-lg text-surface-500 font-medium">
                     {t('auth.welcomeBackDesc')}
                   </p>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <Button
                     onClick={handleFacebookLogin}
                     size="lg"
-                    className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
+                    className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
                   >
                     <div className="flex items-center justify-center gap-3">
                       <FacebookIcon className="w-6 h-6" />
@@ -292,31 +293,32 @@ export default function LoginPage() {
                     </div>
                   </Button>
 
-                  <div className="p-6 rounded-3xl bg-brand-50/50 border border-brand-100 mt-8">
-                    <div className="flex gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-5 h-5 text-brand-600" />
+                  <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-brand-50/50 border border-brand-100">
+                    <div className="flex gap-3 sm:gap-4">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
+                        <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
                       </div>
                       <div>
                         <h4 className="font-bold text-brand-900 text-sm mb-1">{t('auth.didYouKnow')}</h4>
-                        <p className="text-brand-700/80 text-sm font-medium leading-relaxed">
+                        <p className="text-brand-700/80 text-xs sm:text-sm font-medium leading-relaxed">
                           {t('auth.didYouKnowDesc')}
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
-
-                <div className="mt-8 text-center">
-                  <p className="text-sm text-surface-400 font-medium">
-                    {t('auth.termsAgreement')}
-                    <br className="sm:hidden" />
-                    <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
-                    {t('auth.and')}
-                    <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
-                  </p>
-                </div>
               </div>
+            </div>
+
+            {/* Terms - pushed to bottom */}
+            <div className="flex-shrink-0 py-4 text-center">
+              <p className="text-sm text-surface-400 font-medium">
+                {t('auth.termsAgreement')}
+                <br className="sm:hidden" />
+                <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
+                {t('auth.and')}
+                <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
+              </p>
             </div>
           </div>
 

@@ -47,7 +47,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity animate-fade-in" 
@@ -55,13 +55,13 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       />
       
       {/* Modal Container - Bottom sheet on mobile, centered on desktop/landscape */}
-      <div className="flex min-h-screen items-end sm:items-center landscape:items-center justify-center p-0 sm:p-4 landscape:p-6">
+      <div className="fixed inset-0 flex items-end sm:items-center landscape:items-center justify-center p-0 sm:p-4 landscape:p-6">
         <div 
           className={clsx(
             "relative w-full bg-white shadow-2xl overflow-hidden animate-slide-up flex flex-col",
             // Mobile portrait: bottom sheet with safe area
             "rounded-t-3xl sm:rounded-3xl landscape:rounded-3xl",
-            "max-h-[92vh] sm:max-h-[85vh] landscape:max-h-[90vh]",
+            "max-h-[85vh] sm:max-h-[85vh] landscape:max-h-[90vh]",
             // Safe area padding: portrait = bottom, landscape = sides
             "pb-safe landscape:pb-2 landscape:px-safe",
             sizeClasses[size]
