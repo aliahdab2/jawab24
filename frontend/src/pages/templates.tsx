@@ -24,6 +24,7 @@ export default function TemplatesPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [activeLang, setActiveLang] = useState<'en' | 'ar'>('en');
   const [formData, setFormData] = useState({
     name: '',
     en: '',
@@ -68,6 +69,7 @@ export default function TemplatesPage() {
       setEditingTemplate(null);
       setFormData({ name: '', en: '', ar: '', keywords: '' });
     }
+    setActiveLang('en');
     setIsModalOpen(true);
   };
 
@@ -283,54 +285,85 @@ export default function TemplatesPage() {
         </Card>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Create/Edit Modal - Compact with language tabs */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingTemplate ? t('templates.editTemplate') : t('templates.addTemplate')}
-        size="lg"
+        size="md"
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-1 landscape:grid-cols-2 md:grid-cols-2 gap-4">
-            <Input
-              label={t('templates.templateName')}
-              placeholder={t('templates.templateNamePlaceholder')}
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="!py-2.5 sm:!py-3"
-            />
+          <Input
+            label={t('templates.templateName')}
+            placeholder={t('templates.templateNamePlaceholder')}
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            className="!py-2.5"
+          />
 
-            <Input
-              label={t('templates.keywords')}
-              placeholder="price, cost, how much, سعر"
-              value={formData.keywords}
-              onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-              helperText={t('templates.keywordsHelper')}
-              className="!py-2.5 sm:!py-3"
-            />
+          <Input
+            label={t('templates.keywords')}
+            placeholder="price, cost, how much, سعر"
+            value={formData.keywords}
+            onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
+            helperText={t('templates.keywordsHelper')}
+            className="!py-2.5"
+          />
+
+          {/* Language Tabs - Compact switcher */}
+          <div>
+            <div className="flex gap-1 p-1 bg-surface-100 rounded-xl mb-3">
+              <button
+                type="button"
+                onClick={() => setActiveLang('en')}
+                className={clsx(
+                  "flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2",
+                  activeLang === 'en'
+                    ? "bg-white text-brand-600 shadow-sm"
+                    : "text-surface-500 hover:text-surface-700"
+                )}
+              >
+                <Globe className="w-4 h-4" />
+                {t('templates.english')}
+                {formData.en && <span className="w-2 h-2 rounded-full bg-brand-500" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLang('ar')}
+                className={clsx(
+                  "flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2",
+                  activeLang === 'ar'
+                    ? "bg-white text-brand-600 shadow-sm"
+                    : "text-surface-500 hover:text-surface-700"
+                )}
+              >
+                <Globe className="w-4 h-4" />
+                {t('templates.arabic')}
+                {formData.ar && <span className="w-2 h-2 rounded-full bg-brand-500" />}
+              </button>
+            </div>
+
+            {activeLang === 'en' ? (
+              <Textarea
+                placeholder={t('templates.englishPlaceholder')}
+                value={formData.en}
+                onChange={(e) => setFormData({ ...formData, en: e.target.value })}
+                helperText={t('templates.variablesDesc')}
+                className="!py-2.5 min-h-[100px]"
+              />
+            ) : (
+              <Textarea
+                placeholder={t('templates.arabicPlaceholder')}
+                value={formData.ar}
+                onChange={(e) => setFormData({ ...formData, ar: e.target.value })}
+                helperText={t('templates.variablesDesc')}
+                className="text-right !py-2.5 min-h-[100px]"
+                dir="rtl"
+              />
+            )}
           </div>
 
-          <div className="grid grid-cols-1 landscape:grid-cols-2 gap-4">
-            <Textarea
-              label={t('templates.english')}
-              placeholder="Thank you for your interest! ..."
-              value={formData.en}
-              onChange={(e) => setFormData({ ...formData, en: e.target.value })}
-              helperText={t('templates.variablesDesc')}
-              className="!py-2.5 sm:!py-3 min-h-[80px] sm:min-h-[100px] landscape:min-h-[80px]"
-            />
-
-            <Textarea
-              label={t('templates.arabic')}
-              placeholder="شكراً لاهتمامك! ..."
-              value={formData.ar}
-              onChange={(e) => setFormData({ ...formData, ar: e.target.value })}
-              className="text-right !py-2.5 sm:!py-3 min-h-[80px] sm:min-h-[100px] landscape:min-h-[80px]"
-              dir="rtl"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-6 border-t border-surface-100 mt-4 pb-2 sm:pb-0">
+          <div className="flex justify-end gap-3 pt-4 border-t border-surface-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>
