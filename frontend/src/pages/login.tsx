@@ -286,9 +286,13 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-white via-white to-brand-50/30 min-h-0 overflow-hidden relative">
+          {/* Subtle background pattern for visual interest */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(13,148,136,0.03),transparent_50%)] pointer-events-none" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(13,148,136,0.02),transparent_50%)] pointer-events-none" />
+          
           {/* Header - Sticky so it stays visible when content scrolls + pt-safe for safe area */}
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-white flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
+          <div className="sticky top-0 z-10 flex-shrink-0 bg-white/80 backdrop-blur-sm flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content border-b border-surface-100/50">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
@@ -305,59 +309,57 @@ export default function LoginPage() {
           </div>
 
           {/* Content:
-              - Portrait: Main content at top, terms at very bottom (no centering)
-              - Landscape/Desktop: Centered vertically */}
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-6 flex flex-col pb-safe">
-            {/* Main content - top on mobile, centered on desktop */}
-            <div className="flex-1 flex items-start landscape:items-center lg:items-center justify-center pt-6 landscape:pt-0 lg:py-4">
-              <div className="w-full max-w-md">
-                <div className="text-center lg:text-start mb-6">
-                  <h2 className="text-3xl sm:text-4xl font-display font-extrabold text-surface-900 mb-3 tracking-tight">
-                    {t('auth.welcomeBack')}
-                  </h2>
-                  <p className="text-base sm:text-lg text-surface-500 font-medium">
-                    {t('auth.welcomeBackDesc')}
-                  </p>
-                </div>
+              - Mobile: Content at top, terms at bottom
+              - Desktop: Content centered in upper area with terms right below */}
+          <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 lg:px-12 flex flex-col justify-center pb-safe">
+            {/* Main content wrapper - centered on desktop */}
+            <div className="w-full max-w-lg mx-auto pt-6 lg:pt-0">
+              <div className="text-center lg:text-start mb-8">
+                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
+                  {t('auth.welcomeBack')}
+                </h2>
+                <p className="text-base sm:text-lg lg:text-xl text-surface-500 font-medium">
+                  {t('auth.welcomeBackDesc')}
+                </p>
+              </div>
 
-                <div className="space-y-4">
-                  <Button
-                    onClick={handleFacebookLogin}
-                    size="lg"
-                    className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg group transition-all active:scale-95"
-                  >
-                    <div className="flex items-center justify-center gap-3">
-                      <FacebookIcon className="w-6 h-6" />
-                      <span>{t('auth.loginWithFacebook')}</span>
+              <div className="space-y-5">
+                <Button
+                  onClick={handleFacebookLogin}
+                  size="lg"
+                  className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg lg:text-xl group transition-all active:scale-95"
+                >
+                  <div className="flex items-center justify-center gap-3">
+                    <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" />
+                    <span>{t('auth.loginWithFacebook')}</span>
+                  </div>
+                </Button>
+
+                <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-white border border-surface-200 shadow-sm">
+                  <div className="flex gap-4">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-brand-600" />
                     </div>
-                  </Button>
-
-                  <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-brand-50/50 border border-brand-100">
-                    <div className="flex gap-3 sm:gap-4">
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-brand-900 text-sm mb-1">{t('auth.didYouKnow')}</h4>
-                        <p className="text-brand-700/80 text-xs sm:text-sm font-medium leading-relaxed">
-                          {t('auth.didYouKnowDesc')}
-                        </p>
-                      </div>
+                    <div>
+                      <h4 className="font-bold text-surface-900 text-base mb-1">{t('auth.didYouKnow')}</h4>
+                      <p className="text-surface-600 text-sm sm:text-base font-medium leading-relaxed">
+                        {t('auth.didYouKnowDesc')}
+                      </p>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Terms - at very bottom */}
-            <div className="flex-shrink-0 py-3 text-center mt-auto">
-              <p className="text-sm text-surface-400 font-medium">
-                {t('auth.termsAgreement')}
-                <br className="sm:hidden" />
-                <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
-                {t('auth.and')}
-                <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
-              </p>
+              {/* Terms - right below content, not at very bottom */}
+              <div className="py-6 lg:py-8 text-center lg:text-start">
+                <p className="text-sm text-surface-400 font-medium">
+                  {t('auth.termsAgreement')}
+                  <br className="sm:hidden" />
+                  <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
+                  {t('auth.and')}
+                  <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
+                </p>
+              </div>
             </div>
           </div>
 
