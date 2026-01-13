@@ -99,16 +99,9 @@ export default function App({ Component, pageProps }: AppProps) {
       try {
         await StatusBar.setOverlaysWebView({ overlay: true });
         await StatusBar.setStyle({ style: Style.Default });
-        
-        // Set static safe area values ONCE (no resize listener = no layout shifts)
-        // CSS handles orientation changes via media queries (landscape:px-12)
-        const root = document.documentElement;
-        root.style.setProperty('--safe-area-top', '24px');
-        root.style.setProperty('--safe-area-bottom', '20px');
-        root.style.setProperty('--sat', '24px');
-        
+        // Safe areas handled by CSS env() with hardcoded fallbacks (24px/20px)
       } catch (err) {
-        console.error('Safe Area Injection Error:', err);
+        console.error('StatusBar Setup Error:', err);
       }
 
       try {

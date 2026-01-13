@@ -50,7 +50,7 @@ export function LegalPageLayout({
         <meta property="og:url" content={canonicalUrl} />
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="flex-1 overflow-y-auto bg-slate-900 text-white">
+      <div dir={isRTL ? 'rtl' : 'ltr'} className="flex-1 overflow-y-auto bg-slate-900 text-white landscape:px-12">
         {/* Fixed top safe area background */}
         <div
           className="fixed-safe-bg top-safe-bg bg-slate-900"

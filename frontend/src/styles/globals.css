@@ -768,7 +768,7 @@ body.is-native {
 
 /* Native apps: use injected variable (Android WebView doesn't report env() correctly) */
 .is-native .pt-safe {
-  padding-top: var(--safe-area-top, env(safe-area-inset-top, 24px));
+  padding-top: env(safe-area-inset-top, 24px);
 }
 
 .is-native .pb-safe {
@@ -815,7 +815,7 @@ body.is-native {
 /* Native apps: use injected variable for top height */
 html.is-native .top-safe-bg,
 body.is-native .top-safe-bg {
-  height: var(--safe-area-top, env(safe-area-inset-top, 24px));
+  height: env(safe-area-inset-top, 24px);
 }
 
 /* Bottom safe area background (for gesture nav) - capped to avoid excessive height */
@@ -824,11 +824,11 @@ body.is-native .top-safe-bg {
   height: min(24px, max(var(--min-safe-bottom, 0px), env(safe-area-inset-bottom, 0px)));
 }
 
-/* Portrait: show bottom safe area using injected variable */
+/* Portrait: show bottom safe area using actual device env() values */
 html.is-native .bottom-safe-bg,
 body.is-native .bottom-safe-bg {
   display: block;
-  height: var(--safe-area-bottom, 20px);
+  height: env(safe-area-inset-bottom, 28px);
 }
 
 /* Landscape: hide bottom safe area */
@@ -876,8 +876,8 @@ html, body {
    Android WebView doesn't report env() correctly, so _app.tsx injects:
    --safe-area-top, --safe-area-bottom, --safe-area-left, --safe-area-right */
 html.is-native .app-shell {
-  /* Use injected variable with env() fallback for iOS */
-  padding-bottom: var(--safe-area-bottom, env(safe-area-inset-bottom, 20px));
+  /* Use actual device env() values - SafeArea plugin patches Android */
+  padding-bottom: env(safe-area-inset-bottom, 28px);
 }
 
 /* Step 4: Landscape - sides instead of bottom */
@@ -953,7 +953,7 @@ body.is-native .pe-safe {
 /* Native apps: header uses max() for safe area, so we match */
 html.is-native .pt-header,
 body.is-native .pt-header {
-  padding-top: calc(var(--header-height) + var(--safe-area-top, env(safe-area-inset-top, 24px)));
+  padding-top: calc(var(--header-height) + env(safe-area-inset-top, 24px));
 }
 
 @media (min-width: 640px) {
@@ -963,7 +963,7 @@ body.is-native .pt-header {
   
   html.is-native .pt-header,
   body.is-native .pt-header {
-    padding-top: calc(var(--header-height-lg) + var(--safe-area-top, env(safe-area-inset-top, 24px)));
+    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 24px));
   }
 }
 
@@ -974,7 +974,7 @@ body.is-native .pt-header {
 
 html.is-native .pt-hero,
 body.is-native .pt-hero {
-  padding-top: calc(var(--header-height) + var(--safe-area-top, env(safe-area-inset-top, 24px)) + 3rem);
+  padding-top: calc(var(--header-height) + env(safe-area-inset-top, 24px) + 3rem);
 }
 
 @media (min-width: 640px) {
@@ -984,7 +984,7 @@ body.is-native .pt-hero {
   
   html.is-native .pt-hero,
   body.is-native .pt-hero {
-    padding-top: calc(var(--header-height-lg) + var(--safe-area-top, env(safe-area-inset-top, 24px)) + 3rem);
+    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 24px) + 3rem);
   }
 }
 
@@ -995,7 +995,7 @@ body.is-native .pt-hero {
   
   html.is-native .pt-hero,
   body.is-native .pt-hero {
-    padding-top: calc(var(--header-height-lg) + var(--safe-area-top, env(safe-area-inset-top, 24px)) + 5rem);
+    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 24px) + 5rem);
   }
 }
 
