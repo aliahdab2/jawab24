@@ -91,10 +91,15 @@ export default function CheckoutPage() {
 
       // Create checkout session (uses authenticated api client)
       // Backend will also check geo and return 403 if sanctioned
+      // IMPORTANT: Use production URL for return URLs, not window.location.origin
+      // On mobile (Capacitor), window.location.origin is "localhost" which breaks Stripe redirects
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const baseUrl = siteUrl.replace(/\/$/, ''); // Remove trailing slash
+      
       const response = await api.post('/payment/create-checkout-session', {
         planId,
-        successUrl: `${window.location.origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${window.location.origin}/payment/cancel`,
+        successUrl: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${baseUrl}/payment/cancel`,
       });
 
       const { url } = response.data;
