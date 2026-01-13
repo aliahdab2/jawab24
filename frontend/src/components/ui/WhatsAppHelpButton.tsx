@@ -70,11 +70,13 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
         )}
         style={{
           boxShadow: '0 8px 16px rgba(16, 185, 129, 0.25)',
-          // Portrait: above bottom nav + safe area, Landscape: lower (no bottom safe area)
-          bottom: isLandscape ? 'calc(64px + 8px)' : 'calc(64px + 26px)', // nav + gap/safe-area
+          // Use CSS variable for safe area (same as bottom nav) + nav height + gap
+          bottom: isLandscape 
+            ? 'calc(64px + 8px)' // Landscape: no bottom safe area, just nav + gap
+            : 'calc(64px + var(--sai-bottom) + 8px)', // Portrait: nav + safe area + gap
           // Account for side safe area (notch in landscape)
-          right: isRTL ? 'auto' : isLandscape ? 'calc(1.5rem + 24px)' : 'calc(1.5rem + var(--sai-right))',
-          left: isRTL ? (isLandscape ? 'calc(1.5rem + 24px)' : 'calc(1.5rem + var(--sai-left))') : 'auto'
+          right: isRTL ? 'auto' : isLandscape ? 'calc(1.5rem + var(--sai-side-landscape))' : 'calc(1.5rem + var(--sai-right))',
+          left: isRTL ? (isLandscape ? 'calc(1.5rem + var(--sai-side-landscape))' : 'calc(1.5rem + var(--sai-left))') : 'auto'
         }}
         aria-label={t('common.needHelp')}
       >

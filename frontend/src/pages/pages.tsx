@@ -386,23 +386,23 @@ export default function PagesPage() {
         </Card>
       )}
 
-      {/* Knowledge Base Modal - Responsive for portrait, landscape, and desktop */}
+      {/* Knowledge Base Modal - Compact with fixed textarea height */}
       {editingPage && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-6">
           <div 
-            className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden pb-safe landscape:pb-2 landscape:px-safe"
+            className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-lg landscape:max-w-xl flex flex-col overflow-hidden pb-safe landscape:pb-2 landscape:px-safe"
           >
-            {/* Modal Header - Ultra compact in landscape */}
-            <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-surface-100 flex-shrink-0">
-              <div className="flex items-center gap-3 landscape:gap-2">
-                <div className="w-9 h-9 landscape:w-8 landscape:h-8 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center">
-                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
+            {/* Modal Header - Compact */}
+            <div className="flex items-center justify-between px-5 py-4 landscape:py-3 sm:p-5 border-b border-surface-100 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 landscape:w-9 landscape:h-9 rounded-xl bg-brand-100 flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 landscape:w-4 landscape:h-4 text-brand-600" />
                 </div>
                 <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-surface-900">
+                  <h2 className="text-lg landscape:text-base font-semibold text-surface-900">
                     {t('pages.businessInfo')}
                   </h2>
-                  <p className="text-xs sm:text-sm text-surface-500 landscape:hidden">{editingPage.name}</p>
+                  <p className="text-sm landscape:text-xs text-surface-500">{editingPage.name}</p>
                 </div>
               </div>
               <button
@@ -413,45 +413,43 @@ export default function PagesPage() {
               </button>
             </div>
 
-            {/* Modal Body - Textarea takes maximum space */}
-            <div className="flex-1 flex flex-col min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5">
-              {/* Brief hint - hidden in landscape to save vertical space */}
-              <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start landscape:hidden">
+            {/* Modal Body - Fixed textarea height with internal scroll */}
+            <div className="p-5 landscape:p-4 flex-shrink-0">
+              {/* Brief hint */}
+              <p className="text-sm text-surface-500 mb-3 text-start landscape:text-xs landscape:mb-2">
                 {t('pages.businessInfoModalDesc')}
               </p>
 
-              {/* Textarea - THE HERO of the modal */}
-              <div className="flex-1 flex flex-col min-h-0">
-                <textarea
-                  className="flex-1 w-full min-h-[100px] landscape:min-h-0 sm:min-h-[200px] p-4 landscape:p-3 border-2 border-surface-200 rounded-2xl landscape:rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
-                  placeholder={t('pages.writeBusinessInfo')}
-                  value={knowledgeBase}
-                  onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
-                  maxLength={2000}
-                  dir={language === 'ar' ? 'rtl' : 'ltr'}
-                  autoFocus
-                />
-                
-                {/* Character Counter - inline, simplified in landscape */}
-                <div className="flex items-center justify-between mt-2 landscape:mt-1 px-1">
-                  <span className="text-xs text-surface-400 landscape:hidden">
-                    {t('pages.example')}: {language === 'ar' ? 'ساعات العمل، العنوان، المنتجات...' : 'Hours, location, products...'}
-                  </span>
-                  <span className={`text-xs font-medium landscape:ml-auto ${
-                    knowledgeBase.length > 1900
-                      ? 'text-red-500'
-                      : knowledgeBase.length > 1500
-                        ? 'text-amber-500'
-                        : 'text-surface-400'
-                  }`}>
-                    {knowledgeBase.length.toLocaleString()}/2,000
-                  </span>
-                </div>
+              {/* Textarea - Fixed height, scrolls internally */}
+              <textarea
+                className="w-full h-[200px] landscape:h-[120px] sm:h-[250px] p-4 landscape:p-3 border-2 border-surface-200 rounded-2xl landscape:rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
+                placeholder={t('pages.writeBusinessInfo')}
+                value={knowledgeBase}
+                onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
+                maxLength={2000}
+                dir={language === 'ar' ? 'rtl' : 'ltr'}
+                autoFocus
+              />
+              
+              {/* Character Counter & Example */}
+              <div className="flex items-center justify-between mt-2 px-1">
+                <span className="text-xs text-surface-400 landscape:hidden">
+                  {t('pages.example')}: {language === 'ar' ? 'ساعات العمل، العنوان، المنتجات...' : 'Hours, location, products...'}
+                </span>
+                <span className={`text-xs font-medium landscape:ms-auto ${
+                  knowledgeBase.length > 1900
+                    ? 'text-red-500'
+                    : knowledgeBase.length > 1500
+                      ? 'text-amber-500'
+                      : 'text-surface-400'
+                }`}>
+                  {knowledgeBase.length.toLocaleString()}/2,000
+                </span>
               </div>
             </div>
 
-            {/* Modal Footer - Compact, extra compact in landscape */}
-            <div className="flex items-center justify-end gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
+            {/* Modal Footer - Always visible */}
+            <div className="flex items-center justify-end gap-3 px-5 py-4 landscape:py-3 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
               <Button variant="secondary" size="sm" onClick={closeKnowledgeBase}>
                 {t('common.cancel')}
               </Button>

@@ -227,7 +227,7 @@ export default function LoginPage() {
         <meta property="og:url" content="https://jawab24.com/login" />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row min-h-full" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
         <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}
@@ -286,7 +286,7 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden pb-safe">
           {/* Header - Sticky so it stays visible when content scrolls + pt-safe for safe area */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-white flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
