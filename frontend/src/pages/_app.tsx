@@ -100,41 +100,12 @@ export default function App({ Component, pageProps }: AppProps) {
         await StatusBar.setOverlaysWebView({ overlay: true });
         await StatusBar.setStyle({ style: Style.Default });
         
-        // --- INDUSTRY BEST PRACTICE: Safe Area Injection ---
-        // Android WebView doesn't reliably report env(safe-area-inset-*) values.
-        // We calculate and inject them as CSS custom properties.
-        const injectSafeAreas = () => {
-          const isLandscape = window.innerWidth > window.innerHeight;
-          
-          // Top safe area: Status bar height (typically 24-48px)
-          // Use screen.height - window.innerHeight for approximate calculation
-          const screenH = window.screen.height;
-          const windowH = window.innerHeight;
-          const topInset = Math.min(48, Math.max(24, Math.round((screenH - windowH) * 0.3)));
-          
-          // Bottom safe area: Gesture nav (~20-48px), button nav (~48px)
-          // In portrait: show bottom safe area
-          // In landscape: no bottom, but add side safe areas
-          const bottomInset = isLandscape ? 0 : 20;
-          const sideInset = isLandscape ? 44 : 0;
-          
-          // Inject as CSS custom properties (single source of truth)
-          const root = document.documentElement;
-          root.style.setProperty('--safe-area-top', `${topInset}px`);
-          root.style.setProperty('--safe-area-bottom', `${bottomInset}px`);
-          root.style.setProperty('--safe-area-left', `${sideInset}px`);
-          root.style.setProperty('--safe-area-right', `${sideInset}px`);
-          
-          // Also set legacy variable for backwards compatibility
-          root.style.setProperty('--sat', `${topInset}px`);
-        };
-        
-        // Inject on load
-        injectSafeAreas();
-        
-        // Re-inject on orientation change
-        window.addEventListener('resize', injectSafeAreas);
-        listenersRef.current.push(() => window.removeEventListener('resize', injectSafeAreas));
+        // Set static safe area values ONCE (no resize listener = no layout shifts)
+        // CSS handles orientation changes via media queries (landscape:px-12)
+        const root = document.documentElement;
+        root.style.setProperty('--safe-area-top', '24px');
+        root.style.setProperty('--safe-area-bottom', '20px');
+        root.style.setProperty('--sat', '24px');
         
       } catch (err) {
         console.error('Safe Area Injection Error:', err);

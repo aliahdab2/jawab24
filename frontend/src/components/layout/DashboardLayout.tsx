@@ -184,13 +184,9 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           <>
             {/* Bottom navigation - sits ABOVE the safe area */}
             <nav
-              className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]"
+              className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] landscape:px-12"
               style={{
-                // Position nav ABOVE the safe area (uses min fallback on Android)
-                bottom: 'var(--safe-area-bottom, env(safe-area-inset-bottom, 20px))', // Above safe area
-                // Side padding for landscape notch
-                paddingLeft: 'var(--safe-area-left, env(safe-area-inset-left, 44px))',
-                paddingRight: 'var(--safe-area-right, env(safe-area-inset-right, 44px))'
+                bottom: 'var(--safe-area-bottom, 20px)'
               }}
             >
               <MobileNavButton

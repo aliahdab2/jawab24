@@ -785,9 +785,9 @@ body.is-native {
 
 @media (orientation: landscape) {
   .is-native .px-safe {
-    /* Use injected CSS variables for consistent side safe areas */
-    padding-left: var(--safe-area-left, env(safe-area-inset-left, 44px));
-    padding-right: var(--safe-area-right, env(safe-area-inset-right, 44px));
+    /* Pure CSS: 48px side padding for system nav in landscape */
+    padding-left: max(48px, env(safe-area-inset-left, 48px));
+    padding-right: max(48px, env(safe-area-inset-right, 48px));
   }
 }
 
@@ -890,9 +890,9 @@ html.is-native .app-shell {
   
   html.is-native .app-shell {
     padding-bottom: 0;
-    /* Use injected variables for Android */
-    padding-left: var(--safe-area-left, env(safe-area-inset-left, 44px));
-    padding-right: var(--safe-area-right, env(safe-area-inset-right, 44px));
+    /* Pure CSS: 48px side padding for system nav in landscape */
+    padding-left: max(48px, env(safe-area-inset-left, 48px));
+    padding-right: max(48px, env(safe-area-inset-right, 48px));
   }
 }
 
@@ -918,8 +918,8 @@ html.is-native .app-shell {
   .px-safe-landscape,
   html.is-native .px-safe-auto,
   body.is-native .px-safe-auto {
-    padding-left: var(--safe-area-left, env(safe-area-inset-left, 44px));
-    padding-right: var(--safe-area-right, env(safe-area-inset-right, 44px));
+    padding-left: max(48px, env(safe-area-inset-left, 48px));
+    padding-right: max(48px, env(safe-area-inset-right, 48px));
   }
 }
 
