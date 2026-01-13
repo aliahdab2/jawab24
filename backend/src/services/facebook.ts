@@ -75,14 +75,23 @@ export class FacebookService {
     }
     async getUserProfile(accessToken: string): Promise<FacebookUserProfile> {
         try {
-            const response = await axios.get<FacebookUserProfile>(`${FACEBOOK_GRAPH_API}/me`, {
+            const response = await axios.get(`${FACEBOOK_GRAPH_API}/me`, {
                 params: {
-                    fields: 'id,name,email',
+                    fields: 'id,name,email,picture.type(large)',
                     access_token: accessToken,
                 },
             });
 
-            return response.data;
+            // Extract picture URL from nested structure
+            const data = response.data;
+            const pictureUrl = data.picture?.data?.url;
+
+            return {
+                id: data.id,
+                name: data.name,
+                email: data.email,
+                picture: pictureUrl,
+            };
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);

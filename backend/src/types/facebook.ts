@@ -12,6 +12,7 @@ export interface FacebookUserProfile {
     id: string;
     name: string;
     email?: string;
+    picture?: string;
 }
 
 export interface FacebookPage {

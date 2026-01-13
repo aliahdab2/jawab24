@@ -184,6 +184,42 @@ describe('Auth Service', () => {
             expect(response.settings).toBeDefined();
             expect(response.settings?.dashboardLanguage).toBe('ar');
         });
+
+        it('should include picture when available', () => {
+            const user = {
+                id: 'user_123',
+                facebookId: 'fb_456',
+                name: 'John Doe',
+                email: 'john@example.com',
+                picture: 'https://example.com/photo.jpg',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            const token = 'test_token';
+            const fbToken = 'fb_token_123';
+
+            const response = service.createAuthResponse(user, token, fbToken);
+
+            expect(response.user.picture).toBe('https://example.com/photo.jpg');
+        });
+
+        it('should handle user without picture', () => {
+            const user = {
+                id: 'user_123',
+                facebookId: 'fb_456',
+                name: 'John Doe',
+                email: 'john@example.com',
+                picture: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            const token = 'test_token';
+            const fbToken = 'fb_token_123';
+
+            const response = service.createAuthResponse(user, token, fbToken);
+
+            expect(response.user.picture).toBeUndefined();
+        });
     });
 
     describe('Token round-trip', () => {
