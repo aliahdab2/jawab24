@@ -334,7 +334,7 @@ export default function PagesPage() {
                     <FileText className="w-7 h-7" />
                   </div>
                   <div className="text-start min-w-0">
-                    <h3 className="text-lg font-bold text-surface-900 truncate">{page.name}</h3>
+                    <h3 className="text-base sm:text-lg font-bold text-surface-900 line-clamp-2 sm:truncate sm:line-clamp-none">{page.name}</h3>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
                         Facebook
