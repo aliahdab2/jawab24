@@ -44,7 +44,9 @@ vi.mock('@capacitor/core', () => ({
 vi.mock('@capacitor-community/facebook-login', () => ({
     FacebookLogin: {
         initialize: vi.fn().mockResolvedValue(undefined),
-        login: vi.fn()
+        login: vi.fn(),
+        logout: vi.fn().mockResolvedValue(undefined),
+        getCurrentAccessToken: vi.fn().mockResolvedValue(null)
     }
 }));
 
@@ -67,7 +69,8 @@ vi.mock('@/lib/store', () => ({
 vi.mock('sonner', () => ({
     toast: {
         error: vi.fn(),
-        success: vi.fn()
+        success: vi.fn(),
+        info: vi.fn()
     }
 }));
 
@@ -194,6 +197,133 @@ describe('LoginPage', () => {
             
             // Verify isProcessing logic (blank screen after success)
             expect(screen.queryByRole('button')).toBeNull();
+        });
+
+        it('should show info message when user cancels login (no token returned)', async () => {
+            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
+            
+            // Mock SDK returning null (user cancelled)
+            (FacebookLogin.login as any).mockResolvedValue({ accessToken: null });
+
+            // Get toast.info mock
+            const { toast } = await import('sonner');
+            const toastInfoSpy = vi.mocked(toast.info);
+            toastInfoSpy.mockClear();
+
+            render(<LoginPage />);
+            
+            await vi.waitFor(() => {
+                expect(FacebookLogin.initialize).toHaveBeenCalled();
+            });
+
+            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            fireEvent.click(loginButton);
+
+            await vi.waitFor(() => {
+                // User cancellation shows info, not error
+                expect(toastInfoSpy).toHaveBeenCalledWith('auth.loginCancelled');
+            });
+            
+            // Should NOT navigate
+            expect(mockPush).not.toHaveBeenCalled();
+            // Should NOT set auth
+            expect(mockSetAuth).not.toHaveBeenCalled();
+        });
+
+        it('should show error when SDK login throws an error', async () => {
+            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
+            
+            // Mock SDK throwing error
+            (FacebookLogin.login as any).mockRejectedValue(new Error('SDK Error'));
+
+            render(<LoginPage />);
+            
+            await vi.waitFor(() => {
+                expect(FacebookLogin.initialize).toHaveBeenCalled();
+            });
+
+            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            fireEvent.click(loginButton);
+
+            await vi.waitFor(() => {
+                expect(toastErrorSpy).toHaveBeenCalled();
+            });
+            
+            // Should NOT navigate or set auth
+            expect(mockPush).not.toHaveBeenCalled();
+            expect(mockSetAuth).not.toHaveBeenCalled();
+        });
+
+        it('should show error when backend API fails after successful SDK login', async () => {
+            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
+            
+            // SDK succeeds
+            (FacebookLogin.login as any).mockResolvedValue({ accessToken: { token: 'native-fb-token' } });
+            
+            // But backend fails
+            vi.spyOn(authApi, 'nativeFacebookLogin').mockRejectedValue(new Error('Backend Error'));
+
+            render(<LoginPage />);
+            
+            await vi.waitFor(() => {
+                expect(FacebookLogin.initialize).toHaveBeenCalled();
+            });
+
+            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            fireEvent.click(loginButton);
+
+            await vi.waitFor(() => {
+                expect(toastErrorSpy).toHaveBeenCalled();
+            });
+            
+            // Should NOT navigate or set auth
+            expect(mockPush).not.toHaveBeenCalled();
+            expect(mockSetAuth).not.toHaveBeenCalled();
+        });
+
+        it('should handle login timeout', async () => {
+            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
+            
+            // Mock SDK that never resolves (simulates hanging)
+            (FacebookLogin.login as any).mockImplementation(() => new Promise(() => {}));
+
+            // Use fake timers for timeout testing
+            vi.useFakeTimers();
+
+            render(<LoginPage />);
+            
+            await vi.waitFor(() => {
+                expect(FacebookLogin.initialize).toHaveBeenCalled();
+            });
+
+            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            fireEvent.click(loginButton);
+
+            // Fast forward 31 seconds (past the 30 second timeout)
+            await vi.advanceTimersByTimeAsync(31000);
+
+            await vi.waitFor(() => {
+                expect(toastErrorSpy).toHaveBeenCalledWith('auth.loginTimeout');
+            });
+
+            vi.useRealTimers();
+        });
+
+        it('should clear stale tokens on page load', async () => {
+            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
+            
+            // Mock having a stale token
+            (FacebookLogin.getCurrentAccessToken as any).mockResolvedValue({ 
+                accessToken: { token: 'stale-token' } 
+            });
+
+            render(<LoginPage />);
+            
+            // Wait for initialization and stale token cleanup
+            await vi.waitFor(() => {
+                expect(FacebookLogin.getCurrentAccessToken).toHaveBeenCalled();
+                expect(FacebookLogin.logout).toHaveBeenCalled();
+            });
         });
     });
 });
