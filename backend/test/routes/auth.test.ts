@@ -115,14 +115,12 @@ describe('Auth Routes - Login Flow', () => {
                 id: 'fb_user_123',
                 name: 'John Doe',
                 email: 'john@example.com',
-                picture: 'https://example.com/photo.jpg',
             });
             vi.mocked(authService.findOrCreateUser).mockResolvedValue({
                 id: 'user_uuid_123',
                 facebookId: 'fb_user_123',
                 name: 'John Doe',
                 email: 'john@example.com',
-                picture: 'https://example.com/photo.jpg',
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
@@ -134,7 +132,6 @@ describe('Auth Routes - Login Flow', () => {
                     id: 'user_uuid_123',
                     name: 'John Doe',
                     facebookId: 'fb_user_123',
-                    picture: 'https://example.com/photo.jpg',
                 },
             });
 
@@ -154,7 +151,6 @@ describe('Auth Routes - Login Flow', () => {
             expect(body.user.id).toBe('user_uuid_123');
             expect(body.user.name).toBe('John Doe');
             expect(body.user.facebookId).toBe('fb_user_123');
-            expect(body.user.picture).toBe('https://example.com/photo.jpg');
 
             // Verify service calls
             expect(facebookService.getAccessToken).toHaveBeenCalledWith('facebook_auth_code_xyz', undefined);
@@ -162,10 +158,7 @@ describe('Auth Routes - Login Flow', () => {
             expect(authService.findOrCreateUser).toHaveBeenCalledWith(
                 'fb_user_123',
                 'John Doe',
-                'john@example.com',
-                undefined, // facebookAccessToken
-                undefined, // facebookTokenExpiresAt
-                'https://example.com/photo.jpg' // picture
+                'john@example.com'
             );
         });
 
@@ -315,14 +308,12 @@ describe('Auth Routes - Login Flow', () => {
                 id: 'fb_no_email',
                 name: 'Private User',
                 // email is undefined
-                // picture is undefined
             });
             vi.mocked(authService.findOrCreateUser).mockResolvedValue({
                 id: 'user_no_email',
                 facebookId: 'fb_no_email',
                 name: 'Private User',
                 email: null,
-                picture: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
@@ -349,10 +340,7 @@ describe('Auth Routes - Login Flow', () => {
             expect(authService.findOrCreateUser).toHaveBeenCalledWith(
                 'fb_no_email',
                 'Private User',
-                undefined, // email
-                undefined, // facebookAccessToken
-                undefined, // facebookTokenExpiresAt
-                undefined  // picture
+                undefined
             );
         });
     });

@@ -106,13 +106,13 @@ describe('PagesPage', () => {
       });
     });
 
-    it('should show reconnect and create buttons in empty state', async () => {
+    it('should show manage and create buttons in empty state', async () => {
       render(<PagesPage />);
 
       await waitFor(() => {
         // Use getAllByText since both empty state and modal may have these buttons
-        const reconnectButtons = screen.getAllByText('pages.reconnectFacebook');
-        expect(reconnectButtons.length).toBeGreaterThanOrEqual(1);
+        const manageButtons = screen.getAllByText('pages.manageOnFacebook');
+        expect(manageButtons.length).toBeGreaterThanOrEqual(1);
 
         const createButtons = screen.getAllByText('pages.createPage');
         expect(createButtons.length).toBeGreaterThanOrEqual(1);

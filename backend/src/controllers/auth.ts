@@ -28,14 +28,12 @@ export class AuthController {
             // 2. Get user profile from Facebook
             const fbProfile = await facebookService.getUserProfile(accessToken);
 
+
             // 3. Find or create user in our DB
             const user = await authService.findOrCreateUser(
                 fbProfile.id,
                 fbProfile.name,
-                fbProfile.email,
-                undefined, // facebookAccessToken - handled below
-                undefined, // facebookTokenExpiresAt - handled below
-                fbProfile.picture
+                fbProfile.email
             );
 
             // 4. Generate JWT token
@@ -100,8 +98,7 @@ export class AuthController {
                 fbProfile.name,
                 fbProfile.email,
                 longLivedToken,
-                expiresAt,
-                fbProfile.picture
+                expiresAt
             );
 
             // 5. Generate Internal JWT

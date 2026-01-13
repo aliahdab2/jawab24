@@ -20,8 +20,7 @@ export class AuthService {
         name: string,
         email?: string,
         facebookAccessToken?: string,
-        facebookTokenExpiresAt?: Date,
-        picture?: string
+        facebookTokenExpiresAt?: Date
     ): Promise<User> {
         // Check if user exists
         const existingUsers = await db.select().from(users).where(eq(users.facebookId, facebookId));
@@ -36,7 +35,6 @@ export class AuthService {
                 .set({
                     name,
                     email,
-                    picture: picture || user.picture,
                     facebookAccessToken: facebookAccessToken || user.facebookAccessToken,
                     facebookTokenExpiresAt: facebookTokenExpiresAt || user.facebookTokenExpiresAt,
                     updatedAt: new Date(),
@@ -47,7 +45,6 @@ export class AuthService {
                 ...user,
                 name,
                 email: email ?? null,
-                picture: picture || user.picture,
                 facebookAccessToken: facebookAccessToken || user.facebookAccessToken,
                 facebookTokenExpiresAt: facebookTokenExpiresAt || user.facebookTokenExpiresAt,
                 updatedAt: new Date()
@@ -61,7 +58,6 @@ export class AuthService {
                 facebookId,
                 name,
                 email,
-                picture,
                 facebookAccessToken,
                 facebookTokenExpiresAt,
             })
@@ -189,7 +185,6 @@ export class AuthService {
                 name: user.name || '',
                 email: user.email || undefined,
                 facebookId: user.facebookId,
-                picture: user.picture || undefined,
             },
             settings,
         };

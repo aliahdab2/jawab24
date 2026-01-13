@@ -72,17 +72,12 @@ describe('Facebook Service', () => {
     });
 
     describe('getUserProfile', () => {
-        it('should get user profile with picture from Facebook', async () => {
+        it('should get user profile from Facebook', async () => {
             const mockResponse = {
                 data: {
                     id: '123456789',
                     name: 'John Doe',
                     email: 'john@example.com',
-                    picture: {
-                        data: {
-                            url: 'https://graph.facebook.com/123456789/picture?type=large',
-                        },
-                    },
                 },
             };
 
@@ -94,13 +89,12 @@ describe('Facebook Service', () => {
                 id: '123456789',
                 name: 'John Doe',
                 email: 'john@example.com',
-                picture: 'https://graph.facebook.com/123456789/picture?type=large',
             });
             expect(axios.get).toHaveBeenCalledWith(
                 'https://graph.facebook.com/v18.0/me',
                 expect.objectContaining({
                     params: expect.objectContaining({
-                        fields: 'id,name,email,picture.type(large)',
+                        fields: 'id,name,email',
                         access_token: 'access_token_123',
                     }),
                 })
@@ -112,11 +106,6 @@ describe('Facebook Service', () => {
                 data: {
                     id: '123456789',
                     name: 'John Doe',
-                    picture: {
-                        data: {
-                            url: 'https://example.com/photo.jpg',
-                        },
-                    },
                 },
             };
 
@@ -125,25 +114,6 @@ describe('Facebook Service', () => {
             const profile = await service.getUserProfile('access_token_123');
 
             expect(profile.email).toBeUndefined();
-            expect(profile.picture).toBe('https://example.com/photo.jpg');
-        });
-
-        it('should handle profile without picture', async () => {
-            const mockResponse = {
-                data: {
-                    id: '123456789',
-                    name: 'John Doe',
-                    email: 'john@example.com',
-                },
-            };
-
-            vi.mocked(axios.get).mockResolvedValue(mockResponse);
-
-            const profile = await service.getUserProfile('access_token_123');
-
-            expect(profile.id).toBe('123456789');
-            expect(profile.name).toBe('John Doe');
-            expect(profile.picture).toBeUndefined();
         });
 
         it('should throw error on API failure', async () => {
