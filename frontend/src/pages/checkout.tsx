@@ -147,21 +147,26 @@ export default function CheckoutPage() {
           <div className="pt-safe pb-safe px-5 sm:px-6 py-6 sm:py-10 landscape:px-6">
             <div className="max-w-md mx-auto">
               
-              {/* Back Link */}
-              <Link 
-                href="/pricing" 
-                className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors mb-8 sm:mb-10"
-              >
-                <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                {t('checkout.backToPricing')}
-              </Link>
-
-              {/* Logo & Header */}
-              <div className="text-center mb-8 sm:mb-10">
-                <Link href="/" className="inline-flex justify-center items-center gap-3 mb-6 group">
-                  <BrandLogo variant="main" className="w-12 h-12 sm:w-14 sm:h-14 transition-transform group-hover:scale-105" />
-                  <span className="font-display font-bold text-2xl sm:text-3xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+              {/* Header: Back link on one side, Logo on other */}
+              <div className="flex items-center justify-between mb-8 sm:mb-10">
+                <Link 
+                  href="/pricing" 
+                  className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+                  {t('checkout.backToPricing')}
                 </Link>
+                
+                <Link href="/" className="inline-flex items-center gap-2 group">
+                  <span className="font-display font-bold text-lg text-surface-900 tracking-tight">
+                    {BRAND_ASSETS.meta.appName}
+                  </span>
+                  <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
+                </Link>
+              </div>
+
+              {/* Title */}
+              <div className="text-center mb-8 sm:mb-10">
                 <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2 tracking-tight font-display">
                   {t('checkout.title')}
                 </h1>
@@ -200,26 +205,29 @@ export default function CheckoutPage() {
         <div className="pt-safe pb-safe px-5 sm:px-6 py-6 sm:py-10 landscape:px-6">
           <div className="max-w-md mx-auto">
             
-            {/* Back Link - Mobile */}
-            <Link 
-              href="/pricing" 
-              className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors mb-8 sm:mb-10"
-            >
-              <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-              {t('checkout.backToPricing')}
-            </Link>
-
-            {/* Logo & Header */}
-            <div className="text-center mb-8 sm:mb-10">
-              <Link href="/" className="inline-flex justify-center items-center gap-3 mb-6 group">
-                <BrandLogo
-                  variant="main"
-                  className="w-12 h-12 sm:w-14 sm:h-14 transition-transform group-hover:scale-105"
-                />
-                <span className="font-display font-bold text-2xl sm:text-3xl text-surface-900 tracking-tight">
+            {/* Header: Back link on one side, Logo on other */}
+            <div className="flex items-center justify-between mb-8 sm:mb-10">
+              <Link 
+                href="/pricing" 
+                className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+                {t('checkout.backToPricing')}
+              </Link>
+              
+              <Link href="/" className="inline-flex items-center gap-2 group">
+                <span className="font-display font-bold text-lg text-surface-900 tracking-tight">
                   {BRAND_ASSETS.meta.appName}
                 </span>
+                <BrandLogo
+                  variant="main"
+                  className="w-9 h-9 transition-transform group-hover:scale-105"
+                />
               </Link>
+            </div>
+
+            {/* Title */}
+            <div className="text-center mb-8 sm:mb-10">
               <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2 tracking-tight font-display">
                 {t('checkout.title')}
               </h1>

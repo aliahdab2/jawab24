@@ -286,7 +286,7 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden pb-safe">
+        <div className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden">
           {/* Header - Sticky so it stays visible when content scrolls + pt-safe for safe area */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-white flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
@@ -305,11 +305,11 @@ export default function LoginPage() {
           </div>
 
           {/* Content:
-              - Portrait: Main content centered, terms at bottom
+              - Portrait: Main content at top, terms at very bottom (no centering)
               - Landscape/Desktop: Centered vertically */}
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-6 flex flex-col">
-            {/* Main content - centered */}
-            <div className="flex-1 flex items-center justify-center lg:py-4">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-6 flex flex-col pb-safe">
+            {/* Main content - top on mobile, centered on desktop */}
+            <div className="flex-1 flex items-start landscape:items-center lg:items-center justify-center pt-6 landscape:pt-0 lg:py-4">
               <div className="w-full max-w-md">
                 <div className="text-center lg:text-start mb-6">
                   <h2 className="text-3xl sm:text-4xl font-display font-extrabold text-surface-900 mb-3 tracking-tight">
@@ -349,8 +349,8 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Terms - pushed to bottom */}
-            <div className="flex-shrink-0 py-4 text-center">
+            {/* Terms - at very bottom */}
+            <div className="flex-shrink-0 py-3 text-center mt-auto">
               <p className="text-sm text-surface-400 font-medium">
                 {t('auth.termsAgreement')}
                 <br className="sm:hidden" />
