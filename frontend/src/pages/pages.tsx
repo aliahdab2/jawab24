@@ -71,66 +71,28 @@ export default function PagesPage() {
 
     const isMobile = Capacitor.isNativePlatform();
 
+    // For BOTH mobile and web: Use browser-based OAuth with auth_type=rerequest
+    // This is the only reliable way to show Facebook's page selection dialog again
+    // The native SDK doesn't properly support re-requesting page permissions
     if (isMobile) {
-      // Native mobile: use Facebook SDK
-      try {
-        const { FacebookLogin } = await import('@capacitor-community/facebook-login');
-        await FacebookLogin.initialize({ appId: fbAppId });
-        
-        // Logout first to ensure fresh permissions
-        try {
-          await FacebookLogin.logout();
-        } catch {
-          // Ignore logout errors
-        }
-        
-        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
-        const result = await FacebookLogin.login({ permissions });
-        
-        if (result.accessToken) {
-          // Update the fbToken in store and sync
-          useAuthStore.getState().setAuth(
-            useAuthStore.getState().user!,
-            useAuthStore.getState().token!,
-            result.accessToken.token
-          );
-          
-          // Now sync with the new token
-          setSyncing(true);
-          try {
-            await axios.post(`${apiUrl}/pages/sync`,
-              { accessToken: result.accessToken.token },
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-            
-            // Check if pages were found after sync
-            const response = await axios.get(`${apiUrl}/pages`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            const syncedPages = Array.isArray(response.data)
-              ? response.data
-              : (Array.isArray(response.data?.data) ? response.data.data : []);
-            
-            setPages(syncedPages);
-            
-            if (syncedPages.length > 0) {
-              toast.success(t('common.success' as TranslationKey));
-            } else {
-              // Still no pages - show modal again
-              setShowConnectionModal(true);
-            }
-          } catch (error) {
-            console.error('Sync failed after reconnect:', error);
-            toast.error(t('pages.sessionExpired' as TranslationKey));
-            setShowConnectionModal(true);
-          } finally {
-            setSyncing(false);
-          }
-        }
-      } catch (error) {
-        console.error('Reconnect failed:', error);
-        toast.error(t('auth.loginError' as TranslationKey));
-      }
+      // Mobile: Use in-app browser for OAuth (ensures auth_type=rerequest works)
+      const { Browser } = await import('@capacitor/browser');
+      
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+      const localePath = language === 'ar' ? '' : `/${language}`;
+      const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
+      
+      // Return to pages after auth
+      const returnUrl = '/pages';
+      const state = encodeURIComponent(`${returnUrl}|mobile|${language}`);
+      
+      // Open Facebook OAuth in browser with auth_type=rerequest
+      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=touch&auth_type=rerequest`;
+      
+      toast.info(t('auth.redirecting' as TranslationKey));
+      await Browser.open({ url: oauthUrl });
     } else {
       // Web: redirect to Facebook OAuth
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
