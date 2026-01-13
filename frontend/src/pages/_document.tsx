@@ -6,15 +6,27 @@ export default function Document() {
     <Html lang="ar" dir="rtl">
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        {/* Early detection of Capacitor native platform - runs BEFORE React hydrates */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                var isNative = window.location.href.includes('localhost') || window.location.protocol === 'file:';
+                // Best practice: Check for Capacitor object (available immediately in native apps)
+                var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+                
+                // Fallback: Also check for capacitor:// or file:// protocol (older Capacitor versions)
+                if (!isNative) {
+                  var protocol = window.location.protocol;
+                  var href = window.location.href;
+                  isNative = protocol === 'capacitor:' || 
+                             protocol === 'file:' || 
+                             href.includes('localhost') ||
+                             href.includes('capacitor://');
+                }
+                
                 if (isNative) {
                   document.documentElement.classList.add('is-native');
-                  // Pre-set some safe area variables for immediate paint
-                  document.documentElement.style.setProperty('--sat', '24px');
+                  document.body && document.body.classList.add('is-native');
                 }
               })();
             `
@@ -77,6 +89,16 @@ export default function Document() {
         />
       </Head>
       <body>
+        {/* Early body class for native apps - runs as soon as body is parsed */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (document.documentElement.classList.contains('is-native')) {
+                document.body.classList.add('is-native');
+              }
+            `
+          }}
+        />
         <Main />
         <div id="modal-root" />
         <NextScript />

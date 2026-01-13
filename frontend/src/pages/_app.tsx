@@ -49,12 +49,20 @@ export default function App({ Component, pageProps }: AppProps) {
 
   // Add is-native class IMMEDIATELY on first render (before hydration completes)
   // This ensures CSS safe area rules apply from the start
+  // Note: _document.tsx also adds this via inline script for even earlier application
   useEffect(() => {
     if (typeof window === "undefined") return;
     const cap = (window as any).Capacitor;
     if (cap?.isNativePlatform?.()) {
+      // Ensure class is added (may already be added by _document.tsx script)
       document.documentElement.classList.add('is-native');
       document.body.classList.add('is-native');
+      
+      // Configure StatusBar overlay EARLY (before full init) for consistent safe areas
+      import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
+        StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
+        StatusBar.setStyle({ style: Style.Default }).catch(() => {});
+      }).catch(() => {});
     }
   }, []); // Empty deps = runs once on mount
 

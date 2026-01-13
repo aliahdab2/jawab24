@@ -62,15 +62,8 @@
     --ring: 13 148 136;
   }
   
-  /* Override safe area variables with actual values when available */
-  @supports (padding-top: env(safe-area-inset-top)) {
-    :root {
-      --safe-area-top: var(--sai-top);
-      --safe-area-bottom: 0px;
-      --safe-area-left: var(--sai-left);
-      --safe-area-right: var(--sai-right);
-    }
-  }
+  /* Safe area values are defined in --sai-* variables above.
+     No need for @supports - env() with fallbacks handles this. */
 
   * {
     @apply border-surface-200;
@@ -677,20 +670,8 @@
    4. All safe areas use max() to ensure minimum values on Android
 ═══════════════════════════════════════════════════════════════════════════ */
 
-/* CSS Variables for safe areas with fallbacks */
-:root {
-  --safe-top: var(--sai-top);
-  --safe-bottom: 0px;
-  --safe-left: var(--sai-left);
-  --safe-right: var(--sai-right);
-  
-  /* Minimum safe areas for Android (which often reports 0) */
-  --min-safe-top: 0px;
-  --min-safe-bottom: 0px;
-  
-  /* WhatsApp-style: zero bottom safe area for native apps */
-  --safe-bottom-capped: 0px;
-}
+/* Safe areas use --sai-* variables defined at top of file.
+   No additional variables needed - keep it simple! */
 
 /* ═══════════════════════════════════════════════════════════════════════════
    GLOBAL SAFE AREA STRATEGY - INDUSTRY BEST PRACTICE
@@ -710,25 +691,10 @@
 ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ─────────────────────────────────────────────────────────────────
-   1. NATIVE APP (Capacitor - Android/iOS)
-   Enforces minimum values because Android often returns 0
+   NATIVE APP (Capacitor - Android/iOS)
+   The .is-native class enables safe area handling.
+   All values come from --sai-* variables (single source of truth).
 ───────────────────────────────────────────────────────────────── */
-html.is-native,
-body.is-native {
-  --min-safe-top: 24px;
-  --min-safe-bottom: 16px; /* Portrait: small bottom for gesture bar */
-  --min-safe-side: 0px;
-  --safe-bottom-capped: 16px; /* Portrait: visible but small */
-}
-
-@media (orientation: landscape) {
-  html.is-native,
-  body.is-native {
-    --min-safe-side: 32px; /* Larger side padding for system nav */
-    --min-safe-bottom: 0px; /* Zero bottom in landscape */
-    --safe-bottom-capped: 0px;
-  }
-}
 
 /* Safe area padding is handled by AppShell component - not body
    See: APPSHELL section below and src/components/layout/AppShell.tsx
@@ -820,22 +786,16 @@ body.is-native {
 /* Top safe area background (for status bar) */
 .top-safe-bg {
   top: 0;
-  height: max(var(--min-safe-top, 0px), var(--sai-top));
-}
-
-/* Native apps: use injected variable for top height */
-html.is-native .top-safe-bg,
-body.is-native .top-safe-bg {
   height: var(--sai-top);
 }
 
-/* Bottom safe area background (for gesture nav) - capped to avoid excessive height */
+/* Bottom safe area background (for gesture nav) */
 .bottom-safe-bg {
   bottom: 0;
-  height: min(24px, max(var(--min-safe-bottom, 0px), 0px));
+  height: 0px; /* Hidden by default on web */
 }
 
-/* Portrait: show bottom safe area using actual device env() values */
+/* Native apps: show bottom safe area in portrait */
 html.is-native .bottom-safe-bg,
 body.is-native .bottom-safe-bg {
   display: block;
@@ -844,15 +804,20 @@ body.is-native .bottom-safe-bg {
 
 /* Landscape: hide bottom safe area */
 @media (orientation: landscape) {
-  html.is-native .bottom-safe-bg,
-  body.is-native .bottom-safe-bg {
+  .bottom-safe-bg {
     display: none;
   }
 }
 
 /* Bottom inset utility - positions element above system navigation */
 .bottom-safe {
-  bottom: max(var(--min-safe-bottom), var(--safe-bottom));
+  bottom: var(--sai-bottom);
+}
+
+@media (orientation: landscape) {
+  .bottom-safe {
+    bottom: 0;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -883,11 +848,8 @@ html, body {
   padding-bottom: 0px;
 }
 
-/* Step 3: Native apps - use JavaScript-injected CSS variables
-   Android WebView doesn't report env() correctly, so _app.tsx injects:
-   --safe-area-top, --safe-area-bottom, --safe-area-left, --safe-area-right */
+/* Step 3: Native apps - apply safe areas */
 html.is-native .app-shell {
-  /* Use actual device env() values - SafeArea plugin patches Android */
   padding-bottom: var(--sai-bottom);
 }
 
@@ -920,15 +882,8 @@ html.is-native .app-shell {
    Bottom: Zero padding
 ═══════════════════════════════════════════════════════════════════ */
 @media (orientation: landscape) {
-  html.is-native,
-  body.is-native {
-    --min-safe-bottom: 0px; /* Zero in landscape */
-  }
-  
   /* Add side safe areas for notch/cutout in landscape */
-  .px-safe-landscape,
-  html.is-native .px-safe-auto,
-  body.is-native .px-safe-auto {
+  .px-safe-landscape {
     padding-left: max(var(--sai-side-landscape), var(--sai-left));
     padding-right: max(var(--sai-side-landscape), var(--sai-right));
   }
@@ -936,22 +891,11 @@ html.is-native .app-shell {
 
 /* Side safe area utility classes for fixed/sticky elements */
 .ps-safe {
-  padding-inline-start: var(--safe-area-left, var(--sai-left));
+  padding-inline-start: var(--sai-left);
 }
 
 .pe-safe {
-  padding-inline-end: var(--safe-area-right, var(--sai-right));
-}
-
-/* Native apps: ensure side safe areas are applied */
-html.is-native .ps-safe,
-body.is-native .ps-safe {
-  padding-inline-start: var(--safe-area-left, var(--sai-left));
-}
-
-html.is-native .pe-safe,
-body.is-native .pe-safe {
-  padding-inline-end: var(--safe-area-right, var(--sai-right));
+  padding-inline-end: var(--sai-right);
 }
 
 /* Combined: header height + safe area (for content below sticky headers) 
@@ -1012,7 +956,13 @@ body.is-native .pt-hero {
 
 /* Bottom nav safe padding */
 .pb-nav {
-  padding-bottom: calc(var(--nav-bottom-height) + var(--safe-area-bottom));
+  padding-bottom: calc(var(--nav-bottom-height) + var(--sai-bottom));
+}
+
+@media (orientation: landscape) {
+  .pb-nav {
+    padding-bottom: var(--nav-bottom-height);
+  }
 }
 
 /* Bottom nav positioning - above safe area in portrait, at bottom in landscape */
@@ -1036,10 +986,18 @@ body.is-native .pt-hero {
 
 /* Apply all safe paddings at once */
 .safe-paddings {
-  padding-top: var(--safe-area-top);
-  padding-bottom: var(--safe-area-bottom);
-  padding-left: var(--safe-area-left);
-  padding-right: var(--safe-area-right);
+  padding-top: var(--sai-top);
+  padding-bottom: var(--sai-bottom);
+  padding-left: var(--sai-left);
+  padding-right: var(--sai-right);
+}
+
+@media (orientation: landscape) {
+  .safe-paddings {
+    padding-bottom: 0;
+    padding-left: max(var(--sai-side-landscape), var(--sai-left));
+    padding-right: max(var(--sai-side-landscape), var(--sai-right));
+  }
 }
 
 /* Shimmer animation for loading states */
