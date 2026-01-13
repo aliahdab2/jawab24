@@ -227,7 +227,7 @@ export default function LoginPage() {
         <meta property="og:url" content="https://jawab24.com/login" />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row lg:min-h-full" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row min-h-[100dvh]" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
         <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}
@@ -286,7 +286,7 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="lg:flex-1 flex flex-col bg-gradient-to-br from-white via-white to-brand-50/30 min-h-0 overflow-hidden relative">
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-white via-white to-brand-50/30 min-h-0 overflow-hidden relative">
           {/* Subtle background pattern for visual interest */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(13,148,136,0.03),transparent_50%)] pointer-events-none" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(13,148,136,0.02),transparent_50%)] pointer-events-none" />
@@ -309,10 +309,10 @@ export default function LoginPage() {
           </div>
 
           {/* Content:
-              - Mobile: Content at top, natural flow (no flex-1)
-              - Desktop: Content near top with some breathing room */}
-          <div className="relative z-10 lg:flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col pb-safe">
-            {/* Main content wrapper - starts at top, no vertical centering */}
+              - Mobile: Content at top, terms at bottom
+              - Desktop: Content near top, terms below content */}
+          <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col pb-safe">
+            {/* Main content wrapper */}
             <div className="w-full max-w-lg mx-auto pt-6 lg:pt-8">
               <div className="text-center lg:text-start mb-8">
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
@@ -349,17 +349,17 @@ export default function LoginPage() {
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Terms - right below content */}
-              <div className="py-6 lg:py-8 text-center lg:text-start">
-                <p className="text-sm text-surface-400 font-medium">
-                  {t('auth.termsAgreement')}
-                  <br className="sm:hidden" />
-                  <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
-                  {t('auth.and')}
-                  <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
-                </p>
-              </div>
+            {/* Terms - pushed to bottom on mobile, below content on desktop */}
+            <div className="w-full max-w-lg mx-auto mt-auto py-6 lg:py-8 lg:mt-8 text-center lg:text-start">
+              <p className="text-sm text-surface-400 font-medium">
+                {t('auth.termsAgreement')}
+                <br className="sm:hidden" />
+                <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
+                {t('auth.and')}
+                <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
+              </p>
             </div>
           </div>
 
