@@ -60,7 +60,7 @@ export default function AuthSync() {
   }, [router.isReady, router.query, setAuth, router]);
 
   return (
-    <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50 landscape:px-6">
+    <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50">
       <div className="text-center">
         <p className="text-surface-500 text-sm font-medium">{status}</p>
       </div>

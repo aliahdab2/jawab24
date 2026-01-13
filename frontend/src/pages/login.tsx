@@ -188,7 +188,7 @@ export default function LoginPage() {
         <meta property="og:url" content="https://jawab24.com/login" />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row overflow-hidden landscape:px-6" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row overflow-hidden" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
         <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}
