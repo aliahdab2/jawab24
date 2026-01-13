@@ -143,34 +143,31 @@ export default function CheckoutPage() {
           <meta name="robots" content="noindex, follow" />
         </Head>
 
-        <div className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 py-6 md:py-10 px-4 relative pt-safe pb-safe ">
-          <div className="max-w-3xl mx-auto relative">
-            {/* Top Back Link */}
-            <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
-              <Link href="/pricing" className="p-3 text-surface-400 hover:text-brand-600 transition-colors group">
-                <ArrowLeft className="w-6 h-6 transition-transform group-hover:-translate-x-1 rtl:rotate-180 rtl:group-hover:translate-x-1" />
-              </Link>
-            </div>
-
-            <div className="sm:hidden mb-6">
-              <Link href="/pricing" className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors">
+        <div className="flex-1 overflow-y-auto bg-gradient-to-br from-brand-50/30 via-white to-surface-50 min-h-full">
+          <div className="pt-safe pb-safe px-5 sm:px-6 py-6 sm:py-10 landscape:px-6">
+            <div className="max-w-md mx-auto">
+              
+              {/* Back Link */}
+              <Link 
+                href="/pricing" 
+                className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors mb-8 sm:mb-10"
+              >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
                 {t('checkout.backToPricing')}
               </Link>
-            </div>
-            {/* Header */}
-            <div className="text-center mb-10 sm:mb-12">
-              <Link href="/" className="flex justify-center items-center gap-3 mb-8 sm:mb-10 group">
-                <BrandLogo variant="main" className="w-9 h-9 sm:w-10 sm:h-10 transition-transform group-hover:scale-105" />
-                <span className="font-display font-semibold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
-              </Link>
-              <h1 className="text-2xl sm:text-3xl font-semibold text-surface-900 mb-3 tracking-tight">
-                {t('checkout.title')}
-              </h1>
-            </div>
 
-            {/* Blocked Message */}
-            <div className="py-12">
+              {/* Logo & Header */}
+              <div className="text-center mb-8 sm:mb-10">
+                <Link href="/" className="inline-flex justify-center items-center gap-3 mb-6 group">
+                  <BrandLogo variant="main" className="w-12 h-12 sm:w-14 sm:h-14 transition-transform group-hover:scale-105" />
+                  <span className="font-display font-bold text-2xl sm:text-3xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+                </Link>
+                <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2 tracking-tight font-display">
+                  {t('checkout.title')}
+                </h1>
+              </div>
+
+              {/* Blocked Message */}
               <PaymentsUnavailableNotice />
             </div>
           </div>
@@ -198,121 +195,126 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 py-8 md:py-12 px-4 relative pt-safe pb-safe ">
-        <div className="max-w-3xl mx-auto relative pt-4 sm:pt-0">
-          {/* Top Back Link */}
-          <div className="absolute top-0 ltr:-left-4 rtl:-right-4 sm:ltr:-left-12 sm:rtl:-right-12 sm:-top-2 hidden sm:block">
-            <Link href="/pricing" className="p-3 text-surface-400 hover:text-brand-600 transition-colors group">
-              <ArrowLeft className="w-6 h-6 transition-transform group-hover:-translate-x-1 rtl:rotate-180 rtl:group-hover:translate-x-1" />
-            </Link>
-          </div>
-
-          <div className="sm:hidden mb-8">
-            <Link href="/pricing" className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors px-2 py-2 -ml-2">
+      <div className="flex-1 overflow-y-auto bg-gradient-to-br from-brand-50/30 via-white to-surface-50 min-h-full">
+        {/* Safe area padding container */}
+        <div className="pt-safe pb-safe px-5 sm:px-6 py-6 sm:py-10 landscape:px-6">
+          <div className="max-w-md mx-auto">
+            
+            {/* Back Link - Mobile */}
+            <Link 
+              href="/pricing" 
+              className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors mb-8 sm:mb-10"
+            >
               <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
               {t('checkout.backToPricing')}
             </Link>
-          </div>
-          {/* Header */}
-          <div className="text-center mb-10 sm:mb-12">
-            <Link href="/" className="flex justify-center items-center gap-3 mb-8 sm:mb-10 group">
-              <BrandLogo
-                variant="main"
-                className="w-9 h-9 sm:w-10 sm:h-10 transition-transform group-hover:scale-105"
-              />
-              <span className="font-display font-semibold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
-            </Link>
-            <h1 className="text-2xl sm:text-3xl font-semibold text-surface-900 mb-3 tracking-tight">
-              {t('checkout.title')}
-            </h1>
-            <p className="text-surface-600 font-medium">
-              {t('checkout.subtitle')}
-            </p>
-          </div>
 
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-start">
-              {error}
-            </div>
-          )}
-
-          {plan && (
-            <div className="bg-white rounded-2xl p-8 mb-6" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.04)' }}>
-              {/* Plan Details */}
-              <div className="border-b border-surface-200 pb-6 mb-6 text-start">
-                <h2 className="text-2xl font-bold text-surface-900 mb-2">
-                  {t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
-                    ? t(`pricing.${plan.slug}` as TranslationKey)
-                    : (t(`plans.${plan.slug}.name` as TranslationKey) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name` as TranslationKey) : plan.name)}
-                </h2>
-                <p className="text-surface-600 mb-4">
-                  {t(`pricing.${plan.slug}Desc` as TranslationKey) !== `pricing.${plan.slug}Desc`
-                    ? t(`pricing.${plan.slug}Desc` as TranslationKey)
-                    : (t(`plans.${plan.slug}.description` as TranslationKey) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description` as TranslationKey) : plan.description)}
-                </p>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-brand-600">
-                    ${(plan.price / 100).toFixed(2).split('.')[0]}<span className="opacity-60 text-3xl">.{(plan.price / 100).toFixed(2).split('.')[1]}</span>
-                  </span>
-                  <span className="text-surface-600">
-                    / {t('plans.month')}
-                  </span>
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="space-y-3 mb-8">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                  <span className="text-surface-700 text-start">
-                    {plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages} {t('plans.pages')}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                  <span className="text-surface-700 text-start">
-                    {plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {t('plans.aiReplies')}
-                  </span>
-                </div>
-                {plan.trialDays > 0 && (
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span className="text-surface-700 text-start">
-                      {t('pricing.trialDays', { days: plan.trialDays })}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <Button
-                size="lg"
-                className="w-full h-[52px] shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-                onClick={handleCheckout}
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    {t('checkout.processing')}
-                  </>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span>{t('checkout.continueToPayment')}</span>
-                    <ArrowRight className="w-5 h-5 transition-transform rtl:rotate-180" />
-                  </div>
-                )}
-              </Button>
-
-              <p className="text-center text-xs text-surface-400 mt-6">
-                {t('checkout.securePayment')}
+            {/* Logo & Header */}
+            <div className="text-center mb-8 sm:mb-10">
+              <Link href="/" className="inline-flex justify-center items-center gap-3 mb-6 group">
+                <BrandLogo
+                  variant="main"
+                  className="w-12 h-12 sm:w-14 sm:h-14 transition-transform group-hover:scale-105"
+                />
+                <span className="font-display font-bold text-2xl sm:text-3xl text-surface-900 tracking-tight">
+                  {BRAND_ASSETS.meta.appName}
+                </span>
+              </Link>
+              <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2 tracking-tight font-display">
+                {t('checkout.title')}
+              </h1>
+              <p className="text-surface-500 text-base">
+                {t('checkout.subtitle')}
               </p>
             </div>
-          )}
-        </div>
 
-        {/* Fixed safe area backgrounds */}
-        <div className="fixed-safe-bg top-safe-bg bg-white" aria-hidden="true" />
-        <div className="fixed-safe-bg bottom-safe-bg bg-surface-100" aria-hidden="true" />
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-700 text-start text-sm">
+                {error}
+              </div>
+            )}
+
+            {plan && (
+              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-surface-900/5 border border-surface-100">
+                {/* Plan Details */}
+                <div className="border-b border-surface-100 pb-6 mb-6 text-start">
+                  <h2 className="text-xl sm:text-2xl font-bold text-surface-900 mb-1">
+                    {t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
+                      ? t(`pricing.${plan.slug}` as TranslationKey)
+                      : (t(`plans.${plan.slug}.name` as TranslationKey) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name` as TranslationKey) : plan.name)}
+                  </h2>
+                  <p className="text-surface-500 text-sm mb-5">
+                    {t(`pricing.${plan.slug}Desc` as TranslationKey) !== `pricing.${plan.slug}Desc`
+                      ? t(`pricing.${plan.slug}Desc` as TranslationKey)
+                      : (t(`plans.${plan.slug}.description` as TranslationKey) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description` as TranslationKey) : plan.description)}
+                  </p>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-4xl sm:text-5xl font-bold text-brand-600 font-display">
+                      ${(plan.price / 100).toFixed(2).split('.')[0]}
+                      <span className="text-2xl sm:text-3xl opacity-70">.{(plan.price / 100).toFixed(2).split('.')[1]}</span>
+                    </span>
+                    <span className="text-surface-500 font-medium">
+                      / {t('plans.month')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Features */}
+                <div className="space-y-4 mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    </div>
+                    <span className="text-surface-700 font-medium text-start">
+                      {plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages} {t('plans.pages')}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    </div>
+                    <span className="text-surface-700 font-medium text-start">
+                      {plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {t('plans.aiReplies')}
+                    </span>
+                  </div>
+                  {plan.trialDays > 0 && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      </div>
+                      <span className="text-surface-700 font-medium text-start">
+                        {t('pricing.trialDays', { days: plan.trialDays })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <Button
+                  size="lg"
+                  className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
+                  onClick={handleCheckout}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      {t('checkout.processing')}
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span>{t('checkout.continueToPayment')}</span>
+                      <ArrowRight className="w-5 h-5 transition-transform rtl:rotate-180" />
+                    </div>
+                  )}
+                </Button>
+
+                <p className="text-center text-xs text-surface-400 mt-5 font-medium">
+                  {t('checkout.securePayment')}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </>
   );
