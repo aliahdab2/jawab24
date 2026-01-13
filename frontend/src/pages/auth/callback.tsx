@@ -34,6 +34,17 @@ export default function AuthCallback() {
     const platform = parts.length > 1 ? parts[1] : 'web';
     const preferredLocale = parts.length > 2 ? parts[2] : 'ar';
     const safeUrl = returnUrlRaw.startsWith('/') ? returnUrlRaw : '/dashboard';
+    
+    // DEBUG: Log state parsing
+    console.log('[Callback] State Debug:', {
+      rawState: state,
+      decodedState: stateStr,
+      parts,
+      returnUrlRaw,
+      platform,
+      preferredLocale,
+      safeUrl
+    });
 
     if (fbError) {
       authAttemptedRef.current = true;
@@ -146,7 +157,10 @@ export default function AuthCallback() {
       }
       
       // Web: standard navigation
-      // alert(`Web Login Success. Redirecting...`); // Optional debug
+      console.log('[Callback] Redirecting to:', safeUrl);
+      // DEBUG ALERT - Remove after testing
+       
+      alert(`Auth Success!\nState: ${stateStr}\nRedirecting to: ${safeUrl}`);
       routerRef.current.push(safeUrl);
     } catch (err) {
       // Don't show error if request was aborted (user navigated away)
