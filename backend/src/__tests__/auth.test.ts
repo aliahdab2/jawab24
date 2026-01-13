@@ -64,7 +64,7 @@ describe('AuthController - Native Login', () => {
             token: 'long-lived-token', expiresAt 
         });
         vi.mocked(facebookService.getUserProfile).mockResolvedValue({ 
-            id: 'fb-user-id', name: 'Test User', email: 'test@example.com' 
+            id: 'fb-user-id', name: 'Test User', email: 'test@example.com', picture: 'https://example.com/photo.jpg'
         });
         vi.mocked(authService.findOrCreateUser).mockResolvedValue({ 
             id: 'user-id', facebookId: 'fb-user-id', name: 'Test User' 
@@ -91,7 +91,7 @@ describe('AuthController - Native Login', () => {
         expect(facebookService.getLongLivedToken).toHaveBeenCalledWith('valid-fb-token');
         expect(facebookService.getUserProfile).toHaveBeenCalledWith('long-lived-token');
         expect(authService.findOrCreateUser).toHaveBeenCalledWith(
-            'fb-user-id', 'Test User', 'test@example.com', 'long-lived-token', expiresAt
+            'fb-user-id', 'Test User', 'test@example.com', 'long-lived-token', expiresAt, 'https://example.com/photo.jpg'
         );
         expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('user-id', 'long-lived-token');
         expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
