@@ -13,9 +13,15 @@ import {
   Check,
   Instagram,
   ChevronRight,
-  Clock
+  Clock,
+  AlertTriangle,
+  Plus,
+  LogIn
 } from 'lucide-react';
 import axios from 'axios';
+import { toast } from 'sonner';
+import { Capacitor } from '@capacitor/core';
+import { FB_CALLBACK_PATH } from '@/constants/auth';
 import type { Page } from '@jawab24/shared';
 
 export default function PagesPage() {
@@ -28,8 +34,123 @@ export default function PagesPage() {
   const [knowledgeBase, setKnowledgeBase] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // State for "no pages found" connection modal
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+  // Handle Escape key to close connection modal (accessibility best practice)
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showConnectionModal) {
+        setShowConnectionModal(false);
+      }
+    };
+    
+    if (showConnectionModal) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [showConnectionModal]);
+
+  // Open Facebook's page creation in new tab
+  const openCreatePageLink = () => {
+    window.open('https://www.facebook.com/pages/create', '_blank');
+    toast.info(t('pages.openingFacebook' as TranslationKey));
+  };
+
+  // Re-authenticate with Facebook to add more pages
+  const handleReconnect = async () => {
+    setShowConnectionModal(false);
+    
+    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
+    if (!fbAppId) {
+      toast.error(t('auth.loginError' as TranslationKey));
+      return;
+    }
+
+    const isMobile = Capacitor.isNativePlatform();
+
+    if (isMobile) {
+      // Native mobile: use Facebook SDK
+      try {
+        const { FacebookLogin } = await import('@capacitor-community/facebook-login');
+        await FacebookLogin.initialize({ appId: fbAppId });
+        
+        // Logout first to ensure fresh permissions
+        try {
+          await FacebookLogin.logout();
+        } catch {
+          // Ignore logout errors
+        }
+        
+        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
+        const result = await FacebookLogin.login({ permissions });
+        
+        if (result.accessToken) {
+          // Update the fbToken in store and sync
+          useAuthStore.getState().setAuth(
+            useAuthStore.getState().user!,
+            useAuthStore.getState().token!,
+            result.accessToken.token
+          );
+          
+          // Now sync with the new token
+          setSyncing(true);
+          try {
+            await axios.post(`${apiUrl}/pages/sync`,
+              { accessToken: result.accessToken.token },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            
+            // Check if pages were found after sync
+            const response = await axios.get(`${apiUrl}/pages`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            const syncedPages = Array.isArray(response.data)
+              ? response.data
+              : (Array.isArray(response.data?.data) ? response.data.data : []);
+            
+            setPages(syncedPages);
+            
+            if (syncedPages.length > 0) {
+              toast.success(t('common.success' as TranslationKey));
+            } else {
+              // Still no pages - show modal again
+              setShowConnectionModal(true);
+            }
+          } catch (error) {
+            console.error('Sync failed after reconnect:', error);
+            toast.error(t('pages.sessionExpired' as TranslationKey));
+            setShowConnectionModal(true);
+          } finally {
+            setSyncing(false);
+          }
+        }
+      } catch (error) {
+        console.error('Reconnect failed:', error);
+        toast.error(t('auth.loginError' as TranslationKey));
+      }
+    } else {
+      // Web: redirect to Facebook OAuth
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+      const localePath = language === 'ar' ? '' : `/${language}`;
+      const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
+      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
+      
+      // Use current page as return URL
+      const returnUrl = '/pages';
+      const state = encodeURIComponent(`${returnUrl}|web|${language}`);
+
+      const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const displayMode = isMobileWeb ? 'touch' : 'page';
+
+      // Add auth_type=rerequest to force Facebook to show page selection again
+      window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}&auth_type=rerequest`;
+    }
+  };
 
   const fetchPages = useCallback(async () => {
     if (!token) return;
@@ -65,8 +186,14 @@ export default function PagesPage() {
   const handleSyncRef = useRef<(() => Promise<void>) | null>(null);
 
   const handleSync = useCallback(async () => {
-    if (!token || !fbToken) {
-      console.error('No tokens available for sync');
+    if (!token) {
+      toast.error(t('pages.sessionExpired' as TranslationKey));
+      setShowConnectionModal(true);
+      return;
+    }
+    if (!fbToken) {
+      toast.error(t('pages.sessionExpired' as TranslationKey));
+      setShowConnectionModal(true);
       return;
     }
 
@@ -80,13 +207,16 @@ export default function PagesPage() {
 
       // Refresh list
       await fetchPages();
+      toast.success(t('common.success' as TranslationKey));
 
     } catch (error) {
       console.error('Sync failed:', error);
+      toast.error(t('pages.sessionExpired' as TranslationKey));
+      setShowConnectionModal(true);
     } finally {
       setSyncing(false);
     }
-  }, [token, fbToken, apiUrl, fetchPages]);
+  }, [token, fbToken, apiUrl, fetchPages, t]);
 
   // Keep ref updated
   handleSyncRef.current = handleSync;
@@ -96,6 +226,10 @@ export default function PagesPage() {
       // Auto-sync pages from Facebook (only attempt once)
       syncAttemptedRef.current = true;
       handleSyncRef.current?.();
+    }
+    // If after initial load and sync attempt, still no pages, show the connection modal
+    if (!loading && pages.length === 0 && syncAttemptedRef.current && !syncing) {
+      setShowConnectionModal(true);
     }
   }, [loading, pages.length, fbToken, token, syncing]);
 
@@ -378,12 +512,80 @@ export default function PagesPage() {
             title={t('pages.noPages')}
             description={t('pages.noPagesDesc')}
             action={
-              <Button onClick={handleSync}>
-                {t('pages.connectPage')}
-              </Button>
+              <div className="flex flex-col gap-3">
+                <Button onClick={handleReconnect} icon={<RefreshCw className="w-4 h-4" />}>
+                  {t('pages.reconnectFacebook' as TranslationKey)}
+                </Button>
+                <Button variant="secondary" onClick={openCreatePageLink} icon={<Plus className="w-4 h-4" />}>
+                  {t('pages.createPage' as TranslationKey)}
+                </Button>
+              </div>
             }
           />
         </Card>
+      )}
+
+      {/* Connection Modal - Shows when user needs to reconnect or create pages */}
+      {showConnectionModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="connection-modal-title"
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 bg-amber-100 rounded-full">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h2 id="connection-modal-title" className="text-lg font-semibold text-surface-900">
+                  {t('pages.noPagesFoundTitle' as TranslationKey)}
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowConnectionModal(false)}
+                className="p-1 rounded-full hover:bg-surface-100 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5 text-surface-500" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <p className="text-sm text-surface-500 mb-3 text-start">
+              {t('pages.noPagesFoundDesc' as TranslationKey)}
+            </p>
+            <p className="text-sm text-surface-500 mb-4 text-start">
+              {t('pages.noPagesReasons' as TranslationKey)}
+            </p>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-3">
+              <Button 
+                onClick={handleReconnect} 
+                icon={<LogIn className="w-4 h-4" />}
+                className="w-full"
+              >
+                {t('pages.reconnectFacebook' as TranslationKey)}
+              </Button>
+              <Button 
+                variant="secondary" 
+                onClick={openCreatePageLink}
+                icon={<Plus className="w-4 h-4" />}
+                className="w-full"
+              >
+                {t('pages.createPage' as TranslationKey)}
+              </Button>
+            </div>
+
+            {/* Tip */}
+            <p className="text-xs text-surface-400 mt-4 text-start">
+              💡 {t('pages.reconnectTip' as TranslationKey)}
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Knowledge Base Modal - Compact with fixed textarea height */}
