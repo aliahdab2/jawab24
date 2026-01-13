@@ -9,6 +9,7 @@ interface User {
   name: string;
   email?: string;
   facebookId: string;
+  picture?: string;
 }
 
 interface AuthState {

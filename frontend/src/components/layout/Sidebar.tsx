@@ -128,15 +128,28 @@ export function Sidebar() {
 
       {/* User & Logout */}
       <div className="p-4 border-t border-white/5 bg-black/20">
-        {sidebarOpen && user && (
-          <div className="px-3 py-3 mb-4 rounded-2xl bg-white/5 border border-white/5 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-sm border border-brand-500/20">
-              {user.name?.charAt(0) || 'U'}
-            </div>
-            <div className="min-w-0 text-start">
-              <p className="text-sm font-bold text-white truncate leading-tight">{user.name}</p>
-              <p className="text-[10px] text-surface-400 truncate uppercase tracking-widest font-bold mt-0.5">{t('common.active') || 'Active'}</p>
-            </div>
+        {user && (
+          <div className={clsx(
+            "px-3 py-3 mb-4 rounded-2xl bg-white/5 border border-white/5 flex items-center gap-3",
+            !sidebarOpen && "justify-center px-0"
+          )}>
+            {/* Profile Picture or Fallback Initial */}
+            {user.picture ? (
+              <img
+                src={user.picture}
+                alt={user.name || 'User'}
+                className="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-brand-500/20"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-sm border border-brand-500/20 flex-shrink-0">
+                {user.name?.charAt(0) || 'U'}
+              </div>
+            )}
+            {sidebarOpen && (
+              <div className="min-w-0 text-start">
+                <p className="text-sm font-bold text-white truncate leading-tight">{user.name}</p>
+              </div>
+            )}
           </div>
         )}
 
