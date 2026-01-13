@@ -14,10 +14,12 @@ export default function AuthSync() {
     const syncAuth = async () => {
       try {
         setStatus('Syncing session...');
-        // alert(`Sync: Bridge Received.`);
         
         // 1. Get tokens from URL
         const { token, fbToken, redirect } = router.query;
+        
+        // Debug: Log what we received
+        console.log('[Sync] Query params:', { token: !!token, fbToken: !!fbToken, redirect });
 
         if (!token || typeof token !== 'string') {
             throw new Error('No token provided');
@@ -44,7 +46,11 @@ export default function AuthSync() {
         
         // Brief delay to ensure storage persistence
         setTimeout(() => {
-            const redirectPath = redirect ? decodeURIComponent(redirect as string) : '/dashboard';
+            // redirect from query is already URL-decoded by Next.js router
+            const redirectPath = (redirect && typeof redirect === 'string' && redirect.startsWith('/')) 
+              ? redirect 
+              : '/dashboard';
+            console.log('[Sync] Redirecting to:', redirectPath);
             router.replace(redirectPath);
         }, 100);
 
