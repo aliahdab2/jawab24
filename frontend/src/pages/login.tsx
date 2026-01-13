@@ -37,8 +37,9 @@ export default function LoginPage() {
   useEffect(() => {
     setMounted(true);
     
-    // Pre-initialize Facebook SDK on native platforms
-    // This eliminates the delay when user taps the login button
+    // Pre-initialize Facebook SDK on native platforms and clear any stuck sessions
+    // This eliminates the delay when user taps the login button AND prevents
+    // the "stuck on first attempt" issue
     const preInitFacebookSDK = async () => {
       if (!Capacitor.isNativePlatform()) return;
       
@@ -49,6 +50,18 @@ export default function LoginPage() {
         const { FacebookLogin } = await import('@capacitor-community/facebook-login');
         fbSdkRef.current = FacebookLogin;
         await FacebookLogin.initialize({ appId: fbAppId });
+        
+        // Clear any stuck/stale sessions when login page loads
+        // This fixes the "first attempt fails" issue
+        try {
+          const currentToken = await FacebookLogin.getCurrentAccessToken();
+          if (currentToken?.accessToken) {
+            // There's a stale token - clear it
+            await FacebookLogin.logout();
+          }
+        } catch {
+          // No token or error checking - that's fine
+        }
       } catch {
         // Initialization failed or already initialized - that's OK
       }
@@ -94,12 +107,26 @@ export default function LoginPage() {
           }
         }
         
-        // Open native Facebook login dialog immediately - no loading spinner
+        // Note: We clear stale sessions on page load (in useEffect), not here
+        // This avoids the double-logout performance issue
+        
+        // Create a timeout promise (30 seconds)
+        const TIMEOUT_MS = 30000;
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS);
+        });
+        
+        // Open native Facebook login dialog with timeout protection
         const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging'];
-        const result = await FacebookLogin.login({ permissions });
+        
+        const result = await Promise.race([
+          FacebookLogin.login({ permissions }),
+          timeoutPromise
+        ]) as any;
 
         if (!result.accessToken) {
-          // User cancelled - stay on login page
+          // User cancelled - show friendly message
+          toast.info(t('auth.loginCancelled'));
           return;
         }
 
@@ -122,8 +149,20 @@ export default function LoginPage() {
 
       } catch (error: any) {
         console.error('Native login error:', error);
-        toast.error(error.response?.data?.message || t('auth.loginError'));
         setIsProcessing(false);
+        
+        // Specific error messages based on error type
+        if (error.message === 'TIMEOUT') {
+          toast.error(t('auth.loginTimeout'));
+        } else if (error.message?.includes('cancel') || error.message?.includes('Cancel')) {
+          toast.info(t('auth.loginCancelled'));
+        } else if (error.message?.includes('network') || error.code === 'NETWORK_ERROR') {
+          toast.error(t('auth.networkError'));
+        } else if (error.response?.data?.message) {
+          toast.error(error.response.data.message);
+        } else {
+          toast.error(t('auth.loginError'));
+        }
       }
 
     } else {
