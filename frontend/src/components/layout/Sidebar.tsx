@@ -47,7 +47,7 @@ export function Sidebar() {
       style={{
         insetInlineStart: 0,
         background: 'linear-gradient(180deg, #0F172A 0%, #1E293B 100%)',
-        paddingTop: 'env(safe-area-inset-top, 24px)'
+        paddingTop: 'var(--sai-top)'
       }}
     >
       {/* Toggle Button - Floating on the edge */}

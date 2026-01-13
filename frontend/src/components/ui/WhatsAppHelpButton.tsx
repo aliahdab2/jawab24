@@ -60,8 +60,8 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
           // Mobile: Position above bottom nav (64px) + safe area (20px min) + 16px gap
           bottom: 'calc(64px + 16px)', // nav height + gap
           // Account for side safe area (notch in landscape) - use injected CSS vars
-          right: isRTL ? 'auto' : 'calc(1.5rem + env(safe-area-inset-right, 0px))',
-          left: isRTL ? 'calc(1.5rem + env(safe-area-inset-left, 0px))' : 'auto'
+          right: isRTL ? 'auto' : 'calc(1.5rem + var(--sai-right))',
+          left: isRTL ? 'calc(1.5rem + var(--sai-left))' : 'auto'
         }}
         aria-label={t('common.needHelp')}
       >
@@ -81,8 +81,8 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
           style={{
             // Position above the WhatsApp button (button is ~60px + 16px gap)
             bottom: 'calc(64px + 16px + 60px)', // nav + gap + button
-            right: isRTL ? 'auto' : 'calc(2rem + env(safe-area-inset-right, 0px))',
-            left: isRTL ? 'calc(2rem + env(safe-area-inset-left, 0px))' : 'auto'
+            right: isRTL ? 'auto' : 'calc(2rem + var(--sai-right))',
+            left: isRTL ? 'calc(2rem + var(--sai-left))' : 'auto'
           }}
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 -z-10"></div>

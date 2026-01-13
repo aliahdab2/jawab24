@@ -24,11 +24,22 @@
     --content-padding-x-lg: 3rem;     /* 48px desktop */
     --content-padding-y: 1rem;        /* 16px */
     
-    /* Safe areas - these get overridden by env() where supported */
-    --safe-area-top: 0px;
-    --safe-area-bottom: 0px;
-    --safe-area-left: 0px;
-    --safe-area-right: 0px;
+    /* ═══════════════════════════════════════════════════════════════════
+       SAFE AREA INSETS - Single Source of Truth
+       All safe area values defined here. Change fallbacks in ONE place.
+       
+       Fallback values (used when env() not supported):
+       - Top: 24px (status bar height on most Android devices)
+       - Bottom: 28px (gesture navigation height)
+       - Sides: 0px (no side insets in portrait)
+    ═══════════════════════════════════════════════════════════════════ */
+    --sai-top: env(safe-area-inset-top, 24px);
+    --sai-bottom: env(safe-area-inset-bottom, 26px);
+    --sai-left: env(safe-area-inset-left, 0px);
+    --sai-right: env(safe-area-inset-right, 0px);
+    
+    /* Landscape side padding (minimum for system nav buttons) */
+    --sai-side-landscape: 24px;
     
     /* ═══════════════════════════════════════════════════════════════════
        COLOR TOKENS
@@ -54,10 +65,10 @@
   /* Override safe area variables with actual values when available */
   @supports (padding-top: env(safe-area-inset-top)) {
     :root {
-      --safe-area-top: env(safe-area-inset-top, 0px);
-      --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-      --safe-area-left: env(safe-area-inset-left, 0px);
-      --safe-area-right: env(safe-area-inset-right, 0px);
+      --safe-area-top: var(--sai-top);
+      --safe-area-bottom: 0px;
+      --safe-area-left: var(--sai-left);
+      --safe-area-right: var(--sai-right);
     }
   }
 
@@ -668,10 +679,10 @@
 
 /* CSS Variables for safe areas with fallbacks */
 :root {
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-top: var(--sai-top);
+  --safe-bottom: 0px;
+  --safe-left: var(--sai-left);
+  --safe-right: var(--sai-right);
   
   /* Minimum safe areas for Android (which often reports 0) */
   --min-safe-top: 0px;
@@ -732,13 +743,13 @@ body.is-native {
 @media (display-mode: standalone) {
   body {
     /* NO top padding - headers with pt-safe handle this */
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: 0px;
   }
   
   @media (orientation: landscape) {
     body {
-      padding-left: env(safe-area-inset-left, 0px);
-      padding-right: env(safe-area-inset-right, 0px);
+      padding-left: var(--sai-left);
+      padding-right: var(--sai-right);
     }
   }
 }
@@ -754,21 +765,21 @@ body.is-native {
 
 /* Web: use env() only */
 .pt-safe {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--sai-top);
 }
 
 .pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: 0px;
 }
 
 .px-safe {
-  padding-left: env(safe-area-inset-left, 0px);
-  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: var(--sai-left);
+  padding-right: var(--sai-right);
 }
 
 /* Native apps: use injected variable (Android WebView doesn't report env() correctly) */
 .is-native .pt-safe {
-  padding-top: env(safe-area-inset-top, 24px);
+  padding-top: var(--sai-top);
 }
 
 .is-native .pb-safe {
@@ -785,9 +796,9 @@ body.is-native {
 
 @media (orientation: landscape) {
   .is-native .px-safe {
-    /* Pure CSS: 48px side padding for system nav in landscape */
-    padding-left: max(48px, env(safe-area-inset-left, 48px));
-    padding-right: max(48px, env(safe-area-inset-right, 48px));
+    /* Pure CSS: 24px side padding for system nav in landscape */
+    padding-left: max(var(--sai-side-landscape), var(--sai-left));
+    padding-right: max(var(--sai-side-landscape), var(--sai-right));
   }
 }
 
@@ -809,26 +820,26 @@ body.is-native {
 /* Top safe area background (for status bar) */
 .top-safe-bg {
   top: 0;
-  height: max(var(--min-safe-top, 0px), env(safe-area-inset-top, 0px));
+  height: max(var(--min-safe-top, 0px), var(--sai-top));
 }
 
 /* Native apps: use injected variable for top height */
 html.is-native .top-safe-bg,
 body.is-native .top-safe-bg {
-  height: env(safe-area-inset-top, 24px);
+  height: var(--sai-top);
 }
 
 /* Bottom safe area background (for gesture nav) - capped to avoid excessive height */
 .bottom-safe-bg {
   bottom: 0;
-  height: min(24px, max(var(--min-safe-bottom, 0px), env(safe-area-inset-bottom, 0px)));
+  height: min(24px, max(var(--min-safe-bottom, 0px), 0px));
 }
 
 /* Portrait: show bottom safe area using actual device env() values */
 html.is-native .bottom-safe-bg,
 body.is-native .bottom-safe-bg {
   display: block;
-  height: env(safe-area-inset-bottom, 28px);
+  height: var(--sai-bottom);
 }
 
 /* Landscape: hide bottom safe area */
@@ -869,7 +880,7 @@ html, body {
   overflow: hidden; /* Children handle their own scrolling */
   
   /* Web browsers: use env() values (they handle safe areas correctly) */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: 0px;
 }
 
 /* Step 3: Native apps - use JavaScript-injected CSS variables
@@ -877,29 +888,29 @@ html, body {
    --safe-area-top, --safe-area-bottom, --safe-area-left, --safe-area-right */
 html.is-native .app-shell {
   /* Use actual device env() values - SafeArea plugin patches Android */
-  padding-bottom: env(safe-area-inset-bottom, 28px);
+  padding-bottom: var(--sai-bottom);
 }
 
 /* Step 4: Landscape - sides instead of bottom */
 @media (orientation: landscape) {
   .app-shell {
     padding-bottom: 0;
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-right: env(safe-area-inset-right, 0px);
+    padding-left: var(--sai-left);
+    padding-right: var(--sai-right);
   }
   
   html.is-native .app-shell {
     padding-bottom: 0;
-    /* Pure CSS: 48px side padding for system nav in landscape */
-    padding-left: max(48px, env(safe-area-inset-left, 48px));
-    padding-right: max(48px, env(safe-area-inset-right, 48px));
+    /* Pure CSS: 24px side padding for system nav in landscape */
+    padding-left: max(var(--sai-side-landscape), var(--sai-left));
+    padding-right: max(var(--sai-side-landscape), var(--sai-right));
   }
 }
 
 /* Step 5: PWA standalone mode */
 @media (display-mode: standalone) {
   .app-shell {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: 0px;
   }
 }
 
@@ -918,90 +929,101 @@ html.is-native .app-shell {
   .px-safe-landscape,
   html.is-native .px-safe-auto,
   body.is-native .px-safe-auto {
-    padding-left: max(48px, env(safe-area-inset-left, 48px));
-    padding-right: max(48px, env(safe-area-inset-right, 48px));
+    padding-left: max(var(--sai-side-landscape), var(--sai-left));
+    padding-right: max(var(--sai-side-landscape), var(--sai-right));
   }
 }
 
 /* Side safe area utility classes for fixed/sticky elements */
 .ps-safe {
-  padding-inline-start: var(--safe-area-left, env(safe-area-inset-left, 0px));
+  padding-inline-start: var(--safe-area-left, var(--sai-left));
 }
 
 .pe-safe {
-  padding-inline-end: var(--safe-area-right, env(safe-area-inset-right, 0px));
+  padding-inline-end: var(--safe-area-right, var(--sai-right));
 }
 
 /* Native apps: ensure side safe areas are applied */
 html.is-native .ps-safe,
 body.is-native .ps-safe {
-  padding-inline-start: var(--safe-area-left, env(safe-area-inset-left, 0px));
+  padding-inline-start: var(--safe-area-left, var(--sai-left));
 }
 
 html.is-native .pe-safe,
 body.is-native .pe-safe {
-  padding-inline-end: var(--safe-area-right, env(safe-area-inset-right, 0px));
+  padding-inline-end: var(--safe-area-right, var(--sai-right));
 }
 
 /* Combined: header height + safe area (for content below sticky headers) 
    Note: For native apps, header has box-content + pt-safe which adds safe area to height.
    So pt-header should add header base height + safe area that pt-safe adds */
 .pt-header {
-  padding-top: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+  padding-top: calc(var(--header-height) + var(--sai-top));
 }
 
 /* Native apps: header uses max() for safe area, so we match */
 html.is-native .pt-header,
 body.is-native .pt-header {
-  padding-top: calc(var(--header-height) + env(safe-area-inset-top, 24px));
+  padding-top: calc(var(--header-height) + var(--sai-top));
 }
 
 @media (min-width: 640px) {
   .pt-header {
-    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 0px));
+    padding-top: calc(var(--header-height-lg) + var(--sai-top));
   }
   
   html.is-native .pt-header,
   body.is-native .pt-header {
-    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 24px));
+    padding-top: calc(var(--header-height-lg) + var(--sai-top));
   }
 }
 
 /* Hero sections: header + extra breathing room */
 .pt-hero {
-  padding-top: calc(var(--header-height) + env(safe-area-inset-top, 0px) + 3rem);
+  padding-top: calc(var(--header-height) + var(--sai-top) + 3rem);
 }
 
 html.is-native .pt-hero,
 body.is-native .pt-hero {
-  padding-top: calc(var(--header-height) + env(safe-area-inset-top, 24px) + 3rem);
+  padding-top: calc(var(--header-height) + var(--sai-top) + 3rem);
 }
 
 @media (min-width: 640px) {
   .pt-hero {
-    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 0px) + 3rem);
+    padding-top: calc(var(--header-height-lg) + var(--sai-top) + 3rem);
   }
   
   html.is-native .pt-hero,
   body.is-native .pt-hero {
-    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 24px) + 3rem);
+    padding-top: calc(var(--header-height-lg) + var(--sai-top) + 3rem);
   }
 }
 
 @media (min-width: 1024px) {
   .pt-hero {
-    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 0px) + 5rem);
+    padding-top: calc(var(--header-height-lg) + var(--sai-top) + 5rem);
   }
   
   html.is-native .pt-hero,
   body.is-native .pt-hero {
-    padding-top: calc(var(--header-height-lg) + env(safe-area-inset-top, 24px) + 5rem);
+    padding-top: calc(var(--header-height-lg) + var(--sai-top) + 5rem);
   }
 }
 
 /* Bottom nav safe padding */
 .pb-nav {
   padding-bottom: calc(var(--nav-bottom-height) + var(--safe-area-bottom));
+}
+
+/* Bottom nav positioning - above safe area in portrait, at bottom in landscape */
+.bottom-nav-position {
+  bottom: var(--sai-bottom);
+}
+
+@media (orientation: landscape) {
+  .bottom-nav-position {
+    bottom: 0;
+  }
 }
 
 /* App container - full height with safe areas */

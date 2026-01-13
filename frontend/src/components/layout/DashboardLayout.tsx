@@ -70,7 +70,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <title>{pageTitle} | Jawab24</title>
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh landscape:px-12" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh landscape:px-6" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Sidebar - hidden on mobile and on clean layouts */}
         {!isCleanLayout && (
           <div className="hidden lg:block">
@@ -182,12 +182,9 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         ═══════════════════════════════════════════════════════════════ */}
         {!isCleanLayout && (
           <>
-            {/* Bottom navigation - sits ABOVE the safe area */}
+            {/* Bottom navigation - sits ABOVE the safe area in portrait, at bottom in landscape */}
             <nav
-              className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] landscape:px-12"
-              style={{
-                bottom: 'env(safe-area-inset-bottom, 28px)'
-              }}
+              className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] landscape:px-6 bottom-nav-position"
             >
               <MobileNavButton
                 onClick={() => router.push('/dashboard')}

@@ -120,43 +120,71 @@ cd frontend/android
 
 ## 🎯 Safe Area Strategy (CRITICAL)
 
-### Native App (Capacitor)
-Safe areas are applied **automatically** via CSS on `body`:
+### Single Source of Truth
+All safe area values are defined as CSS variables in `globals.css`:
 ```css
-html.is-native body {
-  padding-top: max(24px, env(safe-area-inset-top));
-  padding-bottom: max(20px, env(safe-area-inset-bottom));
+:root {
+  /* Change fallback values HERE - they apply everywhere */
+  --sai-top: env(safe-area-inset-top, 24px);
+  --sai-bottom: env(safe-area-inset-bottom, 28px);
+  --sai-left: env(safe-area-inset-left, 0px);
+  --sai-right: env(safe-area-inset-right, 0px);
+  --sai-side-landscape: 24px;
 }
-/* Landscape adds side padding: 24px */
 ```
 
 ### Rules:
-1. **DO NOT** add `pt-safe` or `pb-safe` to content containers - body handles it
-2. **DO** add `pt-safe` to **fixed/sticky headers** (they ignore body padding)
-3. **DO NOT** add safe areas for regular browser - browser handles it
-4. **DO** add safe areas for PWA standalone mode
+1. **NEVER hardcode safe area values** in components - use `var(--sai-*)` or utility classes
+2. **Use CSS classes** for positioning, not inline styles with env()
+3. **Use `landscape:px-6`** for side padding in landscape mode (24px)
+4. **Portrait**: Bottom safe area visible (28px)
+5. **Landscape**: Bottom safe area = 0, side padding = 24px
 
 ### Fixed Elements Pattern:
 ```tsx
-// Fixed header - NEEDS pt-safe
+// Fixed header - NEEDS pt-safe class
 <nav className="fixed top-0 w-full pt-safe">
 
-// Sticky header - NEEDS pt-safe  
-<header className="sticky top-0 pt-safe">
+// Fixed bottom nav - use CSS class for orientation-aware positioning
+<nav className="fixed left-0 right-0 bottom-nav-position landscape:px-6">
 
-// Page header (at top of scrollable content) - NEEDS pt-safe
-<div className="flex items-center h-16 pt-safe">
-
-// Footer (at bottom of page) - NEEDS pb-safe
-<footer className="p-4 pb-safe">
-
-// Regular content in middle - NO safe area classes needed
-<div className="flex-1">
+// Page content - use flex-1 and overflow-y-auto
+<div className="flex-1 overflow-y-auto landscape:px-6">
 ```
 
-### Every Page Needs:
-1. **Top element**: `pt-safe` (header, nav, or first visible element)
-2. **Bottom element**: `pb-safe` (footer, last content, or copyright)
+### AppShell Pattern:
+All pages are wrapped in `AppShell` which handles safe areas:
+```tsx
+// In _app.tsx - already done, don't duplicate
+<AppShell>
+  <Component {...pageProps} />
+</AppShell>
+```
+
+### Bottom Navigation Positioning:
+Use the `bottom-nav-position` CSS class:
+```css
+.bottom-nav-position {
+  bottom: var(--sai-bottom);  /* Portrait: 28px */
+}
+@media (orientation: landscape) {
+  .bottom-nav-position {
+    bottom: 0;  /* Landscape: no bottom gap */
+  }
+}
+```
+
+### DO NOT:
+- ❌ Use `env(safe-area-inset-*, fallback)` directly in components
+- ❌ Use inline styles for safe area positioning
+- ❌ Add `min-h-screen` or `h-[100vh]` to page content (use `flex-1`)
+- ❌ Hardcode pixel values for safe areas
+
+### DO:
+- ✅ Use `var(--sai-*)` CSS variables
+- ✅ Use utility classes: `pt-safe`, `pb-safe`, `bottom-nav-position`
+- ✅ Use `landscape:px-6` for consistent side padding
+- ✅ Use `flex-1 overflow-y-auto` for scrollable content
 
 ---
 
@@ -217,8 +245,12 @@ Or in Tailwind: `landscape:` prefix
 
 ### Bottom Navigation:
 - Height: 64px (`h-16`)
-- Positioned above safe area: `bottom: max(20px, env(safe-area-inset-bottom))`
+- Use `bottom-nav-position` CSS class for positioning
+- Add `landscape:px-6` for side padding in landscape
 - Hidden on desktop: `lg:hidden`
+```tsx
+<nav className="fixed left-0 right-0 h-16 bottom-nav-position landscape:px-6 lg:hidden">
+```
 
 ---
 
@@ -313,6 +345,9 @@ frontend/
 7. **Ignoring landscape mode**: Test BOTH orientations - buttons must stay visible
 8. **Non-scrollable modals**: Always use `flex-col` with scrollable body, fixed header/footer
 9. **Stripe without country check**: ALWAYS block sanctioned countries BEFORE any Stripe API call
+10. **Hardcoded safe area values**: Use `var(--sai-*)` CSS variables, not `env()` directly
+11. **Inline styles for safe areas**: Use CSS classes like `bottom-nav-position`
+12. **Using `min-h-screen` in page content**: Use `flex-1 overflow-y-auto` instead
 
 ---
 

@@ -143,10 +143,10 @@ export default function LandingPage() {
         />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white overflow-x-hidden landscape:px-12" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-white overflow-x-hidden landscape:px-6" dir={isRTL ? 'rtl' : 'ltr'}>
         {/* Navigation - Mobile optimized */}
         <nav 
-          className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe landscape:px-12"
+          className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe landscape:px-6"
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16 sm:h-20">

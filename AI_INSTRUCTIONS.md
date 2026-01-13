@@ -22,27 +22,50 @@
 
 ### 1. Safe Areas (Mobile App) - CRITICAL
 
-**Every page needs explicit safe area classes. Body only handles bottom padding.**
+**Single Source of Truth** - All safe area values defined in `globals.css`:
 
-```tsx
-// ✅ CORRECT - Every page needs these:
-
-// TOP: Header/nav needs pt-safe (for notch/status bar)
-<nav className="fixed top-0 w-full pt-safe">
-// OR for non-fixed headers:
-<div className="flex items-center h-16 pt-safe">
-
-// BOTTOM: Footer/last element needs pb-safe (for system nav)
-<footer className="p-4 pb-safe">
-
-// MIDDLE: Content between header and footer - NO safe area needed
-<div className="flex-1">
+```css
+:root {
+  /* Change fallback values HERE - they apply everywhere */
+  --sai-top: env(safe-area-inset-top, 24px);
+  --sai-bottom: env(safe-area-inset-bottom, 28px);
+  --sai-left: env(safe-area-inset-left, 0px);
+  --sai-right: env(safe-area-inset-right, 0px);
+  --sai-side-landscape: 24px;
+}
 ```
 
-**The Rule**: 
-- `pt-safe` → Top element of every page (header, nav, first visible element)
-- `pb-safe` → Bottom element of every page (footer, copyright, last content)
-- Middle content → No safe area classes needed
+**Rules:**
+1. **NEVER hardcode safe area values** - use `var(--sai-*)` or utility classes
+2. **Use CSS classes** for positioning, not inline styles
+3. **Use `landscape:px-6`** for side padding in landscape (24px)
+4. **Portrait**: Bottom safe area = 28px
+5. **Landscape**: Bottom = 0, sides = 24px
+
+```tsx
+// ✅ CORRECT patterns:
+
+// Fixed header - use pt-safe class
+<nav className="fixed top-0 w-full pt-safe">
+
+// Fixed bottom nav - use bottom-nav-position class
+<nav className="fixed left-0 right-0 bottom-nav-position landscape:px-6">
+
+// Page content - use flex-1, NOT min-h-screen
+<div className="flex-1 overflow-y-auto landscape:px-6">
+```
+
+**DO NOT:**
+- ❌ Use `env(safe-area-inset-*, fallback)` directly in components
+- ❌ Use inline styles for safe area positioning  
+- ❌ Add `min-h-screen` or `h-[100vh]` to page content
+- ❌ Hardcode pixel values for safe areas
+
+**DO:**
+- ✅ Use `var(--sai-*)` CSS variables
+- ✅ Use utility classes: `pt-safe`, `pb-safe`, `bottom-nav-position`
+- ✅ Use `landscape:px-6` for consistent side padding
+- ✅ Use `flex-1 overflow-y-auto` for scrollable content
 
 ### 2. RTL Support (Arabic)
 
@@ -237,14 +260,15 @@ return (
 
 | Mistake | Fix |
 |---------|-----|
-| Adding `pt-safe` to content | Body handles it automatically |
+| Hardcoded safe area values | Use `var(--sai-*)` CSS variables |
+| Using `env()` in components | Use CSS classes like `pt-safe`, `bottom-nav-position` |
+| Using `min-h-screen` in pages | Use `flex-1 overflow-y-auto` instead |
+| Inline styles for safe areas | Use CSS classes |
 | Using `left`/`right` in CSS | Use `start`/`end` for RTL |
 | Using `pl-*`/`pr-*` | Use `ps-*`/`pe-*` for RTL |
 | Using `ml-*`/`mr-*` | Use `ms-*`/`me-*` for RTL |
 | Hardcoded strings | Use `t('key')` |
 | Missing `dir` attribute | Add `dir={isRTL ? 'rtl' : 'ltr'}` |
-| Missing `pt-safe` on page header | Every page's top element needs `pt-safe` |
-| Missing `pb-safe` on page footer | Every page's bottom element needs `pb-safe` |
 | Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
 | Ignoring landscape mode | Test both orientations, use `landscape:` |
 | Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |
@@ -299,10 +323,12 @@ refactor(css): consolidate safe areas
 - [ ] Ran `npm run lint` - no errors
 - [ ] Used logical properties for RTL (`ps-*`, `pe-*`)
 - [ ] No hardcoded strings (used `t('key')`)
-- [ ] Fixed elements have `pt-safe`
-- [ ] Content containers do NOT have `pt-safe`/`pb-safe`
+- [ ] Safe areas use `var(--sai-*)` or CSS classes (no hardcoded values)
+- [ ] No `min-h-screen` in page content (use `flex-1 overflow-y-auto`)
+- [ ] Bottom nav uses `bottom-nav-position` class
+- [ ] Added `landscape:px-6` for side padding where needed
 - [ ] Added `dir` attribute where needed
 - [ ] Tested in both English and Arabic
-- [ ] **Works in portrait mode**
-- [ ] **Works in landscape mode** (buttons visible, content scrollable)
+- [ ] **Works in portrait mode** (bottom safe area visible)
+- [ ] **Works in landscape mode** (no bottom gap, side padding correct)
 - [ ] Modals don't overflow screen in landscape
