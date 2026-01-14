@@ -138,10 +138,10 @@ export function NotificationBell() {
                 )}
             </button>
 
-            {/* Dropdown */}
+            {/* Dropdown - opens into main content area (start = right in LTR, left in RTL) */}
             {isOpen && (
                 <div 
-                    className="absolute end-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-surface-100 overflow-hidden z-50"
+                    className="absolute start-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-surface-100 overflow-hidden z-50 max-h-[80vh]"
                     dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
                     {/* Header */}
