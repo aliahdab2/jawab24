@@ -130,12 +130,14 @@ CREATE TABLE notification_preferences (
 | Page Disconnected | Facebook API error (token expired) | Push + In-App |
 
 **Deliverables:**
-- [ ] Database schema (device_tokens, notifications)
-- [ ] Backend notification service
-- [ ] FCM integration
-- [ ] API endpoints for token registration
-- [ ] Frontend push permission + registration
-- [ ] In-app notification bell with unread count
+- [x] Database schema (device_tokens, notifications)
+- [x] Backend notification service
+- [x] FCM integration
+- [x] API endpoints for token registration
+- [x] Frontend push permission + registration
+- [x] In-app notification bell with unread count
+- [x] Backend tests (service + routes)
+- [x] Frontend tests (NotificationBell component)
 
 ### Phase 2: User Preferences & Email
 **Goal:** Give users control and add email channel.
@@ -327,6 +329,82 @@ Track these metrics to ensure notification health:
 2. **Rate Limiting** - Limit token registration to prevent abuse
 3. **Validation** - Validate all notification payloads server-side
 4. **User Consent** - Always ask permission before sending push notifications
+
+---
+
+## Testing Strategy
+
+### Backend Tests
+
+**Location:** `backend/test/services/notifications.test.ts` and `backend/test/routes/notifications.test.ts`
+
+#### Service Tests (`notifications.test.ts`)
+| Test Area | Coverage |
+|-----------|----------|
+| Template validation | All templates have bilingual content (AR/EN) |
+| Token registration | Insert new tokens, update existing tokens |
+| Token removal | Delete user tokens |
+| Notification storage | Store notifications in database |
+| Template interpolation | Replace `{variable}` placeholders |
+| Notification retrieval | Pagination, unread count |
+| Mark as read | Single notification, all notifications |
+| Unread count | Count accuracy, zero case |
+
+#### Route Tests (`notifications.test.ts`)
+| Endpoint | Test Cases |
+|----------|------------|
+| `POST /register-token` | Success, missing token, invalid platform, no auth |
+| `POST /remove-token` | Success, missing token |
+| `GET /notifications` | Success, pagination, limit cap |
+| `GET /unread-count` | Count returned |
+| `PATCH /:id/read` | Mark single as read |
+| `POST /mark-all-read` | Mark all as read |
+
+### Frontend Tests
+
+**Location:** `frontend/test/components/NotificationBell.test.tsx`
+
+| Test Case | Description |
+|-----------|-------------|
+| Render | Bell icon renders correctly |
+| Badge visible | Shows count when > 0 |
+| Badge cap | Shows "99+" when count > 99 |
+| Badge hidden | No badge when count = 0 |
+| No fetch without token | Doesn't call API if user not logged in |
+| API headers | Sends correct Authorization header |
+| Error handling | Graceful degradation on API/network errors |
+| Auto-refresh | Polls for updates periodically |
+
+### Running Tests
+
+```bash
+# All tests
+npm run test
+
+# Backend only
+cd backend && npm run test
+
+# Frontend only
+cd frontend && npm run test
+
+# Specific test file
+cd backend && npm run test -- notifications
+```
+
+### Mock Strategy
+
+1. **Database** - Mock Drizzle `db` object to avoid real DB calls
+2. **Firebase Admin** - Mock `firebase-admin` to avoid real FCM calls
+3. **Fetch** - Mock `global.fetch` for frontend API calls
+4. **Zustand Store** - Mock `useStore` to control auth state
+
+### Coverage Goals
+
+| Area | Target | Notes |
+|------|--------|-------|
+| Service logic | 90%+ | All public methods covered |
+| Routes | 80%+ | Happy path + error cases |
+| Frontend components | 70%+ | Render + interaction tests |
 
 ---
 
