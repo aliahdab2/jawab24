@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -19,10 +19,10 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { BrandLogo, NotificationBell } from '@/components/ui';
 
 /**
- * ProfileAvatar - Prevents flicker by showing fallback until image is fully loaded
- * Uses state to track image load and applies smooth fade transition
+ * ProfileAvatar - Memoized component that prevents flicker
+ * Only re-renders when picture or name actually change
  */
-function ProfileAvatar({ picture, name }: { picture?: string; name?: string }) {
+const ProfileAvatar = memo(function ProfileAvatar({ picture, name }: { picture?: string; name?: string }) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
 
@@ -69,7 +69,7 @@ function ProfileAvatar({ picture, name }: { picture?: string; name?: string }) {
       )}
     </div>
   );
-}
+})
 
 // Simple navigation - Templates & Rules are in Settings > Advanced
 const navigationKeys = [
@@ -81,16 +81,26 @@ const navigationKeys = [
   { key: 'nav.settings', href: '/settings', icon: Settings },
 ];
 
-export function Sidebar() {
+/**
+ * Sidebar - Memoized to prevent unnecessary re-renders on page navigation
+ * The memo() wrapper ensures the component only re-renders when its props change
+ * Since Sidebar has no props, it only re-renders when its internal state/hooks change
+ */
+export const Sidebar = memo(function Sidebar() {
   const router = useRouter();
   const { logout, user } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { t } = useTranslation();
 
-  const handleLogout = () => {
+  // Memoize logout handler to prevent unnecessary re-renders
+  const handleLogout = useCallback(() => {
     logout();
     router.push('/login');
-  };
+  }, [logout, router]);
+  
+  // Memoize user data to prevent ProfileAvatar re-renders
+  const userPicture = user?.picture;
+  const userName = user?.name;
 
   return (
     <aside
@@ -146,9 +156,8 @@ export function Sidebar() {
           </span>
         </Link>
         {/* Notification Bell - only visible when sidebar is expanded */}
-        {/* me-4 adds spacing from the collapse toggle button on the edge */}
         {sidebarOpen && (
-          <div className="text-white me-4">
+          <div className="text-white me-2">
             <NotificationBell />
           </div>
         )}
@@ -195,7 +204,7 @@ export function Sidebar() {
             !sidebarOpen && "justify-center px-0"
           )}>
             {/* Profile Picture with smooth loading - prevents flicker on navigation */}
-            <ProfileAvatar picture={user.picture} name={user.name} />
+            <ProfileAvatar picture={userPicture} name={userName} />
             {sidebarOpen && (
               <div className="min-w-0 text-start">
                 <p className="text-sm font-bold text-white truncate leading-tight">{user.name}</p>
@@ -217,4 +226,4 @@ export function Sidebar() {
       </div>
     </aside>
   );
-}
+})
