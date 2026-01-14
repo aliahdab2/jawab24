@@ -23,23 +23,6 @@ vi.mock('@/i18n', () => ({
   }),
 }));
 
-// Mock Capacitor Core
-vi.mock('@capacitor/core', () => ({
-  Capacitor: {
-    isNativePlatform: vi.fn().mockReturnValue(false),
-    getPlatform: vi.fn().mockReturnValue('web'),
-  },
-}));
-
-// Mock Facebook Login Plugin
-vi.mock('@capacitor-community/facebook-login', () => ({
-  FacebookLogin: {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    login: vi.fn().mockResolvedValue({ accessToken: { token: 'new-fb-token' } }),
-    logout: vi.fn().mockResolvedValue(undefined),
-  },
-}));
-
 // Mock Store
 vi.mock('@/lib/store', () => ({
   useAuthStore: vi.fn((selector) => {
@@ -62,43 +45,24 @@ vi.mock('@/lib/store', () => ({
   })),
 }));
 
-// Mock sonner - must be inline to avoid hoisting issues
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-    info: vi.fn(),
-  },
-}));
-
 // Mock axios
 vi.mock('axios');
 const mockedAxios = vi.mocked(axios);
 
 describe('PagesPage', () => {
-  let originalOpen: typeof window.open;
-  let mockToast: { error: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn> };
-
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    originalOpen = window.open;
-    window.open = vi.fn();
-
-    // Get the mocked toast
-    const { toast } = await import('sonner');
-    mockToast = toast as typeof mockToast;
-
     // Default: return empty pages
     mockedAxios.get.mockResolvedValue({ data: [] });
     mockedAxios.post.mockResolvedValue({ data: { success: true } });
   });
 
   afterEach(() => {
-    window.open = originalOpen;
+    vi.clearAllMocks();
   });
 
   describe('Empty State', () => {
-    it('should show empty state title when no pages', async () => {
+    it('should show empty state when no pages', async () => {
       render(<PagesPage />);
 
       await waitFor(() => {
@@ -106,89 +70,13 @@ describe('PagesPage', () => {
       });
     });
 
-    it('should show reconnect and create buttons in empty state', async () => {
+    it('should show connect button in empty state', async () => {
       render(<PagesPage />);
 
       await waitFor(() => {
-        // Use getAllByText since both empty state and modal may have these buttons
-        const reconnectButtons = screen.getAllByText('pages.reconnectFacebook');
-        expect(reconnectButtons.length).toBeGreaterThanOrEqual(1);
-
-        const createButtons = screen.getAllByText('pages.createPage');
-        expect(createButtons.length).toBeGreaterThanOrEqual(1);
-      });
-    });
-
-    it('should open Facebook page creation in new tab when Create Page clicked', async () => {
-      render(<PagesPage />);
-
-      await waitFor(() => {
-        expect(screen.getAllByText('pages.createPage').length).toBeGreaterThanOrEqual(1);
-      });
-
-      // Click the first "Create Page" button found
-      const createButtons = screen.getAllByText('pages.createPage');
-      fireEvent.click(createButtons[0]);
-
-      expect(window.open).toHaveBeenCalledWith(
-        'https://www.facebook.com/pages/create',
-        '_blank'
-      );
-      expect(mockToast.info).toHaveBeenCalledWith('pages.openingFacebook');
-    });
-  });
-
-  describe('Connection Modal', () => {
-    it('should show connection modal title after sync attempt with no pages', async () => {
-      mockedAxios.get.mockResolvedValue({ data: [] });
-      mockedAxios.post.mockResolvedValue({ data: { success: true } });
-
-      render(<PagesPage />);
-
-      // Wait for the modal title to appear
-      await waitFor(
-        () => {
-          expect(screen.getByText('pages.noPagesFoundTitle')).toBeInTheDocument();
-        },
-        { timeout: 3000 }
-      );
-    });
-
-    it('should have a close button on the modal', async () => {
-      mockedAxios.get.mockResolvedValue({ data: [] });
-
-      render(<PagesPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('pages.noPagesFoundTitle')).toBeInTheDocument();
-      });
-
-      // Close button should exist
-      const closeButton = screen.getByLabelText('Close');
-      expect(closeButton).toBeInTheDocument();
-    });
-
-    it('should display modal description and reasons', async () => {
-      mockedAxios.get.mockResolvedValue({ data: [] });
-
-      render(<PagesPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('pages.noPagesFoundDesc')).toBeInTheDocument();
-        expect(screen.getByText('pages.noPagesReasons')).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe('Sync Error Handling', () => {
-    it('should show toast when sync fails', async () => {
-      mockedAxios.get.mockResolvedValue({ data: [] });
-      mockedAxios.post.mockRejectedValue(new Error('Sync failed'));
-
-      render(<PagesPage />);
-
-      await waitFor(() => {
-        expect(mockToast.error).toHaveBeenCalledWith('pages.sessionExpired');
+        // The empty state should have a connect button
+        const buttons = screen.getAllByText('pages.connectPage');
+        expect(buttons.length).toBeGreaterThanOrEqual(1);
       });
     });
   });
@@ -200,7 +88,7 @@ describe('PagesPage', () => {
           {
             id: 'page-1',
             name: 'Test Page',
-            category: 'Business',
+            facebookPageId: '123',
             autoReplyEnabled: true,
             accessToken: 'token',
           },
@@ -215,6 +103,121 @@ describe('PagesPage', () => {
 
       // Empty state should NOT be shown
       expect(screen.queryByText('pages.noPages')).not.toBeInTheDocument();
+    });
+
+    it('should show Facebook badge on page cards', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: [
+          {
+            id: 'page-1',
+            name: 'My Business Page',
+            facebookPageId: '456',
+            autoReplyEnabled: false,
+          },
+        ],
+      });
+
+      render(<PagesPage />);
+
+      // Wait for page to load first
+      await waitFor(() => {
+        expect(screen.getByText('My Business Page')).toBeInTheDocument();
+      });
+
+      // Then check for Facebook badge (there may be multiple "Facebook" texts in the UI)
+      expect(screen.getAllByText('Facebook').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('Sync Functionality', () => {
+    it('should call sync API when connect button is clicked', async () => {
+      mockedAxios.get.mockResolvedValue({ data: [] });
+      mockedAxios.post.mockResolvedValue({ data: { success: true } });
+
+      render(<PagesPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('pages.noPages')).toBeInTheDocument();
+      });
+
+      // Click connect button in header or empty state
+      const connectButtons = screen.getAllByText('pages.connectPage');
+      fireEvent.click(connectButtons[0]);
+
+      await waitFor(() => {
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+          expect.stringContaining('/pages/sync'),
+          expect.objectContaining({ accessToken: 'test-fb-token' }),
+          expect.any(Object)
+        );
+      });
+    });
+  });
+
+  describe('Auto-reply Toggle', () => {
+    it('should toggle auto-reply when switch is clicked', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: [
+          {
+            id: 'page-1',
+            name: 'Test Page',
+            facebookPageId: '123',
+            autoReplyEnabled: false,
+          },
+        ],
+      });
+      mockedAxios.patch.mockResolvedValue({ data: { success: true } });
+
+      render(<PagesPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Page')).toBeInTheDocument();
+      });
+
+      // Find and click the toggle button (role="switch")
+      const toggles = screen.getAllByRole('switch');
+      expect(toggles.length).toBeGreaterThanOrEqual(1);
+      
+      fireEvent.click(toggles[0]);
+
+      await waitFor(() => {
+        expect(mockedAxios.patch).toHaveBeenCalledWith(
+          expect.stringContaining('/pages/page-1/auto-reply'),
+          expect.objectContaining({ enabled: true }),
+          expect.any(Object)
+        );
+      });
+    });
+  });
+
+  describe('Knowledge Base Modal', () => {
+    it('should open knowledge base modal when business info is clicked', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: [
+          {
+            id: 'page-1',
+            name: 'Test Page',
+            facebookPageId: '123',
+            autoReplyEnabled: true,
+            knowledgeBase: '',
+          },
+        ],
+      });
+
+      render(<PagesPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Page')).toBeInTheDocument();
+      });
+
+      // Click the "Add business info" button
+      const businessInfoButton = screen.getByText('pages.addBusinessInfo');
+      fireEvent.click(businessInfoButton);
+
+      // Modal should be open
+      await waitFor(() => {
+        expect(screen.getByText('pages.businessInfo')).toBeInTheDocument();
+      });
     });
   });
 });
