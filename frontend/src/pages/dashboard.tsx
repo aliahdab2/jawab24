@@ -407,7 +407,7 @@ export default function DashboardPage() {
               <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.topPagesDesc')}</p>
             </div>
             <div className="space-y-6 px-5 sm:px-8 py-5 sm:py-8">
-              {pages.length > 0 ? pages.slice(0, 3).map((page, i) => (
+              {pages.filter(p => p.autoReplyEnabled).length > 0 ? pages.filter(p => p.autoReplyEnabled).slice(0, 3).map((page, i) => (
                 <div key={page.id} className="flex items-center gap-5 group animate-slide-up" style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}>
                   <div className="relative">
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm border ${i === 0 ? 'bg-brand-50 text-brand-600 border-brand-100' : 'bg-surface-50 text-surface-600 border-surface-100'
