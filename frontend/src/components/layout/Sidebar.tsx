@@ -92,8 +92,9 @@ export function Sidebar() {
           </span>
         </Link>
         {/* Notification Bell - only visible when sidebar is expanded */}
+        {/* me-4 adds spacing from the collapse toggle button on the edge */}
         {sidebarOpen && (
-          <div className="text-white">
+          <div className="text-white me-4">
             <NotificationBell />
           </div>
         )}
