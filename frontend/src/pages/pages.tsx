@@ -13,15 +13,9 @@ import {
   Check,
   Instagram,
   ChevronRight,
-  Clock,
-  AlertTriangle,
-  Plus,
-  LogIn
+  Clock
 } from 'lucide-react';
 import axios from 'axios';
-import { toast } from 'sonner';
-import { Capacitor } from '@capacitor/core';
-import { FB_CALLBACK_PATH } from '@/constants/auth';
 import type { Page } from '@jawab24/shared';
 
 export default function PagesPage() {
@@ -34,85 +28,8 @@ export default function PagesPage() {
   const [knowledgeBase, setKnowledgeBase] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  // State for "no pages found" connection modal
-  const [showConnectionModal, setShowConnectionModal] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
-  // Handle Escape key to close connection modal (accessibility best practice)
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showConnectionModal) {
-        setShowConnectionModal(false);
-      }
-    };
-    
-    if (showConnectionModal) {
-      document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
-    }
-  }, [showConnectionModal]);
-
-  // Open Facebook's page creation in new tab
-  const openCreatePageLink = () => {
-    window.open('https://www.facebook.com/pages/create', '_blank');
-    toast.info(t('pages.openingFacebook' as TranslationKey));
-  };
-
-  // Re-authenticate with Facebook to add more pages
-  const handleReconnect = async () => {
-    setShowConnectionModal(false);
-    
-    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
-    if (!fbAppId) {
-      toast.error(t('auth.loginError' as TranslationKey));
-      return;
-    }
-
-    const isMobile = Capacitor.isNativePlatform();
-
-    // For BOTH mobile and web: Use browser-based OAuth with auth_type=rerequest
-    // This is the only reliable way to show Facebook's page selection dialog again
-    // The native SDK doesn't properly support re-requesting page permissions
-    if (isMobile) {
-      // Mobile: Use in-app browser for OAuth (ensures auth_type=rerequest works)
-      const { Browser } = await import('@capacitor/browser');
-      
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-      const normalizedOrigin = siteUrl.replace(/\/$/, '');
-      const localePath = language === 'ar' ? '' : `/${language}`;
-      const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
-      
-      // Return to pages after auth
-      const returnUrl = '/pages';
-      const state = encodeURIComponent(`${returnUrl}|mobile|${language}`);
-      
-      // Open Facebook OAuth in browser with auth_type=rerequest
-      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=touch&auth_type=rerequest`;
-      
-      toast.info(t('auth.redirecting' as TranslationKey));
-      await Browser.open({ url: oauthUrl });
-    } else {
-      // Web: redirect to Facebook OAuth
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-      const normalizedOrigin = siteUrl.replace(/\/$/, '');
-      const localePath = language === 'ar' ? '' : `/${language}`;
-      const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
-      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging');
-      
-      // Use current page as return URL
-      const returnUrl = '/pages';
-      const state = encodeURIComponent(`${returnUrl}|web|${language}`);
-
-      const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const displayMode = isMobileWeb ? 'touch' : 'page';
-
-      // Add auth_type=rerequest to force Facebook to show page selection again
-      window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}&auth_type=rerequest`;
-    }
-  };
 
   const fetchPages = useCallback(async () => {
     if (!token) return;
@@ -148,14 +65,8 @@ export default function PagesPage() {
   const handleSyncRef = useRef<(() => Promise<void>) | null>(null);
 
   const handleSync = useCallback(async () => {
-    if (!token) {
-      toast.error(t('pages.sessionExpired' as TranslationKey));
-      setShowConnectionModal(true);
-      return;
-    }
-    if (!fbToken) {
-      toast.error(t('pages.sessionExpired' as TranslationKey));
-      setShowConnectionModal(true);
+    if (!token || !fbToken) {
+      console.error('No tokens available for sync');
       return;
     }
 
@@ -169,16 +80,13 @@ export default function PagesPage() {
 
       // Refresh list
       await fetchPages();
-      toast.success(t('common.success' as TranslationKey));
 
     } catch (error) {
       console.error('Sync failed:', error);
-      toast.error(t('pages.sessionExpired' as TranslationKey));
-      setShowConnectionModal(true);
     } finally {
       setSyncing(false);
     }
-  }, [token, fbToken, apiUrl, fetchPages, t]);
+  }, [token, fbToken, apiUrl, fetchPages]);
 
   // Keep ref updated
   handleSyncRef.current = handleSync;
@@ -188,10 +96,6 @@ export default function PagesPage() {
       // Auto-sync pages from Facebook (only attempt once)
       syncAttemptedRef.current = true;
       handleSyncRef.current?.();
-    }
-    // If after initial load and sync attempt, still no pages, show the connection modal
-    if (!loading && pages.length === 0 && syncAttemptedRef.current && !syncing) {
-      setShowConnectionModal(true);
     }
   }, [loading, pages.length, fbToken, token, syncing]);
 
@@ -295,25 +199,13 @@ export default function PagesPage() {
         title={t('pages.title')}
         description={t('pages.description')}
         action={
-          <div className="flex gap-2">
-            {/* Sync existing pages (refresh) */}
-            <Button
-              onClick={handleSync}
-              disabled={syncing}
-              variant="secondary"
-              icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
-            >
-              {syncing ? t('pages.syncing' as TranslationKey) : t('pages.syncPages' as TranslationKey)}
-            </Button>
-            {/* Connect NEW page - triggers Facebook re-auth with page selection */}
-            <Button
-              onClick={handleReconnect}
-              disabled={syncing}
-              icon={<Plus className="w-4 h-4" />}
-            >
-              {t('pages.connectPage' as TranslationKey)}
-            </Button>
-          </div>
+          <Button
+            onClick={handleSync}
+            disabled={syncing}
+            icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
+          >
+            {syncing ? t('pages.syncing' as TranslationKey) : t('pages.connectPage')}
+          </Button>
         }
       />
 
@@ -334,7 +226,7 @@ export default function PagesPage() {
                     <FileText className="w-7 h-7" />
                   </div>
                   <div className="text-start min-w-0">
-                    <h3 className="text-base sm:text-lg font-bold text-surface-900 line-clamp-2 sm:truncate sm:line-clamp-none">{page.name}</h3>
+                    <h3 className="text-lg font-bold text-surface-900 truncate">{page.name}</h3>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
                         Facebook
@@ -486,99 +378,32 @@ export default function PagesPage() {
             title={t('pages.noPages')}
             description={t('pages.noPagesDesc')}
             action={
-              <div className="flex flex-col gap-3">
-                <Button onClick={handleReconnect} icon={<RefreshCw className="w-4 h-4" />}>
-                  {t('pages.reconnectFacebook' as TranslationKey)}
-                </Button>
-                <Button variant="secondary" onClick={openCreatePageLink} icon={<Plus className="w-4 h-4" />}>
-                  {t('pages.createPage' as TranslationKey)}
-                </Button>
-              </div>
+              <Button onClick={handleSync}>
+                {t('pages.connectPage')}
+              </Button>
             }
           />
         </Card>
       )}
 
-      {/* Connection Modal - Shows when user needs to reconnect or create pages */}
-      {showConnectionModal && (
-        <div 
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="connection-modal-title"
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="flex items-start gap-3 mb-4">
-              <div className="p-2 bg-amber-100 rounded-full">
-                <AlertTriangle className="w-5 h-5 text-amber-600" />
-              </div>
-              <div className="flex-1">
-                <h2 id="connection-modal-title" className="text-lg font-semibold text-surface-900">
-                  {t('pages.noPagesFoundTitle' as TranslationKey)}
-                </h2>
-              </div>
-              <button
-                onClick={() => setShowConnectionModal(false)}
-                className="p-1 rounded-full hover:bg-surface-100 transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5 text-surface-500" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <p className="text-sm text-surface-500 mb-3 text-start">
-              {t('pages.noPagesFoundDesc' as TranslationKey)}
-            </p>
-            <p className="text-sm text-surface-500 mb-4 text-start">
-              {t('pages.noPagesReasons' as TranslationKey)}
-            </p>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-3">
-              <Button 
-                onClick={handleReconnect} 
-                icon={<LogIn className="w-4 h-4" />}
-                className="w-full"
-              >
-                {t('pages.reconnectFacebook' as TranslationKey)}
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={openCreatePageLink}
-                icon={<Plus className="w-4 h-4" />}
-                className="w-full"
-              >
-                {t('pages.createPage' as TranslationKey)}
-              </Button>
-            </div>
-
-            {/* Tip */}
-            <p className="text-xs text-surface-400 mt-4 text-start">
-              💡 {t('pages.reconnectTip' as TranslationKey)}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Knowledge Base Modal - Compact with fixed textarea height */}
+      {/* Knowledge Base Modal - Responsive for portrait, landscape, and desktop */}
       {editingPage && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-6">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
           <div 
-            className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-lg landscape:max-w-xl flex flex-col overflow-hidden pb-safe landscape:pb-2 landscape:px-safe"
+            className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden"
+            style={{ paddingBottom: '8px' }}
           >
-            {/* Modal Header - Compact */}
-            <div className="flex items-center justify-between px-5 py-4 landscape:py-3 sm:p-5 border-b border-surface-100 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 landscape:w-9 landscape:h-9 rounded-xl bg-brand-100 flex items-center justify-center">
-                  <BookOpen className="w-5 h-5 landscape:w-4 landscape:h-4 text-brand-600" />
+            {/* Modal Header - Ultra compact in landscape */}
+            <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-surface-100 flex-shrink-0">
+              <div className="flex items-center gap-3 landscape:gap-2">
+                <div className="w-9 h-9 landscape:w-8 landscape:h-8 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg landscape:text-base font-semibold text-surface-900">
+                  <h2 className="text-base sm:text-lg font-semibold text-surface-900">
                     {t('pages.businessInfo')}
                   </h2>
-                  <p className="text-sm landscape:text-xs text-surface-500">{editingPage.name}</p>
+                  <p className="text-xs sm:text-sm text-surface-500 landscape:hidden">{editingPage.name}</p>
                 </div>
               </div>
               <button
@@ -589,43 +414,45 @@ export default function PagesPage() {
               </button>
             </div>
 
-            {/* Modal Body - Fixed textarea height with internal scroll */}
-            <div className="p-5 landscape:p-4 flex-shrink-0">
-              {/* Brief hint */}
-              <p className="text-sm text-surface-500 mb-3 text-start landscape:text-xs landscape:mb-2">
+            {/* Modal Body - Textarea takes maximum space */}
+            <div className="flex-1 flex flex-col min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5">
+              {/* Brief hint - hidden in landscape to save vertical space */}
+              <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start landscape:hidden">
                 {t('pages.businessInfoModalDesc')}
               </p>
 
-              {/* Textarea - Fixed height, scrolls internally */}
-              <textarea
-                className="w-full h-[200px] landscape:h-[120px] sm:h-[250px] p-4 landscape:p-3 border-2 border-surface-200 rounded-2xl landscape:rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
-                placeholder={t('pages.writeBusinessInfo')}
-                value={knowledgeBase}
-                onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
-                maxLength={2000}
-                dir={language === 'ar' ? 'rtl' : 'ltr'}
-                autoFocus
-              />
-              
-              {/* Character Counter & Example */}
-              <div className="flex items-center justify-between mt-2 px-1">
-                <span className="text-xs text-surface-400 landscape:hidden">
-                  {t('pages.example')}: {language === 'ar' ? 'ساعات العمل، العنوان، المنتجات...' : 'Hours, location, products...'}
-                </span>
-                <span className={`text-xs font-medium landscape:ms-auto ${
-                  knowledgeBase.length > 1900
-                    ? 'text-red-500'
-                    : knowledgeBase.length > 1500
-                      ? 'text-amber-500'
-                      : 'text-surface-400'
-                }`}>
-                  {knowledgeBase.length.toLocaleString()}/2,000
-                </span>
+              {/* Textarea - THE HERO of the modal */}
+              <div className="flex-1 flex flex-col min-h-0">
+                <textarea
+                  className="flex-1 w-full min-h-[100px] landscape:min-h-0 sm:min-h-[200px] p-4 landscape:p-3 border-2 border-surface-200 rounded-2xl landscape:rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
+                  placeholder={t('pages.writeBusinessInfo')}
+                  value={knowledgeBase}
+                  onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
+                  maxLength={2000}
+                  dir={language === 'ar' ? 'rtl' : 'ltr'}
+                  autoFocus
+                />
+                
+                {/* Character Counter - inline, simplified in landscape */}
+                <div className="flex items-center justify-between mt-2 landscape:mt-1 px-1">
+                  <span className="text-xs text-surface-400 landscape:hidden">
+                    {t('pages.example')}: {language === 'ar' ? 'ساعات العمل، العنوان، المنتجات...' : 'Hours, location, products...'}
+                  </span>
+                  <span className={`text-xs font-medium landscape:ml-auto ${
+                    knowledgeBase.length > 1900
+                      ? 'text-red-500'
+                      : knowledgeBase.length > 1500
+                        ? 'text-amber-500'
+                        : 'text-surface-400'
+                  }`}>
+                    {knowledgeBase.length.toLocaleString()}/2,000
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Modal Footer - Always visible */}
-            <div className="flex items-center justify-end gap-3 px-5 py-4 landscape:py-3 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
+            {/* Modal Footer - Compact, extra compact in landscape */}
+            <div className="flex items-center justify-end gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
               <Button variant="secondary" size="sm" onClick={closeKnowledgeBase}>
                 {t('common.cancel')}
               </Button>
