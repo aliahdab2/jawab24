@@ -138,10 +138,10 @@ export function NotificationBell() {
                 )}
             </button>
 
-            {/* Dropdown - fixed position near sidebar (which is on the START side) */}
+            {/* Dropdown - positioned to clear the sidebar (256px when expanded) */}
             {isOpen && (
                 <div 
-                    className="fixed top-20 start-4 end-4 sm:end-auto sm:start-20 sm:w-96 bg-white rounded-2xl shadow-2xl border border-surface-100 overflow-hidden z-[100] max-h-[70vh]"
+                    className="fixed top-20 start-4 end-4 sm:end-auto sm:start-[272px] sm:w-96 bg-white rounded-2xl shadow-2xl border border-surface-100 overflow-hidden z-[100] max-h-[70vh]"
                     dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
                     {/* Header */}
