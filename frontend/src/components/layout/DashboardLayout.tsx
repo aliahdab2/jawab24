@@ -78,30 +78,49 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           </div>
         )}
 
-        {/* Mobile header - Clean version for public pages */}
+        {/* Public header - Matches landing page style */}
         {isCleanLayout ? (
-          <div className="fixed top-0 left-0 right-0 h-16 sm:h-20 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 z-40 border-b border-surface-100 shadow-sm pt-safe box-content">
-            <Link href="/landing" className="flex items-center gap-2 group">
-              <BrandLogo
-                variant="vector"
-                className="w-8 h-8 group-hover:rotate-6 transition-transform"
-              />
-              <span className="font-display font-bold text-lg tracking-tight text-surface-900">{BRAND_ASSETS.meta.appName}</span>
-            </Link>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={toggleLanguage}
-                className="px-3 py-1.5 text-xs font-bold text-surface-600 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-all"
-              >
-                {language === 'ar' ? 'English' : 'العربية'}
-              </button>
-              <Link href={isAuthenticated ? '/dashboard' : '/login'}>
-                <button className="text-sm font-bold text-brand-600 hover:text-brand-700 bg-brand-50 px-4 py-2 rounded-xl transition-all">
-                  {isAuthenticated ? t('nav.dashboard') : t('auth.login')}
-                </button>
-              </Link>
+          <nav className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe px-safe-landscape">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center justify-between h-16 sm:h-20">
+                {/* Logo - matches landing page */}
+                <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
+                  <BrandLogo
+                    variant="main"
+                    className="w-10 h-10 sm:w-12 sm:h-12 transition-transform group-hover:rotate-6 flex-shrink-0"
+                  />
+                  <span className="font-display font-bold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+                </Link>
+
+                {/* Actions - matches landing page */}
+                <div className="flex items-center gap-1 sm:gap-4">
+                  {/* Pricing link - hidden on mobile */}
+                  <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
+                    {t('landing.nav.pricing' as TranslationKey)}
+                  </Link>
+                  <button
+                    onClick={toggleLanguage}
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-surface-600 hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
+                  >
+                    {language === 'ar' ? 'English' : 'العربية'}
+                  </button>
+                  {isAuthenticated ? (
+                    <Link href="/dashboard">
+                      <button className="font-bold shadow-xl shadow-brand-500/20 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 bg-brand-500 text-white rounded-xl hover:bg-brand-600 transition-all">
+                        {t('nav.dashboard')}
+                      </button>
+                    </Link>
+                  ) : (
+                    <Link href="/login?redirect=%2Fdashboard">
+                      <button className="font-bold border-none bg-surface-100 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 text-surface-700 rounded-xl hover:bg-surface-200 transition-all">
+                        {t('landing.nav.login' as TranslationKey)}
+                      </button>
+                    </Link>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          </nav>
         ) : (
           /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+ 
              Uses box-content so pt-safe adds to height rather than squishing content */
