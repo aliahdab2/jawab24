@@ -15,7 +15,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { BrandLogo } from '@/components/ui';
+import { BrandLogo, NotificationBell } from '@/components/ui';
 
 // Simple navigation - Templates & Rules are in Settings > Advanced
 const navigationKeys = [
@@ -74,10 +74,10 @@ export function Sidebar() {
         )}
       </button>
 
-      {/* Logo */}
+      {/* Logo & Notifications */}
       <div className={clsx(
         "h-20 flex items-center px-4 border-b border-white/5 transition-all duration-300",
-        sidebarOpen ? "justify-start gap-3" : "justify-center"
+        sidebarOpen ? "justify-between" : "justify-center"
       )}>
         <Link href="/dashboard" className="flex items-center gap-3 group">
           <BrandLogo
@@ -91,6 +91,12 @@ export function Sidebar() {
             {BRAND_ASSETS.meta.appName}
           </span>
         </Link>
+        {/* Notification Bell - only visible when sidebar is expanded */}
+        {sidebarOpen && (
+          <div className="text-white">
+            <NotificationBell />
+          </div>
+        )}
       </div>
 
       {/* Navigation */}

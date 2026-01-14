@@ -394,3 +394,42 @@ export const usageLogs = pgTable('usage_logs', {
         createdAtIdx: index('idx_usage_logs_created_at').on(table.createdAt),
     };
 });
+
+// ============================================
+// NOTIFICATION TABLES
+// ============================================
+
+// 14. Device Tokens Table - FCM tokens for push notifications
+export const deviceTokens = pgTable('device_tokens', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    token: text('token').notNull(),
+    platform: varchar('platform', { length: 20 }).notNull(), // 'android', 'ios', 'web'
+    createdAt: timestamp('created_at').defaultNow(),
+    lastUsedAt: timestamp('last_used_at').defaultNow(),
+}, (table) => {
+    return {
+        userIdIdx: index('idx_device_tokens_user_id').on(table.userId),
+        tokenIdx: index('idx_device_tokens_token').on(table.token),
+    };
+});
+
+// 15. Notifications Table - In-app notification log
+export const notifications = pgTable('notifications', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    type: varchar('type', { length: 50 }).notNull(), // 'payment_failed', 'subscription_expiring', 'page_disconnected'
+    titleEn: text('title_en').notNull(),
+    titleAr: text('title_ar').notNull(),
+    bodyEn: text('body_en').notNull(),
+    bodyAr: text('body_ar').notNull(),
+    data: jsonb('data'), // Deep link info, metadata
+    read: boolean('read').default(false),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        userIdIdx: index('idx_notifications_user_id').on(table.userId),
+        unreadIdx: index('idx_notifications_unread').on(table.userId, table.read),
+        typeIdx: index('idx_notifications_type').on(table.type),
+    };
+});

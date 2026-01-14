@@ -726,5 +726,12 @@
   "profile.encrypted": "Encrypted",
   "profile.neverShared": "Never shared",
   "common.saving": "Saving...",
-  "common.continue": "Continue"
+  "common.continue": "Continue",
+  "notifications.title": "Notifications",
+  "notifications.noNotifications": "No notifications",
+  "notifications.markAllRead": "Mark all read",
+  "notifications.justNow": "Just now",
+  "notifications.minutesAgo": "{count}m ago",
+  "notifications.hoursAgo": "{count}h ago",
+  "notifications.daysAgo": "{count}d ago"
 }
