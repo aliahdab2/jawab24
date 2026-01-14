@@ -233,9 +233,7 @@ export default function App({ Component, pageProps }: AppProps) {
 
       // 1. Warm Start Listener
       listenerHandle = await App.addListener('appUrlOpen', (data) => {
-        console.log('[DeepLink] Received URL:', data.url);
         const slug = handleDeepLink(data.url);
-        console.log('[DeepLink] Parsed slug:', slug);
         if (slug) {
             setTimeout(() => {
                 routerRef.current.push(slug).catch(console.error);

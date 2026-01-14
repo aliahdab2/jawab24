@@ -17,9 +17,6 @@ export default function AuthSync() {
         
         // 1. Get tokens from URL
         const { token, fbToken, redirect } = router.query;
-        
-        // Debug: Log what we received
-        console.log('[Sync] Query params:', { token: !!token, fbToken: !!fbToken, redirect });
 
         if (!token || typeof token !== 'string') {
             throw new Error('No token provided');
@@ -50,7 +47,6 @@ export default function AuthSync() {
             const redirectPath = (redirect && typeof redirect === 'string' && redirect.startsWith('/')) 
               ? redirect 
               : '/dashboard';
-            console.log('[Sync] Redirecting to:', redirectPath);
             router.replace(redirectPath);
         }, 100);
 

@@ -35,17 +35,6 @@ export default function AuthCallback() {
     const preferredLocale = parts.length > 2 ? parts[2] : 'ar';
     const safeUrl = returnUrlRaw.startsWith('/') ? returnUrlRaw : '/dashboard';
     
-    // DEBUG: Log state parsing
-    console.log('[Callback] State Debug:', {
-      rawState: state,
-      decodedState: stateStr,
-      parts,
-      returnUrlRaw,
-      platform,
-      preferredLocale,
-      safeUrl
-    });
-
     if (fbError) {
       authAttemptedRef.current = true;
       setError(t('auth.loginCancelled'));
@@ -85,15 +74,6 @@ export default function AuthCallback() {
       const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
       const redirectUri = redirectUriClean;
 
-      // Verification log with granular parts for debugging
-      // eslint-disable-next-line no-console
-      console.log(`[Auth] Exchange Debug:`, {
-        origin,
-        preferredLocale,
-        callbackPath: FB_CALLBACK_PATH,
-        fullRedirectUri: redirectUri
-      });
-      
       // Race between fetch and timeout
       const response = await Promise.race([
         fetch(`${apiUrl}/auth/facebook`, {
@@ -148,19 +128,12 @@ export default function AuthCallback() {
         const fbTokenStr = encodeURIComponent(data.fbAccessToken || '');
         const redirectStr = encodeURIComponent(safeUrl);
         
-        // Debug alert - Identifying failure point
-        alert(`Mobile Auth Success!\nState: ${stateStr}\nRedirecting to App...`);
-        
         // Simplified Deep Link: No User Object!
         window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}`;
         return;
       }
       
       // Web: standard navigation
-      console.log('[Callback] Redirecting to:', safeUrl);
-      // DEBUG ALERT - Remove after testing
-       
-      alert(`Auth Success!\nState: ${stateStr}\nRedirecting to: ${safeUrl}`);
       routerRef.current.push(safeUrl);
     } catch (err) {
       // Don't show error if request was aborted (user navigated away)
