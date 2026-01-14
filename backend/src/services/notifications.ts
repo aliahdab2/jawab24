@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { deviceTokens, notifications, users } from '../db/schema';
+import { deviceTokens, notifications, settings } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
 // Notification types
@@ -114,6 +114,7 @@ class NotificationService {
 
     /**
      * Create and send a notification to a user
+     * Uses user's preferred language for push notifications
      */
     async sendNotification(
         userId: string,
@@ -133,12 +134,15 @@ class NotificationService {
             })
             .returning({ id: notifications.id });
 
-        // 2. Get user's device tokens
-        const tokens = await this.getUserDeviceTokens(userId);
+        // 2. Get user's device tokens and language preference
+        const [tokens, userLanguage] = await Promise.all([
+            this.getUserDeviceTokens(userId),
+            this.getUserLanguage(userId),
+        ]);
 
         // 3. Send push notification via FCM (if tokens exist and FCM is configured)
         if (tokens.length > 0) {
-            await this.sendPushNotification(tokens, payload);
+            await this.sendPushNotification(tokens, payload, userLanguage);
         }
 
         return notification.id;
@@ -180,13 +184,30 @@ class NotificationService {
     }
 
     /**
+     * Get user's preferred language from settings
+     */
+    private async getUserLanguage(userId: string): Promise<'ar' | 'en'> {
+        try {
+            const [userSettings] = await db
+                .select({ dashboardLanguage: settings.dashboardLanguage })
+                .from(settings)
+                .where(eq(settings.userId, userId))
+                .limit(1);
+            
+            return (userSettings?.dashboardLanguage === 'en' ? 'en' : 'ar') as 'ar' | 'en';
+        } catch {
+            return 'ar'; // Default to Arabic
+        }
+    }
+
+    /**
      * Send push notification via FCM
-     * Note: This is a placeholder - FCM requires google-services.json and firebase-admin setup
-     * Firebase Admin SDK must be installed separately: npm install firebase-admin
+     * Uses user's preferred language for the notification display
      */
     private async sendPushNotification(
         tokens: string[],
-        payload: NotificationPayload
+        payload: NotificationPayload,
+        userLanguage: 'ar' | 'en' = 'ar'
     ): Promise<void> {
         // Check if Firebase Admin is configured
         const firebaseCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -211,11 +232,15 @@ class NotificationService {
                 });
             }
 
+            // Use user's preferred language for notification display
+            const title = userLanguage === 'ar' ? payload.titleAr : payload.titleEn;
+            const body = userLanguage === 'ar' ? payload.bodyAr : payload.bodyEn;
+
             // Send to all tokens
             const message = {
                 notification: {
-                    title: payload.titleEn, // FCM will use device language preference
-                    body: payload.bodyEn,
+                    title,
+                    body,
                 },
                 data: {
                     type: payload.type,
@@ -223,6 +248,7 @@ class NotificationService {
                     titleAr: payload.titleAr,
                     bodyEn: payload.bodyEn,
                     bodyAr: payload.bodyAr,
+                    language: userLanguage,
                     ...(payload.data ? { customData: JSON.stringify(payload.data) } : {}),
                 },
                 tokens,

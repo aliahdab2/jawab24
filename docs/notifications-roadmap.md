@@ -132,12 +132,13 @@ CREATE TABLE notification_preferences (
 **Deliverables:**
 - [x] Database schema (device_tokens, notifications)
 - [x] Backend notification service
-- [x] FCM integration
+- [x] FCM integration with user language preference
 - [x] API endpoints for token registration
 - [x] Frontend push permission + registration
 - [x] In-app notification bell with unread count
 - [x] Backend tests (service + routes)
 - [x] Frontend tests (NotificationBell component)
+- [x] Bilingual push notifications (uses user's dashboardLanguage)
 
 ### Phase 2: User Preferences & Email
 **Goal:** Give users control and add email channel.
