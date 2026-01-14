@@ -339,6 +339,7 @@
   "settings.privateReply": "Private message",
   "settings.privateReplyDesc": "Reply via private message",
   "settings.dualReply": "Comment Reply + Message",
+  "settings.recommended": "Recommended",
   "settings.dualReplyDesc": "Short public reply + full private message",
   "settings.dualReplyConfigTitle": "Short Comment Text",
   "settings.dualReplyConfigDesc": "Full details will be sent automatically in a private message.",

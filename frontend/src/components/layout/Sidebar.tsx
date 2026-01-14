@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -16,6 +17,59 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { BrandLogo, NotificationBell } from '@/components/ui';
+
+/**
+ * ProfileAvatar - Prevents flicker by showing fallback until image is fully loaded
+ * Uses state to track image load and applies smooth fade transition
+ */
+function ProfileAvatar({ picture, name }: { picture?: string; name?: string }) {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+
+  // Reset loaded state when picture URL changes
+  useEffect(() => {
+    if (picture) {
+      setImageLoaded(false);
+      setImageSrc(picture);
+    } else {
+      setImageSrc(null);
+      setImageLoaded(false);
+    }
+  }, [picture]);
+
+  const fallbackInitial = name?.charAt(0) || 'U';
+
+  return (
+    <div className="relative w-10 h-10 flex-shrink-0">
+      {/* Fallback - always rendered, fades out when image loads */}
+      <div 
+        className={clsx(
+          "absolute inset-0 w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-sm border border-brand-500/20 transition-opacity duration-200",
+          imageLoaded && imageSrc ? "opacity-0" : "opacity-100"
+        )}
+      >
+        {fallbackInitial}
+      </div>
+      
+      {/* Actual image - fades in when loaded */}
+      {imageSrc && (
+        <img
+          src={imageSrc}
+          alt={name || 'User'}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => {
+            setImageSrc(null);
+            setImageLoaded(false);
+          }}
+          className={clsx(
+            "absolute inset-0 w-10 h-10 rounded-xl object-cover border border-brand-500/20 transition-opacity duration-200",
+            imageLoaded ? "opacity-100" : "opacity-0"
+          )}
+        />
+      )}
+    </div>
+  );
+}
 
 // Simple navigation - Templates & Rules are in Settings > Advanced
 const navigationKeys = [
@@ -140,18 +194,8 @@ export function Sidebar() {
             "px-3 py-3 mb-4 rounded-2xl bg-white/5 border border-white/5 flex items-center gap-3",
             !sidebarOpen && "justify-center px-0"
           )}>
-            {/* Profile Picture or Fallback Initial */}
-            {user.picture ? (
-              <img
-                src={user.picture}
-                alt={user.name || 'User'}
-                className="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-brand-500/20"
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-sm border border-brand-500/20 flex-shrink-0">
-                {user.name?.charAt(0) || 'U'}
-              </div>
-            )}
+            {/* Profile Picture with smooth loading - prevents flicker on navigation */}
+            <ProfileAvatar picture={user.picture} name={user.name} />
             {sidebarOpen && (
               <div className="min-w-0 text-start">
                 <p className="text-sm font-bold text-white truncate leading-tight">{user.name}</p>

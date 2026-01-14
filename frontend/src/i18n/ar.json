@@ -341,6 +341,7 @@
   "settings.privateReply": "رسالة خاصة",
   "settings.privateReplyDesc": "الرد برسالة خاصة",
   "settings.dualReply": "رد على التعليق مع إرسال رسالة",
+  "settings.recommended": "مُوصى به",
   "settings.dualReplyDesc": "رد علني مختصر + رسالة خاصة كاملة",
   "settings.dualReplyConfigTitle": "نص التعليق المختصر",
   "settings.dualReplyConfigDesc": "التفاصيل الكاملة تُرسل تلقائياً في رسالة خاصة.",

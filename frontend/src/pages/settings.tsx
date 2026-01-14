@@ -294,6 +294,35 @@ export default function SettingsPage() {
                 {t('settings.commentReplyMode')}
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 landscape:gap-3">
+                {/* Comment Reply + Message - FIRST (Recommended) */}
+                <button
+                  onClick={() => setSettings({ ...settings, commentReplyMode: 'dual' })}
+                  className={`relative flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'dual'
+                    ? 'border-brand-500 bg-brand-50/20 shadow-sm'
+                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
+                    }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'dual' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+                      <MessagesSquare className="w-6 h-6 landscape:w-5 landscape:h-5" />
+                    </div>
+                    <div className="text-start">
+                      <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'dual' ? 'text-brand-900' : 'text-surface-700'}`}>
+                        {t('settings.dualReply')}
+                      </span>
+                      <span className="text-xs text-surface-500 landscape:hidden lg:landscape:block">{t('settings.dualReplyDesc')}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Recommended Badge */}
+                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-brand-100 text-brand-600 rounded-full">
+                      {t('settings.recommended')}
+                    </span>
+                    {settings.commentReplyMode === 'dual' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
+                  </div>
+                </button>
+
+                {/* Comment Reply - SECOND */}
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'public' })}
                   className={`flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'public'
@@ -315,6 +344,7 @@ export default function SettingsPage() {
                   {settings.commentReplyMode === 'public' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
                 </button>
 
+                {/* Private Message - THIRD */}
                 <button
                   onClick={() => setSettings({ ...settings, commentReplyMode: 'private' })}
                   className={`flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'private'
@@ -334,27 +364,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   {settings.commentReplyMode === 'private' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
-                </button>
-
-                <button
-                  onClick={() => setSettings({ ...settings, commentReplyMode: 'dual' })}
-                  className={`flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'dual'
-                    ? 'border-brand-500 bg-brand-50/20 shadow-sm'
-                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
-                    }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'dual' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <MessagesSquare className="w-6 h-6 landscape:w-5 landscape:h-5" />
-                    </div>
-                    <div className="text-start">
-                      <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'dual' ? 'text-brand-900' : 'text-surface-700'}`}>
-                        {t('settings.dualReply')}
-                      </span>
-                      <span className="text-xs text-surface-500 landscape:hidden lg:landscape:block">{t('settings.dualReplyDesc')}</span>
-                    </div>
-                  </div>
-                  {settings.commentReplyMode === 'dual' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
                 </button>
               </div>
 
