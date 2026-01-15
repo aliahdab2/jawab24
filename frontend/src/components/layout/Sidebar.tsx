@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import React, { useState, useEffect, memo, useCallback } from 'react';
+import React, { useState, useEffect, memo, useCallback, useRef } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -19,23 +19,57 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { BrandLogo, NotificationBell } from '@/components/ui';
 
 /**
+ * Global cache of loaded image URLs - persists across component remounts
+ * This prevents flicker when navigating between pages because we know
+ * the image is already in the browser cache
+ */
+const loadedImageCache = new Set<string>();
+
+/**
  * ProfileAvatar - Memoized component that prevents flicker
- * Only re-renders when picture or name actually change
+ * Uses a global cache to track which images have been loaded this session
  */
 const ProfileAvatar = memo(function ProfileAvatar({ picture, name }: { picture?: string; name?: string }) {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  // Initialize as loaded if image is already in our cache
+  const [imageLoaded, setImageLoaded] = useState(() => 
+    picture ? loadedImageCache.has(picture) : false
+  );
+  const [imageSrc, setImageSrc] = useState<string | null>(picture || null);
+  const prevPictureRef = useRef(picture);
 
-  // Reset loaded state when picture URL changes
+  // Only reset loaded state when picture URL actually changes to a NEW value
   useEffect(() => {
-    if (picture) {
-      setImageLoaded(false);
-      setImageSrc(picture);
-    } else {
-      setImageSrc(null);
-      setImageLoaded(false);
+    if (picture !== prevPictureRef.current) {
+      prevPictureRef.current = picture;
+      if (picture) {
+        // Check if this image was previously loaded
+        if (loadedImageCache.has(picture)) {
+          setImageLoaded(true);
+        } else {
+          setImageLoaded(false);
+        }
+        setImageSrc(picture);
+      } else {
+        setImageSrc(null);
+        setImageLoaded(false);
+      }
     }
   }, [picture]);
+
+  const handleImageLoad = useCallback(() => {
+    if (imageSrc) {
+      loadedImageCache.add(imageSrc);
+    }
+    setImageLoaded(true);
+  }, [imageSrc]);
+
+  const handleImageError = useCallback(() => {
+    if (imageSrc) {
+      loadedImageCache.delete(imageSrc);
+    }
+    setImageSrc(null);
+    setImageLoaded(false);
+  }, [imageSrc]);
 
   const fallbackInitial = name?.charAt(0) || 'U';
 
@@ -56,11 +90,8 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name }: { picture?:
         <img
           src={imageSrc}
           alt={name || 'User'}
-          onLoad={() => setImageLoaded(true)}
-          onError={() => {
-            setImageSrc(null);
-            setImageLoaded(false);
-          }}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
           className={clsx(
             "absolute inset-0 w-10 h-10 rounded-xl object-cover border border-brand-500/20 transition-opacity duration-200",
             imageLoaded ? "opacity-100" : "opacity-0"
