@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Toggle, PageHeader, PageSkeleton, Modal } from '@/components/ui';
@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslation, useLanguage } from '@/i18n';
+import type { NextPageWithLayout } from './_app';
 
 // Simple toggle row component with better design
 function SimpleToggle({
@@ -61,7 +62,7 @@ function SimpleToggle({
   );
 }
 
-export default function SettingsPage() {
+const SettingsPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { setLanguage } = useLanguage();
   const { token } = useAuthStore();
@@ -190,15 +191,11 @@ export default function SettingsPage() {
   };
 
   if (loading) {
-    return (
-      <DashboardLayout title={t('settings.title')}>
-        <PageSkeleton />
-      </DashboardLayout>
-    );
+    return <PageSkeleton />;
   }
 
   return (
-    <DashboardLayout title={t('settings.title')}>
+    <>
       {/* Header with Global Context */}
       <PageHeader
         title={t('settings.title')}
@@ -731,6 +728,13 @@ export default function SettingsPage() {
           )}
         </div>
       </Modal>
-    </DashboardLayout>
+    </>
   );
-}
+};
+
+// Persistent layout - prevents Sidebar remounting on navigation
+SettingsPage.getLayout = (page: ReactElement) => (
+  <DashboardLayout title="Settings">{page}</DashboardLayout>
+);
+
+export default SettingsPage;

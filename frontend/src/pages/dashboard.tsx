@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Badge, PageHeader, Button, PageSkeleton } from '@/components/ui';
@@ -21,6 +21,7 @@ import { ar, enUS } from 'date-fns/locale';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
+import type { NextPageWithLayout } from './_app';
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
@@ -55,7 +56,7 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
 // Key for localStorage to track if onboarding was completed
 const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
 
-export default function DashboardPage() {
+const DashboardPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { token } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
@@ -218,15 +219,11 @@ export default function DashboardPage() {
 
   // Dashboard Skeleton Loading State
   if (loading) {
-    return (
-      <DashboardLayout title={t('dashboard.title')}>
-        <PageSkeleton type="dashboard" />
-      </DashboardLayout>
-    );
+    return <PageSkeleton type="dashboard" />;
   }
 
   return (
-    <DashboardLayout title={t('dashboard.title')}>
+    <>
       {/* Onboarding Wizard for new users */}
       {showOnboarding && (
         <OnboardingWizard
@@ -441,9 +438,16 @@ export default function DashboardPage() {
               </Link>
             </div>
           </Card>
-        </div>
       </div>
+    </div>
 
-    </DashboardLayout>
+    </>
   );
-}
+};
+
+// Persistent layout - prevents Sidebar remounting on navigation
+DashboardPage.getLayout = (page: ReactElement) => (
+  <DashboardLayout title="Dashboard">{page}</DashboardLayout>
+);
+
+export default DashboardPage;

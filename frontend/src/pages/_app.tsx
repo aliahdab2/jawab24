@@ -1,5 +1,7 @@
 import '@/styles/globals.css';
 import type { AppProps } from 'next/app';
+import type { NextPage } from 'next';
+import type { ReactElement, ReactNode } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,7 +14,22 @@ import { dmSans, cairo, tajawal } from '@/lib/fonts';
 import { Toaster } from 'sonner';
 import { AppSkeleton } from '@/components/ui';
 
-export default function App({ Component, pageProps }: AppProps) {
+/**
+ * Type for pages with persistent layouts
+ * This pattern prevents layout remounting on navigation, preserving state like:
+ * - Sidebar expansion state
+ * - Profile image loading state (no flicker!)
+ * - Scroll positions
+ */
+export type NextPageWithLayout<P = object, IP = P> = NextPage<P, IP> & {
+  getLayout?: (page: ReactElement) => ReactNode;
+};
+
+type AppPropsWithLayout = AppProps & {
+  Component: NextPageWithLayout;
+};
+
+export default function App({ Component, pageProps }: AppPropsWithLayout) {
   const router = useRouter();
   const { locale } = router;
 
@@ -265,6 +282,10 @@ export default function App({ Component, pageProps }: AppProps) {
     return <AppSkeleton />;
   }
 
+  // Use persistent layout if page defines one
+  // This prevents DashboardLayout (and Sidebar) from remounting on navigation
+  const getLayout = Component.getLayout ?? ((page) => page);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Head>
@@ -301,7 +322,7 @@ export default function App({ Component, pageProps }: AppProps) {
       </Head>
       <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable}`}>
         <ErrorBoundary>
-          <Component {...pageProps} />
+          {getLayout(<Component {...pageProps} />)}
           <Toaster richColors position="top-center" closeButton />
         </ErrorBoundary>
       </AppShell>

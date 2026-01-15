@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
@@ -16,8 +16,9 @@ import {
   Zap
 } from 'lucide-react';
 import type { Template } from '@jawab24/shared';
+import type { NextPageWithLayout } from './_app';
 
-export default function TemplatesPage() {
+const TemplatesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { token } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -151,15 +152,11 @@ export default function TemplatesPage() {
   };
 
   if (loading && templates.length === 0) {
-    return (
-      <DashboardLayout title={t('templates.title')}>
-        <PageSkeleton />
-      </DashboardLayout>
-    );
+    return <PageSkeleton />;
   }
 
   return (
-    <DashboardLayout title={t('templates.title')}>
+    <>
       {/* Header */}
       <PageHeader
         title={t('templates.title')}
@@ -388,6 +385,13 @@ export default function TemplatesPage() {
           </div>
         </div>
       </Modal>
-    </DashboardLayout>
+    </>
   );
-}
+};
+
+// Persistent layout - prevents Sidebar remounting on navigation
+TemplatesPage.getLayout = (page: ReactElement) => (
+  <DashboardLayout title="Templates">{page}</DashboardLayout>
+);
+
+export default TemplatesPage;

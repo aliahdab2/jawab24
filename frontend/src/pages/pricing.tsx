@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -11,6 +11,7 @@ import { Check, X, Zap, Crown, Sparkles, AlertCircle } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
+import type { NextPageWithLayout } from './_app';
 
 
 function PlanCard({
@@ -246,7 +247,7 @@ function FeatureRow({
   );
 }
 
-export default function PricingPage() {
+const PricingPage: NextPageWithLayout = () => {
   const router = useRouter();
   const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
@@ -352,11 +353,7 @@ export default function PricingPage() {
 
   // Show loading skeleton
   if (loading) {
-    return (
-      <DashboardLayout title={t('pricing.title')} isPublic>
-        <PageSkeleton />
-      </DashboardLayout>
-    );
+    return <PageSkeleton />;
   }
 
   // NORMAL PRICING FLOW
@@ -378,7 +375,6 @@ export default function PricingPage() {
         <meta property="og:description" content={t('pricing.ogDescription')} />
         <meta property="og:url" content="https://jawab24.com/pricing" />
       </Head>
-      <DashboardLayout title={t('pricing.title')} isPublic>
         <div>
         {/* Fallback Disclaimer - Only shown when using offline plans */}
         {usingFallback && (
@@ -473,7 +469,13 @@ export default function PricingPage() {
           {t('pricing.allPlansInclude')}
         </div>
         </div>
-      </DashboardLayout>
     </>
   );
-}
+};
+
+// Persistent layout - prevents Sidebar remounting on navigation
+PricingPage.getLayout = (page: ReactElement) => (
+  <DashboardLayout title="Pricing" isPublic>{page}</DashboardLayout>
+);
+
+export default PricingPage;

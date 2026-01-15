@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -17,8 +17,9 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import type { Page } from '@jawab24/shared';
+import type { NextPageWithLayout } from './_app';
 
-export default function PagesPage() {
+const PagesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { token, fbToken } = useAuthStore();
   const [pages, setPages] = useState<Page[]>([]);
@@ -185,15 +186,11 @@ export default function PagesPage() {
   };
 
   if (loading && pages.length === 0) {
-    return (
-      <DashboardLayout title={t('pages.title')}>
-        <PageSkeleton type="grid" />
-      </DashboardLayout>
-    );
+    return <PageSkeleton type="grid" />;
   }
 
   return (
-    <DashboardLayout title={t('pages.title')}>
+    <>
       {/* Header */}
       <PageHeader
         title={t('pages.title')}
@@ -472,6 +469,13 @@ export default function PagesPage() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
-}
+};
+
+// Persistent layout - prevents Sidebar remounting on navigation
+PagesPage.getLayout = (page: ReactElement) => (
+  <DashboardLayout title="Pages">{page}</DashboardLayout>
+);
+
+export default PagesPage;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
@@ -16,8 +16,9 @@ import {
   BookTemplate
 } from 'lucide-react';
 import type { Rule, Template } from '@jawab24/shared';
+import type { NextPageWithLayout } from './_app';
 
-export default function RulesPage() {
+const RulesPage: NextPageWithLayout = () => {
   const { t } = useTranslation();
   const { token } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
@@ -179,15 +180,11 @@ export default function RulesPage() {
   };
 
   if (loading && rules.length === 0) {
-    return (
-      <DashboardLayout title={t('rules.title')}>
-        <PageSkeleton />
-      </DashboardLayout>
-    );
+    return <PageSkeleton />;
   }
 
   return (
-    <DashboardLayout title={t('rules.title')}>
+    <>
       {/* Header */}
       <PageHeader
         title={t('rules.title')}
@@ -407,6 +404,13 @@ export default function RulesPage() {
           </div>
         </div>
       </Modal>
-    </DashboardLayout>
+    </>
   );
-}
+};
+
+// Persistent layout - prevents Sidebar remounting on navigation
+RulesPage.getLayout = (page: ReactElement) => (
+  <DashboardLayout title="Rules">{page}</DashboardLayout>
+);
+
+export default RulesPage;

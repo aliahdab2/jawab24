@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, PageHeader, PageSkeleton, MessagesFilterButtons } from '@/components/ui';
@@ -24,6 +24,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { Message } from '@jawab24/shared';
+import type { NextPageWithLayout } from './_app';
 
 type FilterType = 'all' | 'incoming' | 'outgoing' | 'needs_attention';
 
@@ -35,7 +36,7 @@ interface Conversation {
   needsHumanAttention: boolean;
 }
 
-export default function MessagesPage() {
+const MessagesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { token } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -236,15 +237,11 @@ export default function MessagesPage() {
   );
 
   if (loading && messages.length === 0) {
-    return (
-      <DashboardLayout title={t('messages.title')}>
-        <PageSkeleton type="list" />
-      </DashboardLayout>
-    );
+    return <PageSkeleton type="list" />;
   }
 
   return (
-    <DashboardLayout title={t('messages.title')}>
+    <>
       {/* Header */}
       <PageHeader
         title={t('messages.title')}
@@ -494,6 +491,13 @@ export default function MessagesPage() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
-}
+};
+
+// Persistent layout - prevents Sidebar remounting on navigation
+MessagesPage.getLayout = (page: ReactElement) => (
+  <DashboardLayout title="Messages">{page}</DashboardLayout>
+);
+
+export default MessagesPage;

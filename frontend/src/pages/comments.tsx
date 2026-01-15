@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -25,10 +25,11 @@ import { ar, enUS } from 'date-fns/locale';
 import type { Comment } from '@jawab24/shared';
 
 import { commentsApi, aiApi } from '@/lib/api';
+import type { NextPageWithLayout } from './_app';
 
 type FilterType = 'all' | 'replied' | 'pending' | 'needs_attention';
 
-export default function CommentsPage() {
+const CommentsPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { token } = useAuthStore();
   const [comments, setComments] = useState<Comment[]>([]);
@@ -277,15 +278,11 @@ export default function CommentsPage() {
   };
 
   if (loading && comments.length === 0) {
-    return (
-      <DashboardLayout title={t('comments.title')}>
-        <PageSkeleton type="list" />
-      </DashboardLayout>
-    );
+    return <PageSkeleton type="list" />;
   }
 
   return (
-    <DashboardLayout title={t('comments.title')}>
+    <>
       {/* Header */}
       <PageHeader
         title={t('comments.title')}
@@ -637,6 +634,13 @@ export default function CommentsPage() {
           </div>
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
-}
+};
+
+// Persistent layout - prevents Sidebar remounting on navigation
+CommentsPage.getLayout = (page: ReactElement) => (
+  <DashboardLayout title="Comments">{page}</DashboardLayout>
+);
+
+export default CommentsPage;
