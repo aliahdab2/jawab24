@@ -148,8 +148,8 @@ export default function CheckoutPage() {
           <meta name="robots" content="noindex, follow" />
         </Head>
 
-        <div className="flex-1 flex flex-col overflow-y-auto bg-gradient-to-br from-brand-50/30 via-white to-surface-50">
-          <div className="pt-safe pb-safe px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
+        <div className="flex-1 flex flex-col overflow-y-auto bg-surface-50">
+          <div className="flex-1 pt-safe pb-safe px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
             <div className="max-w-md mx-auto w-full">
               
               {/* Header: Back link on one side, Logo on other */}
@@ -205,9 +205,9 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="flex-1 flex flex-col overflow-y-auto bg-gradient-to-br from-brand-50/30 via-white to-surface-50">
-        {/* Content container - top-aligned with proper padding */}
-        <div className="pt-safe pb-safe px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
+      <div className="flex-1 flex flex-col overflow-y-auto bg-surface-50">
+        {/* Content container - fills space with consistent background */}
+        <div className="flex-1 pt-safe pb-safe px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
           <div className="max-w-md mx-auto w-full">
             
             {/* Header: Back link on one side, Logo on other */}
