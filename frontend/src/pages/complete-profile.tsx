@@ -111,8 +111,8 @@ export default function CompleteProfilePage() {
   // Loading state while checking user status
   if (isLoading) {
     return (
-      <div className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4 pt-safe pb-safe ">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full animate-pulse">
+      <div className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 px-4 py-8 pt-safe pb-safe">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto animate-pulse">
           <div className="flex flex-col items-center">
             <div className="w-16 h-16 bg-surface-200 rounded-full mb-4" />
             <div className="h-8 w-48 bg-surface-200 rounded mb-2" />
@@ -129,12 +129,12 @@ export default function CompleteProfilePage() {
   if (success) {
     return (
       <div 
-        className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4 pt-safe pb-safe " 
+        className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 px-4 py-8 pt-safe pb-safe" 
         dir={isRTL ? 'rtl' : 'ltr'}
         role="main"
         aria-label={t('profile.complete')}
       >
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center animate-fade-in">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto text-center animate-fade-in">
           {/* Animated success icon */}
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce-in">
             <CheckCircle2 className="w-10 h-10 text-green-600" />
@@ -165,11 +165,11 @@ export default function CompleteProfilePage() {
       </Head>
 
       <div 
-        className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 flex items-center justify-center px-4 py-8 pt-safe pb-safe " 
+        className="flex-1 overflow-y-auto bg-gradient-to-br from-sky-50 via-white to-violet-50 px-4 py-8 pt-safe pb-safe" 
         dir={isRTL ? 'rtl' : 'ltr'}
         role="main"
       >
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full animate-fade-in">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto animate-fade-in">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4 transition-transform hover:scale-105">
