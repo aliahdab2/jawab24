@@ -9,6 +9,9 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo } from '@/components/ui';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useLandscape } from '@/hooks/useLandscape';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -25,6 +28,10 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
+
+  // ESC key to close modals (logout confirmation takes priority)
+  useEscapeKey(() => setShowLogoutCheck(false), showLogoutCheck);
+  useEscapeKey(() => setMobileMenuOpen(false), mobileMenuOpen && !showLogoutCheck);
 
   const toggleLanguage = () => {
     const newLang = language === 'ar' ? 'en' : 'ar';
@@ -340,25 +347,9 @@ function MobileMenuOverlay({
   t: (key: TranslationKey) => string;
   onLogout: () => void;
 }) {
-  const [isLandscape, setIsLandscape] = React.useState(false);
-
-  // Detect orientation using matchMedia (industry standard approach)
-  React.useEffect(() => {
-    const mediaQuery = window.matchMedia('(orientation: landscape)');
-    setIsLandscape(mediaQuery.matches);
-    
-    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, []);
-
-  // Prevent body scroll when menu is open (iOS/Android best practice)
-  React.useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = ''; };
-    }
-  }, [isOpen]);
+  // Reusable hooks
+  const isLandscape = useLandscape();
+  useBodyScrollLock(isOpen);
 
   const menuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },

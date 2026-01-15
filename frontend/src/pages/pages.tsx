@@ -18,6 +18,7 @@ import {
 import axios from 'axios';
 import type { Page } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 const PagesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
@@ -29,6 +30,14 @@ const PagesPage: NextPageWithLayout = () => {
   const [knowledgeBase, setKnowledgeBase] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // ESC key to close modal
+  const closeKnowledgeBaseModal = useCallback(() => {
+    setEditingPage(null);
+    setKnowledgeBase('');
+    setSaved(false);
+  }, []);
+  useEscapeKey(closeKnowledgeBaseModal, !!editingPage);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface ModalProps {
   isOpen: boolean;
@@ -16,26 +18,11 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
 
   useEffect(() => {
     setMounted(true);
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+  }, []);
 
-    // Handle ESC key
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    
-    if (isOpen) {
-      window.addEventListener('keydown', handleEsc);
-    }
-
-    return () => {
-      document.body.style.overflow = 'unset';
-      window.removeEventListener('keydown', handleEsc);
-    };
-  }, [isOpen, onClose]);
+  // Reusable hooks
+  useBodyScrollLock(isOpen);
+  useEscapeKey(onClose, isOpen);
 
   if (!isOpen || !mounted) return null;
 

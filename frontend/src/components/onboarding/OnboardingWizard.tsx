@@ -12,6 +12,9 @@ import { Button, FacebookIcon } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 
 import { useSwipe } from '@/hooks/useSwipe';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useLandscape } from '@/hooks/useLandscape';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -58,23 +61,11 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
   const [currentStep, setCurrentStep] = useState(0);
-  const [isLandscape, setIsLandscape] = useState(false);
-
-  // Detect orientation using matchMedia (industry standard)
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(orientation: landscape)');
-    setIsLandscape(mediaQuery.matches);
-    
-    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, []);
-
-  // Prevent body scroll when wizard is open
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+  
+  // Reusable hooks
+  const isLandscape = useLandscape();
+  useBodyScrollLock(true);
+  useEscapeKey(onSkip);
 
   const steps = [
     {

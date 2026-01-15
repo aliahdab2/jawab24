@@ -26,6 +26,7 @@ import type { Comment } from '@jawab24/shared';
 
 import { commentsApi, aiApi } from '@/lib/api';
 import type { NextPageWithLayout } from './_app';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 type FilterType = 'all' | 'replied' | 'pending' | 'needs_attention';
 
@@ -38,6 +39,9 @@ const CommentsPage: NextPageWithLayout = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  // ESC key to close modal
+  useEscapeKey(() => setSelectedComment(null), !!selectedComment);
 
   // Reply State
   const [replyText, setReplyText] = useState('');

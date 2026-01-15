@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import clsx from 'clsx';
+import { useLandscape } from '@/hooks/useLandscape';
 
 // Configure your WhatsApp number here (with country code, no + or spaces)
 const WHATSAPP_NUMBER = '46700224720'; // Sweden +46
@@ -13,17 +14,8 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
-  const [isLandscape, setIsLandscape] = useState(false);
+  const isLandscape = useLandscape();
   const isRTL = language === 'ar';
-
-  // Detect orientation
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(orientation: landscape)');
-    setIsLandscape(mediaQuery.matches);
-    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
-  }, []);
 
   // Auto-hide on scroll down, show on scroll up
   useEffect(() => {

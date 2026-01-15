@@ -25,6 +25,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { Message } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 type FilterType = 'all' | 'incoming' | 'outgoing' | 'needs_attention';
 
@@ -46,6 +47,9 @@ const MessagesPage: NextPageWithLayout = () => {
   const [stats, setStats] = useState({ total: 0, replied: 0, pending: 0 });
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  // ESC key to close modal
+  useEscapeKey(() => setSelectedConversation(null), !!selectedConversation);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
