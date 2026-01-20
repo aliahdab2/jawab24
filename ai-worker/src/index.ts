@@ -1,11 +1,15 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+// Initialize Sentry FIRST
+import { initSentry, Sentry } from './lib/sentry';
+initSentry();
+
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
-import dotenv from 'dotenv';
 import { config } from './config';
 import { openaiService, GenerateRequest } from './services/openai';
-
-dotenv.config();
 
 const server = fastify({
     logger: true,
@@ -50,6 +54,7 @@ server.post<{ Body: GenerateRequest }>('/generate', async (request, reply) => {
         return reply.send(result);
     } catch (error) {
         request.log.error(error, 'Failed to generate reply');
+        Sentry.captureException(error, { extra: { comment, language } });
         return reply.status(500).send({ error: 'Failed to generate reply' });
     }
 });
@@ -73,6 +78,7 @@ server.post<{ Body: { requests: GenerateRequest[] } }>('/generate/batch', async 
         return reply.send({ results });
     } catch (error) {
         request.log.error(error, 'Failed to generate batch replies');
+        Sentry.captureException(error);
         return reply.status(500).send({ error: 'Failed to generate replies' });
     }
 });
@@ -116,6 +122,7 @@ const start = async () => {
                 return result;
             } catch (error) {
                 server.log.error({ jobId: job.id, error }, 'Job failed');
+                Sentry.captureException(error, { extra: { jobId: job.id, comment, language } });
                 throw error;
             }
         }, {

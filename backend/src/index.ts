@@ -1,10 +1,16 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+// Initialize Sentry FIRST (before other imports)
+import { initSentry, Sentry } from './lib/sentry';
+initSentry();
+
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
 import Redis from 'ioredis';
-import dotenv from 'dotenv';
 import healthRoutes from './routes/health';
 import authRoutes from './routes/auth';
 import webhookRoutes from './routes/webhook';
@@ -27,8 +33,6 @@ import { errorHandler } from './middleware/errorHandler';
 import { requestIdMiddleware } from './middleware/requestId';
 import { validateEnv } from './utils/env';
 import { redis } from './lib/redis';
-
-dotenv.config();
 
 // ⚡ Validate environment variables on startup
 try {

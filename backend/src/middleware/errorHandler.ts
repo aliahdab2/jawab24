@@ -1,4 +1,5 @@
 import { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
+import * as Sentry from '@sentry/node';
 import { AppError, ValidationError } from '../utils/errors';
 
 /**
@@ -17,6 +18,19 @@ export function errorHandler(
         url: request.url,
         method: request.method,
     }, 'Request error');
+
+    // Send to Sentry (only for 500 errors, not validation/auth errors)
+    const statusCode = (error as FastifyError).statusCode || (error as AppError).statusCode || 500;
+    if (statusCode >= 500) {
+        Sentry.captureException(error, {
+            extra: {
+                requestId: request.id,
+                url: request.url,
+                method: request.method,
+                body: request.body,
+            },
+        });
+    }
 
     // Handle custom AppError
     if (error instanceof AppError) {
