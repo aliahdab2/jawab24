@@ -21,7 +21,8 @@ describe('useAuthStore - setAuth validation', () => {
         expect(state.token).toBe(mockToken);
         expect(state.fbToken).toBe(mockFbToken);
         expect(state.isAuthenticated).toBe(true);
-        expect(localStorage.getItem('token')).toBe(mockToken);
+        // On Web, we do NOT store the token in localStorage anymore (HttpOnly cookies)
+        expect(localStorage.getItem('token')).toBeNull();
     });
 
     it('should reject auth data with empty token', () => {
