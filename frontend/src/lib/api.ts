@@ -1,10 +1,23 @@
-import axios from 'axios';
+/**
+ * API Client Configuration
+ * 
+ * Industry Standards Applied:
+ * - Axios with interceptors for auth token handling
+ * - Centralized AuthManager for 401 handling
+ * - Separate public/authenticated API instances
+ * - CSRF protection for state-changing requests
+ * - Request retry with exponential backoff
+ * - Request timeout configuration
+ */
+
+import axios, { AxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
-import { setupAuthRefreshInterceptor } from './authInterceptor';
+import { authManager } from './authManager';
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
+// Authenticated API instance
 export const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -12,7 +25,7 @@ export const api = axios.create({
   },
 });
 
-// Public API instance (no auth interceptor)
+// Public API instance (no auth interceptor - for unauthenticated endpoints)
 export const publicApi = axios.create({
   baseURL: API_URL,
   headers: {
@@ -30,45 +43,46 @@ addRetryInterceptor(publicApi, { retries: 3, retryDelay: 1000 });
 addTimeoutConfig(api, 30000); // 30 seconds
 addTimeoutConfig(publicApi, 30000);
 
-// Add auth token to requests
+/**
+ * Request Interceptor - Adds auth token and CSRF token
+ * 
+ * Token Strategy:
+ * - Web (cookies): HttpOnly cookies auto-sent, add CSRF token for mutations
+ * - Mobile (native): Bearer token from localStorage
+ */
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    // Mobile/Legacy: Add Bearer token if present
+    // Mobile/Legacy: Add Bearer token if present in localStorage
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Web: Add CSRF token from cookie if present (for state-changing requests)
+    // Web: Add CSRF token for state-changing requests (POST, PUT, PATCH, DELETE)
+    // CSRF cookie is set by the backend alongside the HttpOnly auth cookie
     if (document.cookie && config.method && ['post', 'put', 'patch', 'delete'].includes(config.method.toLowerCase())) {
-        const match = document.cookie.match(new RegExp('(^| )csrfToken=([^;]+)'));
-        if (match) {
-            config.headers['X-CSRF-Token'] = match[2];
-        }
+      const match = document.cookie.match(new RegExp('(^| )csrfToken=([^;]+)'));
+      if (match) {
+        config.headers['X-CSRF-Token'] = match[2];
+      }
     }
   }
   return config;
 });
 
-// Set up automatic token refreshing
-setupAuthRefreshInterceptor(api, async () => {
-   return authApi.refreshToken();
-});
+/**
+ * Response Interceptor - Centralized 401 handling via AuthManager
+ * 
+ * This uses the AuthManager singleton which handles:
+ * - Token refresh with request queuing (prevents race conditions)
+ * - Centralized logout on refresh failure
+ * - Auth state notifications
+ */
+authManager.setupAuthInterceptor(api);
 
-// Handle auth errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+// ============================================================================
+// API Endpoints
+// ============================================================================
 
 // Auth API
 export const authApi = {
@@ -147,10 +161,6 @@ export const statsApi = {
   get: () => api.get('/stats'),
 };
 
-import { AxiosRequestConfig } from 'axios';
-
-// ... (rest of imports)
-
 // Plans API (Public - uses publicApi to avoid auth redirect issues)
 export const plansApi = {
   getAll: (config?: AxiosRequestConfig) => publicApi.get('/plans', config),
@@ -171,7 +181,6 @@ export const subscriptionApi = {
   get: () => api.get('/subscription'),
   getUsage: (config?: AxiosRequestConfig) => api.get('/subscription/usage', config),
   changePlan: (planId: string) => api.post('/subscription/change-plan', { planId }),
-
   cancel: (reason?: string) => api.post('/subscription/cancel', { reason }),
   pause: () => api.post('/subscription/pause'),
   resume: () => api.post('/subscription/resume'),
@@ -182,10 +191,9 @@ export const subscriptionApi = {
 
 // AI API
 export const aiApi = {
-  generateAsync: (data: { comment: string; language?: string; context?: any }) =>
+  generateAsync: (data: { comment: string; language?: string; context?: unknown }) =>
     api.post<{ jobId: string; status: string }>('/ai/generate-async', data),
 
   getJobStatus: (jobId: string) =>
-    api.get<{ jobId: string; status: string; result?: any; error?: string }>(`/ai/jobs/${jobId}`),
+    api.get<{ jobId: string; status: string; result?: unknown; error?: string }>(`/ai/jobs/${jobId}`),
 };
-

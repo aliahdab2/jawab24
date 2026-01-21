@@ -58,29 +58,19 @@ export const useAuthStore = create<AuthState>()(
         set({ user, token, fbToken, isAuthenticated: true });
       },
       logout: async () => {
-        // 1. Call server logout to clear cookies
-        try {
-           // Dynamic import to avoid circular dependency
-           const { authApi } = await import('./api');
-           await authApi.logout();
-        } catch (e) {
-           console.error('Failed to logout from server:', e);
-        }
-
-        // 2. Immediately clear reactive state to prevent UI flickers or auto-redirects
-        set({ user: null, token: null, fbToken: null, isAuthenticated: false });
-
-        // 3. Perform background cleanups
+        // Use centralized AuthManager for consistent logout behavior
+        // This ensures the same logout flow is used everywhere (interceptors, UI, etc.)
+        const { authManager } = await import('./authManager');
+        
+        // Don't redirect here - let the caller handle navigation
+        await authManager.logout({ redirect: false, reason: 'User initiated logout' });
+        
+        // Clear Native Facebook Session (mobile-specific, non-blocking)
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          
-          // Clear Native Facebook Session (non-blocking but we import Capacitor)
           try {
             const { Capacitor } = await import('@capacitor/core');
             if (Capacitor.isNativePlatform()) {
               const { FacebookLogin } = await import('@capacitor-community/facebook-login');
-              // Initialize first (required before any SDK calls)
               const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
               if (fbAppId) {
                 try {
