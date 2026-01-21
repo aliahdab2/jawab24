@@ -156,14 +156,17 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
           /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+ 
              Uses box-content so pt-safe adds to height rather than squishing content */
           <div
-            className="lg:hidden fixed top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 px-safe-landscape z-40 pt-safe box-content bg-white/80 backdrop-blur-md border-b border-surface-100 transition-all duration-300"
+            className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 px-safe-landscape z-40 pt-safe box-content"
+            style={{
+              background: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 75%, transparent 100%)'
+            }}
           >
-            <Link href="/dashboard" className="flex items-center p-2 -ml-2 min-w-[44px] min-h-[44px] justify-center group">
-              <BrandLogo variant="vector" className="w-10 h-10 text-brand-600 transition-transform group-hover:scale-110" />
+            <Link href="/dashboard" className="flex items-center p-2 -ml-2 min-w-[44px] min-h-[44px] justify-center">
+              <BrandLogo variant="vector" className="w-10 h-10" />
             </Link>
 
             {/* Dynamic Active Page Icon */}
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-surface-50 border border-surface-200 text-brand-600 shadow-sm">
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/90">
               {router.pathname.includes('/comments') ? (
                 <MessageSquare className="w-6 h-6" />
               ) : router.pathname.includes('/messages') ? (
@@ -181,10 +184,11 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
         <main
           className={clsx(
             'transition-all duration-500 flex-1',
-            // Clean layout (public pages) & Mobile Dashboard: use pt-header for fixed header spacing
-            // Desktop Dashboard: Sidebar layout, no top header, so reset padding
-            'pt-header',
-            !isCleanLayout && (sidebarOpen ? 'lg:ms-64 lg:pt-0' : 'lg:ms-20 lg:pt-0')
+            // Clean layout (public pages): use pt-header for fixed header spacing
+            // Regular layout: sticky header is in document flow, no extra padding needed on mobile
+            // Desktop (with sidebar) still gets no top padding
+            isCleanLayout ? 'pt-header' : 'lg:pt-0',
+            !isCleanLayout && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >
           <div 
