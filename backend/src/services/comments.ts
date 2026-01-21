@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { comments, posts, pages } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql, and } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 
 export class CommentsService {
@@ -174,23 +174,68 @@ export class CommentsService {
 
     /**
      * Get comment statistics for a user
+     * Optimized to use SQL aggregation instead of in-memory counting
      */
     async getStats(userId: string) {
-        const allComments = await this.getCommentsByUser(userId);
-        const replied = allComments.filter(c => c.replied);
-        const unreplied = allComments.filter(c => !c.replied);
+        // Get total counts joined by page -> user
+        const totalResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(comments)
+            .innerJoin(posts, eq(comments.postId, posts.id))
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(eq(pages.userId, userId));
+
+        const total = Number(totalResult[0]?.count || 0);
+
+        if (total === 0) {
+            return {
+                total: 0,
+                replied: 0,
+                unreplied: 0,
+                replyRate: '0',
+                byMethod: { template: 0, ai: 0, manual: 0 },
+            };
+        }
+
+        // Get replied count
+        const repliedResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(comments)
+            .innerJoin(posts, eq(comments.postId, posts.id))
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(eq(pages.userId, userId), eq(comments.replied, true)));
+
+        const replied = Number(repliedResult[0]?.count || 0);
+
+        // Get counts by method
+        const byMethodResult = await db
+            .select({
+                method: comments.replyMethod,
+                count: sql<number>`count(*)`,
+            })
+            .from(comments)
+            .innerJoin(posts, eq(comments.postId, posts.id))
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(eq(pages.userId, userId), eq(comments.replied, true)))
+            .groupBy(comments.replyMethod);
 
         const byMethod = {
-            template: replied.filter(c => c.replyMethod === 'template').length,
-            ai: replied.filter(c => c.replyMethod === 'ai').length,
-            manual: replied.filter(c => c.replyMethod === 'manual').length,
+            template: 0,
+            ai: 0,
+            manual: 0,
         };
 
+        byMethodResult.forEach((row) => {
+            if (row.method === 'template') byMethod.template = Number(row.count);
+            else if (row.method === 'ai') byMethod.ai = Number(row.count);
+            else if (row.method === 'manual') byMethod.manual = Number(row.count);
+        });
+
         return {
-            total: allComments.length,
-            replied: replied.length,
-            unreplied: unreplied.length,
-            replyRate: allComments.length > 0 ? (replied.length / allComments.length * 100).toFixed(1) : '0',
+            total,
+            replied,
+            unreplied: total - replied,
+            replyRate: (replied / total * 100).toFixed(1),
             byMethod,
         };
     }

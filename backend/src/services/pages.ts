@@ -111,7 +111,7 @@ export class PagesService {
         logger.info(`[Pages] Starting sync for user ${userId}`);
 
         const fbPages = await facebookService.getUserPages(userAccessToken);
-        const syncedPages = [];
+        const syncedPages: any[] = [];
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
@@ -120,10 +120,15 @@ export class PagesService {
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
 
-        for (const fbPage of fbPages.data) {
+        // 1. Fetch all existing pages for this user upfront (optimizes DB reads)
+        const existingPages = await this.getPages(userId);
+        const existingPagesMap = new Map(existingPages.map(p => [p.facebookPageId, p]));
+
+        // 2. Process Facebook pages in parallel (optimizes external API calls)
+        const processPromises = fbPages.data.map(async (fbPage) => {
             logger.info(`[Pages] Processing page: ${fbPage.name} (${fbPage.id})`);
 
-            // Try to fetch linked Instagram account
+            // Check linked Instagram account
             let instagramAccountId: string | null = null;
             let instagramUsername: string | null = null;
 
@@ -141,13 +146,26 @@ export class PagesService {
                 logger.info(`[Pages] Could not fetch Instagram account (may not be linked)`);
             }
 
-            // Check if page already exists
-            const existingPage = await this.getPageByFacebookId(fbPage.id);
+            return {
+                fbPage,
+                instagramAccountId,
+                instagramUsername
+            };
+        });
+
+        const results = await Promise.all(processPromises);
+
+        // 3. Perform DB Writes (Sequential to ensure consistency)
+        // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
+        // or potential race conditions if multiple syncs happen simultaneously.
+        for (const result of results) {
+            const { fbPage, instagramAccountId, instagramUsername } = result;
+            const existingPage = existingPagesMap.get(fbPage.id);
 
             if (existingPage) {
                 // Update existing page
-                logger.info(`[Pages] Updating existing page: ${fbPage.name}`);
-                const updated = await db
+                logger.debug(`[Pages] Updating existing page: ${fbPage.name}`);
+                const [updated] = await db
                     .update(pages)
                     .set({
                         name: fbPage.name,
@@ -158,10 +176,10 @@ export class PagesService {
                     })
                     .where(eq(pages.id, existingPage.id))
                     .returning();
-                syncedPages.push(updated[0]);
+                syncedPages.push(updated);
             } else {
                 // Create new page
-                logger.info(`[Pages] Creating new page: ${fbPage.name}`);
+                logger.debug(`[Pages] Creating new page: ${fbPage.name}`);
                 const [created] = await db
                     .insert(pages)
                     .values({
@@ -172,7 +190,7 @@ export class PagesService {
                         autoReplyEnabled: true,
                         instagramAccountId,
                         instagramUsername,
-                        instagramAutoReplyEnabled: false, // Default to OFF so user must explicitly enable it
+                        instagramAutoReplyEnabled: false,
                     })
                     .returning();
                 syncedPages.push(created);
