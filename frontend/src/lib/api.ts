@@ -79,7 +79,7 @@ export const authApi = {
     api.post('/auth/facebook/native', { accessToken }),
 
   getProfile: () =>
-    api.get('/auth/profile'),
+    api.get('/auth/me'),
 
   logout: () =>
     api.post('/auth/logout'),
