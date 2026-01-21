@@ -45,6 +45,30 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
   }, []);
 
   useEffect(() => {
+    // Session Verification for Web (Cookie-based)
+    // We trust Zustand 'isAuthenticated' initially to show UI instantly,
+    // but we must verify the actual cookie is still valid in the background.
+    const verifySession = async () => {
+        if (_hasHydrated && isAuthenticated && typeof window !== 'undefined') {
+            const { Capacitor } = await import('@capacitor/core');
+            if (!Capacitor.isNativePlatform()) {
+                 try {
+                     // Dynamic import to avoid circular dependencies
+                     const { authApi } = await import('@/lib/api');
+                     await authApi.getProfile();
+                 } catch (error) {
+                     // If 401, the interceptor will handle redirect
+                     // But if network error or other, we might want to log it
+                     console.error('Session verification failed', error);
+                 }
+            }
+        }
+    };
+
+    verifySession();
+  }, [_hasHydrated, isAuthenticated]);
+
+  useEffect(() => {
     if (_hasHydrated && !isAuthenticated && !isPublic) {
       router.push('/login');
     }

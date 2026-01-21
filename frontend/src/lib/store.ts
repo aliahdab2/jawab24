@@ -110,6 +110,22 @@ export const useAuthStore = create<AuthState>()(
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
+      partialize: (state) => {
+        if (typeof window !== 'undefined') {
+            // Dynamic check for native platform
+            const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+            if (!isNative) {
+                // On Web: Do NOT persist token or fbToken (security + conflict with cookies)
+                // We only persist the user object and isAuthenticated flag for UI state
+                // The actual session is validated via cookies
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { token, fbToken, ...rest } = state;
+                return rest;
+            }
+        }
+        // On Native: Persist everything
+        return state;
+      },
     }
   )
 );
