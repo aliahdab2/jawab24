@@ -123,6 +123,7 @@ services:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://jawab24.com/api}
         - NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=${NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION:-}
         - NEXT_PUBLIC_GA_ID=${NEXT_PUBLIC_GA_ID:-}
+        - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
     restart: unless-stopped
     env_file:
       - ./env/frontend.env

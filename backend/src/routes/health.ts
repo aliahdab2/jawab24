@@ -159,6 +159,15 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
             return reply.status(500).send({ error: 'Failed to get cache stats' });
         }
     });
+
+    /**
+     * Test Sentry error tracking
+     * GET /health/sentry-test
+     * Only available in production to verify Sentry is working
+     */
+    fastify.get('/health/sentry-test', async () => {
+        throw new Error('Sentry Test Error - This is intentional');
+    });
 };
 
 export default healthRoutes;
