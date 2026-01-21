@@ -257,9 +257,12 @@ export class AuthController {
      */
     async logout(request: FastifyRequest, reply: FastifyReply) {
         // 1. Revoke refresh token if present
-        const refreshToken = request.cookies.refreshToken;
-        if (refreshToken) {
-            await refreshTokenService.revokeRefreshToken(refreshToken);
+        const signedRefreshToken = request.cookies.refreshToken;
+        if (signedRefreshToken) {
+             const unsigned = request.unsignCookie(signedRefreshToken);
+             if (unsigned.valid && unsigned.value) {
+                 await refreshTokenService.revokeRefreshToken(unsigned.value);
+             }
         }
 
         // 2. Clear all cookies
@@ -272,11 +275,18 @@ export class AuthController {
      * POST /auth/refresh
      */
     async refresh(request: FastifyRequest, reply: FastifyReply) {
-        const refreshToken = request.cookies.refreshToken;
+        const signedRefreshToken = request.cookies.refreshToken;
 
-        if (!refreshToken) {
+        if (!signedRefreshToken) {
             return reply.status(401).send({ error: 'Missing refresh token' });
         }
+
+        const unsigned = request.unsignCookie(signedRefreshToken);
+        if (!unsigned.valid || !unsigned.value) {
+             return reply.status(401).send({ error: 'Invalid refresh token signature' });
+        }
+        
+        const refreshToken = unsigned.value;
 
         try {
             // 1. Verify and rotate (get new token, revoke old one)

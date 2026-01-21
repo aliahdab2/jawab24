@@ -21,7 +21,15 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
         } 
         // 2. Check HttpOnly Cookie (Web)
         else if (request.cookies.token) {
-            token = request.cookies.token;
+            const unsigned = request.unsignCookie(request.cookies.token);
+            if (unsigned.valid && unsigned.value) {
+                token = unsigned.value;
+            } else {
+                // If signature validation fails, treat as no token
+                // But if it's not signed (legacy/dev), maybe fallback? 
+                // However, updated config says signed: true always.
+                // We'll trust unsignCookie.
+            }
         }
 
         if (!token) {
