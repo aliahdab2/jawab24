@@ -226,28 +226,38 @@ export class MessagesService {
         replied: number;
         pending: number;
     }> {
-        const userPages = await db.query.pages.findMany({
-            where: eq(pages.userId, userId),
-        });
+        const totalResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(messages)
+            .innerJoin(pages, eq(messages.pageId, pages.id))
+            .where(and(
+                eq(pages.userId, userId),
+                eq(messages.direction, 'incoming')
+            ));
 
-        if (userPages.length === 0) {
+        const total = Number(totalResult[0]?.count || 0);
+
+        if (total === 0) {
             return { total: 0, replied: 0, pending: 0 };
         }
 
-        const pageIds = userPages.map(p => p.id);
+        const repliedResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(messages)
+            .innerJoin(pages, eq(messages.pageId, pages.id))
+            .where(and(
+                eq(pages.userId, userId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, true)
+            ));
 
-        const allMessages = await db.query.messages.findMany({
-            where: and(
-                sql`${messages.pageId} IN (${sql.join(pageIds.map(id => sql`${id}`), sql`, `)})`,
-                eq(messages.direction, 'incoming')
-            ),
-        });
+        const replied = Number(repliedResult[0]?.count || 0);
 
-        const total = allMessages.length;
-        const replied = allMessages.filter(m => m.replied).length;
-        const pending = total - replied;
-
-        return { total, replied, pending };
+        return { 
+            total, 
+            replied, 
+            pending: total - replied 
+        };
     }
 
     /**
