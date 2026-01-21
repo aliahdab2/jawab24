@@ -49,6 +49,22 @@ vi.mock('../../src/services/settings', () => ({
     },
 }));
 
+vi.mock('../../src/services/refreshToken', () => ({
+    refreshTokenService: {
+        createRefreshToken: vi.fn().mockResolvedValue('mock-refresh-token'),
+        rotateRefreshToken: vi.fn(),
+        revokeRefreshToken: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/cookies', () => ({
+    cookiesService: {
+        setAuthCookies: vi.fn(),
+        setRefreshTokenCookie: vi.fn(),
+        clearAuthCookies: vi.fn(),
+    },
+}));
+
 describe('Auth Routes - Login Flow', () => {
     let app: FastifyInstance;
 

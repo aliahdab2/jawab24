@@ -14,6 +14,23 @@ export const users = pgTable('users', {
     updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// 1b. Refresh Tokens Table (Level 2 Security)
+export const refreshTokens = pgTable('refresh_tokens', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    tokenHash: varchar('token_hash', { length: 255 }).notNull(), // Store hash for security
+    expiresAt: timestamp('expires_at').notNull(),
+    revokedAt: timestamp('revoked_at'), // Any non-null value means revoked
+    replacedByTokenHash: varchar('replaced_by_token_hash', { length: 255 }), // For rotation tracking
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        userIdIdx: index('idx_refresh_tokens_user_id').on(table.userId),
+        tokenHashIdx: index('idx_refresh_tokens_token_hash').on(table.tokenHash),
+    };
+});
+
 // 2. Pages Table (Facebook Pages with optional linked Instagram)
 export const pages = pgTable('pages', {
     id: uuid('id').defaultRandom().primaryKey(),

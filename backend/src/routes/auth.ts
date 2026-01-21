@@ -19,6 +19,12 @@ export default async function authRoutes(fastify: FastifyInstance) {
         }
     }, authController.nativeLogin);
 
+    // Logout
+    fastify.post('/auth/logout', authController.logout);
+    
+    // Refresh Token
+    fastify.post('/auth/refresh', authController.refresh);
+
     // Protected routes
     fastify.get('/auth/me', { preHandler: [authenticate] }, authController.getMe);
     fastify.patch('/auth/profile', { preHandler: [authenticate] }, authController.updateProfile);

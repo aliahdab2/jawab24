@@ -13,17 +13,25 @@ export interface AuthenticatedRequest extends FastifyRequest {
  */
 export async function authenticate(request: AuthenticatedRequest, reply: FastifyReply) {
     try {
-        const authHeader = request.headers.authorization;
+        let token = request.headers.authorization;
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        // 1. Check Authorization header (Mobile/API)
+        if (token && token.startsWith('Bearer ')) {
+            token = token.substring(7);
+        } 
+        // 2. Check HttpOnly Cookie (Web)
+        else if (request.cookies.token) {
+            token = request.cookies.token;
+        }
+
+        if (!token) {
             return reply.status(401).send({
                 error: true,
-                message: 'Missing or invalid authorization header',
+                message: 'Missing or invalid authorization header/cookie',
                 code: 'AUTH_FAILED',
             });
         }
 
-        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
         const payload = authService.verifyToken(token);
 
         if (!payload) {
@@ -45,6 +53,33 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
             error: true,
             message: 'Authentication failed',
             code: 'AUTH_FAILED',
+        });
+    }
+}
+
+/**
+ * Middleware to validation CSRF token
+ * Required for all state-changing requests when using cookies
+ */
+export async function csrfProtection(request: FastifyRequest, reply: FastifyReply) {
+    // Skip for non-cookie auth (e.g. mobile using Bearer)
+    if (request.headers.authorization) {
+        return;
+    }
+
+    // Skip for safe methods
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+        return;
+    }
+
+    const cookieToken = request.cookies.csrfToken;
+    const headerToken = request.headers['x-csrf-token'];
+
+    if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+        return reply.status(403).send({
+            error: true,
+            message: 'Invalid CSRF token',
+            code: 'CSRF_INVALID',
         });
     }
 }

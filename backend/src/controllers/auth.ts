@@ -1,5 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { authService } from '../services/auth';
+import { authService, ACCESS_TOKEN_EXPIRY } from '../services/auth';
+import { cookiesService } from '../services/cookies';
+import { refreshTokenService } from '../services/refreshToken';
 import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
 import { settingsService } from '../services/settings';
@@ -49,7 +51,14 @@ export class AuthController {
             // 6. Fetch user settings for immediate UI sync
             const userSettings = await settingsService.getSettings(user.id);
 
-            // 7. Return response
+            // 7. Generate refresh token (Level 2 Security)
+            const refreshToken = await refreshTokenService.createRefreshToken(user.id);
+
+            // 8. Set cookies (HttpOnly + CSRF + Refresh)
+            cookiesService.setAuthCookies(reply, token);
+            cookiesService.setRefreshTokenCookie(reply, refreshToken);
+
+            // 9. Return response
             const response = authService.createAuthResponse(user, token, accessToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
@@ -115,7 +124,10 @@ export class AuthController {
             // 7. Fetch user settings
             const userSettings = await settingsService.getSettings(user.id);
 
-            // 8. Return response
+            // 8. Set cookies (HttpOnly + CSRF)
+            cookiesService.setAuthCookies(reply, token);
+
+            // 9. Return response
             const response = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
@@ -236,6 +248,59 @@ export class AuthController {
         } catch (error) {
             request.log.error({ err: error }, 'Delete account failed');
             return reply.status(500).send({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * Logout
+     * POST /auth/logout
+     */
+    async logout(request: FastifyRequest, reply: FastifyReply) {
+        // 1. Revoke refresh token if present
+        const refreshToken = request.cookies.refreshToken;
+        if (refreshToken) {
+            await refreshTokenService.revokeRefreshToken(refreshToken);
+        }
+
+        // 2. Clear all cookies
+        cookiesService.clearAuthCookies(reply);
+        return reply.send({ success: true });
+    }
+
+    /**
+     * Rotate Refresh Token
+     * POST /auth/refresh
+     */
+    async refresh(request: FastifyRequest, reply: FastifyReply) {
+        const refreshToken = request.cookies.refreshToken;
+
+        if (!refreshToken) {
+            return reply.status(401).send({ error: 'Missing refresh token' });
+        }
+
+        try {
+            // 1. Verify and rotate (get new token, revoke old one)
+            const result = await refreshTokenService.rotateRefreshToken(refreshToken);
+
+            if (!result) {
+                // Token invalid or revoked - Clear everything to force login
+                cookiesService.clearAuthCookies(reply);
+                return reply.status(401).send({ error: 'Invalid refresh token' });
+            }
+
+            const { user, newRefreshToken } = result;
+
+            // 2. Generate new Access Token
+            const newAccessToken = authService.generateToken(user, ACCESS_TOKEN_EXPIRY);
+
+            // 3. Set new cookies
+            cookiesService.setAuthCookies(reply, newAccessToken);
+            cookiesService.setRefreshTokenCookie(reply, newRefreshToken);
+
+            return reply.send({ success: true, token: newAccessToken });
+        } catch (error) {
+            request.log.error({ err: error }, 'Token refresh failed');
+            return reply.status(401).send({ error: 'Refresh failed' });
         }
     }
 }

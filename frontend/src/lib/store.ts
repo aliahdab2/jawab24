@@ -37,19 +37,40 @@ export const useAuthStore = create<AuthState>()(
           console.error('Invalid auth data provided to setAuth:', { hasUser: !!user, hasUserId: !!user?.id, hasToken: !!token });
           return;
         }
-        // Sync to legacy key for compatibility with non-Zustand code and tests
+
+        // Sync to legacy key for compatibility but ONLY for Native (Mobile)
+        // Web uses HttpOnly cookies so we should NOT store token in localStorage
         if (typeof window !== 'undefined') {
-          localStorage.setItem('token', token);
-          localStorage.setItem('user', JSON.stringify(user));
+          // Dynamic import to avoid SSR issues
+          import('@capacitor/core').then(({ Capacitor }) => {
+              if (Capacitor.isNativePlatform()) {
+                  localStorage.setItem('token', token);
+                  localStorage.setItem('user', JSON.stringify(user));
+              } else {
+                  // Clean up legacy tokens on web to ensure we switch to cookies
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+              }
+          });
         }
+        
         // Zustand persist handles storage automatically
         set({ user, token, fbToken, isAuthenticated: true });
       },
       logout: async () => {
-        // 1. Immediately clear reactive state to prevent UI flickers or auto-redirects
+        // 1. Call server logout to clear cookies
+        try {
+           // Dynamic import to avoid circular dependency
+           const { authApi } = await import('./api');
+           await authApi.logout();
+        } catch (e) {
+           console.error('Failed to logout from server:', e);
+        }
+
+        // 2. Immediately clear reactive state to prevent UI flickers or auto-redirects
         set({ user: null, token: null, fbToken: null, isAuthenticated: false });
 
-        // 2. Perform background cleanups
+        // 3. Perform background cleanups
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
           localStorage.removeItem('user');

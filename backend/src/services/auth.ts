@@ -5,11 +5,12 @@ import { config } from '../config';
 import crypto from 'crypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
 import { subscriptionsService } from './subscriptions';
-
 // Simple but secure JWT-like implementation using HMAC
 // For production, consider using @fastify/jwt plugin
 const ALGORITHM = 'sha256';
-const TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const LEGACY_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (Keep for backward compatibility)
+
+export const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15 minutes
 
 export class AuthService {
     /**
@@ -106,11 +107,11 @@ export class AuthService {
      * Generate secure token for user
      * Uses HMAC signature with expiry timestamp
      */
-    generateToken(user: User): string {
+    generateToken(user: User, expiryMs: number = LEGACY_TOKEN_EXPIRY_MS): string {
         const payload: JWTPayload & { exp: number } = {
             userId: user.id,
             facebookId: user.facebookId,
-            exp: Date.now() + TOKEN_EXPIRY_MS,
+            exp: Date.now() + expiryMs,
         };
 
         const payloadStr = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -118,6 +119,10 @@ export class AuthService {
 
         return `${payloadStr}.${signature}`;
     }
+
+    /**
+     * Verify and decode token
+     */
 
     /**
      * Verify and decode token
@@ -198,6 +203,7 @@ export class AuthService {
     async deleteUser(userId: string): Promise<void> {
         await db.delete(users).where(eq(users.id, userId));
     }
+
 }
 
 export const authService = new AuthService();

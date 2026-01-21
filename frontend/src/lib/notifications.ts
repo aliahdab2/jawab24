@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Token, ActionPerformed, PushNotificationSchema } from '@capacitor/push-notifications';
 import axios from 'axios';

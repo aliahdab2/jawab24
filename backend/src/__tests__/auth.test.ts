@@ -51,6 +51,8 @@ describe('AuthController - Native Login', () => {
         mockReply = {
             status: vi.fn().mockReturnThis(),
             send: vi.fn(),
+            setCookie: vi.fn(),
+            clearCookie: vi.fn(),
         };
     });
 

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
+import { setupAuthRefreshInterceptor } from './authInterceptor';
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -19,6 +20,10 @@ export const publicApi = axios.create({
   },
 });
 
+// Enable credentials (cookies) for all requests
+api.defaults.withCredentials = true;
+publicApi.defaults.withCredentials = true;
+
 // Add retry logic and timeout to both instances
 addRetryInterceptor(api, { retries: 3, retryDelay: 1000 });
 addRetryInterceptor(publicApi, { retries: 3, retryDelay: 1000 });
@@ -28,12 +33,26 @@ addTimeoutConfig(publicApi, 30000);
 // Add auth token to requests
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
+    // Mobile/Legacy: Add Bearer token if present
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Web: Add CSRF token from cookie if present (for state-changing requests)
+    if (document.cookie && config.method && ['post', 'put', 'patch', 'delete'].includes(config.method.toLowerCase())) {
+        const match = document.cookie.match(new RegExp('(^| )csrfToken=([^;]+)'));
+        if (match) {
+            config.headers['X-CSRF-Token'] = match[2];
+        }
+    }
   }
   return config;
+});
+
+// Set up automatic token refreshing
+setupAuthRefreshInterceptor(api, async () => {
+   return authApi.refreshToken();
 });
 
 // Handle auth errors
@@ -61,6 +80,12 @@ export const authApi = {
 
   getProfile: () =>
     api.get('/auth/profile'),
+
+  logout: () =>
+    api.post('/auth/logout'),
+
+  refreshToken: () =>
+    api.post('/auth/refresh'),
 };
 
 // Pages API
