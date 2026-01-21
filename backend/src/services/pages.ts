@@ -111,7 +111,7 @@ export class PagesService {
         logger.info(`[Pages] Starting sync for user ${userId}`);
 
         const fbPages = await facebookService.getUserPages(userAccessToken);
-        const syncedPages: any[] = [];
+        const syncedPages = [];
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
