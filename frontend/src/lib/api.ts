@@ -195,5 +195,5 @@ export const aiApi = {
     api.post<{ jobId: string; status: string }>('/ai/generate-async', data),
 
   getJobStatus: (jobId: string) =>
-    api.get<{ jobId: string; status: string; result?: unknown; error?: string }>(`/ai/jobs/${jobId}`),
+    api.get<{ jobId: string; status: string; result?: { reply: string }; error?: string }>(`/ai/jobs/${jobId}`),
 };
