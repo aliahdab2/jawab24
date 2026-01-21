@@ -89,4 +89,4 @@ Add security controls like "Force Logout" and "Active Devices".
 All core infrastructure items are complete. Optional future enhancements:
 
 1. **Session Management (Redis)**: Add "Force Logout" and "Active Devices" features if needed.
-2. **Centralized Logging**: Add Sentry or similar for error monitoring (see `roadmap.md`).
+2. **Error Monitoring**: ✅ Sentry integrated (backend, ai-worker, frontend).
