@@ -5,7 +5,7 @@ import { Card, Badge, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { api, subscriptionApi, settingsApi, pagesApi, templatesApi, rulesApi, commentsApi } from '@/lib/api';
+import { subscriptionApi, settingsApi, pagesApi, templatesApi, rulesApi, commentsApi } from '@/lib/api';
 import {
   MessageSquare,
   Zap,

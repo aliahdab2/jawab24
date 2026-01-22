@@ -82,8 +82,6 @@ const RulesPage: NextPageWithLayout = () => {
   };
 
   const handleSave = async () => {
-    if (!token) return;
-
     const ruleData = {
       name: formData.name,
       keywords: formData.keywords.split(',').map(k => k.trim()).filter(Boolean),
