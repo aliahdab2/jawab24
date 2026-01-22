@@ -152,8 +152,8 @@ const RulesPage: NextPageWithLayout = () => {
       // This is race-condition prone but okay for MVP. Better to have a bulk update or reorder endpoint.
       // I'll just update the two modified rules.
       await Promise.all([
-        rulesApi.update(newRules[index].id, { priority: newRules[index].priority }),
-        rulesApi.update(newRules[swapIndex].id, { priority: newRules[swapIndex].priority })
+        rulesApi.update(newRules[index].id, { priority: newRules[index].priority ?? undefined }),
+        rulesApi.update(newRules[swapIndex].id, { priority: newRules[swapIndex].priority ?? undefined })
       ]);
     } catch (error) {
       console.error("Failed to update priority", error);
