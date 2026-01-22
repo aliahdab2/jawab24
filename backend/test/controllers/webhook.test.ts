@@ -1,17 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify from 'fastify';
 import webhookRoutes from '../../src/routes/webhook';
+import { enqueueComment, enqueueMessage } from '../../src/lib/replyQueue';
 
-// Mock reply service before importing
-vi.mock('../../src/services/reply', () => ({
-    replyService: {
-        processComment: vi.fn().mockResolvedValue({
-            success: true,
-            commentId: 'comment_123',
-            replyText: 'Thank you!',
-            replyMethod: 'ai',
-        }),
-    },
+// Mock the reply queue - use vi.hoisted to create mock functions before hoisting
+const { mockEnqueueComment, mockEnqueueMessage } = vi.hoisted(() => ({
+    mockEnqueueComment: vi.fn().mockResolvedValue('mock-job-id'),
+    mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
+}));
+
+vi.mock('../../src/lib/replyQueue', () => ({
+    enqueueComment: mockEnqueueComment,
+    enqueueMessage: mockEnqueueMessage,
+    REPLY_QUEUE_NAME: 'reply-processing-queue',
 }));
 
 // Mock Redis
@@ -291,7 +292,7 @@ describe('Webhook Controller', () => {
             expect(response.statusCode).toBe(200);
         });
 
-        it('should handle messaging events (not processed)', async () => {
+        it('should handle messaging events and enqueue message', async () => {
             const webhookPayload = {
                 object: 'page',
                 entry: [
@@ -302,7 +303,7 @@ describe('Webhook Controller', () => {
                             {
                                 sender: { id: 'user_123' },
                                 recipient: { id: 'page_123' },
-                                message: { text: 'Hello!' },
+                                message: { mid: 'msg_123', text: 'Hello!' },
                             },
                         ],
                     },
@@ -316,6 +317,278 @@ describe('Webhook Controller', () => {
             });
 
             expect(response.statusCode).toBe(200);
+            
+            // Give async processing time to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            expect(mockEnqueueMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    jobType: 'facebook_message',
+                    pageId: 'page_123',
+                    messageId: 'msg_123',
+                    senderId: 'user_123',
+                    text: 'Hello!',
+                })
+            );
+        });
+
+        it('should enqueue comment jobs for new comments', async () => {
+            const webhookPayload = {
+                object: 'page',
+                entry: [
+                    {
+                        id: 'page_123',
+                        time: Date.now(),
+                        changes: [
+                            {
+                                field: 'feed',
+                                value: {
+                                    item: 'comment',
+                                    verb: 'add',
+                                    comment_id: 'comment_123',
+                                    post_id: 'post_123',
+                                    message: 'Great product!',
+                                    from: {
+                                        id: 'user_123',
+                                        name: 'John Doe',
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            
+            // Give async processing time to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            expect(mockEnqueueComment).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    jobType: 'facebook_comment',
+                    pageId: 'page_123',
+                    postId: 'post_123',
+                    commentId: 'comment_123',
+                    text: 'Great product!',
+                    senderId: 'user_123',
+                    senderName: 'John Doe',
+                })
+            );
+        });
+
+        it('should NOT enqueue comment jobs for page own comments', async () => {
+            const webhookPayload = {
+                object: 'page',
+                entry: [
+                    {
+                        id: 'page_123',
+                        time: Date.now(),
+                        changes: [
+                            {
+                                field: 'feed',
+                                value: {
+                                    item: 'comment',
+                                    verb: 'add',
+                                    comment_id: 'comment_123',
+                                    post_id: 'post_123',
+                                    message: 'Reply from page',
+                                    from: {
+                                        id: 'page_123', // Same as page ID
+                                        name: 'My Page',
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            
+            // Give async processing time to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Should NOT be called for page's own comments
+            expect(mockEnqueueComment).not.toHaveBeenCalled();
+        });
+
+        it('should NOT enqueue for comment edits', async () => {
+            const webhookPayload = {
+                object: 'page',
+                entry: [
+                    {
+                        id: 'page_123',
+                        time: Date.now(),
+                        changes: [
+                            {
+                                field: 'feed',
+                                value: {
+                                    item: 'comment',
+                                    verb: 'edit', // Edit, not add
+                                    comment_id: 'comment_123',
+                                    post_id: 'post_123',
+                                    message: 'Edited comment',
+                                    from: {
+                                        id: 'user_123',
+                                        name: 'John Doe',
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            
+            // Give async processing time to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            expect(mockEnqueueComment).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('POST /webhook (Instagram Events)', () => {
+        it('should accept Instagram events and return 200', async () => {
+            const webhookPayload = {
+                object: 'instagram',
+                entry: [
+                    {
+                        id: 'ig_account_123',
+                        time: Date.now(),
+                        changes: [
+                            {
+                                field: 'comments',
+                                value: {
+                                    id: 'ig_comment_123',
+                                    text: 'Nice post!',
+                                    media: { id: 'media_456' },
+                                    from: {
+                                        id: 'ig_user_789',
+                                        username: 'johndoe',
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.payload).toBe('EVENT_RECEIVED');
+        });
+
+        it('should enqueue Instagram comment jobs', async () => {
+            const webhookPayload = {
+                object: 'instagram',
+                entry: [
+                    {
+                        id: 'ig_account_123',
+                        time: Date.now(),
+                        changes: [
+                            {
+                                field: 'comments',
+                                value: {
+                                    id: 'ig_comment_123',
+                                    text: 'Nice post!',
+                                    media: { id: 'media_456' },
+                                    from: {
+                                        id: 'ig_user_789',
+                                        username: 'johndoe',
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            
+            // Give async processing time to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            expect(mockEnqueueComment).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    jobType: 'instagram_comment',
+                    pageId: 'ig_account_123',
+                    postId: 'media_456',
+                    commentId: 'ig_comment_123',
+                    text: 'Nice post!',
+                    senderId: 'ig_user_789',
+                    senderName: 'johndoe',
+                })
+            );
+        });
+
+        it('should enqueue Instagram message jobs', async () => {
+            const webhookPayload = {
+                object: 'instagram',
+                entry: [
+                    {
+                        id: 'ig_account_123',
+                        time: Date.now(),
+                        messaging: [
+                            {
+                                sender: { id: 'ig_user_789' },
+                                message: { mid: 'ig_msg_123', text: 'Hello via DM!' },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            
+            // Give async processing time to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            expect(mockEnqueueMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    jobType: 'instagram_message',
+                    pageId: 'ig_account_123',
+                    messageId: 'ig_msg_123',
+                    senderId: 'ig_user_789',
+                    text: 'Hello via DM!',
+                })
+            );
         });
     });
 });

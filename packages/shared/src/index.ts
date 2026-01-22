@@ -226,3 +226,34 @@ export interface AiGenerateJobData {
 }
 
 export const AI_QUEUE_NAME = 'ai-generation-queue';
+
+// --- Reply Queue Types ---
+export interface ReplyJobData {
+  // Job identification
+  jobType: 'facebook_comment' | 'facebook_message' | 'instagram_comment' | 'instagram_message';
+  requestId?: string; // Correlate with webhook request for tracing
+
+  // Source identification
+  pageId: string;           // Facebook/Instagram page ID (from webhook)
+  postId?: string;          // For comments only (Facebook post ID or Instagram media ID)
+  commentId?: string;       // Facebook/Instagram comment ID
+  messageId?: string;       // Facebook/Instagram message ID (for DMs)
+  senderId?: string;        // User who sent the comment/message
+  senderName?: string;      // Display name of sender
+  text: string;             // The actual comment/message content
+
+  // Metadata
+  receivedAt: string;       // ISO timestamp when webhook received
+  replyDelay?: number;      // Delay in seconds before processing (from user settings)
+}
+
+export interface ReplyJobResult {
+  success: boolean;
+  skipped?: boolean;
+  reason?: string;
+  replyText?: string;
+  replyMethod?: 'template' | 'ai';
+  error?: string;
+}
+
+export const REPLY_QUEUE_NAME = 'reply-processing-queue';

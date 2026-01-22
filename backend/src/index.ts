@@ -34,6 +34,8 @@ import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
 import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
+import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
+import { createRequestLogger } from "./types";
 
 // ⚡ Validate environment variables on startup
 try {
@@ -184,6 +186,12 @@ const start = async () => {
     console.log(`🚀 Server listening on http://${host}:${port}`);
     console.log(`📊 Health check: http://${host}:${port}/health`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+
+    // Start the reply processing worker
+    // Create a logger adapter for the worker
+    const workerLogger = createRequestLogger(server.log);
+    startWorker(workerLogger);
+    console.log(`⚙️  Reply processing worker started`);
   } catch (err) {
     server.log.error(err);
     process.exit(1);
@@ -195,6 +203,11 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`\n${signal} received, closing server gracefully...`);
 
   try {
+    // Stop the reply worker first (wait for in-progress jobs)
+    console.log("⏳ Stopping reply worker...");
+    await stopWorker();
+    console.log("✅ Reply worker stopped");
+
     await server.close();
     await redis.quit();
     console.log("✅ Server closed successfully");

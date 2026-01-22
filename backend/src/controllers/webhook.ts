@@ -1,7 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
-import { replyService } from '../services/reply';
-import { instagramReplyService } from '../services/instagramReply';
+import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 
 /** Messaging event from Facebook/Instagram webhook */
@@ -51,10 +50,13 @@ interface WebhookBody {
 
 export class WebhookController {
     private logger: Logger = noopLogger;
+    private requestId: string | undefined;
 
     /** Set logger for the current request context */
     private setLogger(request: FastifyRequest): void {
         this.logger = createRequestLogger(request.log);
+        // Extract request ID from headers (set by requestId middleware)
+        this.requestId = request.headers['x-request-id'] as string | undefined;
     }
 
     /** Get logger */
@@ -142,7 +144,7 @@ export class WebhookController {
     }
 
     /**
-     * Process a messaging event
+     * Process a messaging event - enqueue for async processing
      */
     private async processMessage(pageId: string, event: MessagingEvent) {
         const senderId = event.sender?.id;
@@ -153,29 +155,28 @@ export class WebhookController {
             return;
         }
 
-        // Ignore messages from the page itself (if any echo)
-        // Note: standard messaging events usually don't include echoes unless explicitly subscribed, 
-        // but good to be safe if logic allows checking. 
-        // Since we don't have the page's own ID easily available here without lookup, 
-        // we assume the event is from a user.
-
-        this.log().info('Processing message', { senderId, messageId, textLength: messageText.length });
+        this.log().info('Enqueueing message for processing', { 
+            senderId, 
+            messageId, 
+            textLength: messageText.length 
+        });
 
         try {
-            const result = await replyService.processMessage(
+            const jobId = await enqueueMessage({
+                jobType: 'facebook_message',
                 pageId,
+                messageId,
                 senderId,
-                messageText,
-                messageId
-            );
+                text: messageText,
+                requestId: this.requestId,
+            });
 
-            if (result.success) {
-                this.log().info('Successfully replied to message', { messageId });
-            } else {
-                this.log().info('Failed to reply to message', { messageId, error: result.error });
-            }
+            this.log().info('Message enqueued successfully', { messageId, jobId });
         } catch (error) {
-            this.log().error('Error processing message', { messageId, error: String(error) });
+            this.log().error('Failed to enqueue message', { 
+                messageId, 
+                error: String(error) 
+            });
         }
     }
 
@@ -209,13 +210,17 @@ export class WebhookController {
     }
 
     /**
-     * Process a new comment
+     * Process a new comment - enqueue for async processing
      */
     private async processNewComment(pageId: string, value: WebhookChange['value']) {
         const { comment_id, post_id, message, from } = value;
 
         if (!comment_id || !post_id || !message) {
-            this.log().debug('Missing required fields for comment processing', { comment_id, post_id, hasMessage: !!message });
+            this.log().debug('Missing required fields for comment processing', { 
+                comment_id, 
+                post_id, 
+                hasMessage: !!message 
+            });
             return;
         }
 
@@ -225,25 +230,26 @@ export class WebhookController {
             return;
         }
 
-        this.log().info('Processing new comment', { comment_id, post_id });
+        this.log().info('Enqueueing comment for processing', { comment_id, post_id });
 
         try {
-            const result = await replyService.processComment(
+            const jobId = await enqueueComment({
+                jobType: 'facebook_comment',
                 pageId,
-                post_id,
-                comment_id,
-                message,
-                from?.id,
-                from?.name
-            );
+                postId: post_id,
+                commentId: comment_id,
+                text: message,
+                senderId: from?.id,
+                senderName: from?.name,
+                requestId: this.requestId,
+            });
 
-            if (result.success) {
-                this.log().info('Successfully replied to comment', { comment_id, replyMethod: result.replyMethod });
-            } else {
-                this.log().info('Failed to reply to comment', { comment_id, error: result.error });
-            }
+            this.log().info('Comment enqueued successfully', { comment_id, jobId });
         } catch (error) {
-            this.log().error('Error processing comment', { comment_id, error: String(error) });
+            this.log().error('Failed to enqueue comment', { 
+                comment_id, 
+                error: String(error) 
+            });
         }
     }
 
@@ -292,7 +298,7 @@ export class WebhookController {
     }
 
     /**
-     * Process an Instagram comment
+     * Process an Instagram comment - enqueue for async processing
      */
     private async processInstagramComment(instagramAccountId: string, value: WebhookChange['value']) {
         const commentId = value.id;
@@ -301,7 +307,11 @@ export class WebhookController {
         const from = value.from;
 
         if (!commentId || !commentText || !mediaId) {
-            this.log().debug('[Instagram] Missing required fields for comment processing', { commentId, mediaId, hasText: !!commentText });
+            this.log().debug('[Instagram] Missing required fields for comment processing', { 
+                commentId, 
+                mediaId, 
+                hasText: !!commentText 
+            });
             return;
         }
 
@@ -311,30 +321,31 @@ export class WebhookController {
             return;
         }
 
-        this.log().info('[Instagram] Processing new comment', { commentId, mediaId });
+        this.log().info('[Instagram] Enqueueing comment for processing', { commentId, mediaId });
 
         try {
-            const result = await instagramReplyService.processComment(
-                instagramAccountId,
-                mediaId,
+            const jobId = await enqueueComment({
+                jobType: 'instagram_comment',
+                pageId: instagramAccountId,
+                postId: mediaId,
                 commentId,
-                commentText,
-                from?.id,
-                from?.username
-            );
+                text: commentText,
+                senderId: from?.id,
+                senderName: from?.username,
+                requestId: this.requestId,
+            });
 
-            if (result.success) {
-                this.log().info('[Instagram] Successfully replied to comment', { commentId });
-            } else {
-                this.log().info('[Instagram] Failed to reply to comment', { commentId, error: result.error });
-            }
+            this.log().info('[Instagram] Comment enqueued successfully', { commentId, jobId });
         } catch (error) {
-            this.log().error('[Instagram] Error processing comment', { commentId, error: String(error) });
+            this.log().error('[Instagram] Failed to enqueue comment', { 
+                commentId, 
+                error: String(error) 
+            });
         }
     }
 
     /**
-     * Process an Instagram DM
+     * Process an Instagram DM - enqueue for async processing
      */
     private async processInstagramMessage(instagramAccountId: string, event: MessagingEvent) {
         const senderId = event.sender?.id;
@@ -345,23 +356,28 @@ export class WebhookController {
             return;
         }
 
-        this.log().info('[Instagram] Processing message', { senderId, messageId, textLength: messageText.length });
+        this.log().info('[Instagram] Enqueueing message for processing', { 
+            senderId, 
+            messageId, 
+            textLength: messageText.length 
+        });
 
         try {
-            const result = await instagramReplyService.processMessage(
-                instagramAccountId,
+            const jobId = await enqueueMessage({
+                jobType: 'instagram_message',
+                pageId: instagramAccountId,
+                messageId,
                 senderId,
-                messageText,
-                messageId
-            );
+                text: messageText,
+                requestId: this.requestId,
+            });
 
-            if (result.success) {
-                this.log().info('[Instagram] Successfully replied to message', { messageId });
-            } else {
-                this.log().info('[Instagram] Failed to reply to message', { messageId, error: result.error });
-            }
+            this.log().info('[Instagram] Message enqueued successfully', { messageId, jobId });
         } catch (error) {
-            this.log().error('[Instagram] Error processing message', { messageId, error: String(error) });
+            this.log().error('[Instagram] Failed to enqueue message', { 
+                messageId, 
+                error: String(error) 
+            });
         }
     }
 }

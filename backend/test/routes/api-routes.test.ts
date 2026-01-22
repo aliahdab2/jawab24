@@ -1,5 +1,27 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
+
+// Mock the reply queue before importing routes
+vi.mock('../../src/lib/replyQueue', () => ({
+    enqueueComment: vi.fn().mockResolvedValue('mock-job-id'),
+    enqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
+    REPLY_QUEUE_NAME: 'reply-processing-queue',
+}));
+
+// Mock config
+vi.mock('../../src/config', () => ({
+    config: {
+        facebook: {
+            webhookVerifyToken: 'test_verify_token',
+        },
+        redis: {
+            host: 'localhost',
+            port: 6379,
+            password: undefined,
+        },
+    },
+}));
+
 import authRoutes from '../../src/routes/auth';
 import pagesRoutes from '../../src/routes/pages';
 import webhookRoutes from '../../src/routes/webhook';
