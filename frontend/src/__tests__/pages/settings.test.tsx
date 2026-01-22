@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import axios from 'axios';
-import MockAdapter from 'axios-mock-adapter';
 import SettingsPage from '@/pages/settings';
 import type { Language } from '@/i18n';
+import { settingsApi } from '@/lib/api';
 
 // Create mock functions
 const mockT = vi.fn((key: string) => key);
@@ -22,8 +21,19 @@ vi.mock('@/i18n', () => ({
 
 vi.mock('@/lib/store', () => ({
     useAuthStore: () => ({
-        token: 'test-token',
+        isAuthenticated: true,
     }),
+}));
+
+// Mock @/lib/api to use axios mock adapter
+vi.mock('@/lib/api', () => ({
+    settingsApi: {
+        get: vi.fn(),
+        update: vi.fn(),
+    },
+    api: {
+        delete: vi.fn(),
+    },
 }));
 
 vi.mock('@/components/layout/DashboardLayout', () => ({
@@ -46,22 +56,21 @@ vi.mock('@/components/ui', () => ({
     ),
 }));
 
+const mockedSettingsApi = vi.mocked(settingsApi);
+
 describe('SettingsPage - Infinite Loop Prevention', () => {
-    let mock: MockAdapter;
     let fetchCallCount = 0;
 
     beforeEach(() => {
-        mock = new MockAdapter(axios);
         fetchCallCount = 0;
         mockSetLanguage.mockClear();
         mockT.mockClear();
 
-        // Track fetch calls
-        mock.onGet(/\/settings$/).reply(() => {
+        // Track fetch calls with mocked settingsApi
+        mockedSettingsApi.get.mockImplementation(async () => {
             fetchCallCount++;
-            return [
-                200,
-                {
+            return {
+                data: {
                     dashboardLanguage: 'en',
                     defaultReplyLanguage: 'ar',
                     autoDetectLanguage: true,
@@ -69,12 +78,11 @@ describe('SettingsPage - Infinite Loop Prevention', () => {
                     commentsAutoReply: true,
                     messagesAutoReply: true,
                 },
-            ];
+            } as any;
         });
     });
 
     afterEach(() => {
-        mock.restore();
         vi.clearAllMocks();
     });
 
@@ -125,14 +133,16 @@ describe('SettingsPage - Infinite Loop Prevention', () => {
 
     it('should call setLanguage when dashboardLanguage differs from current language', async () => {
         // Mock server returning different language
-        mock.onGet(/\/settings$/).reply(200, {
-            dashboardLanguage: 'ar', // Different from current 'en'
-            defaultReplyLanguage: 'ar',
-            autoDetectLanguage: true,
-            aiEnabled: true,
-            commentsAutoReply: true,
-            messagesAutoReply: true,
-        });
+        mockedSettingsApi.get.mockImplementationOnce(async () => ({
+            data: {
+                dashboardLanguage: 'ar', // Different from current 'en'
+                defaultReplyLanguage: 'ar',
+                autoDetectLanguage: true,
+                aiEnabled: true,
+                commentsAutoReply: true,
+                messagesAutoReply: true,
+            },
+        } as any));
 
         render(<SettingsPage />);
 

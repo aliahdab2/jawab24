@@ -15,14 +15,14 @@ import {
   ChevronRight,
   Clock
 } from 'lucide-react';
-import axios from 'axios';
+import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 const PagesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
-  const { token, fbToken } = useAuthStore();
+  const { isAuthenticated, fbToken } = useAuthStore();
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -39,16 +39,10 @@ const PagesPage: NextPageWithLayout = () => {
   }, []);
   useEscapeKey(closeKnowledgeBaseModal, !!editingPage);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
   const fetchPages = useCallback(async () => {
-    if (!token) return;
-
     try {
       setLoading(true);
-      const response = await axios.get(`${apiUrl}/pages`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await pagesApi.getAll();
       const data = Array.isArray(response.data)
         ? response.data
         : (Array.isArray(response.data?.data) ? response.data.data : []);
@@ -58,15 +52,14 @@ const PagesPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl]);
+  }, []);
 
-  // Fetch pages on load, auto-sync if empty
+  // Fetch pages on load - use isAuthenticated instead of token (web uses cookies)
   useEffect(() => {
-    const loadPages = async () => {
-      await fetchPages();
-    };
-    loadPages();
-  }, [fetchPages]);
+    if (isAuthenticated) {
+      fetchPages();
+    }
+  }, [isAuthenticated, fetchPages]);
 
   // Auto-sync if no pages found after initial load (only once)
   const syncAttemptedRef = useRef(false);
@@ -75,18 +68,15 @@ const PagesPage: NextPageWithLayout = () => {
   const handleSyncRef = useRef<(() => Promise<void>) | null>(null);
 
   const handleSync = useCallback(async () => {
-    if (!token || !fbToken) {
-      console.error('No tokens available for sync');
+    if (!fbToken) {
+      console.error('No FB token available for sync');
       return;
     }
 
     try {
       setSyncing(true);
       // Call sync endpoint with user's FB token
-      await axios.post(`${apiUrl}/pages/sync`,
-        { accessToken: fbToken },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.post('/pages/sync', { accessToken: fbToken });
 
       // Refresh list
       await fetchPages();
@@ -96,18 +86,18 @@ const PagesPage: NextPageWithLayout = () => {
     } finally {
       setSyncing(false);
     }
-  }, [token, fbToken, apiUrl, fetchPages]);
+  }, [fbToken, fetchPages]);
 
   // Keep ref updated
   handleSyncRef.current = handleSync;
 
   useEffect(() => {
-    if (!loading && pages.length === 0 && fbToken && token && !syncing && !syncAttemptedRef.current) {
+    if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncing && !syncAttemptedRef.current) {
       // Auto-sync pages from Facebook (only attempt once)
       syncAttemptedRef.current = true;
       handleSyncRef.current?.();
     }
-  }, [loading, pages.length, fbToken, token, syncing]);
+  }, [loading, pages.length, fbToken, isAuthenticated, syncing]);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
     // Optimistic update
@@ -116,10 +106,7 @@ const PagesPage: NextPageWithLayout = () => {
     ));
 
     try {
-      await axios.patch(`${apiUrl}/pages/${pageId}/auto-reply`,
-        { enabled },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await pagesApi.toggle(pageId, enabled);
     } catch (error) {
       console.error('Failed to toggle auto-reply:', error);
       // Revert on error
@@ -136,10 +123,7 @@ const PagesPage: NextPageWithLayout = () => {
     ));
 
     try {
-      await axios.patch(`${apiUrl}/pages/${pageId}/instagram-auto-reply`,
-        { enabled },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.patch(`/pages/${pageId}/instagram-auto-reply`, { enabled });
     } catch (error) {
       console.error('Failed to toggle Instagram auto-reply:', error);
       // Revert on error
@@ -170,15 +154,12 @@ const PagesPage: NextPageWithLayout = () => {
   };
 
   const saveKnowledgeBase = async () => {
-    if (!editingPage || !token) return;
+    if (!editingPage) return;
 
     setSaving(true);
     setSaved(false);
     try {
-      await axios.put(`${apiUrl}/pages/${editingPage.id}`,
-        { knowledgeBase },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await api.put(`/pages/${editingPage.id}`, { knowledgeBase });
 
       // Update local state
       setPages(pages.map(p =>

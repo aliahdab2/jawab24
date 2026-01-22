@@ -4,7 +4,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
-import axios from 'axios';
+import { templatesApi } from '@/lib/api';
 import {
   BookTemplate,
   Plus,
@@ -20,7 +20,7 @@ import type { NextPageWithLayout } from './_app';
 
 const TemplatesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
-  const { token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,15 +48,10 @@ const TemplatesPage: NextPageWithLayout = () => {
   // Form validation: name required + at least one translation
   const isFormValid = formData.name.trim() !== '' && (formData.en.trim() !== '' || formData.ar.trim() !== '');
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
   const fetchTemplates = useCallback(async () => {
-    if (!token) return;
     try {
       setLoading(true);
-      const response = await axios.get(`${apiUrl}/templates`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await templatesApi.getAll();
       const data = Array.isArray(response.data)
         ? response.data
         : (Array.isArray(response.data?.data) ? response.data.data : []);
@@ -66,11 +61,14 @@ const TemplatesPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl]);
+  }, []);
 
   useEffect(() => {
-    fetchTemplates();
-  }, [fetchTemplates]);
+    // Use isAuthenticated instead of token - on web, auth is via cookies
+    if (isAuthenticated) {
+      fetchTemplates();
+    }
+  }, [isAuthenticated, fetchTemplates]);
 
   const handleOpenModal = (template?: Template) => {
     if (template) {
@@ -104,16 +102,10 @@ const TemplatesPage: NextPageWithLayout = () => {
 
     try {
       if (editingTemplate) {
-        const response = await axios.put(`${apiUrl}/templates/${editingTemplate.id}`,
-          templateData,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        const response = await templatesApi.update(editingTemplate.id, templateData);
         setTemplates(templates.map(t => t.id === editingTemplate.id ? response.data : t));
       } else {
-        const response = await axios.post(`${apiUrl}/templates`,
-          templateData,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        const response = await templatesApi.create(templateData);
         setTemplates([response.data, ...templates]);
       }
       setIsModalOpen(false);
@@ -127,10 +119,7 @@ const TemplatesPage: NextPageWithLayout = () => {
     setTemplates(templates.map(t => t.id === id ? { ...t, active } : t));
 
     try {
-      await axios.patch(`${apiUrl}/templates/${id}/active`,
-        { active },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await templatesApi.update(id, { active });
     } catch (error) {
       console.error('Failed to toggle template:', error);
       // Revert
@@ -142,9 +131,7 @@ const TemplatesPage: NextPageWithLayout = () => {
     if (!confirm(t('common.confirmDelete'))) return;
 
     try {
-      await axios.delete(`${apiUrl}/templates/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await templatesApi.delete(id);
       setTemplates(templates.filter(t => t.id !== id));
     } catch (error) {
       console.error('Failed to delete template:', error);

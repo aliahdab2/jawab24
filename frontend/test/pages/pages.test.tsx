@@ -1,7 +1,25 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PagesPage from '@/pages/pages';
-import axios from 'axios';
+
+// Mock @/lib/api
+const mockPagesApiGetAll = vi.fn();
+const mockPagesApiToggle = vi.fn();
+const mockApiPost = vi.fn();
+const mockApiPatch = vi.fn();
+const mockApiPut = vi.fn();
+
+vi.mock('@/lib/api', () => ({
+  pagesApi: {
+    getAll: () => mockPagesApiGetAll(),
+    toggle: (id: string, enabled: boolean) => mockPagesApiToggle(id, enabled),
+  },
+  api: {
+    post: (url: string, data: any) => mockApiPost(url, data),
+    patch: (url: string, data: any) => mockApiPatch(url, data),
+    put: (url: string, data: any) => mockApiPut(url, data),
+  },
+}));
 
 // Mock Next.js router
 vi.mock('next/router', () => ({
@@ -27,7 +45,6 @@ vi.mock('@/i18n', () => ({
 vi.mock('@/lib/store', () => ({
   useAuthStore: vi.fn((selector) => {
     const store = {
-      token: 'test-jwt-token',
       fbToken: 'test-fb-token',
       user: { id: 'user-1' },
       setAuth: vi.fn(),
@@ -45,16 +62,15 @@ vi.mock('@/lib/store', () => ({
   })),
 }));
 
-// Mock axios
-vi.mock('axios');
-const mockedAxios = vi.mocked(axios);
-
 describe('PagesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: return empty pages
-    mockedAxios.get.mockResolvedValue({ data: [] });
-    mockedAxios.post.mockResolvedValue({ data: { success: true } });
+    mockPagesApiGetAll.mockResolvedValue({ data: [] });
+    mockApiPost.mockResolvedValue({ data: { success: true } });
+    mockPagesApiToggle.mockResolvedValue({ data: { success: true } });
+    mockApiPatch.mockResolvedValue({ data: { success: true } });
+    mockApiPut.mockResolvedValue({ data: { success: true } });
   });
 
   afterEach(() => {
@@ -83,7 +99,7 @@ describe('PagesPage', () => {
 
   describe('Pages Display', () => {
     it('should display pages when available', async () => {
-      mockedAxios.get.mockResolvedValue({
+      mockPagesApiGetAll.mockResolvedValue({
         data: [
           {
             id: 'page-1',
@@ -106,7 +122,7 @@ describe('PagesPage', () => {
     });
 
     it('should show Facebook badge on page cards', async () => {
-      mockedAxios.get.mockResolvedValue({
+      mockPagesApiGetAll.mockResolvedValue({
         data: [
           {
             id: 'page-1',
@@ -131,8 +147,8 @@ describe('PagesPage', () => {
 
   describe('Sync Functionality', () => {
     it('should call sync API when connect button is clicked', async () => {
-      mockedAxios.get.mockResolvedValue({ data: [] });
-      mockedAxios.post.mockResolvedValue({ data: { success: true } });
+      mockPagesApiGetAll.mockResolvedValue({ data: [] });
+      mockApiPost.mockResolvedValue({ data: { success: true } });
 
       render(<PagesPage />);
 
@@ -145,10 +161,9 @@ describe('PagesPage', () => {
       fireEvent.click(connectButtons[0]);
 
       await waitFor(() => {
-        expect(mockedAxios.post).toHaveBeenCalledWith(
-          expect.stringContaining('/pages/sync'),
-          expect.objectContaining({ accessToken: 'test-fb-token' }),
-          expect.any(Object)
+        expect(mockApiPost).toHaveBeenCalledWith(
+          '/pages/sync',
+          expect.objectContaining({ accessToken: 'test-fb-token' })
         );
       });
     });
@@ -156,7 +171,7 @@ describe('PagesPage', () => {
 
   describe('Auto-reply Toggle', () => {
     it('should toggle auto-reply when switch is clicked', async () => {
-      mockedAxios.get.mockResolvedValue({
+      mockPagesApiGetAll.mockResolvedValue({
         data: [
           {
             id: 'page-1',
@@ -166,7 +181,6 @@ describe('PagesPage', () => {
           },
         ],
       });
-      mockedAxios.patch.mockResolvedValue({ data: { success: true } });
 
       render(<PagesPage />);
 
@@ -181,18 +195,14 @@ describe('PagesPage', () => {
       fireEvent.click(toggles[0]);
 
       await waitFor(() => {
-        expect(mockedAxios.patch).toHaveBeenCalledWith(
-          expect.stringContaining('/pages/page-1/auto-reply'),
-          expect.objectContaining({ enabled: true }),
-          expect.any(Object)
-        );
+        expect(mockPagesApiToggle).toHaveBeenCalledWith('page-1', true);
       });
     });
   });
 
   describe('Knowledge Base Modal', () => {
     it('should open knowledge base modal when business info is clicked', async () => {
-      mockedAxios.get.mockResolvedValue({
+      mockPagesApiGetAll.mockResolvedValue({
         data: [
           {
             id: 'page-1',

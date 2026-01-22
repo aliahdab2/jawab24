@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, PageHeader, PageSkeleton, MessagesFilterButtons } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
-import axios from 'axios';
+import { api } from '@/lib/api';
 import {
   MessageCircle,
   Search,
@@ -39,7 +39,7 @@ interface Conversation {
 
 const MessagesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
-  const { token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,15 +51,10 @@ const MessagesPage: NextPageWithLayout = () => {
   // ESC key to close modal
   useEscapeKey(() => setSelectedConversation(null), !!selectedConversation);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
   const fetchMessages = useCallback(async () => {
-    if (!token) return;
     try {
       setLoading(true);
-      const response = await axios.get(`${apiUrl}/messages`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/messages');
       const data = Array.isArray(response.data)
         ? response.data
         : (Array.isArray(response.data?.data) ? response.data.data : []);
@@ -69,24 +64,24 @@ const MessagesPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl]);
+  }, []);
 
   const fetchStats = useCallback(async () => {
-    if (!token) return;
     try {
-      const response = await axios.get(`${apiUrl}/messages/stats`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/messages/stats');
       setStats(response.data);
     } catch (error) {
       console.error('Failed to fetch message stats:', error);
     }
-  }, [token, apiUrl]);
+  }, []);
 
   useEffect(() => {
-    fetchMessages();
-    fetchStats();
-  }, [fetchMessages, fetchStats]);
+    // Use isAuthenticated instead of token - on web, auth is via cookies
+    if (isAuthenticated) {
+      fetchMessages();
+      fetchStats();
+    }
+  }, [isAuthenticated, fetchMessages, fetchStats]);
 
   // Check if a conversation needs human attention
   const checkNeedsAttention = (msgs: Message[]): boolean => {

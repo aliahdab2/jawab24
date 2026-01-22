@@ -5,8 +5,7 @@ import { Card, Badge, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import axios from 'axios';
-import { subscriptionApi } from '@/lib/api';
+import { api, subscriptionApi, settingsApi, pagesApi, templatesApi, rulesApi, commentsApi } from '@/lib/api';
 import {
   MessageSquare,
   Zap,
@@ -58,7 +57,7 @@ const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
 
 const DashboardPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
-  const { token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -77,18 +76,17 @@ const DashboardPage: NextPageWithLayout = () => {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
+      // Use API instances that handle auth via cookies (web) or Bearer token (mobile)
       const [commentsRes, pagesRes, templatesRes, rulesRes, usageRes, settingsRes] = await Promise.all([
-        axios.get(`${apiUrl}/comments`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${apiUrl}/pages`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${apiUrl}/templates`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } }),
+        commentsApi.getAll(),
+        pagesApi.getAll(),
+        templatesApi.getAll(),
+        rulesApi.getAll(),
         subscriptionApi.getUsage().catch(() => null),
-        axios.get(`${apiUrl}/settings`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
+        settingsApi.get().catch(() => null)
       ]);
 
       // Set usage data if available
@@ -153,13 +151,14 @@ const DashboardPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl, setOnboardingVisible]);
+  }, [setOnboardingVisible]);
 
   useEffect(() => {
-    if (token) {
+    // Use isAuthenticated instead of token - on web, token is null but auth is via cookies
+    if (isAuthenticated) {
       fetchDashboardData();
     }
-  }, [token, fetchDashboardData]);
+  }, [isAuthenticated, fetchDashboardData]);
 
   const formatTime = (dateValue: string | Date | null | undefined) => {
     if (!dateValue) return '-';

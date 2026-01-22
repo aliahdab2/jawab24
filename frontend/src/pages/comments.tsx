@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, PageHeader, PageSkeleton, CommentsFilterButtons } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
-import axios from 'axios';
 import {
   MessageSquare,
   Search,
@@ -32,7 +31,7 @@ type FilterType = 'all' | 'replied' | 'pending' | 'needs_attention';
 
 const CommentsPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
-  const { token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
@@ -88,15 +87,10 @@ const CommentsPage: NextPageWithLayout = () => {
     </Card>
   );
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
   const fetchComments = useCallback(async () => {
-    if (!token) return;
     try {
       setLoading(true);
-      const response = await axios.get(`${apiUrl}/comments`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await commentsApi.getAll();
       const data = Array.isArray(response.data)
         ? response.data
         : (Array.isArray(response.data?.data) ? response.data.data : []);
@@ -106,11 +100,14 @@ const CommentsPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl]);
+  }, []);
 
   useEffect(() => {
-    fetchComments();
-  }, [fetchComments]);
+    // Use isAuthenticated instead of token - on web, auth is via cookies
+    if (isAuthenticated) {
+      fetchComments();
+    }
+  }, [isAuthenticated, fetchComments]);
 
   // Check if comment needs human attention
   const checkNeedsAttention = (comment: Comment): boolean => {

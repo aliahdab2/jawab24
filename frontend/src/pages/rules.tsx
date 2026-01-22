@@ -4,7 +4,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
-import axios from 'axios';
+import { rulesApi, templatesApi } from '@/lib/api';
 import {
   Zap,
   Plus,
@@ -20,7 +20,7 @@ import type { NextPageWithLayout } from './_app';
 
 const RulesPage: NextPageWithLayout = () => {
   const { t } = useTranslation();
-  const { token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,15 +32,12 @@ const RulesPage: NextPageWithLayout = () => {
     templateId: '',
   });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
   const fetchData = useCallback(async () => {
-    if (!token) return;
     try {
       setLoading(true);
       const [rulesRes, templatesRes] = await Promise.all([
-        axios.get(`${apiUrl}/rules`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${apiUrl}/templates`, { headers: { Authorization: `Bearer ${token}` } })
+        rulesApi.getAll(),
+        templatesApi.getAll()
       ]);
 
       const rulesData = Array.isArray(rulesRes.data)
@@ -60,11 +57,14 @@ const RulesPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl]);
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    // Use isAuthenticated instead of token - on web, auth is via cookies
+    if (isAuthenticated) {
+      fetchData();
+    }
+  }, [isAuthenticated, fetchData]);
 
   const handleOpenModal = (rule?: Rule) => {
     if (rule) {
@@ -94,16 +94,10 @@ const RulesPage: NextPageWithLayout = () => {
 
     try {
       if (editingRule) {
-        const response = await axios.put(`${apiUrl}/rules/${editingRule.id}`,
-          ruleData,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        const response = await rulesApi.update(editingRule.id, ruleData);
         setRules(rules.map(r => r.id === editingRule.id ? response.data : r));
       } else {
-        const response = await axios.post(`${apiUrl}/rules`,
-          ruleData,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        const response = await rulesApi.create(ruleData);
         setRules([...rules, response.data].sort((a, b) => a.priority - b.priority));
       }
       setIsModalOpen(false);
@@ -117,10 +111,7 @@ const RulesPage: NextPageWithLayout = () => {
     setRules(rules.map(r => r.id === id ? { ...r, active } : r));
 
     try {
-      await axios.patch(`${apiUrl}/rules/${id}`,
-        { active },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await rulesApi.update(id, { active });
     } catch (error) {
       console.error('Failed to toggle rule:', error);
       // Revert
@@ -132,9 +123,7 @@ const RulesPage: NextPageWithLayout = () => {
     if (!confirm(t('common.confirmDelete'))) return;
 
     try {
-      await axios.delete(`${apiUrl}/rules/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await rulesApi.delete(id);
       setRules(rules.filter(r => r.id !== id));
     } catch (error) {
       console.error('Failed to delete rule:', error);
@@ -165,8 +154,8 @@ const RulesPage: NextPageWithLayout = () => {
       // This is race-condition prone but okay for MVP. Better to have a bulk update or reorder endpoint.
       // I'll just update the two modified rules.
       await Promise.all([
-        axios.put(`${apiUrl}/rules/${newRules[index].id}`, { priority: newRules[index].priority }, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.put(`${apiUrl}/rules/${newRules[swapIndex].id}`, { priority: newRules[swapIndex].priority }, { headers: { Authorization: `Bearer ${token}` } })
+        rulesApi.update(newRules[index].id, { priority: newRules[index].priority }),
+        rulesApi.update(newRules[swapIndex].id, { priority: newRules[swapIndex].priority })
       ]);
     } catch (error) {
       console.error("Failed to update priority", error);

@@ -5,7 +5,7 @@ import { Card, Button, Input, Toggle, PageHeader, PageSkeleton, Modal } from '@/
 import { useAuthStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { useRouter } from 'next/router';
-import axios from 'axios';
+import { settingsApi, api } from '@/lib/api';
 import {
   Globe,
   Bot,
@@ -65,7 +65,7 @@ function SimpleToggle({
 const SettingsPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { setLanguage } = useLanguage();
-  const { token } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const router = useRouter();
 
   // Show/hide advanced settings
@@ -98,15 +98,10 @@ const SettingsPage: NextPageWithLayout = () => {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
   const fetchSettings = useCallback(async () => {
-    if (!token) return;
     try {
       setLoading(true);
-      const response = await axios.get(`${apiUrl}/settings`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await settingsApi.get();
       const data = response.data;
       setSettings(prev => ({
         ...prev,
@@ -131,12 +126,14 @@ const SettingsPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, apiUrl]);
+  }, []);
 
-  // Fetch settings on mount
+  // Fetch settings on mount - use isAuthenticated instead of token (web uses cookies)
   useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+    if (isAuthenticated) {
+      fetchSettings();
+    }
+  }, [isAuthenticated, fetchSettings]);
 
   // Separate effect: Sync language when settings.dashboardLanguage changes
   // This is the industry-standard pattern for side effects
@@ -147,13 +144,10 @@ const SettingsPage: NextPageWithLayout = () => {
   }, [settings.dashboardLanguage, language, setLanguage]);
 
   const handleSave = async () => {
-    if (!token) return;
     setSaving(true);
     setSaved(false);
     try {
-      await axios.put(`${apiUrl}/settings`, settings, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await settingsApi.update(settings);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
@@ -164,12 +158,9 @@ const SettingsPage: NextPageWithLayout = () => {
   };
 
   const handleDeleteAccount = async () => {
-    if (!token) return;
     setSaving(true);
     try {
-      await axios.delete(`${apiUrl}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete('/auth/me');
       
       // Success state (Best Practice: Give user feedback before redirecting)
       setIsDeleted(true);
