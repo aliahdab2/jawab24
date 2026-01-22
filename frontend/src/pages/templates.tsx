@@ -88,14 +88,14 @@ const TemplatesPage: NextPageWithLayout = () => {
   };
 
   const handleSave = async () => {
-    if (!token) return;
+    // Build translations object only with non-empty values
+    const translations: Record<string, string> = {};
+    if (formData.en) translations.en = formData.en;
+    if (formData.ar) translations.ar = formData.ar;
 
     const templateData = {
       name: formData.name,
-      translations: {
-        en: formData.en || undefined,
-        ar: formData.ar || undefined,
-      },
+      translations,
       keywords: formData.keywords.split(',').map(k => k.trim()).filter(Boolean),
       active: editingTemplate?.active ?? true,
     };

@@ -6,6 +6,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
+import { useAuthStore } from '@/lib/store';
 
 import { Button, BrandLogo } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
@@ -15,6 +16,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { planId } = router.query;
   const { t } = useTranslation();
+  const { isAuthenticated } = useAuthStore();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -51,12 +53,9 @@ export default function CheckoutPage() {
 
         // If it's a FREE plan, redirect to dashboard as they get it for free
         // But only if they don't have a plan yet (otherwise it might be a downgrade)
-        if (planData.price === 0) {
-          const token = localStorage.getItem('token');
-          if (token) {
-            router.push('/dashboard');
-            return;
-          }
+        if (planData.price === 0 && isAuthenticated) {
+          router.push('/dashboard');
+          return;
         }
 
         setPlan(planData);
@@ -68,7 +67,7 @@ export default function CheckoutPage() {
     };
 
     fetchPlan();
-  }, [planId, plan, fetchError, errorLoadPlanMessage, isSanctioned, router]);
+  }, [planId, plan, fetchError, errorLoadPlanMessage, isSanctioned, router, isAuthenticated]);
 
   const handleCheckout = async () => {
     if (!planId) return;
@@ -83,8 +82,8 @@ export default function CheckoutPage() {
     setError('');
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
+      // Check if user is authenticated (web uses cookies, mobile uses token)
+      if (!isAuthenticated) {
         router.push('/login?redirect=/checkout?planId=' + planId);
         return;
       }
