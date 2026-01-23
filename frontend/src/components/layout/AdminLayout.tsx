@@ -2,7 +2,7 @@ import { useRouter } from 'next/router';
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { Shield, Users, FileText, ArrowLeft } from 'lucide-react';
+import { Shield, Users, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import clsx from 'clsx';

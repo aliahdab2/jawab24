@@ -1,6 +1,7 @@
+/* eslint-disable no-console */
 import { db } from '../db';
 import { users } from '../db/schema';
-import { eq, or, ilike } from 'drizzle-orm';
+import { eq, ilike } from 'drizzle-orm';
 
 /**
  * Ensure admin users are set up based on environment variables

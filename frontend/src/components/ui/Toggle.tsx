@@ -32,8 +32,8 @@ export function Toggle({ enabled, onChange, disabled = false, size = 'md' }: Tog
   const getTransform = () => {
     const distance = sizeClasses[size].translateDistance;
     if (isRTL) {
-      // RTL: start at right, move to left when enabled
-      return enabled ? 'translateX(0)' : `translateX(${distance}px)`;
+      // RTL: start at right (flex-start), move to left (negative x) when enabled
+      return enabled ? `translateX(-${distance}px)` : 'translateX(0)';
     } else {
       // LTR: start at left, move to right when enabled
       return enabled ? `translateX(${distance}px)` : 'translateX(0)';

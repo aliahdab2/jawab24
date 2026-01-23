@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, User, Calendar, CreditCard, FileText, Zap, Globe, Mail, Facebook } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Zap, Globe, Mail, Facebook } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslation } from '@/i18n';
 import { Card, Button } from '@/components/ui';

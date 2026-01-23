@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import Link from 'next/link';
-import { Search, Filter, ChevronLeft, ChevronRight, User, Calendar, CreditCard } from 'lucide-react';
+
+import { Search, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslation } from '@/i18n';
-import { Card, Button } from '@/components/ui';
+import { Card } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 
@@ -150,7 +150,7 @@ export default function AdminCustomersPage() {
                 </div>
 
                 {/* Filters */}
-                <Card padding="medium">
+                <Card padding="md">
                     <div className="flex flex-col sm:flex-row gap-4">
                         {/* Search */}
                         <div className="relative flex-1">
@@ -173,7 +173,7 @@ export default function AdminCustomersPage() {
                             <option value="">{t('admin.customers.allStatuses')}</option>
                             <option value="active">{t('admin.customers.status.active')}</option>
                             <option value="trialing">{t('admin.customers.status.trialing')}</option>
-                            <option value="past_due">{t('admin.customers.status.pastDue')}</option>
+                            <option value="past_due">{t('admin.customers.status.past_due')}</option>
                             <option value="canceled">{t('admin.customers.status.canceled')}</option>
                         </select>
 

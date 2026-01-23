@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage } from '../db/schema';
-import { eq, ilike, desc, sql, and, gte, lte } from 'drizzle-orm';
+import { eq, ilike, desc, and, gte, lte } from 'drizzle-orm';
 
 // Request body types
 interface ManualUpgradeBody {
