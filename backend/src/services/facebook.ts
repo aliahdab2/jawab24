@@ -109,7 +109,7 @@ export class FacebookService {
             const response = await axios.get<FacebookPagesResponse>(`${FACEBOOK_GRAPH_API}/me/accounts`, {
                 params: {
                     access_token: accessToken,
-                    fields: 'id,name,access_token,category,tasks',
+                    fields: 'id,name,access_token,category,tasks,about,phone,single_line_address,hours,website',
                 },
             });
 

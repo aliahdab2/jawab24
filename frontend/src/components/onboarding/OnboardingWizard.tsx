@@ -1,15 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   FileText, 
-  Zap, 
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
   X,
-  Sparkles
+  Sparkles,
+  Pencil,
+  MapPin,
+  Phone,
+  Globe,
+  Clock,
+  Info
 } from 'lucide-react';
-import { Button, FacebookIcon } from '@/components/ui';
+import { Button, Toggle } from '@/components/ui';
 import { useTranslation } from '@/i18n';
+import { pagesApi, api } from '@/lib/api';
+import type { Page } from '@jawab24/shared';
 
 import { useSwipe } from '@/hooks/useSwipe';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -21,38 +28,244 @@ interface OnboardingWizardProps {
   onSkip: () => void;
 }
 
-// Visual component that adapts to landscape
-function StepVisual({ 
-  icon: Icon, 
-  color, 
-  isLandscape,
-  isLastStep 
+// Step 1: Welcome
+function WelcomeStep({ 
+  isLandscape, 
+  t 
 }: { 
-  icon: React.ElementType; 
-  color: string; 
-  isLandscape: boolean;
-  isLastStep: boolean;
+  isLandscape: boolean; 
+  t: (key: string) => string;
 }) {
-  const colorClasses: Record<string, string> = {
-    brand: 'bg-gradient-to-br from-brand-400 to-accent-500 shadow-2xl shadow-brand-500/30',
-    blue: 'bg-blue-100',
-    emerald: 'bg-emerald-100',
-    amber: 'bg-amber-100',
-  };
+  return (
+    <div className={`text-center ${isLandscape ? 'flex items-center gap-6' : ''}`}>
+      <div className={isLandscape ? 'flex-shrink-0' : 'mb-6'}>
+        <div className={`${isLandscape ? 'w-20 h-20' : 'w-32 h-32'} mx-auto bg-gradient-to-br from-brand-400 to-accent-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-brand-500/30`}>
+          <Sparkles className={`${isLandscape ? 'w-10 h-10' : 'w-16 h-16'} text-white`} />
+        </div>
+      </div>
+      <div className={isLandscape ? 'flex-1 text-start' : ''}>
+        <h2 className={`font-bold text-surface-900 ${isLandscape ? 'text-xl mb-2' : 'text-2xl mb-4'}`}>
+          {t('onboarding.welcomeTitle')}
+        </h2>
+        <p className={`text-surface-600 leading-relaxed ${isLandscape ? 'text-sm' : 'text-lg'}`}>
+          {t('onboarding.welcomeDesc')}
+        </p>
+      </div>
+    </div>
+  );
+}
 
-  const iconColorClasses: Record<string, string> = {
-    brand: 'text-white',
-    blue: 'text-blue-600',
-    emerald: 'text-emerald-600',
-    amber: 'text-amber-600',
-  };
+// Step 2: Pick Page
+function PickPageStep({ 
+  pages, 
+  loading,
+  onToggle,
+  isLandscape,
+  t,
+  language
+}: { 
+  pages: Page[];
+  loading: boolean;
+  onToggle: (pageId: string, enabled: boolean) => void;
+  isLandscape: boolean;
+  t: (key: string) => string;
+  language: string;
+}) {
+  const isRTL = language === 'ar';
 
-  const size = isLandscape ? 'w-20 h-20' : 'w-32 h-32';
-  const iconSize = isLandscape ? 'w-10 h-10' : 'w-16 h-16';
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-surface-500">{t('common.loading')}</p>
+      </div>
+    );
+  }
+
+  if (pages.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <FileText className="w-12 h-12 text-surface-300 mx-auto mb-4" />
+        <p className="text-surface-600 font-medium">{t('pages.noPages')}</p>
+        <p className="text-surface-400 text-sm mt-2">{t('pages.noPagesDesc')}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className={`${size} mx-auto ${colorClasses[color]} rounded-3xl flex items-center justify-center ${isLastStep ? 'animate-bounce' : ''}`}>
-      <Icon className={`${iconSize} ${iconColorClasses[color]}`} />
+    <div className={isLandscape ? 'flex gap-6' : ''}>
+      <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-6'}>
+        <div className={`${isLandscape ? 'w-16 h-16' : 'w-20 h-20 mx-auto'} bg-blue-100 rounded-2xl flex items-center justify-center`}>
+          <FileText className={`${isLandscape ? 'w-8 h-8' : 'w-10 h-10'} text-blue-600`} />
+        </div>
+      </div>
+      <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
+        <h2 className={`font-bold text-surface-900 ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
+          {t('onboarding.pickPageTitle')}
+        </h2>
+        <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'mb-6'}`}>
+          {t('onboarding.pickPageDesc')}
+        </p>
+        
+        <div className={`space-y-3 ${isLandscape ? 'max-h-[30vh] overflow-y-auto' : 'max-h-[40vh] overflow-y-auto'}`}>
+          {pages.map((page) => (
+            <div
+              key={page.id}
+              className={`flex items-center justify-between gap-4 p-4 rounded-2xl border-2 transition-all ${
+                page.autoReplyEnabled 
+                  ? 'border-brand-500 bg-brand-50/50' 
+                  : 'border-surface-200 bg-white'
+              }`}
+              dir={isRTL ? 'rtl' : 'ltr'}
+            >
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  page.autoReplyEnabled ? 'bg-brand-500 text-white' : 'bg-surface-100 text-surface-400'
+                }`}>
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 text-start">
+                  <p className="font-semibold text-surface-900 truncate">{page.name}</p>
+                  <p className="text-xs text-surface-400">
+                    {page.autoReplyEnabled ? t('onboarding.autoReplyOn') : t('onboarding.autoReplyOff')}
+                  </p>
+                </div>
+              </div>
+              <Toggle
+                enabled={page.autoReplyEnabled ?? false}
+                onChange={(enabled) => onToggle(page.id, enabled)}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Step 3: Review Business Info
+function ReviewInfoStep({
+  selectedPage,
+  knowledgeBase,
+  onKnowledgeBaseChange,
+  isEditing,
+  onEditToggle,
+  isLandscape,
+  t,
+  language
+}: {
+  selectedPage: Page | null;
+  knowledgeBase: string;
+  onKnowledgeBaseChange: (value: string) => void;
+  isEditing: boolean;
+  onEditToggle: () => void;
+  isLandscape: boolean;
+  t: (key: string) => string;
+  language: string;
+}) {
+  const isRTL = language === 'ar';
+
+  if (!selectedPage) {
+    return (
+      <div className="text-center py-8">
+        <Info className="w-12 h-12 text-surface-300 mx-auto mb-4" />
+        <p className="text-surface-600">{t('onboarding.noPageSelected')}</p>
+      </div>
+    );
+  }
+
+  // Parse knowledge base to show structured fields
+  const lines = knowledgeBase.split('\n').filter(l => l.trim());
+  const hasAddress = lines.some(l => l.includes('العنوان') || l.includes('Address'));
+  const hasPhone = lines.some(l => l.includes('الهاتف') || l.includes('Phone'));
+  const hasWebsite = lines.some(l => l.includes('الموقع') || l.includes('website'));
+  const hasHours = lines.some(l => l.includes('ساعات') || l.includes('hours'));
+
+  return (
+    <div className={isLandscape ? 'flex gap-6' : ''}>
+      <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-4'}>
+        <div className={`${isLandscape ? 'w-16 h-16' : 'w-20 h-20 mx-auto'} bg-emerald-100 rounded-2xl flex items-center justify-center`}>
+          <CheckCircle2 className={`${isLandscape ? 'w-8 h-8' : 'w-10 h-10'} text-emerald-600`} />
+        </div>
+      </div>
+      <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
+        <h2 className={`font-bold text-surface-900 ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
+          {t('onboarding.reviewInfoTitle')}
+        </h2>
+        <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'text-sm mb-4'}`}>
+          {t('onboarding.reviewInfoDesc')}
+        </p>
+
+        {isEditing ? (
+          <div className="text-start">
+            <textarea
+              value={knowledgeBase}
+              onChange={(e) => onKnowledgeBaseChange(e.target.value)}
+              className={`w-full p-4 border-2 border-surface-200 rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 ${
+                isLandscape ? 'h-[20vh]' : 'h-[30vh]'
+              }`}
+              placeholder={t('pages.writeBusinessInfo')}
+              dir={isRTL ? 'rtl' : 'ltr'}
+              autoFocus
+            />
+            <div className="flex justify-end mt-2">
+              <Button size="sm" onClick={onEditToggle}>
+                {t('common.save')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div 
+            className="text-start bg-surface-50 rounded-2xl p-4 border border-surface-200"
+            dir={isRTL ? 'rtl' : 'ltr'}
+          >
+            {knowledgeBase ? (
+              <div className="space-y-3">
+                {/* Show indicators for what info is present */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {hasAddress && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium">
+                      <MapPin className="w-3 h-3" /> {t('onboarding.hasAddress')}
+                    </span>
+                  )}
+                  {hasPhone && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">
+                      <Phone className="w-3 h-3" /> {t('onboarding.hasPhone')}
+                    </span>
+                  )}
+                  {hasWebsite && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+                      <Globe className="w-3 h-3" /> {t('onboarding.hasWebsite')}
+                    </span>
+                  )}
+                  {hasHours && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
+                      <Clock className="w-3 h-3" /> {t('onboarding.hasHours')}
+                    </span>
+                  )}
+                </div>
+                <p className="text-surface-600 text-sm whitespace-pre-wrap line-clamp-4">
+                  {knowledgeBase}
+                </p>
+                <p className="text-xs text-surface-400 mt-2">
+                  {t('onboarding.fromFacebook')}
+                </p>
+              </div>
+            ) : (
+              <p className="text-surface-400 text-sm italic">
+                {t('onboarding.noBusinessInfo')}
+              </p>
+            )}
+            <button
+              onClick={onEditToggle}
+              className="mt-3 inline-flex items-center gap-2 text-brand-600 hover:text-brand-700 text-sm font-medium"
+            >
+              <Pencil className="w-4 h-4" />
+              {knowledgeBase ? t('onboarding.editInfo') : t('onboarding.addInfo')}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -61,52 +274,103 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
   const [currentStep, setCurrentStep] = useState(0);
+  const [pages, setPages] = useState<Page[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [knowledgeBase, setKnowledgeBase] = useState('');
+  const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [saving, setSaving] = useState(false);
   
   // Reusable hooks
   const isLandscape = useLandscape();
   useBodyScrollLock(true);
   useEscapeKey(onSkip);
 
-  const steps = [
-    {
-      icon: Sparkles,
-      color: 'brand',
-      title: t('onboarding.welcomeTitle'),
-      description: t('onboarding.welcomeDesc'),
-    },
-    {
-      icon: FacebookIcon,
-      color: 'blue',
-      title: t('onboarding.step1Title'),
-      description: t('onboarding.step1Desc'),
-    },
-    {
-      icon: FileText,
-      color: 'emerald',
-      title: t('onboarding.step2Title'),
-      description: t('onboarding.step2Desc'),
-    },
-    {
-      icon: Zap,
-      color: 'amber',
-      title: t('onboarding.step3Title'),
-      description: t('onboarding.step3Desc'),
-    },
-    {
-      icon: CheckCircle2,
-      color: 'emerald',
-      title: t('onboarding.completeTitle'),
-      description: t('onboarding.completeDesc'),
-    },
-  ];
+  // Fetch pages on mount
+  useEffect(() => {
+    const fetchPages = async () => {
+      try {
+        setLoading(true);
+        const response = await pagesApi.getAll();
+        const data = Array.isArray(response.data)
+          ? response.data
+          : (Array.isArray(response.data?.data) ? response.data.data : []);
+        setPages(data);
+        
+        // Auto-select first enabled page, or first page
+        const enabledPage = data.find((p: Page) => p.autoReplyEnabled);
+        const firstPage = data[0];
+        const selected = enabledPage || firstPage;
+        if (selected) {
+          setSelectedPageId(selected.id);
+          // Use existing knowledgeBase, or fall back to suggestedKnowledgeBase from Facebook
+          setKnowledgeBase(selected.knowledgeBase || selected.suggestedKnowledgeBase || '');
+        }
+      } catch (error) {
+        console.error('Failed to fetch pages:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPages();
+  }, []);
 
-  const currentStepData = steps[currentStep];
-  const isLastStep = currentStep === steps.length - 1;
+  const handleToggle = useCallback(async (pageId: string, enabled: boolean) => {
+    // Optimistic update
+    setPages(prev => prev.map(p => 
+      p.id === pageId ? { ...p, autoReplyEnabled: enabled } : p
+    ));
+    
+    // If enabling, select this page for info review
+    if (enabled) {
+      const page = pages.find(p => p.id === pageId);
+      setSelectedPageId(pageId);
+      // Use existing knowledgeBase, or fall back to suggestedKnowledgeBase from Facebook
+      setKnowledgeBase(page?.knowledgeBase || page?.suggestedKnowledgeBase || '');
+    }
+
+    try {
+      await pagesApi.toggle(pageId, enabled);
+    } catch (error) {
+      console.error('Failed to toggle page:', error);
+      // Revert on error
+      setPages(prev => prev.map(p => 
+        p.id === pageId ? { ...p, autoReplyEnabled: !enabled } : p
+      ));
+    }
+  }, [pages]);
+
+  const handleComplete = async () => {
+    // Save knowledge base if changed
+    if (selectedPageId && knowledgeBase) {
+      setSaving(true);
+      try {
+        await api.put(`/pages/${selectedPageId}`, { knowledgeBase });
+      } catch (error) {
+        console.error('Failed to save knowledge base:', error);
+      } finally {
+        setSaving(false);
+      }
+    }
+    onComplete();
+  };
+
+  const selectedPage = pages.find(p => p.id === selectedPageId) || null;
+  const hasEnabledPage = pages.some(p => p.autoReplyEnabled);
+
+  const totalSteps = 3;
+  const isLastStep = currentStep === totalSteps - 1;
   const isFirstStep = currentStep === 0;
+
+  const canProceed = () => {
+    if (currentStep === 0) return true; // Welcome - always can proceed
+    if (currentStep === 1) return hasEnabledPage; // Must enable at least one page
+    return true; // Review step - always can proceed
+  };
 
   const handleNext = () => {
     if (isLastStep) {
-      onComplete();
+      handleComplete();
     } else {
       setCurrentStep(currentStep + 1);
     }
@@ -118,10 +382,10 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     }
   };
 
-  // Implement swipe using reusable hook (Best Practice)
+  // Implement swipe using reusable hook
   const swipeHandlers = useSwipe({
-    onSwipeLeft: isRTL ? handlePrev : handleNext,
-    onSwipeRight: isRTL ? handleNext : handlePrev,
+    onSwipeLeft: isRTL ? handlePrev : (canProceed() ? handleNext : undefined),
+    onSwipeRight: isRTL ? (canProceed() ? handleNext : undefined) : handlePrev,
     minSwipeDistance: 50
   });
 
@@ -132,12 +396,12 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     >
       <div 
         className={`bg-white rounded-3xl shadow-2xl overflow-hidden animate-In slide-in-from-bottom-4 duration-300 ${
-          isLandscape ? 'max-w-2xl w-full max-h-[90vh]' : 'max-w-md w-full'
-        }`}
+          isLandscape ? 'max-w-2xl w-full max-h-[90vh]' : 'max-w-md w-full max-h-[85vh]'
+        } flex flex-col`}
         {...swipeHandlers}
       >
         {/* Skip button */}
-        <div className={`flex justify-end ${isLandscape ? 'p-3 pb-0' : 'p-4 pb-0'}`}>
+        <div className={`flex justify-end flex-shrink-0 ${isLandscape ? 'p-3 pb-0' : 'p-4 pb-0'}`}>
           <button 
             onClick={onSkip}
             className="text-surface-400 hover:text-surface-600 text-sm flex items-center gap-1 min-h-[44px] min-w-[44px] justify-center"
@@ -147,91 +411,92 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
           </button>
         </div>
 
-        {/* Content - Horizontal in landscape, Vertical in portrait */}
+        {/* Content */}
         <div 
           key={currentStep}
-          className={`animate-In fade-in duration-300 ${
-            isLandscape 
-              ? 'flex items-center gap-6 px-6 pb-4 pt-2' 
-              : 'px-8 pb-8 pt-4 text-center'
+          className={`animate-In fade-in duration-300 flex-1 overflow-y-auto ${
+            isLandscape ? 'px-6 pb-4 pt-2' : 'px-6 pb-6 pt-2'
           }`}
         >
-          {/* Visual */}
-          <div className={isLandscape ? 'flex-shrink-0' : 'mb-6'}>
-            <StepVisual 
-              icon={currentStepData.icon} 
-              color={currentStepData.color} 
+          {currentStep === 0 && (
+            <WelcomeStep isLandscape={isLandscape} t={t} />
+          )}
+          {currentStep === 1 && (
+            <PickPageStep 
+              pages={pages} 
+              loading={loading}
+              onToggle={handleToggle}
               isLandscape={isLandscape}
-              isLastStep={isLastStep}
+              t={t}
+              language={language}
             />
+          )}
+          {currentStep === 2 && (
+            <ReviewInfoStep
+              selectedPage={selectedPage}
+              knowledgeBase={knowledgeBase}
+              onKnowledgeBaseChange={setKnowledgeBase}
+              isEditing={isEditingInfo}
+              onEditToggle={() => setIsEditingInfo(!isEditingInfo)}
+              isLandscape={isLandscape}
+              t={t}
+              language={language}
+            />
+          )}
+        </div>
+
+        {/* Footer with progress and buttons */}
+        <div className={`flex-shrink-0 border-t border-surface-100 ${isLandscape ? 'px-6 py-3' : 'px-6 py-4'}`}>
+          {/* Progress dots */}
+          <div className={`flex gap-2 justify-center mb-4`}>
+            {[0, 1, 2].map((index) => (
+              <div
+                key={index}
+                className={`h-2 rounded-full transition-all ${
+                  isLandscape ? 'w-2' : 'w-2.5 h-2.5'
+                } ${
+                  index === currentStep 
+                    ? `bg-brand-500 ${isLandscape ? 'w-6' : 'w-8'}` 
+                    : index < currentStep 
+                    ? 'bg-brand-300' 
+                    : 'bg-surface-200'
+                }`}
+              />
+            ))}
           </div>
 
-          {/* Text content */}
-          <div className={isLandscape ? 'flex-1 min-w-0' : ''}>
-            {/* Title */}
-            <h2 className={`font-bold text-surface-900 ${
-              isLandscape ? 'text-xl mb-1 text-start' : 'text-2xl mb-3'
-            }`}>
-              {currentStepData.title}
-            </h2>
-
-            {/* Description */}
-            <p className={`text-surface-600 leading-relaxed ${
-              isLandscape ? 'text-sm mb-3 text-start' : 'text-lg mb-8'
-            }`}>
-              {currentStepData.description}
-            </p>
-
-            {/* Progress dots */}
-            <div className={`flex gap-2 ${isLandscape ? 'mb-3 justify-start' : 'mb-6 justify-center'}`}>
-              {steps.map((_, index) => (
-                <div
-                  key={index}
-                  className={`h-2 rounded-full transition-all ${
-                    isLandscape ? 'w-2' : 'w-2.5 h-2.5'
-                  } ${
-                    index === currentStep 
-                      ? `bg-brand-500 ${isLandscape ? 'w-6' : 'w-8'}` 
-                      : index < currentStep 
-                      ? 'bg-brand-300' 
-                      : 'bg-surface-200'
-                  }`}
-                />
-              ))}
-            </div>
-
-            {/* Buttons */}
-            <div className={`flex gap-3 ${isLandscape ? '' : ''}`}>
-              {!isFirstStep && (
-                <Button
-                  variant="secondary"
-                  size={isLandscape ? 'md' : 'lg'}
-                  onClick={handlePrev}
-                  className="flex-1"
-                >
-                  <span className="rtl:block ltr:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
-                  <span className="ltr:block rtl:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
-                  {t('onboarding.previous')}
-                </Button>
-              )}
+          {/* Buttons */}
+          <div className="flex gap-3">
+            {!isFirstStep && (
               <Button
+                variant="secondary"
                 size={isLandscape ? 'md' : 'lg'}
-                onClick={handleNext}
-                className={`flex-1 ${isFirstStep ? 'w-full' : ''}`}
+                onClick={handlePrev}
+                className="flex-1"
               >
-                {isLastStep ? t('onboarding.letsGo') : t('onboarding.next')}
-                {!isLastStep && (
-                  <>
-                    <span className="rtl:block ltr:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
-                    <span className="ltr:block rtl:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
-                  </>
-                )}
+                <span className="rtl:block ltr:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                <span className="ltr:block rtl:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                {t('onboarding.previous')}
               </Button>
-            </div>
+            )}
+            <Button
+              size={isLandscape ? 'md' : 'lg'}
+              onClick={handleNext}
+              disabled={!canProceed() || saving}
+              loading={saving}
+              className={`flex-1 ${isFirstStep ? 'w-full' : ''}`}
+            >
+              {isLastStep ? t('onboarding.letsGo') : t('onboarding.next')}
+              {!isLastStep && (
+                <>
+                  <span className="rtl:block ltr:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                  <span className="ltr:block rtl:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </div>
     </div>
   );
 }
-

@@ -1,9 +1,87 @@
 import { db } from '../db';
 import { pages } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger } from '../types';
+import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
+
+/**
+ * Format Facebook hours object into readable text
+ * Facebook returns hours like: { "mon_1_open": "09:00", "mon_1_close": "18:00", ... }
+ */
+function formatBusinessHours(hours: FacebookPageHours | undefined): string | null {
+    if (!hours || Object.keys(hours).length === 0) return null;
+
+    const dayNames: Record<string, string> = {
+        mon: 'الإثنين',
+        tue: 'الثلاثاء',
+        wed: 'الأربعاء',
+        thu: 'الخميس',
+        fri: 'الجمعة',
+        sat: 'السبت',
+        sun: 'الأحد',
+    };
+
+    const dayHours: Record<string, { open: string; close: string }[]> = {};
+
+    // Parse the hours object
+    for (const [key, value] of Object.entries(hours)) {
+        const match = key.match(/^(mon|tue|wed|thu|fri|sat|sun)_(\d+)_(open|close)$/);
+        if (match) {
+            const [, day, slot, type] = match;
+            if (!dayHours[day]) dayHours[day] = [];
+            if (!dayHours[day][parseInt(slot) - 1]) {
+                dayHours[day][parseInt(slot) - 1] = { open: '', close: '' };
+            }
+            dayHours[day][parseInt(slot) - 1][type as 'open' | 'close'] = value;
+        }
+    }
+
+    // Format into readable string
+    const lines: string[] = [];
+    for (const [day, slots] of Object.entries(dayHours)) {
+        const dayName = dayNames[day] || day;
+        const times = slots
+            .filter(s => s.open && s.close)
+            .map(s => `${s.open} - ${s.close}`)
+            .join(', ');
+        if (times) {
+            lines.push(`${dayName}: ${times}`);
+        }
+    }
+
+    return lines.length > 0 ? lines.join('\n') : null;
+}
+
+/**
+ * Generate knowledge base text from Facebook page data
+ */
+function generateKnowledgeBase(fbPage: FacebookPage): string {
+    const parts: string[] = [];
+
+    if (fbPage.about) {
+        parts.push(fbPage.about);
+    }
+
+    if (fbPage.single_line_address) {
+        parts.push(`📍 العنوان: ${fbPage.single_line_address}`);
+    }
+
+    if (fbPage.phone) {
+        parts.push(`📞 الهاتف: ${fbPage.phone}`);
+    }
+
+    if (fbPage.website) {
+        parts.push(`🌐 الموقع: ${fbPage.website}`);
+    }
+
+    const formattedHours = formatBusinessHours(fbPage.hours);
+    if (formattedHours) {
+        parts.push(`⏰ ساعات العمل:\n${formattedHours}`);
+    }
+
+    return parts.join('\n\n');
+}
 
 export class PagesService {
     private logger: Logger = noopLogger;
@@ -178,8 +256,19 @@ export class PagesService {
                     .returning();
                 syncedPages.push(updated);
             } else {
-                // Create new page
+                // Create new page - save suggested knowledge base for user confirmation
+                // Best Practice: Don't auto-save to knowledgeBase, let user review first
                 logger.debug(`[Pages] Creating new page: ${fbPage.name}`);
+                const suggestedKnowledgeBase = generateKnowledgeBase(fbPage);
+                if (suggestedKnowledgeBase) {
+                    logger.info(`[Pages] Generated suggested knowledge base for ${fbPage.name}`, {
+                        hasAbout: !!fbPage.about,
+                        hasPhone: !!fbPage.phone,
+                        hasAddress: !!fbPage.single_line_address,
+                        hasHours: !!fbPage.hours,
+                        hasWebsite: !!fbPage.website,
+                    });
+                }
                 const [created] = await db
                     .insert(pages)
                     .values({
@@ -191,6 +280,8 @@ export class PagesService {
                         instagramAccountId,
                         instagramUsername,
                         instagramAutoReplyEnabled: false,
+                        // Store as suggestion - user must confirm in onboarding
+                        suggestedKnowledgeBase: suggestedKnowledgeBase || null,
                     })
                     .returning();
                 syncedPages.push(created);

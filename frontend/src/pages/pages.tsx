@@ -408,11 +408,37 @@ const PagesPage: NextPageWithLayout = () => {
                 {t('pages.businessInfoModalDesc')}
               </p>
 
+              {/* Quick chips - tap to insert label */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {[
+                  { label: language === 'ar' ? 'ساعات العمل' : 'Hours', icon: '⏰' },
+                  { label: language === 'ar' ? 'العنوان' : 'Location', icon: '📍' },
+                  { label: language === 'ar' ? 'الأسعار' : 'Prices', icon: '💰' },
+                  { label: language === 'ar' ? 'التواصل' : 'Contact', icon: '📱' },
+                ].map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => {
+                      const prefix = knowledgeBase.length > 0 && !knowledgeBase.endsWith('\n') ? '\n' : '';
+                      setKnowledgeBase(prev => `${prev}${prefix}${chip.icon} ${chip.label}: `);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-100 hover:bg-brand-50 text-surface-600 hover:text-brand-700 rounded-full text-xs font-medium transition-colors border border-surface-200 hover:border-brand-200"
+                  >
+                    <span>{chip.icon}</span>
+                    <span>{chip.label}</span>
+                  </button>
+                ))}
+              </div>
+
               {/* Textarea - THE HERO of the modal */}
               <div className="flex-1 flex flex-col min-h-0">
                 <textarea
                   className="flex-1 w-full min-h-[100px] landscape:min-h-0 sm:min-h-[200px] p-4 landscape:p-3 border-2 border-surface-200 rounded-2xl landscape:rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
-                  placeholder={t('pages.writeBusinessInfo')}
+                  placeholder={language === 'ar' 
+                    ? 'مثال:\n⏰ ساعات العمل: 9 صباحاً - 9 مساءً\n📍 العنوان: الرياض، حي...\n💰 الأسعار: تبدأ من 50 ريال\n📱 التواصل: واتساب 05...'
+                    : 'Example:\n⏰ Hours: 9am - 9pm\n📍 Location: Riyadh, ...\n💰 Prices: Starting from 50 SAR\n📱 Contact: WhatsApp 05...'
+                  }
                   value={knowledgeBase}
                   onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
                   maxLength={2000}
@@ -420,12 +446,9 @@ const PagesPage: NextPageWithLayout = () => {
                   autoFocus
                 />
                 
-                {/* Character Counter - inline, simplified in landscape */}
-                <div className="flex items-center justify-between mt-2 landscape:mt-1 px-1">
-                  <span className="text-xs text-surface-400 landscape:hidden">
-                    {t('pages.example')}: {language === 'ar' ? 'ساعات العمل، العنوان، المنتجات...' : 'Hours, location, products...'}
-                  </span>
-                  <span className={`text-xs font-medium landscape:ml-auto ${
+                {/* Character Counter */}
+                <div className="flex items-center justify-end mt-2 landscape:mt-1 px-1">
+                  <span className={`text-xs font-medium ${
                     knowledgeBase.length > 1900
                       ? 'text-red-500'
                       : knowledgeBase.length > 1500

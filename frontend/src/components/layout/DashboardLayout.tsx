@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo } from '@/components/ui';
+import { DemoBanner } from '@/features/demo';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -209,6 +210,8 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
                   }),
             }}
           >
+            {/* Demo Mode Banner - self-contained, only renders when user is in demo mode */}
+            <DemoBanner className="mb-4 -mx-4 -mt-4 md:-mx-8 md:-mt-8 lg:-mx-16 lg:-mt-10 xl:-mx-20 rounded-none" />
             {children}
           </div>
         </main>

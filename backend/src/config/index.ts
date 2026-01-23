@@ -53,4 +53,12 @@ export const config = {
 
     // Frontend URL
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
+
+    // Demo Mode - allows testing without Facebook API approval
+    demo: {
+        enabled: process.env.DEMO_MODE_ENABLED === 'true',
+        userFacebookId: 'demo_user_jawab24',
+        userName: 'Demo User',
+        userEmail: 'demo@jawab24.com',
+    },
 };

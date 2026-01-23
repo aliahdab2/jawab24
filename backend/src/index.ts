@@ -36,6 +36,8 @@ import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
 import { createRequestLogger } from "./types";
+import { config } from "./config";
+import demoPlugin from "./plugins/demo";
 
 // ⚡ Validate environment variables on startup
 try {
@@ -163,6 +165,13 @@ const start = async () => {
 
     // Register other routes
     await server.register(authRoutes);
+    
+    // Demo mode plugin (only active when DEMO_MODE_ENABLED=true)
+    if (config.demo.enabled) {
+      await server.register(demoPlugin);
+      console.log("🎭 Demo mode enabled");
+    }
+    
     await server.register(webhookRoutes);
     await server.register(rulesRoutes);
     await server.register(templatesRoutes);

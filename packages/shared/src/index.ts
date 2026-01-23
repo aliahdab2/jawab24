@@ -45,6 +45,7 @@ export interface Page {
   instagramAutoReplyEnabled?: boolean | null;
   // Other fields
   knowledgeBase?: string | null;
+  suggestedKnowledgeBase?: string | null;
   commentsCount?: number;
   repliesCount?: number;
   replyRate?: number;

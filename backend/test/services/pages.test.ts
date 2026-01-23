@@ -113,5 +113,110 @@ describe('PagesService', () => {
              expect(db.update).toHaveBeenCalled();
              expect(db.insert).not.toHaveBeenCalled();
         });
+
+        it('should save Facebook business info to suggestedKnowledgeBase (not knowledgeBase)', async () => {
+            const userId = 'user-123';
+            const accessToken = 'token-123';
+
+            // Mock Facebook API response with business info
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [
+                    { 
+                        id: 'fb-page-1', 
+                        name: 'Test Business', 
+                        access_token: 'pt-1',
+                        about: 'We are a test business',
+                        phone: '0501234567',
+                        single_line_address: 'Riyadh, Saudi Arabia',
+                        website: 'https://test.com',
+                        hours: { mon_1_open: '09:00', mon_1_close: '18:00' }
+                    }
+                ]
+            });
+
+            // Mock no existing pages
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue([]) 
+                    })
+                })
+            } as any);
+
+            // Mock Instagram (no linked account)
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            // Capture what's inserted
+            let insertedValues: any = null;
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((values) => {
+                    insertedValues = values;
+                    return {
+                        returning: vi.fn().mockResolvedValue([{ id: 'new-page-id', ...values }])
+                    };
+                })
+            } as any);
+
+            await pagesService.syncFromFacebook(userId, accessToken);
+
+            // Verify suggestedKnowledgeBase is set (not knowledgeBase)
+            expect(insertedValues).toBeDefined();
+            expect(insertedValues.suggestedKnowledgeBase).toBeDefined();
+            // Should contain the about text
+            expect(insertedValues.suggestedKnowledgeBase).toContain('We are a test business');
+            // Should contain phone number
+            expect(insertedValues.suggestedKnowledgeBase).toContain('0501234567');
+            // Should contain address
+            expect(insertedValues.suggestedKnowledgeBase).toContain('Riyadh');
+            
+            // knowledgeBase should NOT be set (user must confirm)
+            expect(insertedValues.knowledgeBase).toBeUndefined();
+        });
+
+        it('should not set suggestedKnowledgeBase when Facebook has no business info', async () => {
+            const userId = 'user-123';
+            const accessToken = 'token-123';
+
+            // Mock Facebook API response with minimal info (no business details)
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [
+                    { 
+                        id: 'fb-page-1', 
+                        name: 'Minimal Page', 
+                        access_token: 'pt-1'
+                        // No about, phone, address, etc.
+                    }
+                ]
+            });
+
+            // Mock no existing pages
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue([]) 
+                    })
+                })
+            } as any);
+
+            // Mock Instagram (no linked account)
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            // Capture what's inserted
+            let insertedValues: any = null;
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((values) => {
+                    insertedValues = values;
+                    return {
+                        returning: vi.fn().mockResolvedValue([{ id: 'new-page-id', ...values }])
+                    };
+                })
+            } as any);
+
+            await pagesService.syncFromFacebook(userId, accessToken);
+
+            // suggestedKnowledgeBase should be null when no business info available
+            expect(insertedValues).toBeDefined();
+            expect(insertedValues.suggestedKnowledgeBase).toBeNull();
+        });
     });
 });

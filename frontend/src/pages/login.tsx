@@ -19,6 +19,7 @@ import { FB_CALLBACK_PATH } from '@/constants/auth';
 
 import { authApi } from '@/lib/api';
 import { useAuthStore, useUIStore } from '@/lib/store';
+import { DemoLoginButton } from '@/features/demo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -334,6 +335,9 @@ export default function LoginPage() {
                     <span>{t('auth.loginWithFacebook')}</span>
                   </div>
                 </Button>
+
+                {/* Demo Mode - Self-contained component (only renders when enabled) */}
+                <DemoLoginButton />
 
                 <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-white border border-surface-200 shadow-sm">
                   <div className="flex gap-4">

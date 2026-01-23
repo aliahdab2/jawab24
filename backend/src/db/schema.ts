@@ -45,6 +45,8 @@ export const pages = pgTable('pages', {
     instagramAutoReplyEnabled: boolean('instagram_auto_reply_enabled').default(true),
     // Knowledge base for AI context - business info, products, FAQ
     knowledgeBase: text('knowledge_base'),
+    // Suggested knowledge base from Facebook data - pending user confirmation
+    suggestedKnowledgeBase: text('suggested_knowledge_base'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
