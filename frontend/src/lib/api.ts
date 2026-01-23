@@ -107,7 +107,7 @@ export const pagesApi = {
   getAll: () => api.get('/pages'),
   getById: (id: string) => api.get(`/pages/${id}`),
   toggle: (id: string, enabled: boolean) =>
-    api.post(`/pages/${id}/toggle`, { enabled }),
+    api.patch(`/pages/${id}/auto-reply`, { enabled }),
   sync: () => api.post('/pages/sync'),
 };
 
@@ -116,7 +116,7 @@ export const postsApi = {
   getByPage: (pageId: string) => api.get(`/pages/${pageId}/posts`),
   getById: (id: string) => api.get(`/posts/${id}`),
   toggle: (id: string, enabled: boolean) =>
-    api.post(`/posts/${id}/toggle`, { enabled }),
+    api.patch(`/posts/${id}/auto-reply`, { enabled }),
 };
 
 // Comments API
