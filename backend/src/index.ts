@@ -39,6 +39,7 @@ import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker"
 import { createRequestLogger } from "./types";
 import { config } from "./config";
 import demoPlugin from "./plugins/demo";
+import { ensureAdminUsers } from "./utils/adminSetup";
 
 // ⚡ Validate environment variables on startup
 try {
@@ -197,6 +198,9 @@ const start = async () => {
     console.log(`🚀 Server listening on http://${host}:${port}`);
     console.log(`📊 Health check: http://${host}:${port}/health`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+
+    // Ensure admin users are set up from environment variables
+    await ensureAdminUsers();
 
     // Start the reply processing worker
     // Create a logger adapter for the worker

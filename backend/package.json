@@ -16,6 +16,9 @@
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check:pg",
     "db:validate": "ts-node scripts/validate-migrations.ts",
+    "admin:add": "ts-node scripts/manage-admin.ts add",
+    "admin:remove": "ts-node scripts/manage-admin.ts remove",
+    "admin:list": "ts-node scripts/manage-admin.ts list",
     "test": "vitest",
     "precommit": "npm run lint && npm run type-check"
   },
