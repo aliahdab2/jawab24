@@ -10,7 +10,8 @@ import {
   MessageCircle,
   ChevronLeft,
   ChevronRight,
-  CreditCard
+  CreditCard,
+  Shield
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -225,6 +226,36 @@ export const Sidebar = memo(function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Admin Link - Only visible for admins */}
+        {user?.isAdmin && (
+          <>
+            <div className="my-4 border-t border-white/10" />
+            <Link
+              href="/admin/customers"
+              className={clsx(
+                'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group relative',
+                router.pathname.startsWith('/admin')
+                  ? 'bg-amber-600 text-white shadow-xl shadow-amber-600/20'
+                  : 'text-surface-400 hover:bg-white/5 hover:text-white',
+                !sidebarOpen && 'justify-center'
+              )}
+            >
+              <Shield className={clsx(
+                "w-6 h-6 flex-shrink-0 transition-transform group-hover:scale-110",
+                router.pathname.startsWith('/admin') ? "text-white" : "text-amber-500 group-hover:text-amber-400"
+              )} />
+              {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('admin.title' as TranslationKey)}</span>}
+
+              {router.pathname.startsWith('/admin') && (
+                <div className={clsx(
+                  "absolute inset-y-2 w-1 bg-white rounded-full transition-all",
+                  sidebarOpen ? "start-0" : "start-1 h-1 top-1/2 -translate-y-1/2 w-1 rounded-full"
+                )}></div>
+              )}
+            </Link>
+          </>
+        )}
       </nav>
 
       {/* User & Logout */}

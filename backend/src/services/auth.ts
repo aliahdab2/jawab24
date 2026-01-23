@@ -195,6 +195,7 @@ export class AuthService {
                 email: user.email || undefined,
                 facebookId: user.facebookId,
                 picture: user.picture || undefined,
+                isAdmin: user.isAdmin || false,
             },
             settings,
         };

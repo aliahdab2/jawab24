@@ -164,6 +164,7 @@ export class AuthController {
                 name: user.name,
                 email: user.email,
                 hasEmail: !!user.email,
+                isAdmin: user.isAdmin || false,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt,
             });

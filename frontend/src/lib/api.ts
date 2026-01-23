@@ -197,3 +197,55 @@ export const aiApi = {
   getJobStatus: (jobId: string) =>
     api.get<{ jobId: string; status: string; result?: { reply: string }; error?: string }>(`/ai/jobs/${jobId}`),
 };
+
+// Admin API - Protected routes for admin users only
+export const adminApi = {
+  // List all users with pagination and filters
+  listUsers: async (filters: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    plan?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters.page) params.append('page', String(filters.page));
+    if (filters.limit) params.append('limit', String(filters.limit));
+    if (filters.search) params.append('search', filters.search);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.plan) params.append('plan', filters.plan);
+    
+    const response = await api.get(`/admin/users/all?${params.toString()}`);
+    return response.data;
+  },
+
+  // Get single user details
+  getUser: async (userId: string) => {
+    const response = await api.get(`/admin/users/${userId}`);
+    return response.data;
+  },
+
+  // Manual upgrade user subscription
+  upgradeUser: async (userId: string, data: {
+    planId: string;
+    periodMonths: 1 | 3 | 6 | 12;
+    paymentMethod: 'manual' | 'bank_transfer' | 'syrian_bank';
+    paymentReference?: string;
+    note?: string;
+  }) => {
+    const response = await api.post(`/admin/users/${userId}/upgrade`, data);
+    return response.data;
+  },
+
+  // Get all plans (for admin dropdown)
+  getPlans: async () => {
+    const response = await api.get('/admin/plans');
+    return response.data;
+  },
+
+  // Get audit logs
+  getAuditLogs: async () => {
+    const response = await api.get('/admin/audit-logs');
+    return response.data;
+  },
+};

@@ -1,8 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs } from '../db/schema';
-import { eq, ilike } from 'drizzle-orm';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage } from '../db/schema';
+import { eq, ilike, desc, sql, and, gte, lte } from 'drizzle-orm';
 
 // Request body types
 interface ManualUpgradeBody {
@@ -17,6 +17,14 @@ interface SearchUsersQuery {
     email?: string;
 }
 
+interface ListAllUsersQuery {
+    page?: string;
+    limit?: string;
+    status?: string;
+    plan?: string;
+    search?: string;
+}
+
 /**
  * Admin Routes - Protected endpoints for manual subscription management
  * All routes require authentication + admin privileges
@@ -26,6 +34,114 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     fastify.register(async (adminProtected) => {
         adminProtected.addHook('preHandler', authenticate);
         adminProtected.addHook('preHandler', requireAdmin);
+
+        /**
+         * GET /admin/users/all - List all users with pagination and filters
+         * Query: ?page=1&limit=20&status=active&plan=pro&search=email
+         */
+        adminProtected.get<{ Querystring: ListAllUsersQuery }>(
+            '/users/all',
+            async (request: FastifyRequest<{ Querystring: ListAllUsersQuery }>, reply: FastifyReply) => {
+                const { 
+                    page = '1', 
+                    limit = '20', 
+                    status, 
+                    plan: planSlug, 
+                    search 
+                } = request.query;
+
+                const pageNum = Math.max(1, parseInt(page, 10) || 1);
+                const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+                const offset = (pageNum - 1) * limitNum;
+
+                try {
+                    // Build base query with subscriptions join
+                    // We'll filter in memory for simplicity with the current schema
+                    const baseQuery = db
+                        .select({
+                            id: users.id,
+                            email: users.email,
+                            name: users.name,
+                            facebookId: users.facebookId,
+                            createdAt: users.createdAt,
+                            subscriptionId: subscriptions.id,
+                            subscriptionStatus: subscriptions.status,
+                            planId: subscriptions.planId,
+                            planName: plans.name,
+                            planSlug: plans.slug,
+                            currentPeriodStart: subscriptions.currentPeriodStart,
+                            currentPeriodEnd: subscriptions.currentPeriodEnd,
+                            paymentMethod: subscriptions.paymentMethod,
+                        })
+                        .from(users)
+                        .leftJoin(subscriptions, eq(users.id, subscriptions.userId))
+                        .leftJoin(plans, eq(subscriptions.planId, plans.id))
+                        .orderBy(desc(users.createdAt));
+
+                    // Get all users first (we'll filter and paginate)
+                    let allUsers = await baseQuery;
+
+                    // Apply filters
+                    if (search && search.trim().length > 0) {
+                        const searchLower = search.trim().toLowerCase();
+                        allUsers = allUsers.filter(u => 
+                            u.email?.toLowerCase().includes(searchLower) ||
+                            u.name?.toLowerCase().includes(searchLower)
+                        );
+                    }
+
+                    if (status) {
+                        allUsers = allUsers.filter(u => u.subscriptionStatus === status);
+                    }
+
+                    if (planSlug) {
+                        allUsers = allUsers.filter(u => u.planSlug === planSlug);
+                    }
+
+                    // Get total count after filters
+                    const totalCount = allUsers.length;
+
+                    // Apply pagination
+                    const paginatedUsers = allUsers.slice(offset, offset + limitNum);
+
+                    // Transform to response format
+                    const responseData = paginatedUsers.map(u => ({
+                        id: u.id,
+                        email: u.email,
+                        name: u.name,
+                        facebookId: u.facebookId,
+                        createdAt: u.createdAt,
+                        subscription: u.subscriptionId ? {
+                            id: u.subscriptionId,
+                            status: u.subscriptionStatus,
+                            planId: u.planId,
+                            planName: u.planName,
+                            planSlug: u.planSlug,
+                            currentPeriodStart: u.currentPeriodStart,
+                            currentPeriodEnd: u.currentPeriodEnd,
+                            paymentMethod: u.paymentMethod,
+                        } : null,
+                    }));
+
+                    return reply.send({
+                        success: true,
+                        data: responseData,
+                        pagination: {
+                            page: pageNum,
+                            limit: limitNum,
+                            total: totalCount,
+                            totalPages: Math.ceil(totalCount / limitNum),
+                        },
+                    });
+                } catch (error) {
+                    request.log.error(error, 'Admin list all users failed');
+                    return reply.status(500).send({
+                        success: false,
+                        error: 'Failed to list users',
+                    });
+                }
+            }
+        );
 
         /**
          * GET /admin/users - Search users by email
@@ -99,7 +215,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         );
 
         /**
-         * GET /admin/users/:userId - Get single user details
+         * GET /admin/users/:userId - Get single user details with pages and usage
          */
         adminProtected.get<{ Params: { userId: string } }>(
             '/users/:userId',
@@ -126,7 +242,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         });
                     }
 
-                    // Get subscription
+                    // Get subscription with plan limits
                     const [subscription] = await db
                         .select({
                             id: subscriptions.id,
@@ -138,10 +254,38 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             currentPeriodEnd: subscriptions.currentPeriodEnd,
                             paymentMethod: subscriptions.paymentMethod,
                             trialEndsAt: subscriptions.trialEndsAt,
+                            maxAiRepliesPerMonth: plans.maxAiRepliesPerMonth,
+                            maxPages: plans.maxPages,
                         })
                         .from(subscriptions)
                         .leftJoin(plans, eq(subscriptions.planId, plans.id))
                         .where(eq(subscriptions.userId, userId))
+                        .limit(1);
+
+                    // Get pages count
+                    const userPages = await db
+                        .select({ id: pages.id })
+                        .from(pages)
+                        .where(eq(pages.userId, userId));
+                    const pagesCount = userPages.length;
+
+                    // Get current period usage
+                    const now = new Date();
+                    const [currentUsage] = await db
+                        .select({
+                            aiRepliesCount: usage.aiRepliesCount,
+                            templateRepliesCount: usage.templateRepliesCount,
+                            periodStart: usage.periodStart,
+                            periodEnd: usage.periodEnd,
+                        })
+                        .from(usage)
+                        .where(
+                            and(
+                                eq(usage.userId, userId),
+                                lte(usage.periodStart, now),
+                                gte(usage.periodEnd, now)
+                            )
+                        )
                         .limit(1);
 
                     return reply.send({
@@ -149,6 +293,20 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         data: {
                             ...user,
                             subscription: subscription || null,
+                            pagesCount,
+                            usage: currentUsage ? {
+                                aiRepliesCount: currentUsage.aiRepliesCount || 0,
+                                templateRepliesCount: currentUsage.templateRepliesCount || 0,
+                                periodStart: currentUsage.periodStart,
+                                periodEnd: currentUsage.periodEnd,
+                                limit: subscription?.maxAiRepliesPerMonth || null,
+                            } : {
+                                aiRepliesCount: 0,
+                                templateRepliesCount: 0,
+                                periodStart: null,
+                                periodEnd: null,
+                                limit: subscription?.maxAiRepliesPerMonth || null,
+                            },
                         },
                     });
                 } catch (error) {

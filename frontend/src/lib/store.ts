@@ -10,6 +10,7 @@ interface User {
   email?: string;
   facebookId: string;
   picture?: string;
+  isAdmin?: boolean;
 }
 
 interface AuthState {

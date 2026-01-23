@@ -9,6 +9,7 @@ export interface User {
     name: string | null;
     email: string | null;
     picture?: string | null;
+    isAdmin?: boolean | null;
     createdAt: Date | null;
     updatedAt: Date | null;
     facebookAccessToken?: string | null;
@@ -38,6 +39,7 @@ export interface AuthResponse {
         email?: string;
         facebookId: string;
         picture?: string;
+        isAdmin?: boolean;
     };
     settings?: {
         dashboardLanguage: string;
