@@ -25,12 +25,19 @@ export function Toggle({ enabled, onChange, disabled = false, size = 'md' }: Tog
     },
   };
 
-  // In RTL, when enabled, the thumb should move to the LEFT (negative X)
-  // In LTR, when enabled, the thumb should move to the RIGHT (positive X)
+  // Toggle positioning:
+  // LTR: OFF = thumb on left (0), ON = thumb on right (+distance)
+  // RTL: OFF = thumb on right (+distance), ON = thumb on left (0)
+  // This ensures visual consistency - OFF is always on the "start" side
   const getTransform = () => {
-    if (!enabled) return 'translateX(0)';
     const distance = sizeClasses[size].translateDistance;
-    return isRTL ? `translateX(-${distance}px)` : `translateX(${distance}px)`;
+    if (isRTL) {
+      // RTL: start at right, move to left when enabled
+      return enabled ? 'translateX(0)' : `translateX(${distance}px)`;
+    } else {
+      // LTR: start at left, move to right when enabled
+      return enabled ? `translateX(${distance}px)` : 'translateX(0)';
+    }
   };
 
   return (
