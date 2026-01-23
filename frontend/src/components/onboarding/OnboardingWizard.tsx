@@ -14,7 +14,7 @@ import {
   Info
 } from 'lucide-react';
 import { Button, Toggle } from '@/components/ui';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 
@@ -22,6 +22,9 @@ import { useSwipe } from '@/hooks/useSwipe';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+
+// Type for the translation function
+type TFunction = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -34,7 +37,7 @@ function WelcomeStep({
   t 
 }: { 
   isLandscape: boolean; 
-  t: (key: string) => string;
+  t: TFunction;
 }) {
   return (
     <div className={`text-center ${isLandscape ? 'flex items-center gap-6' : ''}`}>
@@ -68,7 +71,7 @@ function PickPageStep({
   loading: boolean;
   onToggle: (pageId: string, enabled: boolean) => void;
   isLandscape: boolean;
-  t: (key: string) => string;
+  t: TFunction;
   language: string;
 }) {
   const isRTL = language === 'ar';
@@ -160,7 +163,7 @@ function ReviewInfoStep({
   isEditing: boolean;
   onEditToggle: () => void;
   isLandscape: boolean;
-  t: (key: string) => string;
+  t: TFunction;
   language: string;
 }) {
   const isRTL = language === 'ar';
