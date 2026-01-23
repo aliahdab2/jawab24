@@ -11,14 +11,16 @@ interface StatCardProps {
   index: number;
 }
 
-export function StatCard({ nameKey, value, icon: Icon, color, index }: StatCardProps) {
+export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, isActive }: StatCardProps & { onClick?: () => void; isActive?: boolean }) {
   const { t } = useTranslation();
 
   return (
     <Card
       hover
+      onClick={onClick}
       className={clsx(
-        "animate-slide-up relative overflow-hidden group border-none bg-white transition-all duration-300 hover:-translate-y-1",
+        "animate-slide-up relative overflow-hidden group border-none bg-white transition-all duration-300 hover:-translate-y-1 cursor-pointer",
+        isActive && "ring-2 ring-brand-500 ring-offset-2",
         index === 2 ? "col-span-2 sm:col-span-1" : "col-span-1"
       )}
       style={{

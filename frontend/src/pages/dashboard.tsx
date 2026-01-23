@@ -13,6 +13,8 @@ import {
   FileText,
   Sparkles,
   Crown,
+  Search,
+  X,
   ChevronRight
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -64,6 +66,11 @@ const DashboardPage: NextPageWithLayout = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [recentComments, setRecentComments] = useState<Comment[]>([]);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
+  
+  // Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'replied'>('all');
+  
   const [pages, setPages] = useState<Page[]>([]);
   const [statsData, setStatsData] = useState({
     totalComments: 0,
@@ -176,6 +183,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
   // Simplified stats - only 3 essential metrics for low-tech users
   const stats: Array<{
+    id: 'all' | 'replied' | 'pending';
     nameKey: TranslationKey;
     value: string;
     icon: React.ComponentType<{ className?: string }>;
@@ -183,6 +191,7 @@ const DashboardPage: NextPageWithLayout = () => {
     descriptionKey: TranslationKey;
   }> = [
     {
+      id: 'all',
       nameKey: 'dashboard.totalComments' as TranslationKey,
       value: statsData.totalComments.toLocaleString(),
       icon: MessageSquare,
@@ -190,6 +199,7 @@ const DashboardPage: NextPageWithLayout = () => {
       descriptionKey: 'dashboard.totalCommentsDesc' as TranslationKey
     },
     {
+      id: 'replied',
       nameKey: 'dashboard.autoReplies' as TranslationKey,
       value: statsData.autoReplies.toLocaleString(),
       icon: Zap,
@@ -197,6 +207,7 @@ const DashboardPage: NextPageWithLayout = () => {
       descriptionKey: 'dashboard.autoRepliesDesc' as TranslationKey
     },
     {
+      id: 'pending',
       nameKey: 'dashboard.pending' as TranslationKey,
       value: (statsData.totalComments - statsData.autoReplies).toLocaleString(),
       icon: Clock,
@@ -204,6 +215,24 @@ const DashboardPage: NextPageWithLayout = () => {
       descriptionKey: 'dashboard.pendingDesc' as TranslationKey
     },
   ];
+
+  // Logic: Filter Comments
+  const filteredComments = recentComments.filter(comment => {
+    // 1. Status Filter
+    if (activeFilter === 'pending' && comment.replied) return false;
+    if (activeFilter === 'replied' && !comment.replied) return false;
+
+    // 2. Search Filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return (
+        comment.message.toLowerCase().includes(q) ||
+        comment.fromName?.toLowerCase().includes(q) ||
+        comment.replyText?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   // Handle onboarding completion
   const handleOnboardingComplete = () => {
@@ -258,6 +287,8 @@ const DashboardPage: NextPageWithLayout = () => {
             icon={stat.icon}
             color={stat.color}
             index={i}
+            isActive={activeFilter === stat.id}
+            onClick={() => setActiveFilter(stat.id)}
           />
         ))}
       </div>
@@ -266,20 +297,41 @@ const DashboardPage: NextPageWithLayout = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Comments */}
         <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-white" padding="none">
-          <div className="p-5 sm:p-8 border-b border-surface-100 flex items-center justify-between bg-surface-50/50">
+          <div className="p-5 sm:p-5 border-b border-surface-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface-50/50">
             <div>
               <h3 className="text-xl font-display font-bold text-surface-900 tracking-tight">{t('dashboard.recentComments')}</h3>
-              <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.latestCommentsDesc')}</p>
+              <p className="text-sm font-medium text-surface-500 mt-1">
+                {activeFilter === 'all' 
+                  ? t('dashboard.latestCommentsDesc') 
+                  : activeFilter === 'pending' 
+                    ? t('dashboard.pendingDesc')
+                    : t('dashboard.autoRepliesDesc')}
+              </p>
             </div>
-            <Link href="/comments">
-              <Button variant="secondary" size="sm" className="font-bold border-none bg-white shadow-sm hover:shadow-md">
-                {t('dashboard.viewAllComments')}
-              </Button>
-            </Link>
+            
+            {/* Integrated Search */}
+            <div className="relative group w-full sm:w-auto">
+              <input 
+                type="text" 
+                placeholder={t('common.search')} 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full sm:w-64 pl-10 pr-4 py-2 rounded-xl bg-white border border-surface-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all text-sm font-medium shadow-sm group-hover:shadow-md"
+              />
+              <Search className="w-4 h-4 text-surface-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-brand-500 transition-colors" />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600 p-1 rounded-full hover:bg-surface-100"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="divide-y divide-surface-100">
-            {recentComments.length > 0 ? recentComments.map((comment, i) => (
+          <div className="divide-y divide-surface-100 min-h-[300px]">
+            {filteredComments.length > 0 ? filteredComments.map((comment, i) => (
               <div
                 key={comment.id}
                 className="px-5 sm:px-8 py-5 sm:py-6 hover:bg-brand-50/20 transition-all group animate-slide-up cursor-pointer"

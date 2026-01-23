@@ -114,8 +114,7 @@
   "auth.loginCancelled": "Login was cancelled",
   "auth.loginTimeout": "Facebook is not responding. Please try again.",
   "auth.networkError": "Network error. Please check your connection.",
-  "auth.loginCancelled": "Facebook login was cancelled or failed",
-  "auth.loginTimeout": "Login request timed out. Please try again.",
+
   "auth.redirecting": "Redirecting...",
   "auth.systemsActive": "Systems Active",
   "auth.nextGenAutoReplies": "Next-Gen Auto Replies",
@@ -137,7 +136,7 @@
   "dashboard.autoReplies": "Smart replies",
   "dashboard.autoRepliesDesc": "Use automated replies to engage faster with your audience",
   "dashboard.pendingDesc": "Waiting for reply",
-  "dashboard.aiReplies": "Jawab Replies",
+  "dashboard.aiReplies": "Smart Answers",
   "dashboard.aiRepliesDesc": "Replies by Jawab",
   "dashboard.avgResponseTime": "Speed",
   "dashboard.vsLastWeek": "this week",
