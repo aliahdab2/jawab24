@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import type { Rule, Template } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
-import { useDuplicate } from '@/hooks/useDuplicate';
 
 const RulesPage: NextPageWithLayout = () => {
   const { t } = useTranslation();
@@ -106,16 +105,15 @@ const RulesPage: NextPageWithLayout = () => {
     }
   };
 
-  const { duplicate: handleDuplicate, loading: duplicating } = useDuplicate<Rule>({
-    createFn: rulesApi.create,
-    onSuccess: (newItem) => setRules([...rules, newItem].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))),
-    transform: (rule) => ({
+  const handleDuplicate = (rule: Rule) => {
+    setEditingRule(null); // Create mode
+    setFormData({
       name: `${rule.name} (Copy)`,
-      keywords: rule.keywords || [],
+      keywords: (rule.keywords || []).join(', '),
       templateId: rule.templateId || '',
-      priority: rules.length + 1,
-    }),
-  });
+    });
+    setIsModalOpen(true);
+  };
 
   const handleToggle = async (id: string, active: boolean) => {
     // Optimistic update
@@ -329,10 +327,9 @@ const RulesPage: NextPageWithLayout = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDuplicate(rule)}
-                    disabled={duplicating}
                     className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
                   >
-                    <Copy className={`w-4 h-4 ${duplicating ? 'animate-pulse' : ''}`} />
+                    <Copy className="w-4 h-4" />
                     <span className="lg:hidden text-xs font-bold uppercase tracking-wider">Duplicate</span>
                   </Button>
                   <Button

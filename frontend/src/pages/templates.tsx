@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import type { Template } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
-import { useDuplicate } from '@/hooks/useDuplicate';
 
 const TemplatesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
@@ -115,19 +114,16 @@ const TemplatesPage: NextPageWithLayout = () => {
     }
   };
 
-  const handleDuplicate = async (template: Template) => {
-    try {
-      const duplicateData = {
-        name: `${template.name} (Copy)`,
-        translations: template.translations,
-        keywords: template.keywords || [], // fix: handle null
-      };
-      
-      const response = await templatesApi.create(duplicateData);
-      setTemplates([response.data, ...templates]);
-    } catch (error) {
-      console.error('Failed to duplicate template:', error);
-    }
+  const handleDuplicate = (template: Template) => {
+    setEditingTemplate(null); // Create mode
+    setFormData({
+      name: `${template.name} (Copy)`,
+      en: template.translations.en || '',
+      ar: template.translations.ar || '',
+      keywords: (template.keywords || []).join(', '),
+    });
+    setActiveLang(getDefaultLang());
+    setIsModalOpen(true);
   };
 
   const handleToggle = async (id: string, active: boolean) => {
@@ -283,10 +279,9 @@ const TemplatesPage: NextPageWithLayout = () => {
                     variant="ghost" 
                     size="sm" 
                     onClick={() => handleDuplicate(template)} 
-                    disabled={duplicating}
                     className="text-surface-400 hover:text-brand-600 hover:bg-brand-50"
                   >
-                    <Copy className={`w-4 h-4 ${duplicating ? 'animate-pulse' : ''}`} />
+                    <Copy className="w-4 h-4" />
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => handleDelete(template.id)} className="text-surface-400 hover:text-red-600 hover:bg-red-50">
                     <Trash2 className="w-4 h-4" />
