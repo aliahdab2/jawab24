@@ -10,6 +10,7 @@ import {
   Plus,
   Edit,
   Trash2,
+  Copy,
   ArrowUp,
   ArrowDown,
   Tag,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { Rule, Template } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
+import { useDuplicate } from '@/hooks/useDuplicate';
 
 const RulesPage: NextPageWithLayout = () => {
   const { t } = useTranslation();
@@ -103,6 +105,17 @@ const RulesPage: NextPageWithLayout = () => {
       console.error('Failed to save rule:', error);
     }
   };
+
+  const { duplicate: handleDuplicate, loading: duplicating } = useDuplicate<Rule>({
+    createFn: rulesApi.create,
+    onSuccess: (newItem) => setRules([...rules, newItem].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))),
+    transform: (rule) => ({
+      name: `${rule.name} (Copy)`,
+      keywords: rule.keywords || [],
+      templateId: rule.templateId || '',
+      priority: rules.length + 1,
+    }),
+  });
 
   const handleToggle = async (id: string, active: boolean) => {
     // Optimistic update
@@ -311,6 +324,16 @@ const RulesPage: NextPageWithLayout = () => {
                   >
                     <Edit className="w-4 h-4" />
                     <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('common.edit')}</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDuplicate(rule)}
+                    disabled={duplicating}
+                    className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
+                  >
+                    <Copy className={`w-4 h-4 ${duplicating ? 'animate-pulse' : ''}`} />
+                    <span className="lg:hidden text-xs font-bold uppercase tracking-wider">Duplicate</span>
                   </Button>
                   <Button
                     variant="ghost"

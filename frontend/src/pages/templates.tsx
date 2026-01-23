@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { Template } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
+import { useDuplicate } from '@/hooks/useDuplicate';
 
 const TemplatesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
@@ -111,6 +112,21 @@ const TemplatesPage: NextPageWithLayout = () => {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Failed to save template:', error);
+    }
+  };
+
+  const handleDuplicate = async (template: Template) => {
+    try {
+      const duplicateData = {
+        name: `${template.name} (Copy)`,
+        translations: template.translations,
+        keywords: template.keywords || [], // fix: handle null
+      };
+      
+      const response = await templatesApi.create(duplicateData);
+      setTemplates([response.data, ...templates]);
+    } catch (error) {
+      console.error('Failed to duplicate template:', error);
     }
   };
 
@@ -263,8 +279,14 @@ const TemplatesPage: NextPageWithLayout = () => {
                   <Button variant="ghost" size="sm" onClick={() => handleOpenModal(template)} className="text-surface-400 hover:text-brand-600 hover:bg-brand-50">
                     <Edit className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="text-surface-400 hover:text-brand-600 hover:bg-brand-50">
-                    <Copy className="w-4 h-4" />
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => handleDuplicate(template)} 
+                    disabled={duplicating}
+                    className="text-surface-400 hover:text-brand-600 hover:bg-brand-50"
+                  >
+                    <Copy className={`w-4 h-4 ${duplicating ? 'animate-pulse' : ''}`} />
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => handleDelete(template.id)} className="text-surface-400 hover:text-red-600 hover:bg-red-50">
                     <Trash2 className="w-4 h-4" />
@@ -321,20 +343,6 @@ const TemplatesPage: NextPageWithLayout = () => {
             <div className="flex gap-1 p-1 bg-surface-100 rounded-xl mb-3">
               <button
                 type="button"
-                onClick={() => setActiveLang('en')}
-                className={clsx(
-                  "flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2",
-                  activeLang === 'en'
-                    ? "bg-white text-brand-600 shadow-sm"
-                    : "text-surface-500 hover:text-surface-700"
-                )}
-              >
-                <Globe className="w-4 h-4" />
-                {t('templates.english')}
-                {formData.en && <span className="w-2 h-2 rounded-full bg-brand-500" />}
-              </button>
-              <button
-                type="button"
                 onClick={() => setActiveLang('ar')}
                 className={clsx(
                   "flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2",
@@ -346,6 +354,20 @@ const TemplatesPage: NextPageWithLayout = () => {
                 <Globe className="w-4 h-4" />
                 {t('templates.arabic')}
                 {formData.ar && <span className="w-2 h-2 rounded-full bg-brand-500" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLang('en')}
+                className={clsx(
+                  "flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2",
+                  activeLang === 'en'
+                    ? "bg-white text-brand-600 shadow-sm"
+                    : "text-surface-500 hover:text-surface-700"
+                )}
+              >
+                <Globe className="w-4 h-4" />
+                {t('templates.english')}
+                {formData.en && <span className="w-2 h-2 rounded-full bg-brand-500" />}
               </button>
             </div>
 
