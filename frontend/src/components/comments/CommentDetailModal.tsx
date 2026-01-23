@@ -5,6 +5,7 @@ import { Button, Badge } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import { commentsApi, aiApi, subscriptionApi } from '@/lib/api';
 import type { Comment } from '@jawab24/shared';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import {
   MessageSquare,
   Bot,
@@ -29,6 +30,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   onReplySuccess,
 }) => {
   const { t, language } = useTranslation();
+  
+  // Close on ESC
+  useEscapeKey(onClose);
+
   const [replyText, setReplyText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);

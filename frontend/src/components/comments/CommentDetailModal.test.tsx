@@ -96,5 +96,15 @@ describe('CommentDetailModal', () => {
       expect(screen.getByText('Generated')).toBeInTheDocument();
     });
   });
+
+  it('closes on ESC key press', () => {
+    const onClose = vi.fn();
+    render(<CommentDetailModal comment={mockComment} onClose={onClose} onReplySuccess={vi.fn()} />);
+    
+    // Simulate ESC key press
+    fireEvent.keyDown(window, { key: 'Escape' });
+    
+    expect(onClose).toHaveBeenCalled();
+  });
 });
 
