@@ -323,7 +323,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable}`}>
         <ErrorBoundary>
           {getLayout(<Component {...pageProps} />)}
-          <Toaster richColors position="top-center" closeButton />
+          <Toaster richColors position="top-center" closeButton duration={4000} />
         </ErrorBoundary>
       </AppShell>
     </QueryClientProvider>
