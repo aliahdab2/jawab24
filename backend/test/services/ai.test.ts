@@ -188,6 +188,114 @@ describe('AI Service', () => {
             expect(db.delete).toHaveBeenCalled();
         });
     });
+
+    describe('getJobStatus', () => {
+        it('should return not_found when job does not exist', async () => {
+            vi.doMock('../../src/lib/queue', () => ({
+                aiQueue: {
+                    getJob: vi.fn().mockResolvedValue(null)
+                }
+            }));
+
+            // Need to reimport to get fresh mock
+            vi.resetModules();
+            const { AiService: FreshAiService } = await import('../../src/services/ai');
+            const freshService = new FreshAiService();
+
+            const result = await freshService.getJobStatus('nonexistent-job');
+
+            expect(result.status).toBe('not_found');
+            expect(result.jobId).toBe('nonexistent-job');
+        });
+
+        it('should return completed status with result when job is done', async () => {
+            const mockJob = {
+                id: 'completed-job',
+                returnvalue: { reply: 'AI generated reply' },
+                getState: vi.fn().mockResolvedValue('completed')
+            };
+
+            vi.doMock('../../src/lib/queue', () => ({
+                aiQueue: {
+                    getJob: vi.fn().mockResolvedValue(mockJob)
+                }
+            }));
+
+            vi.resetModules();
+            const { AiService: FreshAiService } = await import('../../src/services/ai');
+            const freshService = new FreshAiService();
+
+            const result = await freshService.getJobStatus('completed-job');
+
+            expect(result.status).toBe('completed');
+            expect(result.result?.reply).toBe('AI generated reply');
+        });
+
+        it('should return failed status with error when job failed', async () => {
+            const mockJob = {
+                id: 'failed-job',
+                failedReason: 'OpenAI API error',
+                getState: vi.fn().mockResolvedValue('failed')
+            };
+
+            vi.doMock('../../src/lib/queue', () => ({
+                aiQueue: {
+                    getJob: vi.fn().mockResolvedValue(mockJob)
+                }
+            }));
+
+            vi.resetModules();
+            const { AiService: FreshAiService } = await import('../../src/services/ai');
+            const freshService = new FreshAiService();
+
+            const result = await freshService.getJobStatus('failed-job');
+
+            expect(result.status).toBe('failed');
+            expect(result.error).toBe('OpenAI API error');
+        });
+
+        it('should return active status when job is being processed', async () => {
+            const mockJob = {
+                id: 'active-job',
+                getState: vi.fn().mockResolvedValue('active')
+            };
+
+            vi.doMock('../../src/lib/queue', () => ({
+                aiQueue: {
+                    getJob: vi.fn().mockResolvedValue(mockJob)
+                }
+            }));
+
+            vi.resetModules();
+            const { AiService: FreshAiService } = await import('../../src/services/ai');
+            const freshService = new FreshAiService();
+
+            const result = await freshService.getJobStatus('active-job');
+
+            expect(result.status).toBe('active');
+        });
+
+        it('should return queued status for waiting jobs', async () => {
+            const mockJob = {
+                id: 'waiting-job',
+                getState: vi.fn().mockResolvedValue('waiting')
+            };
+
+            vi.doMock('../../src/lib/queue', () => ({
+                aiQueue: {
+                    getJob: vi.fn().mockResolvedValue(mockJob)
+                }
+            }));
+
+            vi.resetModules();
+            const { AiService: FreshAiService } = await import('../../src/services/ai');
+            const freshService = new FreshAiService();
+
+            const result = await freshService.getJobStatus('waiting-job');
+
+            expect(result.status).toBe('queued');
+        });
+    });
     describe('normalization', () => {
         it('should normalize comments for better cache hits', async () => {
             const { redis } = await import('../../src/lib/redis');

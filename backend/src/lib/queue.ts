@@ -19,7 +19,7 @@ export const aiQueue = new Queue<AiGenerateJobData>(AI_QUEUE_NAME, {
             type: 'exponential',
             delay: 1000,
         },
-        removeOnComplete: true, // Keep DB clean
+        removeOnComplete: { age: 60 }, // Keep completed jobs for 60 seconds for status polling
         removeOnFail: 100, // Keep last 100 failures for debugging
     },
 });

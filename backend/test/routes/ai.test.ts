@@ -144,5 +144,80 @@ describe('AI Routes', () => {
             expect(aiService.clearCache).toHaveBeenCalled();
         });
     });
+
+    describe('GET /ai/jobs/:jobId', () => {
+        it('should return job status when job exists and is queued', async () => {
+            vi.mocked(aiService.getJobStatus).mockResolvedValue({
+                jobId: 'test-job-123',
+                status: 'queued'
+            });
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/ai/jobs/test-job-123'
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.payload)).toEqual({
+                jobId: 'test-job-123',
+                status: 'queued'
+            });
+            expect(aiService.getJobStatus).toHaveBeenCalledWith('test-job-123');
+        });
+
+        it('should return completed status with result', async () => {
+            vi.mocked(aiService.getJobStatus).mockResolvedValue({
+                jobId: 'test-job-456',
+                status: 'completed',
+                result: { reply: 'Thank you for your comment!' }
+            });
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/ai/jobs/test-job-456'
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.status).toBe('completed');
+            expect(payload.result.reply).toBe('Thank you for your comment!');
+        });
+
+        it('should return failed status with error', async () => {
+            vi.mocked(aiService.getJobStatus).mockResolvedValue({
+                jobId: 'test-job-789',
+                status: 'failed',
+                error: 'AI service unavailable'
+            });
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/ai/jobs/test-job-789'
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.status).toBe('failed');
+            expect(payload.error).toBe('AI service unavailable');
+        });
+
+        it('should return 404 when job is not found', async () => {
+            vi.mocked(aiService.getJobStatus).mockResolvedValue({
+                jobId: 'nonexistent-job',
+                status: 'not_found'
+            });
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/ai/jobs/nonexistent-job'
+            });
+
+            expect(response.statusCode).toBe(404);
+            expect(JSON.parse(response.payload)).toEqual({
+                error: 'Job not found',
+                jobId: 'nonexistent-job'
+            });
+        });
+    });
 });
 

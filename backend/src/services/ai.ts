@@ -222,6 +222,50 @@ export class AiService {
             status: 'queued'
         };
     }
+
+    /**
+     * Get the status of an async AI generation job
+     */
+    async getJobStatus(jobId: string): Promise<{ 
+        jobId: string; 
+        status: 'queued' | 'active' | 'completed' | 'failed' | 'not_found';
+        result?: { reply: string };
+        error?: string;
+    }> {
+        const { aiQueue } = await import('../lib/queue');
+        
+        const job = await aiQueue.getJob(jobId);
+        
+        if (!job) {
+            return { jobId, status: 'not_found' };
+        }
+
+        const state = await job.getState();
+        
+        if (state === 'completed') {
+            const returnValue = job.returnvalue as { reply: string } | undefined;
+            return {
+                jobId,
+                status: 'completed',
+                result: returnValue
+            };
+        }
+        
+        if (state === 'failed') {
+            return {
+                jobId,
+                status: 'failed',
+                error: job.failedReason || 'Unknown error'
+            };
+        }
+        
+        if (state === 'active') {
+            return { jobId, status: 'active' };
+        }
+        
+        // waiting, delayed, etc. -> treat as queued
+        return { jobId, status: 'queued' };
+    }
 }
 
 export const aiService = new AiService();

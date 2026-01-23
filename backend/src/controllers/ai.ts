@@ -70,6 +70,31 @@ export class AiController {
             return reply.status(500).send({ error: 'Failed to clear cache' });
         }
     }
+
+    /**
+     * Get job status for async AI generation
+     * GET /ai/jobs/:jobId
+     */
+    async getJobStatus(request: FastifyRequest<{ Params: { jobId: string } }>, reply: FastifyReply) {
+        const { jobId } = request.params;
+
+        if (!jobId) {
+            return reply.status(400).send({ error: 'Job ID is required' });
+        }
+
+        try {
+            const status = await aiService.getJobStatus(jobId);
+            
+            if (status.status === 'not_found') {
+                return reply.status(404).send({ error: 'Job not found', jobId });
+            }
+            
+            return reply.send(status);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to get job status' });
+        }
+    }
 }
 
 export const aiController = new AiController();

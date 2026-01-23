@@ -9,6 +9,9 @@ export default async function aiRoutes(fastify: FastifyInstance) {
         // Generate AI reply
         protectedRoutes.post('/ai/generate', aiController.generate);
         protectedRoutes.post('/ai/generate-async', aiController.generateAsync);
+        
+        // Job status polling (for async generation)
+        protectedRoutes.get('/ai/jobs/:jobId', aiController.getJobStatus);
 
         // Cache management
         protectedRoutes.get('/ai/cache/stats', aiController.getCacheStats);
