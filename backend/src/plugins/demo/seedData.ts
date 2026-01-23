@@ -1,7 +1,30 @@
 import { db } from '../../db';
-import { pages, posts, comments, templates } from '../../db/schema';
+import { pages, posts, comments, templates, settings } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
+
+/**
+ * Demo settings configuration
+ * Uses 'dual' mode (comment + private message) to showcase full feature set
+ */
+const DEMO_SETTINGS = {
+    dashboardLanguage: 'ar',
+    defaultReplyLanguage: 'ar',
+    supportedLanguages: ['ar', 'en'],
+    autoDetectLanguage: true,
+    aiEnabled: true,
+    aiModel: 'gpt-4o-mini',
+    // Dual mode: sends private message + short public nudge
+    commentReplyMode: 'dual',
+    dualReplyConfig: {
+        ar: 'تم إرسال التفاصيل برسالة خاصة 📩',
+        en: 'Details sent via DM 📩'
+    },
+    commentsAutoReply: true,
+    messagesAutoReply: true,
+    businessHoursOnly: false,
+    greetingMessage: 'أهلاً بك! كيف يمكنني مساعدتك؟',
+};
 
 /**
  * Demo seed data for testing without Facebook API approval
@@ -156,7 +179,7 @@ const DEMO_COMMENTS = [
     },
     {
         facebookCommentId: 'demo_comment_4',
-        message: 'هل المعهد معتمد؟',
+        message: 'عندي مشكلة في التسجيل، أحتاج مساعدة من موظف',
         fromId: 'user_4',
         fromName: 'سارة أحمد',
         postIndex: 0,
@@ -286,6 +309,30 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
     if (hasExistingDemoPages) {
         logger.info('[DemoData] Demo data already exists, skipping seed');
         return;
+    }
+
+    // Create or update demo settings with dual mode (showcases all features)
+    const existingSettings = await db
+        .select()
+        .from(settings)
+        .where(eq(settings.userId, userId));
+
+    if (existingSettings.length === 0) {
+        await db.insert(settings).values({
+            userId,
+            ...DEMO_SETTINGS,
+        });
+        logger.debug('[DemoData] Created demo settings with dual reply mode');
+    } else {
+        // Update existing settings to demo defaults
+        await db.update(settings)
+            .set({
+                commentReplyMode: DEMO_SETTINGS.commentReplyMode,
+                dualReplyConfig: DEMO_SETTINGS.dualReplyConfig,
+                aiEnabled: DEMO_SETTINGS.aiEnabled,
+            })
+            .where(eq(settings.userId, userId));
+        logger.debug('[DemoData] Updated settings to demo defaults');
     }
 
     // Create demo pages (with suggestedKnowledgeBase for demo - user can confirm in onboarding)

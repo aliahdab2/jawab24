@@ -19,6 +19,8 @@ export interface SendCommentReplyOptions {
     fromId?: string;
     replyMode: ReplyMode;
     dualReplyConfig?: DualReplyConfig;
+    /** If true, skip Facebook API calls (for demo mode) */
+    isDemo?: boolean;
 }
 
 export interface SendReplyResult {
@@ -51,8 +53,15 @@ export class ReplySender {
             accessToken, 
             fromId, 
             replyMode, 
-            dualReplyConfig 
+            dualReplyConfig,
+            isDemo = false
         } = options;
+
+        // Demo mode: Skip Facebook API calls, simulate success
+        if (isDemo) {
+            this.logger.info('[Sender] Demo mode - skipping Facebook API', { facebookCommentId });
+            return { success: true };
+        }
 
         let success = false;
         let errorMsg = '';

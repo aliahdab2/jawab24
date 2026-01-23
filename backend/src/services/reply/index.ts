@@ -218,6 +218,8 @@ export class ReplyService {
 
             // 9. Send reply based on mode
             const replyMode = (userSettings.commentReplyMode || 'public') as ReplyMode;
+            // Check if this is a demo page (skip Facebook API calls)
+            const isDemo = page.facebookPageId.startsWith('demo_');
             const sendResult = await replySender.sendCommentReply({
                 facebookCommentId,
                 replyText,
@@ -226,6 +228,7 @@ export class ReplyService {
                 fromId,
                 replyMode,
                 dualReplyConfig: userSettings.dualReplyConfig as Record<string, string> | undefined,
+                isDemo,
             });
 
             if (!sendResult.success) {

@@ -23,7 +23,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import type { Comment } from '@jawab24/shared';
 
-import { commentsApi, aiApi } from '@/lib/api';
+import { commentsApi, aiApi, pagesApi } from '@/lib/api';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -38,6 +38,7 @@ const CommentsPage: NextPageWithLayout = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [hasPages, setHasPages] = useState(true); // Assume true until checked
 
   // ESC key to close modal
   useEscapeKey(() => setSelectedComment(null), !!selectedComment);
@@ -90,11 +91,22 @@ const CommentsPage: NextPageWithLayout = () => {
   const fetchComments = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await commentsApi.getAll();
-      const data = Array.isArray(response.data)
-        ? response.data
-        : (Array.isArray(response.data?.data) ? response.data.data : []);
-      setComments(data);
+      // Fetch comments and pages in parallel
+      const [commentsRes, pagesRes] = await Promise.all([
+        commentsApi.getAll(),
+        pagesApi.getAll()
+      ]);
+      
+      const commentsData = Array.isArray(commentsRes.data)
+        ? commentsRes.data
+        : (Array.isArray(commentsRes.data?.data) ? commentsRes.data.data : []);
+      setComments(commentsData);
+      
+      // Check if user has any pages connected
+      const pagesData = Array.isArray(pagesRes.data)
+        ? pagesRes.data
+        : (Array.isArray(pagesRes.data?.data) ? pagesRes.data.data : []);
+      setHasPages(pagesData.length > 0);
     } catch (error) {
       console.error('Failed to fetch comments:', error);
     } finally {
@@ -453,9 +465,13 @@ const CommentsPage: NextPageWithLayout = () => {
               {searchQuery ? t('common.noData') : t('comments.noComments')}
             </p>
             <p className="text-sm text-surface-500 mb-5">
-              {searchQuery ? t('comments.tryDifferentSearch') : t('comments.noCommentsDesc')}
+              {searchQuery 
+                ? t('comments.tryDifferentSearch') 
+                : hasPages 
+                  ? t('comments.noCommentsForFilter')
+                  : t('comments.noCommentsDesc')}
             </p>
-            {!searchQuery && (
+            {!searchQuery && !hasPages && (
               <Link href="/pages">
                 <Button variant="primary" size="sm" className="py-2" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }} icon={<ExternalLink className="w-[18px] h-[18px] sm:w-5 sm:h-5" />}>
                   {t('comments.connectPage')}

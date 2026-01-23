@@ -320,12 +320,16 @@ const DashboardPage: NextPageWithLayout = () => {
                 <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
                   <MessageSquare className="w-8 h-8 text-surface-300" />
                 </div>
-                <p className="text-base font-semibold text-surface-600 mb-4">{t('dashboard.noDataDesc')}</p>
-                <Link href="/pages">
-                  <Button variant="primary" size="sm">
-                    {t('pages.connectPage')}
-                  </Button>
-                </Link>
+                <p className="text-base font-semibold text-surface-600 mb-4">
+                  {pages.length > 0 ? t('dashboard.noRecentComments') : t('dashboard.noDataDesc')}
+                </p>
+                {pages.length === 0 && (
+                  <Link href="/pages">
+                    <Button variant="primary" size="sm">
+                      {t('pages.connectPage')}
+                    </Button>
+                  </Link>
+                )}
               </div>
             )}
           </div>
