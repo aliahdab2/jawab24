@@ -57,25 +57,23 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title=""
+      title={title}
       size="sm"
     >
-      <div className="text-center sm:text-start">
-        <div className={`mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full sm:mx-0 sm:h-10 sm:w-10 ${getIconBg()} mb-4`}>
-          {getIcon()}
-        </div>
-        
-        <h3 className="text-lg font-semibold leading-6 text-surface-900 mb-2">
-          {title}
-        </h3>
-        
-        <div className="mt-2">
-          <p className="text-sm text-surface-500">
-            {message}
-          </p>
+      <div>
+        <div className="flex items-start gap-4">
+          <div className={`flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full ${getIconBg()}`}>
+            {getIcon()}
+          </div>
+          
+          <div className="mt-1">
+            <p className="text-sm text-surface-600 leading-relaxed">
+              {message}
+            </p>
+          </div>
         </div>
 
-        <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+        <div className="mt-8 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
           <Button
             variant="secondary"
             onClick={onClose}

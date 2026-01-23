@@ -11,8 +11,9 @@ vi.mock('@/i18n', () => ({
 
 // Mock Modal since it uses portals
 vi.mock('./Modal', () => ({
-  Modal: ({ children, isOpen, onClose }: any) => isOpen ? (
+  Modal: ({ children, isOpen, onClose, title }: any) => isOpen ? (
     <div role="dialog">
+      {title && <h1>{title}</h1>}
       <button onClick={onClose} aria-label="Close">X</button>
       {children}
     </div>
