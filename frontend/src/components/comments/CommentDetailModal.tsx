@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
@@ -14,6 +14,8 @@ import {
   X,
   ExternalLink,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -38,10 +40,23 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<string>('');
+  const [showDetails, setShowDetails] = useState(false);
   
   // Limit State
   const [aiLimit, setAiLimit] = useState<{ allowed: boolean; reason?: string }>({ allowed: true });
   const [isReplyGenerated, setIsReplyGenerated] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-focus textarea on open
+  useEffect(() => {
+    // Small timeout to allow modal animation to complete
+    const timer = setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Check limits on mount
   const fetchLimits = useCallback(async () => {
@@ -271,6 +286,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 </div>
               </div>
               <textarea
+                ref={textareaRef}
                 className="w-full p-3 rounded-lg border border-surface-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-surface-900 placeholder:text-surface-400 resize-y"
                 placeholder={t('comments.typeReply')}
                 value={replyText}
@@ -292,31 +308,44 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           )}
 
-          {/* Metadata */}
-          <div className="bg-surface-50 rounded-xl p-4">
-            <h3 className="text-sm font-medium text-surface-700 mb-3">
-              {t('comments.additionalInfo')}
-            </h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-surface-400">{t('comments.commentId')}</p>
-                <p className="text-surface-700 font-mono text-xs truncate">{comment.id}</p>
+          {/* Metadata Collapsible */}
+          <div className="bg-surface-50 rounded-xl border border-surface-200 overflow-hidden">
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="w-full flex items-center justify-between p-4 bg-surface-100 hover:bg-surface-200 transition-colors text-start"
+            >
+              <span className="text-sm font-medium text-surface-700">{t('comments.additionalInfo')}</span>
+              {showDetails ? (
+                <ChevronUp className="w-4 h-4 text-surface-500" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-surface-500" />
+              )}
+            </button>
+            
+            {showDetails && (
+              <div className="p-4 border-t border-surface-200 animate-in slide-in-from-top-2 duration-200">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-surface-400 font-medium mb-1">{t('comments.commentId')}</p>
+                    <p className="text-surface-700 font-mono text-xs break-all bg-white p-1.5 rounded border border-surface-200">{comment.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-surface-400 font-medium mb-1">{t('comments.postId')}</p>
+                    <p className="text-surface-700 font-mono text-xs break-all bg-white p-1.5 rounded border border-surface-200">{comment.postId}</p>
+                  </div>
+                  <div>
+                    <p className="text-surface-400 font-medium mb-1">{t('comments.commenterId')}</p>
+                    <p className="text-surface-700 font-mono text-xs break-all bg-white p-1.5 rounded border border-surface-200">{comment.fromId || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-surface-400 font-medium mb-1">{t('comments.status')}</p>
+                    <Badge variant={comment.replied ? 'success' : 'warning'}>
+                      {comment.replied ? t('comments.replied') : t('comments.pending')}
+                    </Badge>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-surface-400">{t('comments.postId')}</p>
-                <p className="text-surface-700 font-mono text-xs truncate">{comment.postId}</p>
-              </div>
-              <div>
-                <p className="text-surface-400">{t('comments.commenterId')}</p>
-                <p className="text-surface-700 font-mono text-xs truncate">{comment.fromId || '-'}</p>
-              </div>
-              <div>
-                <p className="text-surface-400">{t('comments.status')}</p>
-                <Badge variant={comment.replied ? 'success' : 'warning'}>
-                  {comment.replied ? t('comments.replied') : t('comments.pending')}
-                </Badge>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
