@@ -21,6 +21,7 @@ import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
 import type { NextPageWithLayout } from './_app';
+import { CommentDetailModal } from '@/components/comments/CommentDetailModal';
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
@@ -62,6 +63,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [recentComments, setRecentComments] = useState<Comment[]>([]);
+  const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [pages, setPages] = useState<Page[]>([]);
   const [statsData, setStatsData] = useState({
     totalComments: 0,
@@ -280,7 +282,8 @@ const DashboardPage: NextPageWithLayout = () => {
             {recentComments.length > 0 ? recentComments.map((comment, i) => (
               <div
                 key={comment.id}
-                className="px-5 sm:px-8 py-5 sm:py-6 hover:bg-brand-50/20 transition-all group animate-slide-up"
+                className="px-5 sm:px-8 py-5 sm:py-6 hover:bg-brand-50/20 transition-all group animate-slide-up cursor-pointer"
+                onClick={() => setSelectedComment(comment)}
                 style={{ animationDelay: `${(i + 3) * 0.1}s` } as React.CSSProperties}
               >
                 <div className="flex items-start justify-between gap-6">
@@ -444,6 +447,16 @@ const DashboardPage: NextPageWithLayout = () => {
       </div>
     </div>
 
+      {/* Comment Detail Modal */}
+      {selectedComment && (
+        <CommentDetailModal
+          comment={selectedComment}
+          onClose={() => setSelectedComment(null)}
+          onReplySuccess={async () => {
+            await fetchDashboardData();
+          }}
+        />
+      )}
     </>
   );
 };

@@ -260,10 +260,18 @@ const MessagesPage: NextPageWithLayout = () => {
 
       {/* Stats - Horizontal scroll on mobile if they don't fit, otherwise 2-col then 4-col */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
-        <StatCard title={t('messages.totalMessages')} value={stats.total} icon={<MessageCircle />} color="brand" />
-        <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle />} color="emerald" />
-        <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock />} color="amber" />
-        <StatCard title={t('comments.needsAttention')} value={needsAttentionCount} icon={<AlertTriangle />} color="red" />
+        <div onClick={() => setFilter('all')} className="cursor-pointer transition-transform active:scale-95">
+          <StatCard title={t('messages.totalMessages')} value={stats.total} icon={<MessageCircle />} color="brand" />
+        </div>
+        <div className="cursor-default">
+          <StatCard title={t('comments.replied')} value={stats.replied} icon={<CheckCircle />} color="emerald" />
+        </div>
+        <div className="cursor-default">
+          <StatCard title={t('comments.pending')} value={stats.pending} icon={<Clock />} color="amber" />
+        </div>
+        <div onClick={() => setFilter('needs_attention')} className="cursor-pointer transition-transform active:scale-95">
+          <StatCard title={t('comments.needsAttention')} value={needsAttentionCount} icon={<AlertTriangle />} color="red" />
+        </div>
       </div>
 
       {/* Filters & Search - Compact unified section */}
