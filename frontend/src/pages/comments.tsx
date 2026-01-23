@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
+import { toast } from 'sonner';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, PageHeader, PageSkeleton, CommentsFilterButtons } from '@/components/ui';
@@ -23,7 +24,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import type { Comment } from '@jawab24/shared';
 
-import { commentsApi, aiApi, pagesApi } from '@/lib/api';
+import { commentsApi, aiApi, pagesApi, subscriptionApi } from '@/lib/api';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -176,8 +177,36 @@ const CommentsPage: NextPageWithLayout = () => {
     }
   };
 
+  // Limit State
+  const [aiLimit, setAiLimit] = useState<{ allowed: boolean; reason?: string }>({ allowed: true });
+  const [isReplyGenerated, setIsReplyGenerated] = useState(false);
+
+  // Reset one-shot lock when a new comment is selected
+  useEffect(() => {
+    if (selectedComment) {
+      setIsReplyGenerated(false);
+      setReplyText(''); // Clear previous text
+    }
+  }, [selectedComment]);
+
+  const fetchLimits = useCallback(async () => {
+    try {
+      const { data } = await subscriptionApi.checkAiLimit();
+      setAiLimit(data);
+    } catch (error) {
+      console.error('Failed to fetch AI limits', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchLimits();
+    }
+  }, [isAuthenticated, fetchLimits]);
+
   const handleGenerateAi = async () => {
-    if (!selectedComment) return;
+    if (!selectedComment || !aiLimit.allowed || isReplyGenerated) return;
+    
     setIsGenerating(true);
     setGenerationStatus(t('common.loading'));
 
@@ -186,9 +215,7 @@ const CommentsPage: NextPageWithLayout = () => {
       const { data: job } = await aiApi.generateAsync({
         comment: selectedComment.message,
         language: selectedComment.detectedLanguage || 'en',
-        context: {
-          // context is optional, omitting strictly typed missing fields for now
-        }
+        context: {}
       });
 
       // 2. Poll for Status
@@ -201,11 +228,15 @@ const CommentsPage: NextPageWithLayout = () => {
             setReplyText(status.result.reply);
             setIsGenerating(false);
             setGenerationStatus('');
+            setIsReplyGenerated(true); // Lock the button! One-shot only.
+            
+            // Refresh limits after successful generation
+            fetchLimits();
           } else if (status.status === 'failed') {
             clearInterval(interval);
             setIsGenerating(false);
             setGenerationStatus('Failed');
-            // toast.error('AI Generation failed');
+            toast.error('AI Generation failed');
           } else {
             setGenerationStatus('Generating...');
           }
@@ -215,9 +246,22 @@ const CommentsPage: NextPageWithLayout = () => {
         }
       }, 1000);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI Generation caught error', error);
       setIsGenerating(false);
+      
+      // Fallback: If 403 happens (e.g. race condition), show toast and refresh limits
+      if (error.response?.status === 403) {
+        setGenerationStatus('');
+        fetchLimits(); // Update UI state
+        toast.error(error.response?.data?.error || 'Limit reached', {
+          duration: 5000,
+          action: {
+            label: t('pricing.upgrade'),
+            onClick: () => window.location.href = '/settings'
+          }
+        });
+      }
     }
   };
 
@@ -568,16 +612,37 @@ const CommentsPage: NextPageWithLayout = () => {
                 <div className="bg-surface-50 rounded-xl p-4 border border-surface-200">
                   <div className="flex justify-between items-center mb-2">
                     <label className="text-sm font-medium text-surface-700">{t('comments.reply')}</label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleGenerateAi}
-                      disabled={isGenerating}
-                      className={isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50'}
-                      icon={<Bot className="w-4 h-4" />}
-                    >
-                      {isGenerating ? generationStatus || t('common.loading') : t('dashboard.aiReply')}
-                    </Button>
+                    
+                    <div className="relative group/tooltip inline-block">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleGenerateAi}
+                        disabled={isGenerating || !aiLimit.allowed || isReplyGenerated}
+                        className={clsx(
+                          isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50',
+                          (!aiLimit.allowed || isReplyGenerated) && 'opacity-50 cursor-not-allowed'
+                        )}
+                        icon={isReplyGenerated ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Bot className="w-4 h-4" />}
+                      >
+                        {isGenerating 
+                          ? generationStatus || t('common.loading') 
+                          : isReplyGenerated 
+                            ? 'Generated' 
+                            : !aiLimit.allowed 
+                              ? 'Limit Reached' 
+                              : t('dashboard.aiReply')}
+                      </Button>
+                      
+                      {/* Tooltip for disabled state */}
+                      {(!aiLimit.allowed || isReplyGenerated) && (
+                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
+                          {!aiLimit.allowed 
+                            ? aiLimit.reason || 'Monthly AI limit reached' 
+                            : 'Already generated for this comment'}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <textarea
                     className="w-full p-3 rounded-lg border border-surface-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-surface-900 placeholder:text-surface-400 resize-y"

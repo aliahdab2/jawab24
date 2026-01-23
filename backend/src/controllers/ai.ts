@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { aiService } from '../services/ai';
 import { AiGenerateRequest } from '../types';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 export class AiController {
     /**
@@ -28,10 +29,25 @@ export class AiController {
      * POST /ai/generate-async
      */
     async generateAsync(request: FastifyRequest<{ Body: AiGenerateRequest }>, reply: FastifyReply) {
+        const user = (request as AuthenticatedRequest).user;
         const { comment } = request.body;
 
         if (!comment || comment.trim().length === 0) {
             return reply.status(400).send({ error: 'Comment is required' });
+        }
+
+        if (user) {
+            // Check subscription limits
+            const { subscriptionsService } = await import('../services/subscriptions');
+            const limitCheck = await subscriptionsService.canUseAiReplies(user.userId);
+            
+            if (!limitCheck.allowed) {
+                return reply.status(403).send({ 
+                    error: limitCheck.reason || 'AI reply limit reached',
+                    limit: limitCheck.limit,
+                    used: limitCheck.used
+                });
+            }
         }
 
         try {
