@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { templatesApi } from '@/lib/api';
@@ -127,12 +127,19 @@ const TemplatesPage: NextPageWithLayout = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('common.confirmDelete'))) return;
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
+
+  const handleDelete = (id: string) => {
+    setDeleteConfirmationId(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmationId) return;
 
     try {
-      await templatesApi.delete(id);
-      setTemplates(templates.filter(t => t.id !== id));
+      await templatesApi.delete(deleteConfirmationId);
+      setTemplates(templates.filter(t => t.id !== deleteConfirmationId));
+      setDeleteConfirmationId(null);
     } catch (error) {
       console.error('Failed to delete template:', error);
     }
@@ -372,6 +379,17 @@ const TemplatesPage: NextPageWithLayout = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!deleteConfirmationId}
+        onClose={() => setDeleteConfirmationId(null)}
+        onConfirm={handleConfirmDelete}
+        title={t('templates.deleteTemplate')}
+        message={t('templates.deleteTemplateConfirm')}
+        confirmText={t('common.delete')}
+        variant="danger"
+      />
     </>
   );
 };

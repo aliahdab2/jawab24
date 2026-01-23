@@ -17,3 +17,4 @@ export { KpiCard } from './KpiCard';
 export { Skeleton, PageSkeleton, AppSkeleton } from './Skeleton';
 export { SystemStatusBanner } from './SystemStatusBanner';
 export { NotificationBell } from './NotificationBell';
+export { ConfirmationModal } from './ConfirmationModal';

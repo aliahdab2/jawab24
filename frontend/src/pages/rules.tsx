@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, Input, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { rulesApi, templatesApi } from '@/lib/api';
@@ -117,12 +117,19 @@ const RulesPage: NextPageWithLayout = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('common.confirmDelete'))) return;
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
+
+  const handleDelete = (id: string) => {
+    setDeleteConfirmationId(id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmationId) return;
 
     try {
-      await rulesApi.delete(id);
-      setRules(rules.filter(r => r.id !== id));
+      await rulesApi.delete(deleteConfirmationId);
+      setRules(rules.filter(r => r.id !== deleteConfirmationId));
+      setDeleteConfirmationId(null);
     } catch (error) {
       console.error('Failed to delete rule:', error);
     }
@@ -391,6 +398,17 @@ const RulesPage: NextPageWithLayout = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={!!deleteConfirmationId}
+        onClose={() => setDeleteConfirmationId(null)}
+        onConfirm={handleConfirmDelete}
+        title={t('rules.deleteRule')}
+        message={t('rules.deleteRuleConfirm')}
+        confirmText={t('common.delete')}
+        variant="danger"
+      />
     </>
   );
 };

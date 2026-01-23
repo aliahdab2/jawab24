@@ -89,12 +89,10 @@ describe('CommentDetailModal', () => {
     const generateBtn = screen.getByRole('button', { name: /dashboard.aiReply/i });
     fireEvent.click(generateBtn);
     
-    // Wait for the interval to tick (real time)
-    await new Promise(resolve => setTimeout(resolve, 1100));
-
+    // Wait for the interval to tick and update UI
     await waitFor(() => {
       expect(screen.getByText('Generated')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
   });
 
   it('closes on ESC key press', () => {
