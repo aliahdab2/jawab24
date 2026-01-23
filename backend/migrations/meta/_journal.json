@@ -43,6 +43,13 @@
       "when": 1769126282467,
       "tag": "0005_clear_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1769129967443,
+      "tag": "0006_smiling_power_man",
+      "breakpoints": true
     }
   ]
 }

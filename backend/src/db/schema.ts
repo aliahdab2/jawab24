@@ -10,6 +10,7 @@ export const users = pgTable('users', {
     picture: text('picture'), // Facebook profile picture URL
     facebookAccessToken: text('facebook_access_token'),
     facebookTokenExpiresAt: timestamp('facebook_token_expires_at'),
+    isAdmin: boolean('is_admin').default(false), // Admin flag for manual upgrades
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -450,5 +451,29 @@ export const notifications = pgTable('notifications', {
         userIdIdx: index('idx_notifications_user_id').on(table.userId),
         unreadIdx: index('idx_notifications_unread').on(table.userId, table.read),
         typeIdx: index('idx_notifications_type').on(table.type),
+    };
+});
+
+// ============================================
+// ADMIN TABLES
+// ============================================
+
+// 16. Admin Audit Logs Table - Track all admin actions for accountability
+export const adminAuditLogs = pgTable('admin_audit_logs', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    adminUserId: uuid('admin_user_id').references(() => users.id, { onDelete: 'set null' }), // Admin who performed the action
+    targetUserId: uuid('target_user_id').references(() => users.id, { onDelete: 'set null' }), // User affected by the action
+    action: varchar('action', { length: 50 }).notNull(), // 'manual_upgrade', 'manual_downgrade', 'extend_subscription', etc.
+    previousValue: jsonb('previous_value'), // State before action (e.g., { planId, status, periodEnd })
+    newValue: jsonb('new_value'), // State after action
+    paymentReference: varchar('payment_reference', { length: 255 }), // Bank transfer ID, etc.
+    note: text('note'), // Admin's note explaining the action
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        adminUserIdIdx: index('idx_admin_audit_admin_user_id').on(table.adminUserId),
+        targetUserIdIdx: index('idx_admin_audit_target_user_id').on(table.targetUserId),
+        actionIdx: index('idx_admin_audit_action').on(table.action),
+        createdAtIdx: index('idx_admin_audit_created_at').on(table.createdAt),
     };
 });

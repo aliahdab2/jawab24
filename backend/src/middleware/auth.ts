@@ -1,10 +1,14 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { authService } from '../services/auth';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 export interface AuthenticatedRequest extends FastifyRequest {
     user?: {
         userId: string;
         facebookId: string;
+        isAdmin?: boolean;
     };
 }
 
@@ -88,6 +92,54 @@ export async function csrfProtection(request: FastifyRequest, reply: FastifyRepl
             error: true,
             message: 'Invalid CSRF token',
             code: 'CSRF_INVALID',
+        });
+    }
+}
+
+/**
+ * Middleware to require admin privileges
+ * Must be used AFTER authenticate middleware
+ * Checks the isAdmin flag on the user record
+ */
+export async function requireAdmin(request: AuthenticatedRequest, reply: FastifyReply) {
+    // First ensure user is authenticated
+    if (!request.user?.userId) {
+        return reply.status(401).send({
+            error: true,
+            message: 'Authentication required',
+            code: 'AUTH_REQUIRED',
+        });
+    }
+
+    try {
+        // Fetch user from database to check isAdmin flag
+        const [user] = await db
+            .select({ isAdmin: users.isAdmin })
+            .from(users)
+            .where(eq(users.id, request.user.userId))
+            .limit(1);
+
+        if (!user || !user.isAdmin) {
+            request.log.warn({
+                userId: request.user.userId,
+                route: request.url,
+            }, 'Admin access denied');
+
+            return reply.status(403).send({
+                error: true,
+                message: 'Admin privileges required',
+                code: 'ADMIN_REQUIRED',
+            });
+        }
+
+        // Attach isAdmin to request for downstream use
+        request.user.isAdmin = true;
+    } catch (error) {
+        request.log.error(error, 'Failed to check admin status');
+        return reply.status(500).send({
+            error: true,
+            message: 'Failed to verify admin status',
+            code: 'ADMIN_CHECK_FAILED',
         });
     }
 }

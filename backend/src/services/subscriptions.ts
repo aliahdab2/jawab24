@@ -18,6 +18,7 @@ export const subscriptionsService = {
     PRIORITY_SQL: SUBSCRIPTION_PRIORITY_SQL,
     /**
      * Get user's current subscription with plan details
+     * Includes automatic expiration check - updates status if period has ended
      */
     async getUserSubscription(userId: string): Promise<(Subscription & { plan: Plan }) | null> {
         const result = await db
@@ -36,8 +37,54 @@ export const subscriptionsService = {
 
         if (!result[0]) return null;
 
+        const sub = result[0].subscription;
+        const now = new Date();
+
+        // Check for expired subscription and auto-update status
+        let needsUpdate = false;
+        let newStatus: SubscriptionStatus | null = null;
+
+        // Check trial expiration
+        if (sub.status === 'trialing' && sub.trialEndsAt) {
+            const trialEnd = new Date(sub.trialEndsAt);
+            if (trialEnd < now) {
+                needsUpdate = true;
+                newStatus = 'past_due';
+            }
+        }
+
+        // Check period expiration for active subscriptions
+        if (sub.status === 'active' && sub.currentPeriodEnd) {
+            const periodEnd = new Date(sub.currentPeriodEnd);
+            if (periodEnd < now) {
+                needsUpdate = true;
+                newStatus = 'past_due';
+            }
+        }
+
+        // Auto-update status if expired
+        if (needsUpdate && newStatus) {
+            await db
+                .update(subscriptions)
+                .set({
+                    status: newStatus,
+                    updatedAt: now,
+                })
+                .where(eq(subscriptions.id, sub.id));
+
+            // Return updated subscription
+            return {
+                ...this.mapToSubscription({
+                    ...sub,
+                    status: newStatus,
+                    updatedAt: now,
+                }),
+                plan: plansService.mapToPlan(result[0].plan),
+            };
+        }
+
         return {
-            ...this.mapToSubscription(result[0].subscription),
+            ...this.mapToSubscription(sub),
             plan: plansService.mapToPlan(result[0].plan),
         };
     },
@@ -361,7 +408,26 @@ export const subscriptionsService = {
             return { allowed: false, reason: `Subscription is ${subscription.status}` };
         }
 
-        // Check trial expiration
+        // Check past_due status with grace period (7 days)
+        if (subscription.status === 'past_due') {
+            const GRACE_PERIOD_DAYS = 7;
+            const periodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
+            
+            if (periodEnd) {
+                const gracePeriodEnd = new Date(periodEnd);
+                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + GRACE_PERIOD_DAYS);
+                
+                if (new Date() > gracePeriodEnd) {
+                    return { 
+                        allowed: false, 
+                        reason: 'Subscription expired. Please renew to continue using AI replies.' 
+                    };
+                }
+                // Within grace period - still allow but warn
+            }
+        }
+
+        // Check trial expiration (already handled by getUserSubscription, but double-check)
         if (subscription.status === 'trialing' && subscription.trialEndsAt) {
             const trialEnd = new Date(subscription.trialEndsAt);
             if (trialEnd < new Date()) {
