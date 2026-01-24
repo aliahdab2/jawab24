@@ -165,14 +165,16 @@ export function PageSkeleton({ type = 'default' }: { type?: 'default' | 'grid' |
                     <Skeleton width={200} height={32} />
                     <Skeleton width={120} height={32} />
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+                {/* Stats Row - Match flex layout of actual page */}
+                <div className="flex gap-4 mb-8 overflow-hidden">
                     {[1, 2, 3, 4, 5].map((i) => (
-                        <Skeleton key={i} height={100} className="rounded-2xl" />
+                        <Skeleton key={i} height={100} width={140} className="shrink-0 rounded-2xl md:flex-1 md:w-auto" />
                     ))}
                 </div>
-                <div className="space-y-4">
-                    {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} height={160} className="rounded-2xl" />
+                {/* Main Grid - Match xl:grid-cols-2 */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    {[1, 2, 3, 4].map((i) => (
+                        <Skeleton key={i} height={200} className="rounded-2xl" />
                     ))}
                 </div>
             </div>
