@@ -46,6 +46,9 @@ else
     exit 1
 fi
 
+# Clean frontend cache to prevent conflicts with mobile build artifacts
+rm -rf frontend/.next
+
 if npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
 else
