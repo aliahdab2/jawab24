@@ -69,7 +69,7 @@ const DashboardPage: NextPageWithLayout = () => {
   
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'replied'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'replied'>('pending');
   
   const [pages, setPages] = useState<Page[]>([]);
   const [statsData, setStatsData] = useState({
