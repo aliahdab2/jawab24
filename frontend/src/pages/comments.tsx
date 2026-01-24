@@ -111,6 +111,7 @@ const CommentsPage: NextPageWithLayout = () => {
         case 'all':
           matchesFilter = true;
           break;
+        case 'template':
           // Replied by human/template (EXCLUDING AI)
           matchesFilter = !!comment.replied && comment.replyMethod !== 'ai';
           break;
@@ -405,14 +406,14 @@ const CommentsPage: NextPageWithLayout = () => {
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="font-bold text-surface-900 text-lg">{comment.fromName || t('common.unknownUser')}</span>
                         
-                        {/* Restore Status Badges */}
+                        {/* SIMPLIFIED: Just "Replied" status on top. Method is shown in the reply box below. */}
                         {comment.replied && (
                           <Badge 
-                            variant={comment.replyMethod === 'ai' ? 'success' : 'default'} 
+                            variant="success" 
                             className="gap-1.5 py-0.5"
                           >
-                            {comment.replyMethod === 'ai' ? <Sparkles className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
-                            {comment.replyMethod === 'ai' ? t('comments.aiReplies') : t('comments.replied')}
+                            <CheckCircle className="w-3 h-3" />
+                            {t('comments.replied')}
                           </Badge>
                         )}
 
