@@ -7,7 +7,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY ai-worker/package.json ./ai-worker/
 
 # Install dependencies (Cached unless package.json changes)
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 # Copy source code
 COPY packages/shared ./packages/shared

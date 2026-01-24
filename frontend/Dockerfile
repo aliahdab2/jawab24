@@ -7,7 +7,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY frontend/package.json ./frontend/
 
 # Install all dependencies (Cached unless package.json changes)
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 
 # Build arguments for frontend
