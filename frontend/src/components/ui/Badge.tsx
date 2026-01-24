@@ -6,9 +6,10 @@ interface BadgeProps {
   variant?: 'success' | 'warning' | 'error' | 'info' | 'default';
   size?: 'sm' | 'md';
   className?: string;
+  onClick?: () => void;
 }
 
-export function Badge({ children, variant = 'default', size = 'md', className }: BadgeProps) {
+export function Badge({ children, variant = 'default', size = 'md', className, onClick }: BadgeProps) {
   const variantClasses = {
     success: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
     warning: 'bg-amber-50 text-amber-700 border border-amber-100',
@@ -23,7 +24,16 @@ export function Badge({ children, variant = 'default', size = 'md', className }:
   };
 
   return (
-    <span className={clsx('inline-flex items-center rounded-lg shadow-sm', variantClasses[variant], sizeClasses[size], className)}>
+    <span 
+      onClick={onClick}
+      className={clsx(
+        'inline-flex items-center rounded-lg shadow-sm transition-all',
+        variantClasses[variant], 
+        sizeClasses[size],
+        onClick && 'cursor-pointer hover:opacity-80 active:scale-95',
+        className
+      )}
+    >
       {children}
     </span>
   );

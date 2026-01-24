@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, PageHeader, PageSkeleton, MessagesFilterButtons } from '@/components/ui';
+import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import {

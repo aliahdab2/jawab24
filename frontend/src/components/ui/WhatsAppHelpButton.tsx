@@ -14,6 +14,14 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [shouldPulse, setShouldPulse] = useState(false);
+
+  // Pulse once on mount
+  useEffect(() => {
+    const timer = setTimeout(() => setShouldPulse(true), 1200);
+    const stopTimer = setTimeout(() => setShouldPulse(false), 3200);
+    return () => { clearTimeout(timer); clearTimeout(stopTimer); };
+  }, []);
   const isLandscape = useLandscape();
   const isRTL = language === 'ar';
 
@@ -57,8 +65,9 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
-          "fixed z-50 w-12 h-12 md:w-16 md:h-16 md:bottom-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl md:rounded-[2rem] transition-all duration-300 flex items-center justify-center group active:scale-90 overflow-hidden",
-          hidden || !isVisible ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+          "fixed z-50 w-12 h-12 md:w-16 md:h-16 md:bottom-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl md:rounded-[2rem] transition-all duration-500 flex items-center justify-center group active:scale-90 overflow-hidden",
+          hidden || !isVisible ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100',
+          shouldPulse && "animate-bounce" // Fallback to bounce or custom pulse if defined
         )}
         style={{
           boxShadow: '0 8px 16px rgba(16, 185, 129, 0.25)',

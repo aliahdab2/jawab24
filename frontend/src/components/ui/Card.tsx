@@ -10,7 +10,7 @@ interface CardProps {
   onClick?: MouseEventHandler<HTMLDivElement>;
 }
 
-export function Card({ children, className, hover = false, padding = 'md', style, onClick }: CardProps) {
+export function Card({ children, className, hover = false, padding = 'md', style, onClick, ...props }: CardProps & React.HTMLAttributes<HTMLDivElement>) {
   const paddingClasses = {
     none: '',
     sm: 'p-5 sm:p-6',
@@ -31,6 +31,7 @@ export function Card({ children, className, hover = false, padding = 'md', style
       )}
       style={style}
       onClick={onClick}
+      {...props}
     >
       {children}
     </div>

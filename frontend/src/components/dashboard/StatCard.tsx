@@ -7,7 +7,7 @@ interface StatCardProps {
   nameKey: TranslationKey;
   value: string;
   icon: React.ComponentType<{ className?: string }>;
-  color: 'brand' | 'emerald' | 'amber';
+  color: 'brand' | 'emerald' | 'amber' | 'violet' | 'red';
   index: number;
 }
 
@@ -16,16 +16,39 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, is
 
   return (
     <Card
-      hover
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
       className={clsx(
-        "animate-slide-up relative overflow-hidden group border-none bg-white transition-all duration-300 hover:-translate-y-1 cursor-pointer",
-        isActive && "ring-2 ring-brand-500 ring-offset-2",
+        "animate-slide-up relative overflow-hidden group transition-all cursor-pointer",
+        // Precise duration for premium feel
+        "duration-[120ms] ease-out",
+        isActive 
+          ? clsx(
+              "ring-2 ring-offset-2",
+              color === 'brand' ? 'bg-brand-50/50 ring-brand-500 border-brand-200 shadow-[0_0_15px_rgba(59,130,246,0.15)]' :
+              color === 'emerald' ? 'bg-emerald-50/50 ring-emerald-500 border-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.15)]' :
+              color === 'amber' ? 'bg-amber-50/50 ring-amber-500 border-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.15)]' :
+              color === 'violet' ? 'bg-violet-50/50 ring-violet-500 border-violet-200 shadow-[0_0_15px_rgba(139,92,246,0.15)]' :
+              'bg-red-50/50 ring-red-500 border-red-200 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
+            )
+          : "border-transparent bg-white shadow-sm hover:shadow-lg active:shadow-md",
+        "border", // Always apply border class to prevent layout shift
+        // Press feedback
+        "active:scale-[0.98] active:duration-[80ms]",
+        // Hover feedback (only if NOT active to avoid jitter)
+        !isActive && "hover:scale-[1.015] hover:-translate-y-0.5",
         index === 2 ? "col-span-2 sm:col-span-1" : "col-span-1"
       )}
       style={{
         animationDelay: `${index * 0.1}s`,
-        boxShadow: '0 10px 30px rgba(0,0,0,0.04)'
+        // Default shadow removed here as we use tailwind classes for consistency
       } as React.CSSProperties}
       padding="none"
     >
@@ -37,12 +60,23 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, is
             'bg-amber-500'
       )}></div>
 
-      <div className="relative z-10 px-4 py-4 sm:px-5 sm:py-5 flex items-center justify-between">
+      <div className="relative z-10 px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
         <div>
-          <p className="text-[26px] sm:text-[32px] font-bold text-surface-900 leading-none tracking-tight mb-1.5">
+          <p className={clsx(
+            "text-[26px] sm:text-[32px] font-bold leading-none tracking-tight mb-1.5",
+            isActive ? "text-surface-900" : "text-surface-900"
+          )}>
             {value}
           </p>
-          <p className="text-[11px] sm:text-xs font-bold text-surface-500 uppercase tracking-widest truncate leading-tight opacity-70">
+          <p className={clsx(
+            "text-[11px] sm:text-xs font-bold uppercase tracking-widest truncate leading-tight",
+            isActive 
+                ? (color === 'brand' ? 'text-brand-700' : 
+                   color === 'emerald' ? 'text-emerald-700' : 
+                   color === 'amber' ? 'text-amber-700' : 
+                   color === 'violet' ? 'text-violet-700' : 'text-red-700')
+                : "text-surface-500 opacity-70"
+          )}>
             {t(nameKey)}
           </p>
         </div>

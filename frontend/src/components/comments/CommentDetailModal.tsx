@@ -237,7 +237,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   <Badge size="sm" variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>
                     {comment.replyMethod === 'ai' ? (
                       <span className="flex items-center gap-1">
-                        <Bot className="w-3 h-3" /> AI
+                        <Bot className="w-3 h-3" /> {t('dashboard.aiReply')}
                       </span>
                     ) : (
                       <>{t('dashboard.templateReply')}</>
@@ -339,8 +339,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   </div>
                   <div>
                     <p className="text-surface-400 font-medium mb-1">{t('comments.status')}</p>
-                    <Badge variant={comment.replied ? 'success' : 'warning'}>
-                      {comment.replied ? t('comments.replied') : t('comments.pending')}
+                    <Badge variant={comment.replied ? (comment.replyMethod === 'ai' ? 'info' : 'success') : 'warning'}>
+                      {comment.replied 
+                        ? (comment.replyMethod === 'ai' ? t('dashboard.aiReply') : t('comments.replied')) 
+                        : t('comments.pending')}
                     </Badge>
                   </div>
                 </div>
