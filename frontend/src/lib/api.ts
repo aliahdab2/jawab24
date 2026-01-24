@@ -127,7 +127,11 @@ export const commentsApi = {
   reply: (id: string, text: string) =>
     api.post(`/comments/${id}/reply`, { text }),
   submitFeedback: (id: string, data: { feedback: 'positive' | 'negative'; reason?: string[]; source: string }) =>
-    api.post(`/comments/${id}/feedback`, data),
+    api.post(`/comments/${id}/feedback`, {
+      helpful: data.feedback === 'positive',
+      reason: data.reason ? data.reason.join(', ') : undefined,
+      // Source param is tracked by frontend but not currently used by backend controller
+    }),
 };
 
 // Templates API

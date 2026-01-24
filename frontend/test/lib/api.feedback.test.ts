@@ -24,9 +24,15 @@ describe('commentsApi', () => {
       // Call the method
       await commentsApi.submitFeedback(commentId, mockFeedbackData);
 
-      // Verify api.post was called with correct arguments
+      // Verify api.post was called with correct transformed arguments
       expect(api.post).toHaveBeenCalledTimes(1);
-      expect(api.post).toHaveBeenCalledWith(`/comments/${commentId}/feedback`, mockFeedbackData);
+      expect(api.post).toHaveBeenCalledWith(
+        `/comments/${commentId}/feedback`,
+        expect.objectContaining({
+          helpful: true,
+          // reason: undefined 
+        })
+      );
     });
 
     it('should post negative feedback with reasons', async () => {
@@ -38,7 +44,13 @@ describe('commentsApi', () => {
 
       await commentsApi.submitFeedback(commentId, negativeFeedback);
 
-      expect(api.post).toHaveBeenCalledWith(`/comments/${commentId}/feedback`, negativeFeedback);
+      expect(api.post).toHaveBeenCalledWith(
+        `/comments/${commentId}/feedback`,
+        expect.objectContaining({
+          helpful: false,
+          reason: 'bad_tone'
+        })
+      );
     });
   });
 });

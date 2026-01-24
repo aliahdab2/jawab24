@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { CommentDetailModal } from '@/components/comments/CommentDetailModal';
 import { useAuthStore } from '@/lib/store';

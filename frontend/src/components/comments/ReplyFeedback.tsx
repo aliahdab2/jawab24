@@ -73,11 +73,11 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
   };
 
   const reasons = [
-    { id: 'incorrect_info', label: 'Incorrect information' },
-    { id: 'not_relevant', label: 'Not relevant' },
-    { id: 'bad_tone', label: 'Bad tone' },
-    { id: 'wrong_language', label: 'Wrong language' },
-    { id: 'other', label: 'Other' },
+    { id: 'incorrect_info', label: t('feedback.reasons.incorrectInfo') || 'Incorrect information' },
+    { id: 'not_relevant', label: t('feedback.reasons.notRelevant') || 'Not relevant' },
+    { id: 'bad_tone', label: t('feedback.reasons.badTone') || 'Bad tone' },
+    { id: 'wrong_language', label: t('feedback.reasons.wrongLanguage') || 'Wrong language' },
+    { id: 'other', label: t('feedback.reasons.other') || 'Other' },
   ];
 
   if (showFollowUp) {
