@@ -110,14 +110,17 @@ describe('PageSkeleton Component', () => {
         it('should render list skeleton with header, stats, and items', () => {
             const { container } = render(<PageSkeleton type="list" />);
 
-            // Should have stats grid (5 items)
-            const statsGrid = container.querySelector('.grid-cols-2.md\\:grid-cols-5');
-            expect(statsGrid).toBeInTheDocument();
-            expect(statsGrid?.children).toHaveLength(5);
+            // Should have stats row (flex container)
+            // We check for 'flex' and 'overflow-hidden' which are distinct to the new layout
+            const statsRow = container.querySelector('.flex.gap-4.overflow-hidden');
+            expect(statsRow).toBeInTheDocument();
+            expect(statsRow?.children).toHaveLength(5);
 
-            // Should have list items (3 items)
-            const listItems = container.querySelector('.space-y-4');
-            expect(listItems?.children).toHaveLength(3);
+            // Should have main grid (4 items now match 2-col grid logic)
+            // Matches: <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            const mainGrid = container.querySelector('.grid-cols-1.xl\\:grid-cols-2');
+            expect(mainGrid).toBeInTheDocument();
+            expect(mainGrid?.children).toHaveLength(4);
         });
     });
 
@@ -169,11 +172,16 @@ describe('PageSkeleton Component', () => {
             expect(contentGrid).toBeInTheDocument();
         });
 
-        it('should have responsive grid classes for list', () => {
+        it('should have responsive layout for list', () => {
             const { container } = render(<PageSkeleton type="list" />);
 
-            const statsGrid = container.querySelector('.grid-cols-2.md\\:grid-cols-5');
-            expect(statsGrid).toBeInTheDocument();
+            // Check for the flex scroll container for stats
+            const statsRow = container.querySelector('.flex.gap-4.overflow-hidden');
+            expect(statsRow).toBeInTheDocument();
+            
+            // Check for the responsive grid for cards
+            const cardGrid = container.querySelector('.grid-cols-1.xl\\:grid-cols-2');
+            expect(cardGrid).toBeInTheDocument();
         });
     });
 });
