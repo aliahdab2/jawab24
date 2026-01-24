@@ -1,15 +1,16 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 
-# Copy root config and workspaces
+# Copy only manifests first to cache dependencies
 COPY package.json package-lock.json ./
-COPY packages/shared ./packages/shared
-COPY frontend ./frontend
+COPY packages/shared/package.json ./packages/shared/
+COPY frontend/package.json ./frontend/
 
-# Install all dependencies
+# Install all dependencies (Cached unless package.json changes)
 RUN npm ci
 
-# Build arguments
+
+# Build arguments for frontend
 ARG NEXT_PUBLIC_FB_APP_ID
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
@@ -23,6 +24,10 @@ ENV NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=$NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
 ENV NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID
 ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_APP_VERSION=$SEMANTIC_VERSION
+
+# Copy source code
+COPY packages/shared ./packages/shared
+COPY frontend ./frontend
 
 # Build shared and frontend
 RUN npm run build --workspace=@jawab24/shared

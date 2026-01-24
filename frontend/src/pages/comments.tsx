@@ -111,8 +111,8 @@ const CommentsPage: NextPageWithLayout = () => {
         case 'all':
           matchesFilter = true;
           break;
-          // Replied by human/template OR AI (Show all history)
-          matchesFilter = !!comment.replied;
+          // Replied by human/template (EXCLUDING AI)
+          matchesFilter = !!comment.replied && comment.replyMethod !== 'ai';
           break;
         case 'ai':
           // Replied by AI
@@ -129,8 +129,8 @@ const CommentsPage: NextPageWithLayout = () => {
 
   const stats = useMemo(() => ({
     total: comments.length,
-    // "Replied" card now represents ALL replies (History)
-    templateReplies: comments.filter(c => !!c.replied).length,
+    // "Replied" card now represents ONLY Template/Manual replies (Mutually exclusive from AI)
+    templateReplies: comments.filter(c => !!c.replied && c.replyMethod !== 'ai').length,
     pending: comments.filter(c => !c.replied).length,
     aiReplies: comments.filter(c => c.replyMethod === 'ai').length,
     needsAttention: comments.filter(c => checkNeedsAttention(c)).length,
@@ -271,9 +271,9 @@ const CommentsPage: NextPageWithLayout = () => {
         </div>
         <div onClick={() => updateFilter('template')}>
           <StatCard 
-            nameKey="comments.replied" 
+            nameKey="dashboard.templateReply" 
             value={stats.templateReplies.toLocaleString()} 
-            icon={CheckCircle} 
+            icon={Zap} 
             color="emerald" 
             index={1}
             isActive={filter === 'template'}
@@ -291,7 +291,7 @@ const CommentsPage: NextPageWithLayout = () => {
         </div>
         <div onClick={() => updateFilter('ai')}>
           <StatCard 
-            nameKey="comments.aiReplies" 
+            nameKey="dashboard.aiReply" 
             value={stats.aiReplies.toLocaleString()} 
             icon={Bot} 
             color="violet" 
@@ -329,14 +329,34 @@ const CommentsPage: NextPageWithLayout = () => {
           
           {filter !== 'all' && (
             <div className="flex shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
-               <Badge 
-                variant={filter === 'pending' ? 'warning' : filter === 'ai' ? 'info' : filter === 'needs_attention' ? 'error' : 'success'}
-                className="py-2.5 px-4 rounded-xl flex items-center gap-2 border bg-white shadow-sm group cursor-pointer hover:bg-surface-50 transition-colors"
+               <button 
                 onClick={() => updateFilter('all')}
+                className={clsx(
+                  "group relative flex items-center gap-2.5 py-2.5 px-5 rounded-full shadow-sm hover:shadow-md transition-all duration-300 ring-1 ring-inset",
+                  filter === 'pending' && "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100",
+                  filter === 'ai' && "bg-violet-50 text-violet-700 ring-violet-200 hover:bg-violet-100",
+                  filter === 'needs_attention' && "bg-red-50 text-red-700 ring-red-200 hover:bg-red-100",
+                  filter === 'template' && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100"
+                )}
                >
-                 <span className="font-bold text-surface-900">{getFilterChipLabel(filter)}</span>
-                 <X className="w-4 h-4 text-surface-400 group-hover:text-red-500 transition-colors" />
-               </Badge>
+                 {/* Icon */}
+                 {filter === 'pending' && <Clock className="w-4 h-4" />}
+                 {filter === 'ai' && <Bot className="w-4 h-4" />}
+                 {filter === 'needs_attention' && <AlertTriangle className="w-4 h-4" />}
+                 {filter === 'template' && <CheckCircle className="w-4 h-4" />}
+                 
+                 <span className="font-bold text-sm tracking-wide">{getFilterChipLabel(filter)}</span>
+                 
+                 {/* Divider */}
+                 <div className={clsx(
+                   "w-px h-4 mx-1 opacity-20 bg-current"
+                 )} />
+
+                 {/* Close Icon (Animated) */}
+                 <div className="bg-white/50 rounded-full p-0.5 group-hover:bg-white transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                 </div>
+               </button>
             </div>
           )}
 

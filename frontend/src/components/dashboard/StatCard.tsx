@@ -44,6 +44,8 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, is
         "active:scale-[0.98] active:duration-[80ms]",
         // Hover feedback (only if NOT active to avoid jitter)
         !isActive && "hover:scale-[1.015] hover:-translate-y-0.5",
+        // Dim if count is 0 and not selected
+        (value === "0" && !isActive) && "opacity-60 grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
         index === 2 ? "col-span-2 sm:col-span-1" : "col-span-1"
       )}
       style={{

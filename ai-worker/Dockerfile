@@ -1,13 +1,19 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 
-# Copy root config and workspaces
+# Copy only manifests first to cache dependencies
 COPY package.json package-lock.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY ai-worker/package.json ./ai-worker/
+
+# Install dependencies (Cached unless package.json changes)
+RUN npm ci
+
+# Copy source code
 COPY packages/shared ./packages/shared
 COPY ai-worker ./ai-worker
 
-# Install & Build
-RUN npm ci
+# Build
 RUN npm run build --workspace=@jawab24/shared
 RUN npm run build --workspace=jawab24-ai-worker
 

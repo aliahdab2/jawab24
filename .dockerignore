@@ -1,0 +1,30 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Next.js
+.next
+out
+build
+
+# Production
+dist
+
+# Misc
+.DS_Store
+*.pem
+*.log
+.git
+.gitignore
+.dockerignore
+.env*
+!env/*.env
+README.md
+docker-compose*.yml
+scripts
+test
+*.apk

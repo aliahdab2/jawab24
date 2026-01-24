@@ -5,13 +5,19 @@ WORKDIR /app
 ARG GIT_COMMIT=unknown
 ENV GIT_COMMIT=${GIT_COMMIT}
 
-# Copy root config and workspaces
+# Copy only manifests first to cache dependencies
 COPY package.json package-lock.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY backend/package.json ./backend/
+
+# Install dependencies (Cached unless package.json changes)
+RUN npm ci
+
+# Copy source code
 COPY packages/shared ./packages/shared
 COPY backend ./backend
 
-# Install & Build
-RUN npm ci
+# Build
 RUN npm run build --workspace=@jawab24/shared
 RUN npm run build --workspace=jawab24-backend
 
