@@ -200,7 +200,7 @@ const DashboardPage: NextPageWithLayout = () => {
     },
     {
       id: 'replied',
-      nameKey: 'dashboard.autoReplies' as TranslationKey,
+      nameKey: 'comments.replied' as TranslationKey,
       value: statsData.autoReplies.toLocaleString(),
       icon: Zap,
       color: 'emerald',

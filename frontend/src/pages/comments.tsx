@@ -259,7 +259,7 @@ const CommentsPage: NextPageWithLayout = () => {
       />
 
       {/* Stats - Premium Physical Feedback */}
-      <div className="flex overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-5 gap-3 sm:gap-4 mb-4 md:mb-8 snap-x no-scrollbar">
+      <div className="flex overflow-x-auto pb-6 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-5 gap-3 sm:gap-4 mb-4 md:mb-8 snap-x no-scrollbar">
         <div className="min-w-[140px] flex-1 snap-center" id={filter === 'all' ? 'active-stat' : undefined}>
           <StatCard 
             nameKey="comments.allComments"
@@ -420,7 +420,8 @@ const CommentsPage: NextPageWithLayout = () => {
                         {/* Page Source Indicator (Multi-Page Only) */}
                         {pages.length > 1 && (
                             (() => {
-                                const pageId = comment.pageId;
+                                // Cast to any because shared type update might not be picked up yet
+                                const pageId = (comment as any).pageId;
                                 const page = pages.find(p => p.id === pageId);
                                 if (!page) return null;
                                 return (
@@ -439,19 +440,14 @@ const CommentsPage: NextPageWithLayout = () => {
                              <Zap className="w-8 h-8 text-brand-500" />
                            </div>
                            <div className="flex items-center justify-between mb-2">
-                             <span className="text-xs font-bold text-brand-900 flex items-center gap-1.5">
-                               <Reply className="w-3.5 h-3.5" />
-                               {t('comments.reply')}
-                             </span>
-                             <Badge variant={comment.replyMethod === 'ai' ? 'info' : 'success'} size="sm" className="shadow-none">
-                               {comment.replyMethod === 'ai' ? (
-                                 <span className="flex items-center gap-1 text-[9px]">
-                                   <Sparkles className="w-2.5 h-2.5" /> {t('dashboard.aiReply')}
-                                 </span>
-                               ) : (
-                                 <span className="text-[9px]">{t('dashboard.templateReply')}</span>
-                               )}
-                             </Badge>
+                             <div className="flex items-center gap-2">
+                               <div className={clsx("p-1 rounded-lg", comment.replyMethod === 'ai' ? "bg-violet-100 text-violet-600" : "bg-emerald-100 text-emerald-600")}>
+                                 {comment.replyMethod === 'ai' ? <Sparkles className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+                               </div>
+                               <span className={clsx("text-xs font-bold uppercase tracking-wider", comment.replyMethod === 'ai' ? "text-violet-700" : "text-emerald-700")}>
+                                 {comment.replyMethod === 'ai' ? t('dashboard.aiReply') : t('dashboard.templateReply')}
+                               </span>
+                             </div>
                            </div>
                            <p className="text-sm text-surface-600 line-clamp-2 italic italic-arabic">"{comment.replyText}"</p>
                         </div>

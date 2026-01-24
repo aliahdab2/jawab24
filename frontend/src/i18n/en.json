@@ -212,7 +212,7 @@
   "comments.title": "Comments",
   "comments.description": "Track and manage all comments from your connected pages.",
   "comments.allComments": "Show all",
-  "comments.replied": "Replied from Template",
+  "comments.replied": "Replied",
   "comments.repliedDesc": "Already responded to.",
   "comments.pending": "Pending reply",
   "comments.pendingDesc": "Waiting for a reply.",
