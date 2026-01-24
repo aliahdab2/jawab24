@@ -168,6 +168,31 @@ export class CommentsController {
             return reply.status(500).send({ error: 'Failed to delete comment' });
         }
     }
+    /**
+     * Submit feedback for a reply
+     * POST /comments/:id/feedback
+     */
+    async feedback(request: FastifyRequest<{ Params: { id: string }; Body: { helpful: boolean; reason?: string } }>, reply: FastifyReply) {
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        
+        const { id } = request.params;
+        const { helpful, reason } = request.body;
+        
+        if (typeof helpful !== 'boolean') {
+            return reply.status(400).send({ error: 'Helpful status is required' });
+        }
+
+        try {
+            const log = await commentsService.logFeedback(id, user.userId, helpful, reason);
+            return reply.send({ success: true, logId: log.id });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to submit feedback' });
+        }
+    }
 }
 
 export const commentsController = new CommentsController();

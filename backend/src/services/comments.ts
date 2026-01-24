@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { comments, posts, pages } from '../db/schema';
+import { comments, posts, pages, logs } from '../db/schema';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 
@@ -238,6 +238,36 @@ export class CommentsService {
             replyRate: (replied / total * 100).toFixed(1),
             byMethod,
         };
+    }
+    /**
+     * Log feedback for a reply
+     */
+    async logFeedback(commentId: string, userId: string, helpful: boolean, reason?: string) {
+        // Get comment details for context
+        const comment = await this.getComment(commentId);
+        
+        if (!comment) {
+            throw new Error('Comment not found');
+        }
+
+        const [log] = await db
+            .insert(logs)
+            .values({
+                userId,
+                commentId,
+                action: helpful ? 'feedback_like' : 'feedback_dislike',
+                status: 'success',
+                message: reason || (helpful ? 'User found reply helpful' : 'User found reply unhelpful'),
+                metadata: {
+                    replyMethod: comment.replyMethod,
+                    replyText: comment.replyText,
+                    helpful,
+                    reason
+                }
+            })
+            .returning();
+            
+        return log;
     }
 }
 

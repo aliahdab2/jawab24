@@ -111,9 +111,8 @@ const CommentsPage: NextPageWithLayout = () => {
         case 'all':
           matchesFilter = true;
           break;
-        case 'template':
-          // Replied by human/template (NOT AI)
-          matchesFilter = !!comment.replied && comment.replyMethod !== 'ai';
+          // Replied by human/template OR AI (Show all history)
+          matchesFilter = !!comment.replied;
           break;
         case 'ai':
           // Replied by AI
@@ -130,8 +129,8 @@ const CommentsPage: NextPageWithLayout = () => {
 
   const stats = useMemo(() => ({
     total: comments.length,
-    // "Replied" card now represents "Template/Manual" only
-    templateReplies: comments.filter(c => !!c.replied && c.replyMethod !== 'ai').length,
+    // "Replied" card now represents ALL replies (History)
+    templateReplies: comments.filter(c => !!c.replied).length,
     pending: comments.filter(c => !c.replied).length,
     aiReplies: comments.filter(c => c.replyMethod === 'ai').length,
     needsAttention: comments.filter(c => checkNeedsAttention(c)).length,

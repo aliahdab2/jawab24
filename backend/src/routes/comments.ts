@@ -16,6 +16,7 @@ export default async function commentsRoutes(fastify: FastifyInstance) {
 
         // Reply to comment
         protectedRoutes.post('/comments/:id/reply', commentsController.reply);
+        protectedRoutes.post('/comments/:id/feedback', commentsController.feedback);
     });
 }
 
