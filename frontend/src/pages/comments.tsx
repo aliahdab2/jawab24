@@ -399,6 +399,24 @@ const CommentsPage: NextPageWithLayout = () => {
                     needsAttention && "bg-red-500 w-1.5"
                 )} />
 
+                {/* Top-Right Unified Status Tag */}
+                {needsAttention ? (
+                  <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider">
+                    <AlertTriangle className="w-3 h-3" />
+                    {t('comments.needsAttention')}
+                  </div>
+                ) : comment.replied ? (
+                   <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
+                     <CheckCircle className="w-3 h-3" />
+                     {t('comments.replied')}
+                   </div>
+                ) : (
+                   <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider opacity-60">
+                     <Clock className="w-3 h-3" />
+                     {t('dashboard.pending')}
+                   </div>
+                )}
+
                 <div className="p-4 sm:p-6">
                   <div className="flex flex-col lg:flex-row lg:items-start gap-4 sm:gap-6">
                     {/* User Info */}
@@ -406,23 +424,6 @@ const CommentsPage: NextPageWithLayout = () => {
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="font-bold text-surface-900 text-lg">{comment.fromName || t('common.unknownUser')}</span>
                         
-                        {/* SIMPLIFIED: Just "Replied" status on top. Method is shown in the reply box below. */}
-                        {comment.replied && (
-                          <Badge 
-                            variant="success" 
-                            className="gap-1.5 py-0.5"
-                          >
-                            <CheckCircle className="w-3 h-3" />
-                            {t('comments.replied')}
-                          </Badge>
-                        )}
-
-                        {needsAttention && (
-                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider">
-                            <AlertTriangle className="w-3 h-3" />
-                            {t('comments.needsAttention')}
-                          </div>
-                        )}
                         <span className="text-surface-300 hidden sm:inline">•</span>
                         <div className="flex items-center gap-1 text-xs font-medium text-surface-400">
                           <Clock className="w-3 h-3" />
@@ -484,17 +485,19 @@ const CommentsPage: NextPageWithLayout = () => {
 
                     {/* Quick Actions - Better Placement */}
                     <div className="flex lg:flex-col items-center gap-3 lg:items-end flex-shrink-0 justify-end w-full lg:w-auto mt-2 lg:mt-0 border-t border-surface-100 pt-3 lg:border-0 lg:pt-0">
-                       <Button 
-                         variant={comment.replied ? "secondary" : "primary"} 
-                         size="sm" 
-                         className="rounded-xl px-4 py-2 transition-all shadow-sm hover:shadow-md group-hover/card:shadow-brand-500/20 w-full sm:w-auto"
-                         onClick={(e) => {
-                           e.stopPropagation();
-                           setSelectedComment(comment);
-                         }}
-                       >
-                         {comment.replied ? t('comments.replied') : t('comments.reply')}
-                       </Button>
+                       {!comment.replied && (
+                        <Button 
+                          variant="primary" 
+                          size="sm" 
+                          className="rounded-xl px-4 py-2 transition-all shadow-sm hover:shadow-md group-hover/card:shadow-brand-500/20 w-full sm:w-auto"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedComment(comment);
+                          }}
+                        >
+                          {t('comments.reply')}
+                        </Button>
+                       )}
                     </div>
                   </div>
                 </div>
