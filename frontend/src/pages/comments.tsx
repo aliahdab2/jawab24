@@ -384,6 +384,18 @@ const CommentsPage: NextPageWithLayout = () => {
                     <div className="flex-1 min-w-0 text-start">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className="font-bold text-surface-900 text-lg">{comment.fromName || t('common.unknownUser')}</span>
+                        
+                        {/* Restore Status Badges */}
+                        {comment.replied && (
+                          <Badge 
+                            variant={comment.replyMethod === 'ai' ? 'success' : 'default'} 
+                            className="gap-1.5 py-0.5"
+                          >
+                            {comment.replyMethod === 'ai' ? <Sparkles className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+                            {comment.replyMethod === 'ai' ? t('comments.aiReplies') : t('comments.replied')}
+                          </Badge>
+                        )}
+
                         {needsAttention && (
                           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider">
                             <AlertTriangle className="w-3 h-3" />
