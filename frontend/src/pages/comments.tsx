@@ -273,17 +273,7 @@ const CommentsPage: NextPageWithLayout = () => {
             />
           </div>
           {/* Filter buttons - 2x2 grid on mobile, row on larger screens */}
-          <CommentsFilterButtons
-            filter={filter}
-            onChange={setFilter}
-            needsAttentionCount={needsAttentionCount}
-            labels={{
-              all: t('comments.allComments'),
-              replied: t('comments.replied'),
-              pending: t('comments.pending'),
-              needsAttention: t('comments.needsAttention'),
-            }}
-          />
+          {/* Filter buttons removed as Stats Cards are now clickable */}
         </div>
       </Card>
 

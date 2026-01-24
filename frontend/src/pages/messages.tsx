@@ -290,17 +290,7 @@ const MessagesPage: NextPageWithLayout = () => {
             />
           </div>
           {/* Filter buttons - 2x2 grid on mobile, row on larger screens */}
-          <MessagesFilterButtons
-            filter={filter}
-            onChange={setFilter}
-            needsAttentionCount={needsAttentionCount}
-            labels={{
-              all: t('common.all' as TranslationKey),
-              incoming: t('messages.incoming'),
-              outgoing: t('messages.outgoing'),
-              needsAttention: t('comments.needsAttention'),
-            }}
-          />
+          {/* Filter buttons removed */}
         </div>
       </Card>
 
