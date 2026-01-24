@@ -259,8 +259,9 @@ const CommentsPage: NextPageWithLayout = () => {
       />
 
       {/* Stats - Premium Physical Feedback */}
-      <div className="flex overflow-x-auto pb-6 -mx-4 px-4 md:mx-0 md:px-0 md:grid md:grid-cols-5 gap-3 sm:gap-4 mb-4 md:mb-8 snap-x no-scrollbar">
-        <div className="min-w-[140px] flex-1 snap-center" id={filter === 'all' ? 'active-stat' : undefined}>
+      {/* Stats - Grid Layout (Matches Messages Page) */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4 mb-8">
+        <div onClick={() => updateFilter('all')}>
           <StatCard 
             nameKey="comments.allComments"
             value={stats.total.toLocaleString()} 
@@ -268,10 +269,9 @@ const CommentsPage: NextPageWithLayout = () => {
             color="brand" 
             index={0}
             isActive={filter === 'all'}
-            onClick={() => updateFilter('all')}
           />
         </div>
-        <div className="min-w-[140px] flex-1 snap-center" id={filter === 'template' ? 'active-stat' : undefined}>
+        <div onClick={() => updateFilter('template')}>
           <StatCard 
             nameKey="comments.replied" 
             value={stats.templateReplies.toLocaleString()} 
@@ -279,10 +279,9 @@ const CommentsPage: NextPageWithLayout = () => {
             color="emerald" 
             index={1}
             isActive={filter === 'template'}
-            onClick={() => updateFilter('template')}
           />
         </div>
-        <div className="min-w-[140px] flex-1 snap-center" id={filter === 'pending' ? 'active-stat' : undefined}>
+        <div onClick={() => updateFilter('pending')}>
           <StatCard 
             nameKey="comments.pending" 
             value={stats.pending.toLocaleString()} 
@@ -290,10 +289,9 @@ const CommentsPage: NextPageWithLayout = () => {
             color="amber" 
             index={2}
             isActive={filter === 'pending'}
-            onClick={() => updateFilter('pending')}
           />
         </div>
-        <div className="min-w-[140px] flex-1 snap-center" id={filter === 'ai' ? 'active-stat' : undefined}>
+        <div onClick={() => updateFilter('ai')}>
           <StatCard 
             nameKey="comments.aiReplies" 
             value={stats.aiReplies.toLocaleString()} 
@@ -301,10 +299,9 @@ const CommentsPage: NextPageWithLayout = () => {
             color="violet" 
             index={3}
             isActive={filter === 'ai'}
-            onClick={() => updateFilter('ai')}
           />
         </div>
-        <div className="min-w-[140px] flex-1 snap-center md:col-span-1" id={filter === 'needs_attention' ? 'active-stat' : undefined}>
+        <div className="col-span-2 md:col-span-1" onClick={() => updateFilter('needs_attention')}>
           <StatCard 
             nameKey="comments.needsAttention" 
             value={stats.needsAttention.toLocaleString()} 
@@ -312,7 +309,6 @@ const CommentsPage: NextPageWithLayout = () => {
             color="red" 
             index={4}
             isActive={filter === 'needs_attention'}
-            onClick={() => updateFilter('needs_attention')}
           />
         </div>
       </div>
@@ -384,8 +380,8 @@ const CommentsPage: NextPageWithLayout = () => {
                     needsAttention && "bg-red-500 w-1.5"
                 )} />
 
-                <div className="p-5 sm:p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6">
+                <div className="p-4 sm:p-6">
+                  <div className="flex flex-col lg:flex-row lg:items-start gap-4 sm:gap-6">
                     {/* User Info */}
                     <div className="flex-1 min-w-0 text-start">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -406,7 +402,7 @@ const CommentsPage: NextPageWithLayout = () => {
                       <p className="text-surface-700 text-base leading-relaxed mb-4 italic italic-arabic">"{comment.message}"</p>
 
                       {/* Post Info */}
-                      <div className="flex items-center gap-3 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
+                      <div className="flex items-center gap-3 text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-4 lg:mb-0">
                         <div className="flex items-center gap-1.5 px-2 py-1 bg-surface-50 rounded-lg">
                           <FileText className="w-3 h-3" />
                           <span>POST: {comment.postId?.slice(0, 8)}</span>
@@ -426,14 +422,15 @@ const CommentsPage: NextPageWithLayout = () => {
                                 if (!page) return null;
                                 return (
                                     <div className="flex items-center gap-1.5 px-2 py-1 bg-brand-50 text-brand-700 rounded-lg">
-                                        <div className="font-bold max-w-[100px] truncate">{page.name}</div>
+                                        {/* Mobile-friendly truncate */}
+                                        <div className="font-bold max-w-[80px] sm:max-w-[100px] truncate">{page.name}</div>
                                     </div>
                                 );
                             })()
                         )}
                       </div>
 
-                      {/* Reply Preview */}
+                      {/* Reply Preview (Full width on mobile) */}
                       {comment.replied && comment.replyText && (
                         <div className="mt-4 p-4 bg-brand-50/20 rounded-2xl border border-brand-100 relative group/reply overflow-hidden">
                            <div className="absolute top-0 end-0 p-2 opacity-10">
@@ -454,13 +451,12 @@ const CommentsPage: NextPageWithLayout = () => {
                       )}
                     </div>
 
-                    {/* Quick Actions & Status - Hierarchy Polish */}
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-4 flex-shrink-0">
-                       {/* Primary Action (Solid) */}
+                    {/* Quick Actions - Better Placement */}
+                    <div className="flex lg:flex-col items-center gap-3 lg:items-end flex-shrink-0 justify-end w-full lg:w-auto mt-2 lg:mt-0 border-t border-surface-100 pt-3 lg:border-0 lg:pt-0">
                        <Button 
                          variant={comment.replied ? "secondary" : "primary"} 
                          size="sm" 
-                         className="rounded-xl px-4 py-2 transition-all shadow-sm hover:shadow-md group-hover/card:shadow-brand-500/20"
+                         className="rounded-xl px-4 py-2 transition-all shadow-sm hover:shadow-md group-hover/card:shadow-brand-500/20 w-full sm:w-auto"
                          onClick={(e) => {
                            e.stopPropagation();
                            setSelectedComment(comment);
@@ -468,11 +464,6 @@ const CommentsPage: NextPageWithLayout = () => {
                        >
                          {comment.replied ? t('comments.replied') : t('comments.reply')}
                        </Button>
-
-                       {/* Status Badge (Fallback for small height) */}
-                       <div className="sm:hidden">
-                         {comment.replied ? <CheckCircle className="w-5 h-5 text-emerald-500" /> : <Clock className="w-5 h-5 text-amber-500" />}
-                       </div>
                     </div>
                   </div>
                 </div>
