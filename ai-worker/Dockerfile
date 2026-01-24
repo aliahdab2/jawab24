@@ -1,4 +1,4 @@
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy only manifests first to cache dependencies
@@ -20,7 +20,7 @@ RUN npm run build --workspace=jawab24-ai-worker
 RUN npm prune --omit=dev
 
 # Production
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 WORKDIR /app
 RUN apk add --no-cache dumb-init
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
