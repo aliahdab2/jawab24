@@ -15,7 +15,9 @@ import {
   Crown,
   Search,
   X,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle,
+  CheckCircle
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';

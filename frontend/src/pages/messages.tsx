@@ -301,77 +301,77 @@ const MessagesPage: NextPageWithLayout = () => {
             <Card
               key={conv.senderId}
               hover
-              className={`animate-slide-up cursor-pointer border-none shadow-md hover:shadow-xl transition-all duration-300 rounded-2xl overflow-hidden ${conv.needsHumanAttention ? 'ring-2 ring-red-200 bg-red-50/10' : ''
-                }`}
+              className={clsx(
+                "animate-slide-up group/card cursor-pointer border-none shadow-sm hover:shadow-lg transition-all duration-300 rounded-2xl overflow-hidden relative",
+                conv.needsHumanAttention && 'ring-1 ring-red-100'
+              )}
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
               onClick={() => setSelectedConversation(conv)}
             >
-              <div className="p-4 sm:p-6">
-                <div className="flex flex-col lg:flex-row lg:items-start gap-6">
-                  {/* User Avatar */}
-                  <div className="flex-shrink-0 relative">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner transition-colors ${conv.needsHumanAttention ? 'bg-red-100 text-red-600' : 'bg-brand-100 text-brand-600'
-                      }`}>
-                      <User className="w-7 h-7" />
-                    </div>
-                    {conv.needsHumanAttention && (
-                      <div className="absolute -top-2 -end-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                        <AlertTriangle className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                  </div>
+              {/* Left Accent Bar */}
+              <div className={clsx(
+                  "absolute inset-y-0 start-0 w-1 transition-all duration-300",
+                  conv.lastMessage.replied || conv.lastMessage.direction === 'outgoing' ? "bg-emerald-500" : "bg-amber-500",
+                  conv.needsHumanAttention && "bg-red-500 w-1.5"
+              )} />
 
-                  {/* Conversation Content */}
+              {/* Top-Right Unified Status Tag */}
+              {conv.needsHumanAttention ? (
+                <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider">
+                  <AlertTriangle className="w-3 h-3" />
+                  {t('messages.needsHuman')}
+                </div>
+              ) : conv.lastMessage.replied || conv.lastMessage.direction === 'outgoing' ? (
+                  <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
+                    <CheckCircle className="w-3 h-3" />
+                    {t('comments.replied')}
+                  </div>
+              ) : (
+                  <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider opacity-60">
+                    <Clock className="w-3 h-3" />
+                    {t('comments.pending')}
+                  </div>
+              )}
+
+              <div className="p-4 sm:p-6">
+                <div className="flex flex-col lg:flex-row lg:items-start gap-4 sm:gap-6">
+                  {/* User Info */}
                   <div className="flex-1 min-w-0 text-start">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <span className="font-bold text-surface-900 text-lg">
                         {conv.senderName || t('common.user' as TranslationKey)}
                       </span>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] font-bold text-surface-400 uppercase tracking-widest text-start">
+                      
+                      <span className="text-surface-300 hidden sm:inline">•</span>
+                       <span className="text-[10px] font-bold text-surface-400 uppercase tracking-widest text-start bg-surface-50 px-2 py-0.5 rounded-full">
                           {t('messages.msgCount' as TranslationKey, { count: conv.messages.length })}
                         </span>
-                        {conv.needsHumanAttention && (
-                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 text-[10px] font-bold uppercase tracking-wider">
-                            <AlertTriangle className="w-3 h-3" />
-                            {t('messages.needsHuman')}
-                          </div>
-                        )}
-                        <span className="text-surface-300">•</span>
-                        <div className="flex items-center gap-1 text-xs font-medium text-surface-400">
-                          <Clock className="w-3 h-3" />
-                          {formatTime(conv.lastMessage.createdAt)}
-                        </div>
+                      <span className="text-surface-300 hidden sm:inline">•</span>
+                      <div className="flex items-center gap-1 text-xs font-medium text-surface-400">
+                        <Clock className="w-3 h-3" />
+                        {formatTime(conv.lastMessage.createdAt)}
                       </div>
                     </div>
 
                     {/* Last Message Preview */}
-                    <div className="flex items-start gap-3 p-3 rounded-xl bg-surface-50 group-hover:bg-white transition-colors border border-transparent group-hover:border-surface-100">
+                    <div className="flex items-start gap-3 p-4 rounded-xl bg-surface-50 group-hover:bg-brand-50/20 transition-colors border border-transparent group-hover:border-brand-50">
                       {conv.lastMessage.direction === 'incoming' ? (
                         <ArrowDownLeft className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
                       ) : (
                         <ArrowUpRight className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
                       )}
-                      <p className="text-surface-700 text-sm line-clamp-1 italic italic-arabic">
+                      <p className="text-surface-700 text-sm leading-relaxed italic italic-arabic line-clamp-2">
                         "{conv.lastMessage.message}"
                       </p>
                     </div>
                   </div>
 
-                  {/* Actions / Status */}
-                  <div className="flex lg:flex-col items-center gap-3 lg:items-end flex-shrink-0">
-                    {conv.lastMessage.replied || conv.lastMessage.direction === 'outgoing' ? (
-                      <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                        <CheckCircle className="w-4 h-4" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">{t('comments.replied')}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-100">
-                        <Clock className="w-4 h-4" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">{t('comments.pending')}</span>
-                      </div>
-                    )}
-                    <ChevronRight className={`w-5 h-5 text-surface-300 group-hover:text-brand-500 transition-all ${language === 'ar' ? 'rotate-180' : ''}`} />
+                  {/* Actions / Status - Keep minimal, click to view */}
+                  <div className="flex lg:flex-col items-center gap-3 lg:items-end flex-shrink-0 justify-end w-full lg:w-auto mt-2 lg:mt-0 border-t border-surface-100 pt-3 lg:border-0 lg:pt-0">
+                    <ChevronRight className={clsx(
+                      "w-5 h-5 text-surface-300 group-hover:text-brand-500 transition-all transform group-hover:translate-x-1",
+                      language === 'ar' && "rotate-180 group-hover:-translate-x-1"
+                    )} />
                   </div>
                 </div>
               </div>

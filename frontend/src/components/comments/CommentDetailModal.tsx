@@ -244,8 +244,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 </div>
               </div>
               
-              {/* Reply Feedback */}
-              <ReplyFeedback commentId={comment.id} />
+              {/* Reply Feedback - AI Only */}
+              {comment.replyMethod === 'ai' && <ReplyFeedback commentId={comment.id} />}
             </div>
           )}
 
