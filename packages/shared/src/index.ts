@@ -27,6 +27,7 @@ export interface Comment {
   replyText: string | null;
   replyMethod: 'template' | 'ai' | 'manual' | string | null;
   detectedLanguage: string | null;
+  pageId: string | null;
   createdAt: string | Date | null;
   repliedAt?: string | Date | null;
   postId: string | null;

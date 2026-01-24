@@ -420,8 +420,7 @@ const CommentsPage: NextPageWithLayout = () => {
                         {/* Page Source Indicator (Multi-Page Only) */}
                         {pages.length > 1 && (
                             (() => {
-                                // Cast to any because shared type might miss pageId
-                                const pageId = (comment as any).pageId;
+                                const pageId = comment.pageId;
                                 const page = pages.find(p => p.id === pageId);
                                 if (!page) return null;
                                 return (
