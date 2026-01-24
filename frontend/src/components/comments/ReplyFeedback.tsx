@@ -85,7 +85,9 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
       <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
         <div className="bg-surface-50 rounded-xl p-4 border border-surface-200">
           <div className="flex justify-between items-start mb-3">
-            <h4 className="text-sm font-semibold text-surface-900">What went wrong? <span className="text-surface-400 font-normal">(Optional)</span></h4>
+            <h4 className="text-sm font-semibold text-surface-900">
+              {t('feedback.whatWentWrong')} <span className="text-surface-400 font-normal">{t('feedback.optional')}</span>
+            </h4>
             <button onClick={() => setShowFollowUp(false)} className="text-surface-400 hover:text-surface-600">
                <X className="w-4 h-4" />
             </button>
@@ -112,7 +114,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
               onClick={handleDislikeSubmit}
               loading={isSubmitting}
             >
-              Send Feedback
+              {t('feedback.send')}
             </Button>
             <Button 
               size="sm" 
@@ -120,7 +122,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
               onClick={handleDislikeSkip}
               disabled={isSubmitting}
             >
-              Skip
+              {t('feedback.skip')}
             </Button>
           </div>
         </div>
