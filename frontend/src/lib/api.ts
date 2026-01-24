@@ -126,6 +126,8 @@ export const commentsApi = {
   getByPost: (postId: string) => api.get(`/posts/${postId}/comments`),
   reply: (id: string, text: string) =>
     api.post(`/comments/${id}/reply`, { text }),
+  submitFeedback: (id: string, data: { feedback: 'positive' | 'negative'; reason?: string[]; source: string }) =>
+    api.post(`/comments/${id}/feedback`, data),
 };
 
 // Templates API

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
+import { ReplyFeedback } from './ReplyFeedback';
 import { useTranslation } from '@/i18n';
 import { commentsApi, aiApi, subscriptionApi } from '@/lib/api';
 import type { Comment } from '@jawab24/shared';
@@ -14,8 +15,6 @@ import {
   X,
   ExternalLink,
   CheckCircle,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -40,7 +39,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<string>('');
-  const [showDetails, setShowDetails] = useState(false);
   
   // Limit State
   const [aiLimit, setAiLimit] = useState<{ allowed: boolean; reason?: string }>({ allowed: true });
@@ -245,6 +243,9 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   </Badge>
                 </div>
               </div>
+              
+              {/* Reply Feedback */}
+              <ReplyFeedback commentId={comment.id} />
             </div>
           )}
 
@@ -308,47 +309,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           )}
 
-          {/* Metadata Collapsible */}
-          <div className="bg-surface-50 rounded-xl border border-surface-200 overflow-hidden">
-            <button
-              onClick={() => setShowDetails(!showDetails)}
-              className="w-full flex items-center justify-between p-4 bg-surface-100 hover:bg-surface-200 transition-colors text-start"
-            >
-              <span className="text-sm font-medium text-surface-700">{t('comments.additionalInfo')}</span>
-              {showDetails ? (
-                <ChevronUp className="w-4 h-4 text-surface-500" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-surface-500" />
-              )}
-            </button>
-            
-            {showDetails && (
-              <div className="p-4 border-t border-surface-200 animate-in slide-in-from-top-2 duration-200">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-surface-400 font-medium mb-1">{t('comments.commentId')}</p>
-                    <p className="text-surface-700 font-mono text-xs break-all bg-white p-1.5 rounded border border-surface-200">{comment.id}</p>
-                  </div>
-                  <div>
-                    <p className="text-surface-400 font-medium mb-1">{t('comments.postId')}</p>
-                    <p className="text-surface-700 font-mono text-xs break-all bg-white p-1.5 rounded border border-surface-200">{comment.postId}</p>
-                  </div>
-                  <div>
-                    <p className="text-surface-400 font-medium mb-1">{t('comments.commenterId')}</p>
-                    <p className="text-surface-700 font-mono text-xs break-all bg-white p-1.5 rounded border border-surface-200">{comment.fromId || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-surface-400 font-medium mb-1">{t('comments.status')}</p>
-                    <Badge variant={comment.replied ? (comment.replyMethod === 'ai' ? 'info' : 'success') : 'warning'}>
-                      {comment.replied 
-                        ? (comment.replyMethod === 'ai' ? t('dashboard.aiReply') : t('comments.replied')) 
-                        : t('comments.pending')}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+
         </div>
 
         {/* Modal Footer */}
