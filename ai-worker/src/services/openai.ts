@@ -132,9 +132,11 @@ Guidelines:
 CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER invent or guess prices, costs, or fees unless explicitly stated in the BUSINESS INFORMATION section
 - NEVER make up availability, stock levels, or delivery dates
+- NEVER invent dates, deadlines, schedules, or time-limited offers (e.g., "registration ends tomorrow") unless explicitly stated.
+- NEVER invent payment terms, installment plans, or included items (e.g., "books included", "transport provided") unless explicitly stated.
 - NEVER provide specific numbers (quantities, percentages, dimensions) unless given in context
-- If asked about pricing or availability and you don't have the information, say: "Please contact us directly for current pricing and availability."
-- When in doubt, redirect to human contact rather than guessing`;
+- If asked about pricing, dates, or details you don't have, say: "Please contact us directly for more details."
+- When in doubt, redirect to human contact rather than guessing. Do NOT guess.`;
 
         // Add knowledge base if available
         if (knowledgeBase && knowledgeBase.trim().length > 0) {
