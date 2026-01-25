@@ -22,7 +22,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { format } from 'date-fns';
+import { format, isToday } from 'date-fns';
 import type { Comment, Page } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -134,15 +134,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
             matchesFilter = !comment.replied;
             break;
           case 'replied_today':
-            if (!comment.replied || !comment.repliedAt) {
-              matchesFilter = false;
-            } else {
-              const replyDate = new Date(comment.repliedAt);
-              const today = new Date();
-              matchesFilter = replyDate.getDate() === today.getDate() &&
-                              replyDate.getMonth() === today.getMonth() &&
-                              replyDate.getFullYear() === today.getFullYear();
-            }
+            matchesFilter = !!comment.replied && !!comment.repliedAt && isToday(new Date(comment.repliedAt));
             break;
         }
         
@@ -225,6 +217,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
       case 'ai': return t('dashboard.aiReply');
       case 'pending': return t('comments.pending');
       case 'needs_attention': return t('comments.needsAttention');
+      case 'replied_today': return t('comments.replied_today');
       default: return '';
     }
   };
@@ -367,14 +360,14 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
                   filter === 'pending' && "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100",
                   filter === 'ai' && "bg-violet-50 text-violet-700 ring-violet-200 hover:bg-violet-100",
                   filter === 'needs_attention' && "bg-red-50 text-red-700 ring-red-200 hover:bg-red-100",
-                  filter === 'template' && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100"
+                  (filter === 'template' || filter === 'replied_today') && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100"
                 )}
                >
                  {/* Icon */}
                  {filter === 'pending' && <Clock className="w-4 h-4" />}
                  {filter === 'ai' && <Bot className="w-4 h-4" />}
                  {filter === 'needs_attention' && <AlertTriangle className="w-4 h-4" />}
-                 {filter === 'template' && <CheckCircle className="w-4 h-4" />}
+                 {(filter === 'template' || filter === 'replied_today') && <CheckCircle className="w-4 h-4" />}
                  
                  <span className="font-bold text-sm tracking-wide">{getFilterChipLabel(filter)}</span>
                  
