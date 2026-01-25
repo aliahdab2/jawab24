@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useCallback, type ReactElement } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, type ReactElement } from 'react';
+import { useRouter } from 'next/router';
+import { useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
+import { StatCard } from '@/components/dashboard/StatCard';
 import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import {
@@ -21,7 +24,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow, format, isToday } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { Message } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';

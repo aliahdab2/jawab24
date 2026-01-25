@@ -5,9 +5,10 @@ import { Card, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { subscriptionApi, settingsApi, pagesApi, commentsApi } from '@/lib/api';
+import { subscriptionApi, settingsApi, pagesApi, commentsApi, api } from '@/lib/api';
 import {
   MessageSquare,
+  MessageCircle,
   Zap,
   Clock,
   FileText,
@@ -19,11 +20,12 @@ import {
   TrendingUp,
   TrendingDown,
   Bot,
-  Minus
+  Minus,
+  CheckCircle
 } from 'lucide-react';
 import { isToday } from 'date-fns';
 import clsx from 'clsx';
-import type { Comment, Page, UsageSummary } from '@jawab24/shared';
+import type { Comment, Page, UsageSummary, Message } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
 import type { NextPageWithLayout } from './_app';
 import { CommentDetailModal, CommentCard, checkNeedsAttention } from '@/components/comments';
@@ -75,16 +77,22 @@ const DashboardPage: NextPageWithLayout = () => {
   
   const [pages, setPages] = useState<Page[]>([]);
   const [statsData, setStatsData] = useState({
+    // Comment stats
     totalComments: 0,
     repliedToday: 0,
     pendingReplies: 0,
     needsAttention: 0,
     activePages: 0,
-    // New metrics
     commentsToday: 0,
     commentsYesterday: 0,
     aiReplies: 0,
-    templateReplies: 0
+    templateReplies: 0,
+    // Message stats
+    totalMessages: 0,
+    messagesReplied: 0,
+    messagesPending: 0,
+    messagesNeedsAttention: 0,
+    messagesRepliedToday: 0
   });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
@@ -93,11 +101,12 @@ const DashboardPage: NextPageWithLayout = () => {
     try {
       setLoading(true);
       // Use API instances that handle auth via cookies (web) or Bearer token (mobile)
-      const [commentsRes, pagesRes, usageRes, settingsRes] = await Promise.all([
+      const [commentsRes, pagesRes, usageRes, settingsRes, messagesRes] = await Promise.all([
         commentsApi.getAll(),
         pagesApi.getAll(),
         subscriptionApi.getUsage().catch(() => null),
-        settingsApi.get().catch(() => null)
+        settingsApi.get().catch(() => null),
+        api.get('/messages').catch(() => ({ data: [] }))
       ]);
 
       // Set usage data if available
@@ -175,6 +184,28 @@ const DashboardPage: NextPageWithLayout = () => {
       });
       setRecentComments(sortedComments.slice(0, 5));
 
+      // Process Messages
+      const allMessages: Message[] = Array.isArray(messagesRes.data)
+        ? messagesRes.data
+        : (Array.isArray(messagesRes.data?.data) ? messagesRes.data.data : []);
+
+      // Message stats
+      const totalMessages = allMessages.length;
+      const messagesReplied = allMessages.filter(m => m.replied).length;
+      const messagesPending = allMessages.filter(m => !m.replied && m.direction === 'incoming').length;
+
+      // Check if message needs human attention
+      const helpKeywords = ['human', 'agent', 'help', 'support', 'مساعدة', 'بشري', 'شخص', 'موظف'];
+      const messagesNeedsAttention = allMessages.filter(m => {
+        if (m.replied || m.direction !== 'incoming') return false;
+        const messageText = m.message.toLowerCase();
+        return helpKeywords.some(kw => messageText.includes(kw));
+      }).length;
+
+      const messagesRepliedToday = allMessages.filter(m => {
+        return m.replied && m.repliedAt && isToday(new Date(m.repliedAt));
+      }).length;
+
       setStatsData({
         totalComments,
         repliedToday,
@@ -184,7 +215,13 @@ const DashboardPage: NextPageWithLayout = () => {
         commentsToday,
         commentsYesterday,
         aiReplies,
-        templateReplies
+        templateReplies,
+        // Message stats
+        totalMessages,
+        messagesReplied,
+        messagesPending,
+        messagesNeedsAttention,
+        messagesRepliedToday
       });
 
     } catch (error) {
@@ -219,31 +256,31 @@ const DashboardPage: NextPageWithLayout = () => {
 
   const trend = getTrend();
 
-  // Improved Stats Array
-  const stats = [
+  // Comments Stats Array
+  const commentStats = [
     {
       id: 'pending',
-      nameKey: 'dashboard.pending' as TranslationKey,
+      nameKey: 'comments.pending' as TranslationKey,
       value: statsData.pendingReplies.toLocaleString(),
       icon: Clock,
-      color: 'amber' as const, 
+      color: 'amber' as const,
       href: '/comments?filter=pending'
+    },
+    {
+      id: 'replied_today',
+      nameKey: 'comments.repliedToday' as TranslationKey,
+      value: statsData.repliedToday.toLocaleString(),
+      icon: CheckCircle,
+      color: 'emerald' as const,
+      href: '/comments?filter=replied_today'
     },
     {
       id: 'needs_attention',
       nameKey: 'comments.needsAttention' as TranslationKey,
       value: statsData.needsAttention.toLocaleString(),
       icon: AlertTriangle,
-      color: 'red' as const, // Maps to warning/danger visually
+      color: 'red' as const,
       href: '/comments?filter=flagged'
-    },
-    {
-      id: 'replied_today',
-      nameKey: 'comments.repliedToday' as TranslationKey,
-      value: statsData.repliedToday.toLocaleString(),
-      icon: Zap,
-      color: 'emerald' as const,
-      href: '/comments?filter=replied_today'
     },
     {
       id: 'all',
@@ -252,6 +289,42 @@ const DashboardPage: NextPageWithLayout = () => {
       icon: MessageSquare,
       color: 'brand' as const,
       href: '/comments'
+    }
+  ];
+
+  // Messages Stats Array
+  const messageStats = [
+    {
+      id: 'pending',
+      nameKey: 'comments.pending' as TranslationKey,
+      value: statsData.messagesPending.toLocaleString(),
+      icon: Clock,
+      color: 'amber' as const,
+      href: '/messages?filter=pending'
+    },
+    {
+      id: 'replied_today',
+      nameKey: 'comments.repliedToday' as TranslationKey,
+      value: statsData.messagesRepliedToday.toLocaleString(),
+      icon: CheckCircle,
+      color: 'emerald' as const,
+      href: '/messages'
+    },
+    {
+      id: 'needs_attention',
+      nameKey: 'comments.needsAttention' as TranslationKey,
+      value: statsData.messagesNeedsAttention.toLocaleString(),
+      icon: AlertTriangle,
+      color: 'red' as const,
+      href: '/messages?filter=needs_attention'
+    },
+    {
+      id: 'all',
+      nameKey: 'messages.totalMessages' as TranslationKey,
+      value: statsData.totalMessages.toLocaleString(),
+      icon: MessageCircle,
+      color: 'brand' as const,
+      href: '/messages'
     }
   ];
 
@@ -297,19 +370,56 @@ const DashboardPage: NextPageWithLayout = () => {
         />
       )}
 
-      {/* Update Stats Grid - 4 Columns */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
-        {stats.map((stat, i) => (
-          <StatCard
-            key={stat.id}
-            nameKey={stat.nameKey}
-            value={stat.value}
-            icon={stat.icon}
-            color={stat.color}
-            index={i}
-            href={stat.href}
-          />
-        ))}
+      {/* Comments Stats Section */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            {t('comments.title')}
+          </h3>
+          <Link href="/comments" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
+            {t('common.viewAll')} →
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          {commentStats.map((stat, i) => (
+            <StatCard
+              key={stat.id}
+              nameKey={stat.nameKey}
+              value={stat.value}
+              icon={stat.icon}
+              color={stat.color}
+              index={i}
+              href={stat.href}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Messages Stats Section */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
+            <MessageCircle className="w-4 h-4" />
+            {t('messages.title')}
+          </h3>
+          <Link href="/messages" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
+            {t('common.viewAll')} →
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          {messageStats.map((stat, i) => (
+            <StatCard
+              key={stat.id}
+              nameKey={stat.nameKey}
+              value={stat.value}
+              icon={stat.icon}
+              color={stat.color}
+              index={i + 4}
+              href={stat.href}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Today's Activity Summary */}

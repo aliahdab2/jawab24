@@ -150,14 +150,24 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
       });
     }, [comments, filter, searchQuery]);
 
-    const stats = useMemo(() => ({
-      total: comments.length,
-      // "Replied" card now represents ONLY Template/Manual replies (Mutually exclusive from AI)
-      templateReplies: comments.filter(c => !!c.replied && c.replyMethod !== 'ai').length,
-      pending: comments.filter(c => !c.replied).length,
-      aiReplies: comments.filter(c => c.replyMethod === 'ai').length,
-      needsAttention: comments.filter(c => checkNeedsAttention(c)).length,
-    }), [comments]);
+    const stats = useMemo(() => {
+      const today = new Date();
+      return {
+        total: comments.length,
+        // "Replied" card now represents ONLY Template/Manual replies (Mutually exclusive from AI)
+        templateReplies: comments.filter(c => !!c.replied && c.replyMethod !== 'ai').length,
+        pending: comments.filter(c => !c.replied).length,
+        aiReplies: comments.filter(c => c.replyMethod === 'ai').length,
+        needsAttention: comments.filter(c => checkNeedsAttention(c)).length,
+        repliedToday: comments.filter(c => {
+          if (!c.replied || !c.repliedAt) return false;
+          const replyDate = new Date(c.repliedAt);
+          return replyDate.getDate() === today.getDate() &&
+                 replyDate.getMonth() === today.getMonth() &&
+                 replyDate.getFullYear() === today.getFullYear();
+        }).length,
+      };
+    }, [comments]);
   
     // Update Page Title
     useEffect(() => {
@@ -268,55 +278,65 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
       />
 
       {/* Stats - Premium Physical Feedback */}
-      {/* Stats - Grid Layout (Matches Messages Page) */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4 mb-8">
+      {/* Stats - Grid Layout */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
         <div onClick={() => updateFilter('all')}>
-          <StatCard 
+          <StatCard
             nameKey="comments.allComments"
-            value={stats.total.toLocaleString()} 
-            icon={MessageSquare} 
-            color="brand" 
+            value={stats.total.toLocaleString()}
+            icon={MessageSquare}
+            color="brand"
             index={0}
             isActive={filter === 'all'}
           />
         </div>
-        <div onClick={() => updateFilter('template')}>
-          <StatCard 
-            nameKey="dashboard.templateReply" 
-            value={stats.templateReplies.toLocaleString()} 
-            icon={Zap} 
-            color="emerald" 
-            index={1}
-            isActive={filter === 'template'}
-          />
-        </div>
         <div onClick={() => updateFilter('pending')}>
-          <StatCard 
-            nameKey="comments.pending" 
-            value={stats.pending.toLocaleString()} 
-            icon={Clock} 
-            color="amber" 
-            index={2}
+          <StatCard
+            nameKey="comments.pending"
+            value={stats.pending.toLocaleString()}
+            icon={Clock}
+            color="amber"
+            index={1}
             isActive={filter === 'pending'}
           />
         </div>
+        <div onClick={() => updateFilter('replied_today')}>
+          <StatCard
+            nameKey="comments.repliedToday"
+            value={stats.repliedToday.toLocaleString()}
+            icon={CheckCircle}
+            color="emerald"
+            index={2}
+            isActive={filter === 'replied_today'}
+          />
+        </div>
         <div onClick={() => updateFilter('ai')}>
-          <StatCard 
-            nameKey="dashboard.aiReply" 
-            value={stats.aiReplies.toLocaleString()} 
-            icon={Bot} 
-            color="violet" 
+          <StatCard
+            nameKey="dashboard.aiReply"
+            value={stats.aiReplies.toLocaleString()}
+            icon={Bot}
+            color="violet"
             index={3}
             isActive={filter === 'ai'}
           />
         </div>
-        <div className="col-span-2 md:col-span-1" onClick={() => updateFilter('needs_attention')}>
-          <StatCard 
-            nameKey="comments.needsAttention" 
-            value={stats.needsAttention.toLocaleString()} 
-            icon={AlertTriangle} 
-            color="red" 
+        <div onClick={() => updateFilter('template')}>
+          <StatCard
+            nameKey="dashboard.templateReply"
+            value={stats.templateReplies.toLocaleString()}
+            icon={Zap}
+            color="brand"
             index={4}
+            isActive={filter === 'template'}
+          />
+        </div>
+        <div onClick={() => updateFilter('needs_attention')}>
+          <StatCard
+            nameKey="comments.needsAttention"
+            value={stats.needsAttention.toLocaleString()}
+            icon={AlertTriangle}
+            color="red"
+            index={5}
             isActive={filter === 'needs_attention'}
           />
         </div>
