@@ -315,64 +315,69 @@ const MessagesPage: NextPageWithLayout = () => {
                   conv.needsHumanAttention && "bg-red-500 w-1.5"
               )} />
 
-              {/* Top-Right Unified Status Tag */}
-              {conv.needsHumanAttention ? (
-                <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider">
-                  <AlertTriangle className="w-3 h-3" />
-                  {t('messages.needsHuman')}
-                </div>
-              ) : conv.lastMessage.replied || conv.lastMessage.direction === 'outgoing' ? (
-                  <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
-                    <CheckCircle className="w-3 h-3" />
-                    {t('comments.replied')}
-                  </div>
-              ) : (
-                  <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider opacity-60">
-                    <Clock className="w-3 h-3" />
-                    {t('comments.pending')}
-                  </div>
-              )}
-
-              <div className="p-4 sm:p-6">
-                <div className="flex flex-col lg:flex-row lg:items-start gap-4 sm:gap-6">
-                  {/* User Info */}
-                  <div className="flex-1 min-w-0 text-start">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className="font-bold text-surface-900 text-lg">
-                        {conv.senderName || t('common.user' as TranslationKey)}
-                      </span>
-                      
-                      <span className="text-surface-300 hidden sm:inline">•</span>
-                       <span className="text-[10px] font-bold text-surface-400 uppercase tracking-widest text-start bg-surface-50 px-2 py-0.5 rounded-full">
-                          {t('messages.msgCount' as TranslationKey, { count: conv.messages.length })}
-                        </span>
-                      <span className="text-surface-300 hidden sm:inline">•</span>
-                      <div className="flex items-center gap-1 text-xs font-medium text-surface-400">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(conv.lastMessage.createdAt)}
+              <div className="p-4 sm:p-5">
+                <div className="flex flex-col gap-3">
+                   {/* Header: Name, Count, Time */}
+                   <div className="flex items-start justify-between gap-4">
+                      <div className="flex flex-col gap-1">
+                          <h3 className="font-bold text-surface-900 text-base">
+                             {conv.senderName || t('common.user' as TranslationKey)}
+                          </h3>
+                          <div className="flex items-center gap-2 text-xs text-surface-400">
+                             <div className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {formatTime(conv.lastMessage.createdAt)}
+                             </div>
+                             <span className="text-surface-300">•</span>
+                             <span>{t('messages.msgCount' as TranslationKey, { count: conv.messages.length })}</span>
+                          </div>
                       </div>
-                    </div>
 
-                    {/* Last Message Preview */}
-                    <div className="flex items-start gap-3 p-4 rounded-xl bg-surface-50 group-hover:bg-brand-50/20 transition-colors border border-transparent group-hover:border-brand-50">
-                      {conv.lastMessage.direction === 'incoming' ? (
-                        <ArrowDownLeft className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <ArrowUpRight className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                      )}
-                      <p className="text-surface-700 text-sm leading-relaxed italic italic-arabic line-clamp-2">
-                        "{conv.lastMessage.message}"
-                      </p>
-                    </div>
-                  </div>
+                      {/* Status Badges - Top Right */}
+                      <div className="flex items-center gap-2">
+                          {conv.needsHumanAttention ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft">
+                               <AlertTriangle className="w-3 h-3" />
+                               {t('messages.needsHuman')}
+                            </span>
+                          ) : !conv.lastMessage.replied && conv.lastMessage.direction === 'incoming' && (
+                             <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider">
+                                <Clock className="w-3 h-3" />
+                                {t('comments.pending')}
+                             </span>
+                          )}
+                      </div>
+                   </div>
 
-                  {/* Actions / Status - Keep minimal, click to view */}
-                  <div className="flex lg:flex-col items-center gap-3 lg:items-end flex-shrink-0 justify-end w-full lg:w-auto mt-2 lg:mt-0 border-t border-surface-100 pt-3 lg:border-0 lg:pt-0">
-                    <ChevronRight className={clsx(
-                      "w-5 h-5 text-surface-300 group-hover:text-brand-500 transition-all transform group-hover:translate-x-1",
-                      language === 'ar' && "rotate-180 group-hover:-translate-x-1"
-                    )} />
-                  </div>
+                   {/* Message Preview Box */}
+                   <div className="relative group/box mt-1">
+                      {/* Speech Bubble Arrow */}
+                      <div className="absolute -top-1.5 start-6 w-3 h-3 bg-surface-50 rotate-45 border-t border-l border-surface-100/60 z-0"></div>
+                      
+                      <div className="relative z-10 p-4 bg-surface-50 rounded-2xl rounded-tl-sm border border-surface-100/60 transition-colors group-hover/card:bg-brand-50/30 group-hover/card:border-brand-100/30">
+                         <div className="flex items-start gap-3">
+                            {conv.lastMessage.direction === 'incoming' ? (
+                              <ArrowDownLeft className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                            ) : (
+                              <ArrowUpRight className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                            )}
+                            <p className="text-surface-700 text-sm leading-relaxed italic-arabic line-clamp-2">
+                               {conv.lastMessage.message}
+                            </p>
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* Footer / Reply Hint */}
+                   <div className="flex items-center justify-end mt-1">
+                       <div className="flex items-center gap-1 text-xs font-bold text-brand-600 opacity-0 group-hover/card:opacity-100 transition-opacity transform translate-y-1 group-hover/card:translate-y-0 duration-300">
+                          <span>{t('comments.reply')}</span>
+                          <ChevronRight className={clsx(
+                            "w-4 h-4 transition-transform",
+                            language === 'ar' && "rotate-180"
+                          )} />
+                       </div>
+                   </div>
                 </div>
               </div>
             </Card>
