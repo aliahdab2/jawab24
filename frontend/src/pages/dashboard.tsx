@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Badge, PageHeader, Button, PageSkeleton } from '@/components/ui';
+import { Card, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore, useUIStore } from '@/lib/store';
@@ -19,16 +19,14 @@ import {
   TrendingUp,
   TrendingDown,
   Bot,
-  User,
   Minus
 } from 'lucide-react';
-import { formatDistanceToNow, isToday } from 'date-fns';
-import { ar, enUS } from 'date-fns/locale';
+import { isToday } from 'date-fns';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
 import type { NextPageWithLayout } from './_app';
-import { CommentDetailModal } from '@/components/comments/CommentDetailModal';
+import { CommentDetailModal, CommentCard } from '@/components/comments';
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
@@ -86,7 +84,7 @@ const DashboardPage: NextPageWithLayout = () => {
     commentsToday: 0,
     commentsYesterday: 0,
     aiReplies: 0,
-    manualReplies: 0
+    templateReplies: 0
   });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
@@ -164,9 +162,13 @@ const DashboardPage: NextPageWithLayout = () => {
         return date.toDateString() === yesterday.toDateString();
       }).length;
 
-      // Calculate AI vs Manual replies
-      const aiReplies = allComments.filter(c => c.replied && c.replyMethod === 'ai').length;
-      const manualReplies = allComments.filter(c => c.replied && (c.replyMethod === 'manual' || c.replyMethod === 'template')).length;
+      // Calculate AI vs Template replies (today only, to match "Today's Activity" section)
+      const aiReplies = allComments.filter(c =>
+        c.replied && c.replyMethod === 'ai' && c.repliedAt && isToday(new Date(c.repliedAt))
+      ).length;
+      const templateReplies = allComments.filter(c =>
+        c.replied && c.replyMethod === 'template' && c.repliedAt && isToday(new Date(c.repliedAt))
+      ).length;
 
       // Recent Comments Logic: Sort by newest, take top 5
       const sortedComments = [...allComments].sort((a, b) => {
@@ -185,7 +187,7 @@ const DashboardPage: NextPageWithLayout = () => {
         commentsToday,
         commentsYesterday,
         aiReplies,
-        manualReplies
+        templateReplies
       });
 
     } catch (error) {
@@ -200,18 +202,6 @@ const DashboardPage: NextPageWithLayout = () => {
       fetchDashboardData();
     }
   }, [isAuthenticated, fetchDashboardData]);
-
-  const formatTime = (dateValue: string | Date | null | undefined) => {
-    if (!dateValue) return '-';
-    try {
-      return formatDistanceToNow(new Date(dateValue), {
-        addSuffix: true,
-        locale: language === 'ar' ? ar : enUS
-      });
-    } catch {
-      return String(dateValue);
-    }
-  };
 
   // Helper to get page name from pageId
   const getPageName = (pageId: string | null): string | null => {
@@ -281,13 +271,6 @@ const DashboardPage: NextPageWithLayout = () => {
     setOnboardingVisible(false);
   };
   
-  // Use a helper to check needs attention for badge logic
-  const checkNeedsAttention = (c: Comment): boolean => {
-    if (c.replied) return false;
-    const helpKeywords = ['human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue', 'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'];
-    return helpKeywords.some(kw => c.message.toLowerCase().includes(kw));
-  };
-
   // Dashboard Skeleton Loading State
   if (loading) {
     return <PageSkeleton type="dashboard" />;
@@ -333,7 +316,7 @@ const DashboardPage: NextPageWithLayout = () => {
       </div>
 
       {/* Today's Activity Summary */}
-      {(statsData.commentsToday > 0 || statsData.aiReplies > 0 || statsData.manualReplies > 0) && (
+      {(statsData.commentsToday > 0 || statsData.aiReplies > 0 || statsData.templateReplies > 0) && (
         <div className="mb-8 p-4 bg-white rounded-2xl border border-surface-100 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             {/* Today vs Yesterday */}
@@ -380,12 +363,12 @@ const DashboardPage: NextPageWithLayout = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
-                  <User className="w-4 h-4 text-violet-600" />
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                  <Zap className="w-4 h-4 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-surface-900">{statsData.manualReplies}</p>
-                  <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wide">{t('common.manual' as TranslationKey)}</p>
+                  <p className="text-sm font-bold text-surface-900">{statsData.templateReplies}</p>
+                  <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wide">{t('dashboard.templateReply' as TranslationKey)}</p>
                 </div>
               </div>
             </div>
@@ -405,86 +388,17 @@ const DashboardPage: NextPageWithLayout = () => {
           </div>
 
           <div className="divide-y divide-surface-100 min-h-[300px]">
-            {recentComments.length > 0 ? recentComments.map((comment, i) => {
-              const needsAttention = checkNeedsAttention(comment);
-              return (
-                <div
-                  key={comment.id}
-                  className="px-5 py-4 hover:bg-brand-50/20 transition-all group animate-slide-up"
-                  onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
-                  style={{ animationDelay: `${(i + 3) * 0.1}s` } as React.CSSProperties}
-                >
-                  <div className="flex flex-col gap-2">
-                    {/* Row 1: Name + Page + Time */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                       <span className="font-bold text-surface-900 text-sm">
-                          {comment.fromName || t('common.unknownUser')}
-                       </span>
-                       {getPageName(comment.pageId) && (
-                         <>
-                           <span className="text-surface-300">•</span>
-                           <span className="text-xs font-medium text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
-                             {getPageName(comment.pageId)}
-                           </span>
-                         </>
-                       )}
-                       <span className="text-surface-300">•</span>
-                       <span className="text-xs font-medium text-surface-400">
-                         {formatTime(comment.createdAt)}
-                       </span>
-                    </div>
-
-                    {/* Row 2: Preview (Max 2 lines) */}
-                    <p className="text-surface-700 text-sm leading-relaxed line-clamp-2">
-                      {comment.message}
-                    </p>
-                    
-                    {/* Row 3: Badge + Action */}
-                    <div className="flex items-center justify-between mt-1">
-                      <div className="flex items-center">
-                        {comment.replied ? (
-                          <Badge variant="success" size="sm" className="px-2 py-0.5 rounded-md shadow-sm">
-                            <span className="flex items-center gap-1 font-bold text-[10px]">
-                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                               {t('comments.replied')}
-                            </span>
-                          </Badge>
-                        ) : needsAttention ? (
-                           <Badge variant="error" size="sm" className="px-2 py-0.5 rounded-md shadow-sm">
-                            <span className="flex items-center gap-1 font-bold text-[10px]">
-                               <AlertTriangle className="w-3 h-3" />
-                               {t('comments.needsAttention')}
-                            </span>
-                          </Badge>
-                        ) : (
-                          <Badge variant="warning" size="sm" className="px-2 py-0.5 rounded-md shadow-sm">
-                            <span className="flex items-center gap-1 font-bold text-[10px]">
-                               <Clock className="w-3 h-3" />
-                               {t('dashboard.pending')}
-                            </span>
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* Action Button - Quick Reply */}
-                      {!comment.replied && (
-                          <Button
-                            size="sm"
-                            variant="primary" 
-                            className="h-8 px-4 rounded-lg shadow-sm hover:shadow-brand-500/20 text-xs font-bold"
-                            onClick={(e) => {
-                              e.stopPropagation(); // Don't trigger full view
-                              setSelectedCommentData({ comment, mode: 'quick' });
-                            }}
-                          >
-                             {t('comments.quickReply' as any)} 
-                          </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            }) : (
+            {recentComments.length > 0 ? recentComments.map((comment, i) => (
+              <CommentCard
+                key={comment.id}
+                comment={comment}
+                variant="compact"
+                pageName={getPageName(comment.pageId) || undefined}
+                animationDelay={(i + 3) * 0.1}
+                onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
+                onQuickReply={() => setSelectedCommentData({ comment, mode: 'quick' })}
+              />
+            )) : (
               <div className="py-14 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
                   <MessageSquare className="w-8 h-8 text-surface-300" />

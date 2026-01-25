@@ -6,27 +6,23 @@ import { useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { CommentDetailModal } from '@/components/comments/CommentDetailModal';
+import { CommentDetailModal, CommentCard, checkNeedsAttention } from '@/components/comments';
 import { useAuthStore } from '@/lib/store';
 import { commentsApi, pagesApi } from '@/lib/api';
 import {
   MessageSquare,
   Search,
   Bot,
-  FileText,
   Clock,
   CheckCircle,
   Download,
   AlertTriangle,
   ExternalLink,
-  Globe,
   X,
-  Sparkles,
   Zap
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { formatDistanceToNow, format } from 'date-fns';
-import { ar, enUS } from 'date-fns/locale';
+import { format } from 'date-fns';
 import type { Comment, Page } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -38,7 +34,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
   type FilterType = 'all' | 'template' | 'ai' | 'pending' | 'needs_attention' | 'replied_today' | 'flagged';
 
   const CommentsPage: NextPageWithLayout = () => {
-    const { t, language } = useTranslation();
+    const { t } = useTranslation();
     const { isAuthenticated } = useAuthStore();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -113,15 +109,6 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
       }
     }, [searchParams]);
   
-    // Check if comment needs human attention
-    const checkNeedsAttention = useCallback((comment: Comment): boolean => {
-      if (comment.replied) return false;
-      const helpKeywords = ['human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue',
-        'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'];
-      const messageText = comment.message.toLowerCase();
-      return helpKeywords.some(kw => messageText.includes(kw));
-    }, []);
-  
     const filteredComments = useMemo(() => {
       return comments.filter(comment => {
         const matchesSearch = comment.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -161,8 +148,8 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
         
         return matchesSearch && matchesFilter;
       });
-    }, [comments, filter, searchQuery, checkNeedsAttention]);
-  
+    }, [comments, filter, searchQuery]);
+
     const stats = useMemo(() => ({
       total: comments.length,
       // "Replied" card now represents ONLY Template/Manual replies (Mutually exclusive from AI)
@@ -170,7 +157,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
       pending: comments.filter(c => !c.replied).length,
       aiReplies: comments.filter(c => c.replyMethod === 'ai').length,
       needsAttention: comments.filter(c => checkNeedsAttention(c)).length,
-    }), [comments, checkNeedsAttention]);
+    }), [comments]);
   
     // Update Page Title
     useEffect(() => {
@@ -221,18 +208,6 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
       fetchComments();
     }
   }, [isAuthenticated, fetchComments]);
-
-  const formatTime = (dateValue: string | Date | null | undefined) => {
-    if (!dateValue) return '-';
-    try {
-      return formatDistanceToNow(new Date(dateValue), {
-        addSuffix: true,
-        locale: language === 'ar' ? ar : enUS
-      });
-    } catch {
-      return String(dateValue);
-    }
-  };
 
   const getFilterChipLabel = (filterType: FilterType) => {
     switch (filterType) {
@@ -413,130 +388,19 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
           )}
         >
           {filteredComments.map((comment, i) => {
-            const needsAttention = checkNeedsAttention(comment);
+            const pageId = comment.pageId;
+            const page = pages.find(p => p.id === pageId);
             return (
-              <Card
+              <CommentCard
                 key={comment.id}
-                hover
-                className={clsx(
-                  "animate-slide-up group/card cursor-pointer border-none shadow-sm hover:shadow-lg transition-all duration-300 rounded-2xl overflow-hidden relative",
-                  needsAttention && 'ring-1 ring-red-100'
-                )}
-                style={{ 
-                    animationDelay: `${(i % 10) * 0.05}s`,
-                } as React.CSSProperties}
+                comment={comment}
+                variant="full"
+                pageName={pages.length > 1 ? page?.name : undefined}
+                showPostInfo={true}
+                animationDelay={(i % 10) * 0.05}
                 onClick={() => setSelectedComment(comment)}
-              >
-                {/* Left Accent Bar */}
-                <div className={clsx(
-                    "absolute inset-y-0 start-0 w-1 transition-all duration-300",
-                    comment.replied ? "bg-emerald-500" : "bg-amber-500",
-                    needsAttention && "bg-red-500 w-1.5"
-                )} />
-
-                {/* Top-Right Unified Status Tag */}
-                {needsAttention ? (
-                  <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider">
-                    <AlertTriangle className="w-3 h-3" />
-                    {t('comments.needsAttention')}
-                  </div>
-                ) : comment.replied ? (
-                   <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider">
-                     <CheckCircle className="w-3 h-3" />
-                     {t('comments.replied')}
-                   </div>
-                ) : (
-                   <div className="absolute top-4 end-4 flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider opacity-60">
-                     <Clock className="w-3 h-3" />
-                     {t('dashboard.pending')}
-                   </div>
-                )}
-
-                <div className="p-4 sm:p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-start gap-4 sm:gap-6">
-                    {/* User Info */}
-                    <div className="flex-1 min-w-0 text-start">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className="font-bold text-surface-900 text-lg">{comment.fromName || t('common.unknownUser')}</span>
-                        
-                        <span className="text-surface-300 hidden sm:inline">•</span>
-                        <div className="flex items-center gap-1 text-xs font-medium text-surface-400">
-                          <Clock className="w-3 h-3" />
-                          {formatTime(comment.createdAt)}
-                        </div>
-                      </div>
-
-                      <p className="text-surface-700 text-base leading-relaxed mb-4 italic italic-arabic">"{comment.message}"</p>
-
-                      {/* Post Info */}
-                      <div className="flex items-center gap-3 text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-4 lg:mb-0">
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-surface-50 rounded-lg">
-                          <FileText className="w-3 h-3" />
-                          <span>POST: {comment.postId?.slice(0, 8)}</span>
-                        </div>
-                        {comment.detectedLanguage && (
-                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface-50 text-surface-500">
-                            <Globe className="w-3 h-3" />
-                            <span>{comment.detectedLanguage === 'ar' ? t('templates.arabic') : t('templates.english')}</span>
-                          </div>
-                        )}
-                        {/* Page Source Indicator (Multi-Page Only) */}
-                        {pages.length > 1 && (
-                            (() => {
-                                // Cast to any because shared type update might not be picked up yet
-                                const pageId = (comment as any).pageId;
-                                const page = pages.find(p => p.id === pageId);
-                                if (!page) return null;
-                                return (
-                                    <div className="flex items-center gap-1.5 px-2 py-1 bg-brand-50 text-brand-700 rounded-lg">
-                                        {/* Mobile-friendly truncate */}
-                                        <div className="font-bold max-w-[80px] sm:max-w-[100px] truncate">{page.name}</div>
-                                    </div>
-                                );
-                            })()
-                        )}
-                      </div>
-
-                      {/* Reply Preview (Full width on mobile) */}
-                      {comment.replied && comment.replyText && (
-                        <div className="mt-4 p-4 bg-brand-50/20 rounded-2xl border border-brand-100 relative group/reply overflow-hidden">
-                           <div className="absolute top-0 end-0 p-2 opacity-10">
-                             <Zap className="w-8 h-8 text-brand-500" />
-                           </div>
-                           <div className="flex items-center justify-between mb-2">
-                             <div className="flex items-center gap-2">
-                               <div className={clsx("p-1 rounded-lg", comment.replyMethod === 'ai' ? "bg-violet-100 text-violet-600" : "bg-emerald-100 text-emerald-600")}>
-                                 {comment.replyMethod === 'ai' ? <Sparkles className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
-                               </div>
-                               <span className={clsx("text-xs font-bold uppercase tracking-wider", comment.replyMethod === 'ai' ? "text-violet-700" : "text-emerald-700")}>
-                                 {comment.replyMethod === 'ai' ? t('dashboard.aiReply') : t('dashboard.templateReply')}
-                               </span>
-                             </div>
-                           </div>
-                           <p className="text-sm text-surface-600 line-clamp-2 italic italic-arabic">"{comment.replyText}"</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quick Actions - Better Placement */}
-                    <div className="flex lg:flex-col items-center gap-3 lg:items-end flex-shrink-0 justify-end w-full lg:w-auto mt-2 lg:mt-0 border-t border-surface-100 pt-3 lg:border-0 lg:pt-0">
-                       {!comment.replied && (
-                        <Button 
-                          variant="primary" 
-                          size="sm" 
-                          className="rounded-xl px-4 py-2 transition-all shadow-sm hover:shadow-md group-hover/card:shadow-brand-500/20 w-full sm:w-auto"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedComment(comment);
-                          }}
-                        >
-                          {t('comments.reply')}
-                        </Button>
-                       )}
-                    </div>
-                  </div>
-                </div>
-              </Card>
+                onQuickReply={() => setSelectedComment(comment)}
+              />
             );
           })}
         </div>
