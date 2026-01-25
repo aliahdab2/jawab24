@@ -44,7 +44,9 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
         "w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
         color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
           color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
-            'bg-amber-50 text-amber-600 shadow-amber-500/10'
+          color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/10' :
+          color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/10' :
+          'bg-red-50 text-red-600 shadow-red-500/10'
       )}>
         <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
       </div>
@@ -90,7 +92,9 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
       "absolute -end-4 -bottom-4 w-20 h-20 rounded-full opacity-[0.08] transition-all duration-700 group-hover:scale-125 group-hover:opacity-[0.15]",
       color === 'brand' ? 'bg-brand-500' :
       color === 'emerald' ? 'bg-emerald-500' :
-      'bg-amber-500'
+      color === 'amber' ? 'bg-amber-500' :
+      color === 'violet' ? 'bg-violet-500' :
+      'bg-red-500'
     )}></div>
   );
 

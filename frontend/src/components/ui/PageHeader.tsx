@@ -14,7 +14,7 @@ export function PageHeader({ title, description, action, className }: PageHeader
           {title}
         </h1>
         {description && (
-          <p className="text-sm sm:text-lg text-surface-500 mt-1 sm:mt-2 font-medium leading-relaxed line-clamp-2 sm:line-clamp-none">
+          <p className="text-sm sm:text-lg text-surface-500 mt-2 sm:mt-3 font-medium leading-relaxed line-clamp-2 sm:line-clamp-none">
             {description}
           </p>
         )}

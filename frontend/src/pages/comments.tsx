@@ -279,7 +279,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 
       {/* Stats - Premium Physical Feedback */}
       {/* Stats - Grid Layout */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-12">
         <div onClick={() => updateFilter('all')}>
           <StatCard
             nameKey="comments.allComments"
@@ -343,7 +343,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
       </div>
 
       {/* Filters & Search - Integrated Chip Row */}
-      <Card className="mb-8 border-none shadow-md shadow-surface-200/20 overflow-visible" padding="none">
+      <Card className="mb-12 border-none shadow-md shadow-surface-200/20 overflow-visible" padding="none">
         <div className="p-4 sm:p-5 flex flex-col md:flex-row items-center gap-4">
           <div className="relative group flex-1 w-full">
             <Search
@@ -411,7 +411,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
            return (
             <div 
               className={clsx(
-                "grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12 transition-all duration-300 ease-out",
+                "grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12 transition-all duration-300 ease-out",
                 isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
               )}
             >

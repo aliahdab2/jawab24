@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactElement } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, PageHeader, Button, PageSkeleton } from '@/components/ui';
@@ -34,22 +34,28 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-end text-xs">
-        <span className="font-bold text-surface-500 opacity-80">
+        <span className="font-bold text-surface-500 opacity-80 uppercase tracking-wider">
           {label}
         </span>
-        <span className="font-bold text-surface-900 text-sm">
-          {used.toLocaleString()} <span className="text-surface-400 font-medium">/ {limit ? limit.toLocaleString() : '∞'}</span>
-        </span>
+        <div className="flex items-baseline gap-1">
+          <span className="font-bold text-surface-900 text-lg leading-none">
+            {used.toLocaleString()}
+          </span>
+          <span className="text-surface-400 font-medium text-xs">/ {limit ? limit.toLocaleString() : '∞'}</span>
+        </div>
       </div>
-      <div className="h-2.5 w-full bg-surface-100 rounded-full overflow-hidden shadow-inner p-0.5">
+      <div className="h-2.5 w-full bg-surface-100 rounded-full overflow-hidden shadow-inner p-0.5 relative">
         <div
           className={clsx(
-            "h-full rounded-full transition-all duration-1000 relative",
+            "h-full rounded-full transition-all duration-1000 relative shadow-sm",
             percent > 90 ? 'bg-gradient-to-r from-red-500 to-red-600' :
               percent > 75 ? 'bg-gradient-to-r from-amber-500 to-amber-600' :
                 'bg-gradient-to-r from-brand-500 to-brand-600'
           )}
-          style={{ width: `${Math.min(percent, 100)}%` }}
+          style={{ 
+            width: `${Math.min(percent, 100)}%`,
+            boxShadow: percent > 10 ? `0 0 10px ${percent > 90 ? 'rgba(239, 68, 68, 0.3)' : percent > 75 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(20, 184, 166, 0.3)'}` : 'none'
+          }}
         >
           {percent > 20 && (
             <div className="absolute inset-0 bg-white/20 animate-pulse-soft"></div>
@@ -65,7 +71,7 @@ const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
 
 const DashboardPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, fbToken } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   
   const [loading, setLoading] = useState(true);
@@ -231,6 +237,19 @@ const DashboardPage: NextPageWithLayout = () => {
     }
   }, [setOnboardingVisible]);
 
+  // Auto-sync if no pages found (Ported from pages.tsx)
+  const syncAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncAttemptedRef.current) {
+      syncAttemptedRef.current = true;
+      api.post('/pages/sync', { accessToken: fbToken })
+        .then(() => {
+          fetchDashboardData();
+        })
+        .catch(err => console.error('Dashboard: Auto-sync failed', err));
+    }
+  }, [loading, pages.length, fbToken, isAuthenticated, fetchDashboardData]);
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchDashboardData();
@@ -371,7 +390,7 @@ const DashboardPage: NextPageWithLayout = () => {
       )}
 
       {/* Comments Stats Section */}
-      <div className="mb-6">
+      <div className="mb-10">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
@@ -397,7 +416,7 @@ const DashboardPage: NextPageWithLayout = () => {
       </div>
 
       {/* Messages Stats Section */}
-      <div className="mb-6">
+      <div className="mb-10">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageCircle className="w-4 h-4" />
@@ -576,7 +595,7 @@ const DashboardPage: NextPageWithLayout = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-6 relative z-10">
+                    <div className="space-y-8 relative z-10">
                       <UsageProgress
                         label={t('subscription.aiRepliesUsed')}
                         used={usage.aiReplies.used}
@@ -585,9 +604,9 @@ const DashboardPage: NextPageWithLayout = () => {
                       />
                       <UsageProgress
                         label={t('subscription.pagesUsed')}
-                        used={usage.pages.used}
+                        used={Math.max(usage.pages.used, pages.length)}
                         limit={usage.pages.limit}
-                        percent={usage.pages.limit ? (usage.pages.used / usage.pages.limit) * 100 : 0}
+                        percent={usage.pages.limit ? (Math.max(usage.pages.used, pages.length) / usage.pages.limit) * 100 : 0}
                       />
                     </div>
 
@@ -603,7 +622,7 @@ const DashboardPage: NextPageWithLayout = () => {
                     )}
 
                     {isPaidPlan ? (
-                      <Link href="/settings" className="block mt-8">
+                      <Link href="/pricing" className="block mt-8">
                         <Button
                           variant="secondary"
                           className="w-full py-4 text-sm"
