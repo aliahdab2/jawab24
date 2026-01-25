@@ -18,9 +18,10 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
   title?: string;
   isPublic?: boolean;
+  skipTitle?: boolean;
 }
 
-export function DashboardLayout({ children, title, isPublic = false }: DashboardLayoutProps) {
+export function DashboardLayout({ children, title, isPublic = false, skipTitle = false }: DashboardLayoutProps) {
   const router = useRouter();
   const { t, language, setLanguage } = useTranslation();
   const isRTL = language === 'ar';
@@ -99,7 +100,7 @@ export function DashboardLayout({ children, title, isPublic = false }: Dashboard
   return (
     <>
       <Head>
-        <title>{pageTitle} | Jawab24</title>
+        {!skipTitle && <title>{pageTitle} | Jawab24</title>}
       </Head>
 
       <div className="flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh" dir={isRTL ? 'rtl' : 'ltr'}>

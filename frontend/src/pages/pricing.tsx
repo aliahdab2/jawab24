@@ -475,7 +475,7 @@ const PricingPage: NextPageWithLayout = () => {
 
 // Persistent layout - prevents Sidebar remounting on navigation
 PricingPage.getLayout = (page: ReactElement) => (
-  <DashboardLayout title="Pricing" isPublic>{page}</DashboardLayout>
+  <DashboardLayout title="Pricing" isPublic skipTitle>{page}</DashboardLayout>
 );
 
 export default PricingPage;

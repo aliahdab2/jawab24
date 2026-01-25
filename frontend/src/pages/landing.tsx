@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
+import Image from 'next/image';
 import Link from 'next/link';
 import {
   MessageCircle,
@@ -408,8 +409,14 @@ export default function LandingPage() {
 
               {/* Dashboard Preview - Takes half width on mobile */}
               <div className="relative col-span-1 pt-8 sm:pt-0">
-                <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-2 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700">
-                  <img src="/images/social-icons-3d.png" alt={t('landing.images.dashboardPreview' as TranslationKey) as string} className="w-full" />
+                <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-2 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700 bg-surface-50">
+                  <Image 
+                    src="/images/social-icons-3d.png" 
+                    alt={t('landing.images.dashboardPreview' as TranslationKey) as string} 
+                    width={1200}
+                    height={675}
+                    className="w-full h-auto"
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-brand-900/20 to-transparent"></div>
                 </div>
                 {/* Decorative Elements */}
@@ -435,8 +442,13 @@ export default function LandingPage() {
               "{t('landing.testimonials.quote1')}"
             </h2>
             <div className="flex flex-col items-center">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 sm:border-4 border-white/30 overflow-hidden mb-2 sm:mb-4 shadow-xl">
-                <img src="https://ui-avatars.com/api/?name=Ahmed+S&background=white&color=0EA5E9" alt={t('landing.images.user' as TranslationKey) as string} />
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 sm:border-4 border-white/30 overflow-hidden mb-2 sm:mb-4 shadow-xl relative">
+                <Image 
+                  src="https://ui-avatars.com/api/?name=Ahmed+S&background=white&color=0EA5E9" 
+                  alt={t('landing.images.user' as TranslationKey) as string}
+                  width={64}
+                  height={64}
+                />
               </div>
               <div className="text-white font-bold text-base sm:text-xl">{t('landing.testimonials.author1')}</div>
             </div>

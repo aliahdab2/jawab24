@@ -12,6 +12,18 @@ const nextConfig = {
   // Enable static export for mobile builds (puts files in 'out' folder for Capacitor)
   output: isMobile ? 'export' : undefined,
 
+  images: {
+    unoptimized: isMobile,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ui-avatars.com',
+        port: '',
+        pathname: '/api/**',
+      },
+    ],
+  },
+
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api',
     NEXT_PUBLIC_FB_APP_ID: process.env.NEXT_PUBLIC_FB_APP_ID || '774211662298446',
