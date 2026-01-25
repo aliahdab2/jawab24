@@ -1,5 +1,6 @@
 import { useTranslation } from '@/i18n';
 import { LegalPageLayout } from '@/components/layout/LegalPageLayout';
+import { BRAND_ASSETS } from '@/constants/brand';
 
 export default function TermsOfService() {
   const { t } = useTranslation();
@@ -53,7 +54,7 @@ export default function TermsOfService() {
       title={t('terms.title')}
       seoTitle={t('terms.seoTitle')}
       metaDescription={t('terms.metaDescription')}
-      canonicalUrl="https://jawab24.com/terms"
+      canonicalUrl={BRAND_ASSETS.urls.canonical('/terms')}
       lastUpdatedLabel={t('terms.lastUpdated')}
       lastUpdatedDate={t('terms.updateDate')}
       backToHomeLabel={t('terms.backToHome')}

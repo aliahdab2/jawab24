@@ -123,8 +123,7 @@ export default function LandingPage() {
       <Head>
         <title>{BRAND_ASSETS.meta.appTitle}</title>
         <meta name="description" content={t('landing.seoDescription')} />
-        <meta name="keywords" content={t('landing.seoKeywords')} />
-        <link rel="canonical" href="https://jawab24.com/landing" />
+        <link rel="canonical" href={BRAND_ASSETS.urls.canonical('/landing')} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

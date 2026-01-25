@@ -1,5 +1,6 @@
 import { useTranslation } from '@/i18n';
 import { LegalPageLayout } from '@/components/layout/LegalPageLayout';
+import { BRAND_ASSETS } from '@/constants/brand';
 
 export default function PrivacyPolicy() {
   const { t } = useTranslation();
@@ -57,7 +58,7 @@ export default function PrivacyPolicy() {
       title={t('privacy.title')}
       seoTitle={t('privacy.seoTitle')}
       metaDescription={t('privacy.metaDescription')}
-      canonicalUrl="https://jawab24.com/privacy"
+      canonicalUrl={BRAND_ASSETS.urls.canonical('/privacy')}
       lastUpdatedLabel={t('privacy.lastUpdated')}
       lastUpdatedDate={t('privacy.updateDate')}
       backToHomeLabel={t('privacy.backToHome')}

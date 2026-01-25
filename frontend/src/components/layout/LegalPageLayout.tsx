@@ -25,6 +25,7 @@ interface LegalPageLayoutProps {
   lastUpdatedDate: string;
   backToHomeLabel: string;
   sections: Section[];
+  ogImage?: string;
 }
 
 export function LegalPageLayout({
@@ -36,6 +37,7 @@ export function LegalPageLayout({
   lastUpdatedDate,
   backToHomeLabel,
   sections,
+  ogImage = 'https://jawab24.com/brand/og-social.png',
 }: LegalPageLayoutProps) {
   const { language } = useTranslation();
   const isRTL = language === 'ar';
@@ -47,7 +49,14 @@ export function LegalPageLayout({
         <meta name="description" content={metaDescription} />
         <link rel="canonical" href={canonicalUrl} />
         <meta property="og:title" content={seoTitle} />
+        <meta property="og:description" content={metaDescription} />
         <meta property="og:url" content={canonicalUrl} />
+        <meta property="og:image" content={ogImage} />
+        <meta property="og:type" content="article" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={seoTitle} />
+        <meta name="twitter:description" content={metaDescription} />
+        <meta name="twitter:image" content={ogImage} />
       </Head>
 
       <div dir={isRTL ? 'rtl' : 'ltr'} className="flex-1 overflow-y-auto bg-slate-900 text-white">

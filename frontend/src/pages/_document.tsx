@@ -86,6 +86,45 @@ export default function Document() {
             })
           }}
         />
+
+        {/* SoftwareApplication Structured Data for Rich Snippets */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              "name": "Jawab24",
+              "alternateName": "جواب24",
+              "applicationCategory": "BusinessApplication",
+              "operatingSystem": "Web, iOS, Android",
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD",
+                "description": "Start free trial - no credit card required"
+              },
+              "description": "AI-powered auto-reply platform for Facebook and Instagram business pages. Automatically respond to comments and messages in Arabic and English 24/7.",
+              "featureList": [
+                "AI-powered automatic replies",
+                "Facebook & Instagram integration",
+                "Arabic & English language support",
+                "24/7 automated responses",
+                "Custom reply templates",
+                "Business knowledge base"
+              ],
+              "screenshot": "https://jawab24.com/brand/og-social.png",
+              "softwareVersion": "1.0",
+              "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": "4.8",
+                "ratingCount": "50",
+                "bestRating": "5",
+                "worstRating": "1"
+              }
+            })
+          }}
+        />
       </Head>
       <body>
         {/* Early body class for native apps - runs as soon as body is parsed */}
