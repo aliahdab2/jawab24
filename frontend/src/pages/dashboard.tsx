@@ -504,17 +504,29 @@ const DashboardPage: NextPageWithLayout = () => {
           </div>
 
           <div className="divide-y divide-surface-100">
-            {recentComments.length > 0 ? recentComments.map((comment, i) => (
-              <CommentCard
-                key={comment.id}
-                comment={comment}
-                variant="compact"
-                pageName={getPageName(comment.pageId) || undefined}
-                animationDelay={(i + 3) * 0.1}
-                onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
-                onQuickReply={() => setSelectedCommentData({ comment, mode: 'quick' })}
-              />
-            )) : (
+            {recentComments.length > 0 ? (
+              (() => {
+                const showPageName = pages.length > 1;
+                // Check if user has active pages on BOTH platforms
+                const hasFacebook = pages.some(p => !!p.facebookPageId);
+                const hasInstagram = pages.some(p => !!p.instagramAccountId);
+                const showPlatformIcon = hasFacebook && hasInstagram;
+
+                return recentComments.map((comment, i) => (
+                  <CommentCard
+                    key={comment.id}
+                    comment={comment}
+                    variant="compact"
+                    pageName={getPageName(comment.pageId) || undefined}
+                    showPageName={showPageName}
+                    showPlatformIcon={showPlatformIcon}
+                    animationDelay={(i + 3) * 0.1}
+                    onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
+                    onQuickReply={() => setSelectedCommentData({ comment, mode: 'quick' })}
+                  />
+                ));
+              })()
+            ) : (
               <div className="py-12 text-center">
                 <div className="w-14 h-14 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
                   <MessageSquare className="w-7 h-7 text-surface-300" />

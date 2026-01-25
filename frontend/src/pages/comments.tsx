@@ -401,29 +401,41 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 
       {/* Comments List - Smart Transitions + XL Grid */}
       {filteredComments.length > 0 ? (
-        <div 
-          className={clsx(
-            "grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12 transition-all duration-300 ease-out",
-            isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
-          )}
-        >
-          {filteredComments.map((comment, i) => {
-            const pageId = comment.pageId;
-            const page = pages.find(p => p.id === pageId);
-            return (
-              <CommentCard
-                key={comment.id}
-                comment={comment}
-                variant="full"
-                pageName={pages.length > 1 ? page?.name : undefined}
-                showPostInfo={true}
-                animationDelay={(i % 10) * 0.05}
-                onClick={() => setSelectedComment(comment)}
-                onQuickReply={() => setSelectedComment(comment)}
-              />
-            );
-          })}
-        </div>
+        (() => {
+           // Calculate platform visibility logic (same as Dashboard)
+           const showPageName = pages.length > 1;
+           const hasFacebook = pages.some(p => !!p.facebookPageId);
+           const hasInstagram = pages.some(p => !!p.instagramAccountId);
+           const showPlatformIcon = hasFacebook && hasInstagram;
+
+           return (
+            <div 
+              className={clsx(
+                "grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12 transition-all duration-300 ease-out",
+                isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
+              )}
+            >
+              {filteredComments.map((comment, i) => {
+                const pageId = comment.pageId;
+                const page = pages.find(p => p.id === pageId);
+                return (
+                  <CommentCard
+                    key={comment.id}
+                    comment={comment}
+                    variant="full"
+                    pageName={page?.name}
+                    showPageName={showPageName}
+                    showPlatformIcon={showPlatformIcon}
+                    showPostInfo={true}
+                    animationDelay={(i % 10) * 0.05}
+                    onClick={() => setSelectedComment(comment)}
+                    onQuickReply={() => setSelectedComment(comment)}
+                  />
+                );
+              })}
+            </div>
+          );
+        })()
       ) : (
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl" padding="lg">
           <div className="py-10 text-center">

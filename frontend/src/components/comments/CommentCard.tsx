@@ -22,6 +22,8 @@ export interface CommentCardProps {
   onQuickReply?: (e: React.MouseEvent) => void;
   variant?: 'compact' | 'full';
   pageName?: string;
+  showPageName?: boolean;
+  showPlatformIcon?: boolean;
   showPostInfo?: boolean;
   animationDelay?: number;
   className?: string;
@@ -48,6 +50,8 @@ export function CommentCard({
   onQuickReply,
   variant = 'compact',
   pageName,
+  showPageName = true,
+  showPlatformIcon = false,
   showPostInfo = false,
   animationDelay = 0,
   className
@@ -81,12 +85,7 @@ export function CommentCard({
         </div>
       );
     }
-    return (
-      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider opacity-60">
-        <Clock className="w-3 h-3" />
-        {t('dashboard.pending')}
-      </div>
-    );
+    return null;
   };
 
   // Reply Preview Component
@@ -151,21 +150,44 @@ export function CommentCard({
         )} />
 
         <div className="ps-5 pe-4 py-4">
-          {/* Top-Right Status Badge */}
-          <div className="absolute top-3 end-4">
-            <StatusBadge />
-          </div>
+          {/* Top-Right Status Badge - ONLY for critical or replied states */}
+          {(needsAttention || comment.replied) && (
+            <div className="absolute top-3 end-4">
+              <StatusBadge />
+            </div>
+          )}
 
           {/* Header: Name + Page + Time */}
           <div className="flex items-center gap-2 flex-wrap mb-2 pe-24">
             <span className="font-bold text-surface-900">
               {comment.fromName || t('common.unknownUser')}
             </span>
-            {pageName && (
-              <span className="text-xs font-medium text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
-                {pageName}
-              </span>
+            
+            {/* Page Name & Platform Icon */}
+            {(showPageName || showPlatformIcon) && (
+              <div className="flex items-center gap-1.5 text-xs font-medium text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
+                
+                {/* Platform Icon */}
+                {showPlatformIcon && (
+                  <>
+                    {/* Logic: If facebookCommentId exists, it's FB. Else IG (future proof) */}
+                    {comment.facebookCommentId ? (
+                      <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                        <path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036c-2.148 0-2.797 1.66-2.797 3.592v1.402h3.475l-.532 3.665h-2.943v7.98h-5.018Z" />
+                      </svg>
+                    ) : (
+                       /* Placeholder for Instagram Icon - using generic for now unless lucide has one */
+                       <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                         <path d="M7.03013 19.6332C4.98648 19.6332 3.61554 18.2774 3.61554 16.2573V13.8834V7.74268C3.61554 5.72266 4.98648 4.36682 7.03013 4.36682H13.1678H16.9734C19.017 4.36682 20.3879 5.72266 20.3879 7.74268V13.8834V16.2573C20.3879 18.2774 19.017 19.6332 16.9734 19.6332H13.1678H7.03013ZM16.9734 18.4116C18.3375 18.4116 19.167 17.5898 19.167 16.2573V13.8834V7.74268C19.167 6.41016 18.3375 5.58838 16.9734 5.58838H13.1678H7.03013C5.66608 5.58838 4.83658 6.41016 4.83658 7.74268V13.8834V16.2573C4.83658 17.5898 5.66608 18.4116 7.03013 18.4116H13.1678H16.9734ZM12.0017 15.5684C10.0526 15.5684 8.52838 14.072 8.52838 12.006C8.52838 9.94006 10.0526 8.44373 12.0017 8.44373C13.9509 8.44373 15.4751 9.94006 15.4751 12.006C15.4751 14.072 13.9509 15.5684 12.0017 15.5684ZM12.0017 14.3468C13.2847 14.3468 14.2541 13.3854 14.2541 12.006C14.2541 10.6267 13.2847 9.66528 12.0017 9.66528C10.7187 9.66528 9.74933 10.6267 9.74933 12.006C9.74933 13.3854 10.7187 14.3468 12.0017 14.3468ZM16.6853 8.35632C16.2163 8.35632 15.8208 8.01221 15.8208 7.50293C15.8208 6.99365 16.2163 6.64954 16.6853 6.64954C17.1543 6.64954 17.5498 6.99365 17.5498 7.50293C17.5498 8.01221 17.1543 8.35632 16.6853 8.35632Z" />
+                       </svg>
+                    )}
+                  </>
+                )}
+                
+                {showPageName && pageName}
+              </div>
             )}
+
             <span className="text-surface-300">•</span>
             <span className="text-xs text-surface-400">
               {formatTime(comment.createdAt)}
