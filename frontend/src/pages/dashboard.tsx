@@ -515,8 +515,8 @@ const DashboardPage: NextPageWithLayout = () => {
               <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
                 <span>{t('common.viewAll')}</span>
                 <ArrowRight className={clsx(
-                  "w-4 h-4 transition-transform group-hover:translate-x-0.5",
-                  language === 'ar' && "rotate-180 group-hover:-translate-x-0.5"
+                  "w-4 h-4 transition-transform",
+                  language === 'ar' ? "rotate-180 group-hover:-translate-x-1" : "group-hover:translate-x-1"
                 )} />
               </Link>
             )}
