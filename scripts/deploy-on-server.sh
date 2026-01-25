@@ -66,6 +66,59 @@ determine_target() {
     echo "🎯 Deploying to: $DEPLOY_ENV"
 }
 
+# Pre-build cleanup to prevent "no space left on device" errors
+pre_build_cleanup() {
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🧹 PRE-BUILD: Disk Cleanup"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Check current disk usage
+    DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+    echo "📊 Current disk usage: ${DISK_USAGE}%"
+
+    # Always clean build cache (this is the main culprit for "no space" errors)
+    echo "🔄 Clearing Docker build cache..."
+    docker builder prune -af 2>/dev/null || true
+
+    # Clean dangling images and unused volumes
+    echo "🔄 Removing dangling images..."
+    docker image prune -f 2>/dev/null || true
+
+    # If disk usage is high (>70%), do more aggressive cleanup
+    if [ "$DISK_USAGE" -gt 70 ]; then
+        echo "⚠️  Disk usage high (${DISK_USAGE}%), running aggressive cleanup..."
+
+        # Remove images older than 48 hours (keeps current deployment safe)
+        docker image prune -af --filter "until=48h" 2>/dev/null || true
+
+        # Remove unused volumes
+        docker volume prune -f 2>/dev/null || true
+
+        # Remove stopped containers
+        docker container prune -f 2>/dev/null || true
+    fi
+
+    # If still critical (>85%), remove all unused images
+    DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+    if [ "$DISK_USAGE" -gt 85 ]; then
+        echo "🚨 Disk still critical (${DISK_USAGE}%), removing ALL unused images..."
+        docker system prune -af 2>/dev/null || true
+    fi
+
+    # Final disk check
+    DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+    echo "✅ Disk usage after cleanup: ${DISK_USAGE}%"
+
+    if [ "$DISK_USAGE" -gt 90 ]; then
+        echo "❌ ERROR: Disk usage still critical (${DISK_USAGE}%)!"
+        echo "   Manual intervention required. Consider:"
+        echo "   - Removing old logs: find /var/log -name '*.gz' -delete"
+        echo "   - Clearing apt cache: apt-get clean"
+        echo "   - Removing unused packages: apt autoremove"
+        exit 1
+    fi
+}
+
 # Build fresh Docker images
 build_images() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -248,6 +301,7 @@ cleanup() {
 validate_setup
 pull_code
 determine_target
+pre_build_cleanup  # Clean disk BEFORE building to prevent "no space" errors
 build_images
 start_new_env
 # Run migrations BEFORE switching traffic, but AFTER starting new env

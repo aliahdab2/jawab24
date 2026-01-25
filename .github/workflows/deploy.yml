@@ -99,19 +99,45 @@ jobs:
               exit 1
             fi
             
-            # Check 3: Disk space
+            # Check 3: Disk space (more aggressive - prevent "no space left" errors)
             echo ""
             echo "📋 Check 3/3: Disk Space..."
             DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
-            if [ "$DISK_USAGE" -lt 90 ]; then
+            echo "   📊 Current disk usage: $DISK_USAGE%"
+
+            # Always clean build cache before deployment (main cause of disk issues)
+            echo "   🔄 Clearing Docker build cache..."
+            docker builder prune -af 2>/dev/null || true
+
+            if [ "$DISK_USAGE" -lt 70 ]; then
               echo "   ✅ Sufficient disk space ($DISK_USAGE% used)"
             else
-              echo "   ⚠️  Disk usage high: $DISK_USAGE%"
-              echo "   Cleaning up old Docker images..."
-              docker system prune -af --filter "until=48h" 2>/dev/null || true
-              
+              echo "   ⚠️  Disk usage elevated: $DISK_USAGE%"
+              echo "   🔄 Running pre-deployment cleanup..."
+
+              # Clean dangling images
+              docker image prune -f 2>/dev/null || true
+
+              # Clean images older than 48 hours
+              docker image prune -af --filter "until=48h" 2>/dev/null || true
+
+              # Clean unused volumes
+              docker volume prune -f 2>/dev/null || true
+
               NEW_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
               echo "   📊 Disk usage after cleanup: $NEW_USAGE%"
+
+              if [ "$NEW_USAGE" -gt 85 ]; then
+                echo "   ⚠️  Disk still high, running aggressive cleanup..."
+                docker system prune -af 2>/dev/null || true
+                NEW_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+                echo "   📊 Disk usage after aggressive cleanup: $NEW_USAGE%"
+              fi
+
+              if [ "$NEW_USAGE" -gt 90 ]; then
+                echo "   ❌ ERROR: Disk usage critical! Deployment may fail."
+                echo "   Consider manually cleaning logs and apt cache on server."
+              fi
             fi
             
             echo ""
