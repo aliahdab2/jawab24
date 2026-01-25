@@ -200,7 +200,7 @@ const DashboardPage: NextPageWithLayout = () => {
     },
     {
       id: 'replied_today',
-      nameKey: 'dashboard.repliedToday' as TranslationKey, // Ensure this key exists or add
+      nameKey: 'comments.repliedToday' as TranslationKey,
       value: statsData.repliedToday.toLocaleString(),
       icon: Zap,
       color: 'emerald' as const,
@@ -208,7 +208,7 @@ const DashboardPage: NextPageWithLayout = () => {
     },
     {
       id: 'all',
-      nameKey: 'dashboard.totalComments' as TranslationKey,
+      nameKey: 'comments.totalComments' as TranslationKey,
       value: statsData.totalComments.toLocaleString(),
       icon: MessageSquare,
       color: 'brand' as const,
@@ -284,9 +284,9 @@ const DashboardPage: NextPageWithLayout = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Comments */}
         <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-white" padding="none">
-          <div className="p-5 sm:p-5 border-b border-surface-100 flex items-center justify-between gap-4 bg-surface-50/50">
+          <div className="p-4 sm:p-5 border-b border-surface-100 flex items-center justify-between gap-4 bg-surface-50/50">
             <div>
-              <h3 className="text-xl font-display font-bold text-surface-900 tracking-tight">{t('dashboard.recentComments')}</h3>
+              <h3 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('comments.latestComments' as any)}</h3>
             </div>
             {/* Removed Search/Filter Controls */}
           </div>
@@ -297,72 +297,69 @@ const DashboardPage: NextPageWithLayout = () => {
               return (
                 <div
                   key={comment.id}
-                  className="px-5 sm:px-8 py-5 sm:py-6 hover:bg-brand-50/20 transition-all group animate-slide-up"
+                  className="px-5 py-4 hover:bg-brand-50/20 transition-all group animate-slide-up"
                   onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
                   style={{ animationDelay: `${(i + 3) * 0.1}s` } as React.CSSProperties}
                 >
-                  <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                    {/* Main Content */}
-                    <div className="flex-1 min-w-0 text-start">
-                      {/* Row 1: Name + Time */}
-                      <div className="flex items-center gap-2 mb-2">
-                         <span className="font-bold text-surface-900 text-base">
-                            {comment.fromName || t('common.unknownUser')}
-                         </span>
-                         <span className="text-surface-300">•</span>
-                         <span className="text-xs font-medium text-surface-400">
-                           {formatTime(comment.createdAt)}
-                         </span>
-                      </div>
-                      
-                      {/* Row 2: Preview */}
-                      <p className="text-surface-600 text-sm leading-relaxed mb-3 line-clamp-2 italic italic-arabic">
-                        "{comment.message}"
-                      </p>
-                      
-                      {/* Row 3: Badge */}
-                      <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2">
+                    {/* Row 1: Name + Time */}
+                    <div className="flex items-center gap-2">
+                       <span className="font-bold text-surface-900 text-sm">
+                          {comment.fromName || t('common.unknownUser')}
+                       </span>
+                       <span className="text-surface-300">•</span>
+                       <span className="text-xs font-medium text-surface-400">
+                         {formatTime(comment.createdAt)}
+                       </span>
+                    </div>
+
+                    {/* Row 2: Preview (Max 2 lines) */}
+                    <p className="text-surface-700 text-sm leading-relaxed line-clamp-2">
+                      {comment.message}
+                    </p>
+                    
+                    {/* Row 3: Badge + Action */}
+                    <div className="flex items-center justify-between mt-1">
+                      <div className="flex items-center">
                         {comment.replied ? (
-                          <Badge variant="success" size="sm" className="px-2.5 py-0.5 rounded-lg shadow-sm">
-                            <span className="flex items-center gap-1.5 font-bold">
+                          <Badge variant="success" size="sm" className="px-2 py-0.5 rounded-md shadow-sm">
+                            <span className="flex items-center gap-1 font-bold text-[10px]">
                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                {t('comments.replied')}
                             </span>
                           </Badge>
                         ) : needsAttention ? (
-                           <Badge variant="error" size="sm" className="px-2.5 py-0.5 rounded-lg shadow-sm">
-                            <span className="flex items-center gap-1.5 font-bold">
+                           <Badge variant="error" size="sm" className="px-2 py-0.5 rounded-md shadow-sm">
+                            <span className="flex items-center gap-1 font-bold text-[10px]">
                                <AlertTriangle className="w-3 h-3" />
                                {t('comments.needsAttention')}
                             </span>
                           </Badge>
                         ) : (
-                          <Badge variant="warning" size="sm" className="px-2.5 py-0.5 rounded-lg shadow-sm">
-                            <span className="flex items-center gap-1.5 font-bold">
+                          <Badge variant="warning" size="sm" className="px-2 py-0.5 rounded-md shadow-sm">
+                            <span className="flex items-center gap-1 font-bold text-[10px]">
                                <Clock className="w-3 h-3" />
                                {t('dashboard.pending')}
                             </span>
                           </Badge>
                         )}
                       </div>
-                    </div>
-                    
-                    {/* Action Button - Quick Reply */}
-                    {!comment.replied && (
-                       <div className="self-start sm:self-center flex-shrink-0 pt-2 sm:pt-0 w-full sm:w-auto">
+
+                      {/* Action Button - Quick Reply */}
+                      {!comment.replied && (
                           <Button
                             size="sm"
                             variant="primary" 
-                            className="w-full sm:w-auto rounded-xl shadow-sm hover:shadow-brand-500/20"
+                            className="h-8 px-4 rounded-lg shadow-sm hover:shadow-brand-500/20 text-xs font-bold"
                             onClick={(e) => {
                               e.stopPropagation(); // Don't trigger full view
                               setSelectedCommentData({ comment, mode: 'quick' });
                             }}
                           >
-                             {t('comments.reply')} 
+                             {t('comments.quickReply' as any)} 
                           </Button>
-                       </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -372,9 +369,10 @@ const DashboardPage: NextPageWithLayout = () => {
                   <MessageSquare className="w-8 h-8 text-surface-300" />
                 </div>
                 <p className="text-base font-semibold text-surface-600 mb-2">
-                  {t('dashboard.noNewComments' as any)} 
-                  {/* Need to ensure this translation key exists or use fallback */}
-                  {!t('dashboard.noNewComments' as any) && "No new comments 🎉"}
+                   {statsData.pendingReplies === 0 
+                      ? t('comments.noPendingComments' as any) 
+                      : t('comments.noCommentsYet' as any)
+                   }
                 </p>
                 {/* Fallback empty state */}
                 {pages.length === 0 && (
@@ -390,9 +388,9 @@ const DashboardPage: NextPageWithLayout = () => {
           
           {/* View All Button */}
           {recentComments.length > 0 && (
-             <div className="p-4 border-t border-surface-100 bg-surface-50/30">
+             <div className="p-3 border-t border-surface-100 bg-surface-50/30">
                 <Link href="/comments">
-                   <Button variant="secondary" className="w-full justify-center group text-surface-600 hover:text-brand-600">
+                   <Button variant="ghost" className="w-full justify-center group text-surface-500 hover:text-brand-600 hover:bg-surface-100 border border-transparent hover:border-surface-200">
                       {t('dashboard.viewAllComments')} 
                       {!t('dashboard.viewAllComments') && "View All Comments"}
                       <ArrowRight className="w-4 h-4 ms-2 transition-transform group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1" />
