@@ -116,22 +116,20 @@ export function CommentCard({
       onClick={onClick}
       style={{ animationDelay: `${animationDelay}s` } as React.CSSProperties}
     >
-      {/* Replied Badge - Top Left (or Start) */}
-      {comment.replied && (
-        <div className="absolute top-4 start-4 z-10">
-          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider shadow-sm border border-emerald-100">
-            <CheckCircle className="w-3 h-3" />
-            {t('comments.replied')}
-          </div>
-        </div>
-      )}
 
       {/* Needs Attention Badge */}
-      {needsAttention && (
-        <div className="absolute top-4 end-4 z-10">
+      {needsAttention ? (
+        <div className="absolute top-4 end-4 z-10 animate-fade-in">
            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100">
               <AlertTriangle className="w-3 h-3" />
               {t('comments.needsAttention')}
+           </div>
+        </div>
+      ) : !comment.replied && (
+        <div className="absolute top-4 end-4 z-10 animate-fade-in">
+           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider border border-amber-100">
+              <Clock className="w-3 h-3" />
+              {t('comments.pending')}
            </div>
         </div>
       )}
