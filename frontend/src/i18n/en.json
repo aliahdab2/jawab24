@@ -157,6 +157,7 @@
   "dashboard.templateReply": "Template Reply",
   "dashboard.minAgo": "min ago",
   "dashboard.todayComments": "Today's Comments",
+  "dashboard.vsYesterday": "vs yesterday",
   "dashboard.waitingReply": "Waiting for Reply",
   "dashboard.activeRepliesOn": "Auto-replies active",
   "dashboard.autoReplyNote": "We'll auto-reply to your customers' comments and messages",

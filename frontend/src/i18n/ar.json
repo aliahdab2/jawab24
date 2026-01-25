@@ -158,6 +158,7 @@
   "dashboard.templateReply": "رد من قالب",
   "dashboard.minAgo": "دقيقة",
   "dashboard.todayComments": "تعليقات اليوم",
+  "dashboard.vsYesterday": "مقارنة بالأمس",
   "dashboard.waitingReply": "في انتظار الرد",
   "dashboard.activeRepliesOn": "الردود التلقائية مفعلة",
   "dashboard.autoReplyNote": "سنرد على تعليقات ورسائل عملائك تلقائياً",

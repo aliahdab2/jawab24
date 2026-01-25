@@ -26,7 +26,7 @@ import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
 import type { NextPageWithLayout } from './_app';
-import { CommentDetailModal, CommentCard } from '@/components/comments';
+import { CommentDetailModal, CommentCard, checkNeedsAttention } from '@/components/comments';
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
@@ -141,11 +141,8 @@ const DashboardPage: NextPageWithLayout = () => {
         return c.replied && c.repliedAt && isToday(new Date(c.repliedAt));
       }).length;
 
-      // Calculate Needs Attention (simple heuristic same as comments page)
-      const helpKeywords = ['human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue', 'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'];
-      const needsAttention = allComments.filter(c =>
-        !c.replied && helpKeywords.some(kw => c.message.toLowerCase().includes(kw))
-      ).length;
+      // Calculate Needs Attention (using shared function)
+      const needsAttention = allComments.filter(c => checkNeedsAttention(c)).length;
 
       // Calculate Comments Today vs Yesterday
       const today = new Date();
@@ -336,13 +333,13 @@ const DashboardPage: NextPageWithLayout = () => {
                 </p>
                 <p className="text-xs text-surface-500">
                   {trend.direction === 'up' && (
-                    <span className="text-emerald-600">+{trend.percent}% {t('dashboard.vsLastWeek' as TranslationKey)}</span>
+                    <span className="text-emerald-600">+{trend.percent}% {t('dashboard.vsYesterday')}</span>
                   )}
                   {trend.direction === 'down' && (
-                    <span className="text-red-500">-{trend.percent}% {t('dashboard.vsLastWeek' as TranslationKey)}</span>
+                    <span className="text-red-500">-{trend.percent}% {t('dashboard.vsYesterday')}</span>
                   )}
                   {trend.direction === 'neutral' && (
-                    <span className="text-surface-400">{t('dashboard.vsLastWeek' as TranslationKey)}</span>
+                    <span className="text-surface-400">{t('dashboard.vsYesterday')}</span>
                   )}
                 </p>
               </div>
@@ -382,12 +379,21 @@ const DashboardPage: NextPageWithLayout = () => {
         <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-white" padding="none">
           <div className="p-4 sm:p-5 border-b border-surface-100 flex items-center justify-between gap-4 bg-surface-50/50">
             <div>
-              <h3 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('comments.latestComments' as any)}</h3>
+              <h3 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.recentComments')}</h3>
+              <p className="text-sm text-surface-500 mt-0.5">{t('dashboard.latestCommentsDesc')}</p>
             </div>
-            {/* Removed Search/Filter Controls */}
+            {recentComments.length > 0 && (
+              <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
+                <span>{t('common.viewAll')}</span>
+                <ArrowRight className={clsx(
+                  "w-4 h-4 transition-transform group-hover:translate-x-0.5",
+                  language === 'ar' && "rotate-180 group-hover:-translate-x-0.5"
+                )} />
+              </Link>
+            )}
           </div>
 
-          <div className="divide-y divide-surface-100 min-h-[300px]">
+          <div className="divide-y divide-surface-100">
             {recentComments.length > 0 ? recentComments.map((comment, i) => (
               <CommentCard
                 key={comment.id}
@@ -399,20 +405,16 @@ const DashboardPage: NextPageWithLayout = () => {
                 onQuickReply={() => setSelectedCommentData({ comment, mode: 'quick' })}
               />
             )) : (
-              <div className="py-14 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
-                  <MessageSquare className="w-8 h-8 text-surface-300" />
+              <div className="py-12 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
+                  <MessageSquare className="w-7 h-7 text-surface-300" />
                 </div>
-                <p className="text-base font-semibold text-surface-600 mb-2">
-                   {statsData.pendingReplies === 0 
-                      ? t('comments.noPendingComments' as any) 
-                      : t('comments.noCommentsYet' as any)
-                   }
+                <p className="text-sm font-medium text-surface-500 mb-1">
+                  {t('dashboard.noRecentComments')}
                 </p>
-                {/* Fallback empty state */}
                 {pages.length === 0 && (
                   <Link href="/pages">
-                    <Button variant="primary" size="sm" className="mt-4">
+                    <Button variant="primary" size="sm" className="mt-3">
                       {t('pages.connectPage')}
                     </Button>
                   </Link>
@@ -420,19 +422,6 @@ const DashboardPage: NextPageWithLayout = () => {
               </div>
             )}
           </div>
-          
-          {/* View All Button */}
-          {recentComments.length > 0 && (
-             <div className="p-3 border-t border-surface-100 bg-surface-50/30">
-                <Link href="/comments">
-                   <Button variant="ghost" className="w-full justify-center group text-surface-500 hover:text-brand-600 hover:bg-surface-100 border border-transparent hover:border-surface-200">
-                      {t('dashboard.viewAllComments')} 
-                      {!t('dashboard.viewAllComments') && "View All Comments"}
-                      <ArrowRight className="w-4 h-4 ms-2 transition-transform group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1" />
-                   </Button>
-                </Link>
-             </div>
-          )}
         </Card>
 
         {/* Top Pages & Usage Column */}
@@ -442,61 +431,79 @@ const DashboardPage: NextPageWithLayout = () => {
             <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-white relative group" padding="lg">
               <div className="absolute top-0 end-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-brand-500/10"></div>
 
-              <div className="flex items-center gap-5 mb-8 relative z-10">
-                <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20 transform transition-transform group-hover:rotate-6">
-                  <Crown className="w-8 h-8" />
-                </div>
-                <div className="min-w-0 flex-1 text-start">
-                  <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                  <h4 className="text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
-                    {usage.subscription.plan.name}
-                    {usage.subscription.status === 'trialing' && (
-                      <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
-                        {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
-                      </span>
+              {(() => {
+                const isTrialing = usage.subscription.status === 'trialing';
+                const isPaidPlan = usage.subscription.status === 'active' && !isTrialing;
+
+                return (
+                  <>
+                    <div className="flex items-center gap-5 mb-8 relative z-10">
+                      <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20 transform transition-transform group-hover:rotate-6">
+                        <Crown className="w-8 h-8" />
+                      </div>
+                      <div className="min-w-0 flex-1 text-start">
+                        <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
+                        <h4 className="text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
+                          {usage.subscription.plan.name}
+                          {isTrialing && (
+                            <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
+                              TRIAL
+                            </span>
+                          )}
+                        </h4>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6 relative z-10">
+                      <UsageProgress
+                        label={t('subscription.aiRepliesUsed')}
+                        used={usage.aiReplies.used}
+                        limit={usage.aiReplies.limit}
+                        percent={usage.aiReplies.percentUsed}
+                      />
+                      <UsageProgress
+                        label={t('subscription.pagesUsed')}
+                        used={usage.pages.used}
+                        limit={usage.pages.limit}
+                        percent={usage.pages.limit ? (usage.pages.used / usage.pages.limit) * 100 : 0}
+                      />
+                    </div>
+
+                    {isTrialing && usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
+                      <div className="mt-8 p-4 rounded-2xl bg-amber-50 border border-amber-100 flex items-center gap-3 text-amber-700">
+                        <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                          <Zap className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold leading-relaxed">
+                          {t('subscription.trialEndsIn')} {usage.subscription.trialDaysRemaining} {t('subscription.days')}
+                        </span>
+                      </div>
                     )}
 
-                  </h4>
-                  <p className="text-sm font-medium text-surface-500 mt-1">{t('subscription.upgradeDesc')}</p>
-                </div>
-              </div>
-
-              <div className="space-y-6 relative z-10">
-                <UsageProgress
-                  label={t('subscription.aiRepliesUsed')}
-                  used={usage.aiReplies.used}
-                  limit={usage.aiReplies.limit}
-                  percent={usage.aiReplies.percentUsed}
-                />
-                <UsageProgress
-                  label={t('subscription.pagesUsed')}
-                  used={usage.pages.used}
-                  limit={usage.pages.limit}
-                  percent={usage.pages.limit ? (usage.pages.used / usage.pages.limit) * 100 : 0}
-                />
-              </div>
-
-              {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
-                <div className="mt-8 p-4 rounded-2xl bg-amber-50 border border-amber-100 flex items-center gap-3 text-amber-700 animate-pulse-soft">
-                  <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
-                    <Zap className="w-4 h-4" />
-                  </div>
-                  <span className="text-xs font-bold leading-relaxed">
-                    {t('subscription.trialEndsIn')} {usage.subscription.trialDaysRemaining} {t('subscription.days')}
-                  </span>
-                </div>
-              )}
-
-              <Link href="/pricing" className="block mt-8">
-                <Button
-                  variant="primary"
-                  className="w-full py-6 text-base whitespace-nowrap"
-                  style={{ boxShadow: '0 12px 32px rgba(20, 184, 166, 0.24)' }}
-                  icon={<Sparkles className="w-6 h-6" />}
-                >
-                  {t('subscription.upgradePlan')}
-                </Button>
-              </Link>
+                    {isPaidPlan ? (
+                      <Link href="/settings" className="block mt-8">
+                        <Button
+                          variant="secondary"
+                          className="w-full py-4 text-sm"
+                        >
+                          {t('subscription.managePlan')}
+                        </Button>
+                      </Link>
+                    ) : (
+                      <Link href="/pricing" className="block mt-8">
+                        <Button
+                          variant="primary"
+                          className="w-full py-5 text-base whitespace-nowrap"
+                          style={{ boxShadow: '0 12px 32px rgba(20, 184, 166, 0.24)' }}
+                          icon={<Sparkles className="w-5 h-5" />}
+                        >
+                          {t('subscription.upgradePlan')}
+                        </Button>
+                      </Link>
+                    )}
+                  </>
+                );
+              })()}
             </Card>
           )}
 
@@ -514,7 +521,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
                 return (
                   <Link
-                    href={`/comments?page=${page.id}`}
+                    href="/pages"
                     key={page.id}
                     className="flex items-center gap-4 p-4 sm:p-5 group hover:bg-brand-50/30 transition-all cursor-pointer animate-slide-up"
                     style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}
@@ -577,17 +584,6 @@ const DashboardPage: NextPageWithLayout = () => {
                 </div>
               )}
             </div>
-            {pages.length > 0 && (
-              <div className="px-5 sm:px-6 py-4 border-t border-surface-100 bg-surface-50/30">
-                <Link href="/pages" className="text-sm text-brand-600 hover:text-brand-700 font-bold flex items-center justify-center gap-2 group transition-all">
-                  {t('dashboard.managePages')}
-                  <ChevronRight className={clsx(
-                    "w-4 h-4 transition-transform group-hover:translate-x-1",
-                    language === 'ar' && "rotate-180 group-hover:-translate-x-1"
-                  )} />
-                </Link>
-              </div>
-            )}
           </Card>
       </div>
     </div>
