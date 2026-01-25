@@ -516,7 +516,7 @@ const DashboardPage: NextPageWithLayout = () => {
                 <span>{t('common.viewAll')}</span>
                 <ArrowRight className={clsx(
                   "w-4 h-4 transition-transform",
-                  language === 'ar' ? "rotate-180 group-hover:-translate-x-1" : "group-hover:translate-x-1"
+                  language === 'ar' ? "group-hover:-translate-x-1" : "group-hover:translate-x-1"
                 )} />
               </Link>
             )}
