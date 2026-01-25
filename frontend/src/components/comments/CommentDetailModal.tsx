@@ -23,12 +23,14 @@ interface CommentDetailModalProps {
   comment: Comment;
   onClose: () => void;
   onReplySuccess: () => void;
+  mode?: 'full' | 'quick';
 }
 
 export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   comment,
   onClose,
   onReplySuccess,
+  mode = 'full',
 }) => {
   const { t, language } = useTranslation();
   
@@ -67,8 +69,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   }, []);
 
   useEffect(() => {
-    fetchLimits();
-  }, [fetchLimits]);
+    // Only fetch limits if AI is allowed (full mode)
+    if (mode === 'full') {
+      fetchLimits();
+    }
+  }, [fetchLimits, mode]);
 
   // Check if comment needs human attention
   const checkNeedsAttention = (c: Comment): boolean => {
@@ -178,7 +183,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-surface-900">
-                {t('comments.commentDetails')}
+                {mode === 'quick' ? t('comments.reply') : t('comments.commentDetails')}
               </h2>
               <p className="text-sm text-surface-500">
                 {comment.fromName || t('common.unknownUser')}
@@ -223,7 +228,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           </div>
 
           {/* Reply */}
-          {comment.replied && comment.replyText && (
+          {mode === 'full' && comment.replied && comment.replyText && (
             <div>
               <h3 className="text-sm font-medium text-surface-500 mb-2">
                 {t('comments.reply')}
@@ -255,36 +260,38 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-medium text-surface-700">{t('comments.reply')}</label>
                 
-                <div className="relative group/tooltip inline-block">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleGenerateAi}
-                    disabled={isGenerating || !aiLimit.allowed || isReplyGenerated}
-                    className={clsx(
-                      isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50',
-                      (!aiLimit.allowed || isReplyGenerated) && 'opacity-50 cursor-not-allowed'
+                {mode === 'full' && (
+                  <div className="relative group/tooltip inline-block">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleGenerateAi}
+                      disabled={isGenerating || !aiLimit.allowed || isReplyGenerated}
+                      className={clsx(
+                        isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50',
+                        (!aiLimit.allowed || isReplyGenerated) && 'opacity-50 cursor-not-allowed'
+                      )}
+                      icon={isReplyGenerated ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Bot className="w-4 h-4" />}
+                    >
+                      {isGenerating 
+                        ? generationStatus || t('common.loading') 
+                        : isReplyGenerated 
+                          ? 'Generated' 
+                          : !aiLimit.allowed 
+                            ? 'Limit Reached' 
+                            : t('dashboard.aiReply')}
+                    </Button>
+                    
+                    {/* Tooltip for disabled state */}
+                    {(!aiLimit.allowed || isReplyGenerated) && (
+                      <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
+                        {!aiLimit.allowed 
+                          ? aiLimit.reason || 'Monthly AI limit reached' 
+                          : 'Already generated for this comment'}
+                      </div>
                     )}
-                    icon={isReplyGenerated ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Bot className="w-4 h-4" />}
-                  >
-                    {isGenerating 
-                      ? generationStatus || t('common.loading') 
-                      : isReplyGenerated 
-                        ? 'Generated' 
-                        : !aiLimit.allowed 
-                          ? 'Limit Reached' 
-                          : t('dashboard.aiReply')}
-                  </Button>
-                  
-                  {/* Tooltip for disabled state */}
-                  {(!aiLimit.allowed || isReplyGenerated) && (
-                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
-                      {!aiLimit.allowed 
-                        ? aiLimit.reason || 'Monthly AI limit reached' 
-                        : 'Already generated for this comment'}
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
               <textarea
                 ref={textareaRef}
@@ -295,7 +302,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 disabled={isGenerating || isSending}
                 dir="auto"
               />
-              <div className="flex justify-end mt-3">
+              <div className="flex justify-end mt-3 gap-2">
+                <Button variant="secondary" onClick={onClose} disabled={isSending}>
+                   {t('common.cancel')}
+                </Button>
                 <Button
                   variant="primary"
                   onClick={handleSendReply}
@@ -313,24 +323,23 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 md:p-6 border-t border-surface-100 bg-white">
-          <div className="flex items-center justify-between">
-            {comment.facebookCommentId && (
-              <a
-                href={`https://facebook.com/${comment.facebookCommentId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-brand-600 hover:text-brand-700 flex items-center gap-1"
-              >
-                <ExternalLink className="w-4 h-4" />
-                {t('comments.viewOnFacebook')}
-              </a>
-            )}
-            <Button variant="secondary" onClick={onClose}>
-              {t('comments.close')}
-            </Button>
+        {mode === 'full' && (
+          <div className="p-4 md:p-6 border-t border-surface-100 bg-white">
+            <div className="flex items-center justify-between">
+              {comment.facebookCommentId && (
+                <a
+                  href={`https://facebook.com/${comment.facebookCommentId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {t('comments.viewOnFacebook')}
+                </a>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

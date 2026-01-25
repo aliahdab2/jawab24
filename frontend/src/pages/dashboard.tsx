@@ -5,7 +5,7 @@ import { Card, Badge, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { subscriptionApi, settingsApi, pagesApi, templatesApi, rulesApi, commentsApi } from '@/lib/api';
+import { subscriptionApi, settingsApi, pagesApi, commentsApi } from '@/lib/api';
 import {
   MessageSquare,
   Zap,
@@ -13,11 +13,11 @@ import {
   FileText,
   Sparkles,
   Crown,
-  Search,
-  X,
-  ChevronRight
+  AlertTriangle,
+  ChevronRight,
+  ArrowRight
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isToday } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
@@ -62,25 +62,21 @@ const DashboardPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
+  
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [recentComments, setRecentComments] = useState<Comment[]>([]);
-  const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   
-  // Filter States
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'replied'>('pending');
+  // Selected Comment State
+  const [selectedCommentData, setSelectedCommentData] = useState<{ comment: Comment, mode: 'full' | 'quick' } | null>(null);
   
   const [pages, setPages] = useState<Page[]>([]);
   const [statsData, setStatsData] = useState({
     totalComments: 0,
-    autoReplies: 0,
-    aiReplies: 0,
-    avgResponseTime: '< 1s', // Placeholder
-    replyRate: 0,
-    activePages: 0,
-    templatesCount: 0,
-    activeRules: 0
+    repliedToday: 0,
+    pendingReplies: 0,
+    needsAttention: 0,
+    activePages: 0
   });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
@@ -89,11 +85,9 @@ const DashboardPage: NextPageWithLayout = () => {
     try {
       setLoading(true);
       // Use API instances that handle auth via cookies (web) or Bearer token (mobile)
-      const [commentsRes, pagesRes, templatesRes, rulesRes, usageRes, settingsRes] = await Promise.all([
+      const [commentsRes, pagesRes, usageRes, settingsRes] = await Promise.all([
         commentsApi.getAll(),
         pagesApi.getAll(),
-        templatesApi.getAll(),
-        rulesApi.getAll(),
         subscriptionApi.getUsage().catch(() => null),
         settingsApi.get().catch(() => null)
       ]);
@@ -111,7 +105,7 @@ const DashboardPage: NextPageWithLayout = () => {
         });
       }
 
-      const comments: Comment[] = Array.isArray(commentsRes.data)
+      const allComments: Comment[] = Array.isArray(commentsRes.data)
         ? commentsRes.data
         : (Array.isArray(commentsRes.data?.data) ? commentsRes.data.data : []);
 
@@ -119,40 +113,46 @@ const DashboardPage: NextPageWithLayout = () => {
         ? pagesRes.data
         : (Array.isArray(pagesRes.data?.data) ? pagesRes.data.data : []);
 
-      const templates = Array.isArray(templatesRes.data)
-        ? templatesRes.data
-        : (Array.isArray(templatesRes.data?.data) ? templatesRes.data.data : []);
-
-      const rules = Array.isArray(rulesRes.data)
-        ? rulesRes.data
-        : (Array.isArray(rulesRes.data?.data) ? rulesRes.data.data : []);
-
-      setRecentComments(comments.slice(0, 5));
       setPages(fetchedPages);
 
-      // Show onboarding for new users (no pages connected and haven't completed onboarding)
+      // Show onboarding for new users
       const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
       if (fetchedPages.length === 0 && !onboardingComplete) {
         setShowOnboarding(true);
-        setOnboardingVisible(true); // Hide floating elements during onboarding
+        setOnboardingVisible(true); 
       }
 
       // Calculate stats
-      const totalComments = comments.length;
-      const repliedComments = comments.filter(c => c.replied);
-      const aiReplies = comments.filter(c => c.replyMethod === 'ai').length;
-      const autoReplies = repliedComments.length; // Assuming all replies are auto for now or tracked by method
-      const replyRate = totalComments > 0 ? Math.round((repliedComments.length / totalComments) * 100) : 0;
+      const totalComments = allComments.length;
+      
+      // Calculate Pending
+      const pendingReplies = allComments.filter(c => !c.replied).length;
+
+      // Calculate Replied Today
+      const repliedToday = allComments.filter(c => {
+        return c.replied && c.repliedAt && isToday(new Date(c.repliedAt));
+      }).length;
+
+      // Calculate Needs Attention (simple heuristic same as comments page)
+      const helpKeywords = ['human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue', 'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'];
+      const needsAttention = allComments.filter(c => 
+        !c.replied && helpKeywords.some(kw => c.message.toLowerCase().includes(kw))
+      ).length;
+
+      // Recent Comments Logic: Sort by newest, take top 5
+      const sortedComments = [...allComments].sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+      setRecentComments(sortedComments.slice(0, 5));
 
       setStatsData({
         totalComments,
-        autoReplies,
-        aiReplies,
-        avgResponseTime: '< 1s',
-        replyRate,
-        activePages: fetchedPages.filter(p => p.autoReplyEnabled).length,
-        templatesCount: templates.length,
-        activeRules: rules.filter((r: any) => r.active).length
+        repliedToday,
+        pendingReplies,
+        needsAttention,
+        activePages: fetchedPages.filter(p => p.autoReplyEnabled).length
       });
 
     } catch (error) {
@@ -163,7 +163,6 @@ const DashboardPage: NextPageWithLayout = () => {
   }, [setOnboardingVisible]);
 
   useEffect(() => {
-    // Use isAuthenticated instead of token - on web, token is null but auth is via cookies
     if (isAuthenticated) {
       fetchDashboardData();
     }
@@ -181,70 +180,60 @@ const DashboardPage: NextPageWithLayout = () => {
     }
   };
 
-  // Simplified stats - only 3 essential metrics for low-tech users
-  const stats: Array<{
-    id: 'all' | 'replied' | 'pending';
-    nameKey: TranslationKey;
-    value: string;
-    icon: React.ComponentType<{ className?: string }>;
-    color: 'brand' | 'emerald' | 'amber';
-    descriptionKey: TranslationKey;
-  }> = [
+  // Improved Stats Array
+  const stats = [
+    {
+      id: 'pending',
+      nameKey: 'dashboard.pending' as TranslationKey,
+      value: statsData.pendingReplies.toLocaleString(),
+      icon: Clock,
+      color: 'amber' as const, 
+      href: '/comments?filter=pending'
+    },
+    {
+      id: 'needs_attention',
+      nameKey: 'comments.needsAttention' as TranslationKey,
+      value: statsData.needsAttention.toLocaleString(),
+      icon: AlertTriangle,
+      color: 'red' as const, // Maps to warning/danger visually
+      href: '/comments?filter=flagged'
+    },
+    {
+      id: 'replied_today',
+      nameKey: 'dashboard.repliedToday' as TranslationKey, // Ensure this key exists or add
+      value: statsData.repliedToday.toLocaleString(),
+      icon: Zap,
+      color: 'emerald' as const,
+      href: '/comments?filter=replied_today'
+    },
     {
       id: 'all',
       nameKey: 'dashboard.totalComments' as TranslationKey,
       value: statsData.totalComments.toLocaleString(),
       icon: MessageSquare,
-      color: 'brand',
-      descriptionKey: 'dashboard.totalCommentsDesc' as TranslationKey
-    },
-    {
-      id: 'replied',
-      nameKey: 'comments.replied' as TranslationKey,
-      value: statsData.autoReplies.toLocaleString(),
-      icon: Zap,
-      color: 'emerald',
-      descriptionKey: 'dashboard.autoRepliesDesc' as TranslationKey
-    },
-    {
-      id: 'pending',
-      nameKey: 'dashboard.pending' as TranslationKey,
-      value: (statsData.totalComments - statsData.autoReplies).toLocaleString(),
-      icon: Clock,
-      color: 'amber',
-      descriptionKey: 'dashboard.pendingDesc' as TranslationKey
-    },
-  ];
-
-  // Logic: Filter Comments
-  const filteredComments = recentComments.filter(comment => {
-    // 1. Status Filter
-    if (activeFilter === 'pending' && comment.replied) return false;
-    if (activeFilter === 'replied' && !comment.replied) return false;
-
-    // 2. Search Filter
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        comment.message.toLowerCase().includes(q) ||
-        comment.fromName?.toLowerCase().includes(q) ||
-        comment.replyText?.toLowerCase().includes(q)
-      );
+      color: 'brand' as const,
+      href: '/comments'
     }
-    return true;
-  });
+  ];
 
   // Handle onboarding completion
   const handleOnboardingComplete = () => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setShowOnboarding(false);
-    setOnboardingVisible(false); // Show floating elements again
+    setOnboardingVisible(false);
   };
 
   const handleOnboardingSkip = () => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setShowOnboarding(false);
-    setOnboardingVisible(false); // Show floating elements again
+    setOnboardingVisible(false);
+  };
+  
+  // Use a helper to check needs attention for badge logic
+  const checkNeedsAttention = (c: Comment): boolean => {
+    if (c.replied) return false;
+    const helpKeywords = ['human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue', 'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'];
+    return helpKeywords.some(kw => c.message.toLowerCase().includes(kw));
   };
 
   // Dashboard Skeleton Loading State
@@ -267,7 +256,7 @@ const DashboardPage: NextPageWithLayout = () => {
         description={t('dashboard.overview')}
       />
 
-      {/* Smart status message - Active or Configured but Disabled */}
+      {/* Smart status message */}
       {userSettings && (
         <AutoReplyStatusCard
           activePages={statsData.activePages}
@@ -276,19 +265,17 @@ const DashboardPage: NextPageWithLayout = () => {
         />
       )}
 
-
-      {/* Stats Grid - Best Practice KPI Layout - Dense 2-col on mobile */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
+      {/* Update Stats Grid - 4 Columns */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
         {stats.map((stat, i) => (
           <StatCard
-            key={stat.nameKey}
+            key={stat.id}
             nameKey={stat.nameKey}
             value={stat.value}
             icon={stat.icon}
             color={stat.color}
             index={i}
-            isActive={activeFilter === stat.id}
-            onClick={() => setActiveFilter(stat.id)}
+            href={stat.href}
           />
         ))}
       </div>
@@ -297,90 +284,102 @@ const DashboardPage: NextPageWithLayout = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Comments */}
         <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-white" padding="none">
-          <div className="p-5 sm:p-5 border-b border-surface-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-surface-50/50">
+          <div className="p-5 sm:p-5 border-b border-surface-100 flex items-center justify-between gap-4 bg-surface-50/50">
             <div>
               <h3 className="text-xl font-display font-bold text-surface-900 tracking-tight">{t('dashboard.recentComments')}</h3>
-              <p className="text-sm font-medium text-surface-500 mt-1">
-                {activeFilter === 'all' 
-                  ? t('dashboard.latestCommentsDesc') 
-                  : activeFilter === 'pending' 
-                    ? t('dashboard.pendingDesc')
-                    : t('dashboard.autoRepliesDesc')}
-              </p>
             </div>
-            
-            {/* Integrated Search */}
-            <div className="relative group w-full sm:w-auto">
-              <input 
-                type="text" 
-                placeholder={t('common.search')} 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full sm:w-64 pl-10 pr-4 py-2 rounded-xl bg-white border border-surface-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 transition-all text-sm font-medium shadow-sm group-hover:shadow-md"
-              />
-              <Search className="w-4 h-4 text-surface-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-brand-500 transition-colors" />
-              {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600 p-1 rounded-full hover:bg-surface-100"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
+            {/* Removed Search/Filter Controls */}
           </div>
 
           <div className="divide-y divide-surface-100 min-h-[300px]">
-            {filteredComments.length > 0 ? filteredComments.map((comment, i) => (
-              <div
-                key={comment.id}
-                className="px-5 sm:px-8 py-5 sm:py-6 hover:bg-brand-50/20 transition-all group animate-slide-up cursor-pointer"
-                onClick={() => setSelectedComment(comment)}
-                style={{ animationDelay: `${(i + 3) * 0.1}s` } as React.CSSProperties}
-              >
-                <div className="flex items-start justify-between gap-6">
-                  <div className="flex-1 min-w-0 text-start">
-                    <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <div className="w-8 h-8 rounded-full bg-surface-100 flex items-center justify-center text-xs font-bold text-surface-500 group-hover:bg-brand-100 group-hover:text-brand-600 transition-colors">
-                        {comment.fromName?.charAt(0) || '?'}
+            {recentComments.length > 0 ? recentComments.map((comment, i) => {
+              const needsAttention = checkNeedsAttention(comment);
+              return (
+                <div
+                  key={comment.id}
+                  className="px-5 sm:px-8 py-5 sm:py-6 hover:bg-brand-50/20 transition-all group animate-slide-up"
+                  onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
+                  style={{ animationDelay: `${(i + 3) * 0.1}s` } as React.CSSProperties}
+                >
+                  <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+                    {/* Main Content */}
+                    <div className="flex-1 min-w-0 text-start">
+                      {/* Row 1: Name + Time */}
+                      <div className="flex items-center gap-2 mb-2">
+                         <span className="font-bold text-surface-900 text-base">
+                            {comment.fromName || t('common.unknownUser')}
+                         </span>
+                         <span className="text-surface-300">•</span>
+                         <span className="text-xs font-medium text-surface-400">
+                           {formatTime(comment.createdAt)}
+                         </span>
                       </div>
-                      <span className="font-bold text-surface-900 group-hover:text-brand-600 transition-colors">
-                        {comment.fromName || t('common.unknownUser')}
-                      </span>
-                      <span className="text-surface-300">•</span>
-                      <span className="text-[10px] font-bold text-surface-400 uppercase tracking-[0.1em] flex items-center gap-1.5 bg-surface-50 px-2 py-0.5 rounded-full">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(comment.createdAt)}
-                      </span>
-                    </div>
-                    <p className="text-surface-600 text-sm leading-relaxed italic italic-arabic ps-11">"{comment.message}"</p>
-                  </div>
-                  <div className="flex-shrink-0 flex items-center gap-2">
-                    {comment.replied ? (
-                      <Badge variant={comment.replyMethod === 'ai' ? 'info' : 'success'} className="shadow-sm px-4 py-1.5 rounded-xl">
-                        {comment.replyMethod === 'ai' ? (
-                          <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> {t('dashboard.aiReply')}</span>
+                      
+                      {/* Row 2: Preview */}
+                      <p className="text-surface-600 text-sm leading-relaxed mb-3 line-clamp-2 italic italic-arabic">
+                        "{comment.message}"
+                      </p>
+                      
+                      {/* Row 3: Badge */}
+                      <div className="flex items-center gap-2">
+                        {comment.replied ? (
+                          <Badge variant="success" size="sm" className="px-2.5 py-0.5 rounded-lg shadow-sm">
+                            <span className="flex items-center gap-1.5 font-bold">
+                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                               {t('comments.replied')}
+                            </span>
+                          </Badge>
+                        ) : needsAttention ? (
+                           <Badge variant="error" size="sm" className="px-2.5 py-0.5 rounded-lg shadow-sm">
+                            <span className="flex items-center gap-1.5 font-bold">
+                               <AlertTriangle className="w-3 h-3" />
+                               {t('comments.needsAttention')}
+                            </span>
+                          </Badge>
                         ) : (
-                          <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> {t('dashboard.templateReply')}</span>
+                          <Badge variant="warning" size="sm" className="px-2.5 py-0.5 rounded-lg shadow-sm">
+                            <span className="flex items-center gap-1.5 font-bold">
+                               <Clock className="w-3 h-3" />
+                               {t('dashboard.pending')}
+                            </span>
+                          </Badge>
                         )}
-                      </Badge>
-                    ) : (
-                      <Badge variant="warning" className="shadow-sm px-4 py-1.5 rounded-xl">{t('dashboard.pending')}</Badge>
+                      </div>
+                    </div>
+                    
+                    {/* Action Button - Quick Reply */}
+                    {!comment.replied && (
+                       <div className="self-start sm:self-center flex-shrink-0 pt-2 sm:pt-0 w-full sm:w-auto">
+                          <Button
+                            size="sm"
+                            variant="primary" 
+                            className="w-full sm:w-auto rounded-xl shadow-sm hover:shadow-brand-500/20"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Don't trigger full view
+                              setSelectedCommentData({ comment, mode: 'quick' });
+                            }}
+                          >
+                             {t('comments.reply')} 
+                          </Button>
+                       </div>
                     )}
                   </div>
                 </div>
-              </div>
-            )) : (
+              );
+            }) : (
               <div className="py-14 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
                   <MessageSquare className="w-8 h-8 text-surface-300" />
                 </div>
-                <p className="text-base font-semibold text-surface-600 mb-4">
-                  {pages.length > 0 ? t('dashboard.noRecentComments') : t('dashboard.noDataDesc')}
+                <p className="text-base font-semibold text-surface-600 mb-2">
+                  {t('dashboard.noNewComments' as any)} 
+                  {/* Need to ensure this translation key exists or use fallback */}
+                  {!t('dashboard.noNewComments' as any) && "No new comments 🎉"}
                 </p>
+                {/* Fallback empty state */}
                 {pages.length === 0 && (
                   <Link href="/pages">
-                    <Button variant="primary" size="sm">
+                    <Button variant="primary" size="sm" className="mt-4">
                       {t('pages.connectPage')}
                     </Button>
                   </Link>
@@ -388,11 +387,24 @@ const DashboardPage: NextPageWithLayout = () => {
               </div>
             )}
           </div>
+          
+          {/* View All Button */}
+          {recentComments.length > 0 && (
+             <div className="p-4 border-t border-surface-100 bg-surface-50/30">
+                <Link href="/comments">
+                   <Button variant="secondary" className="w-full justify-center group text-surface-600 hover:text-brand-600">
+                      {t('dashboard.viewAllComments')} 
+                      {!t('dashboard.viewAllComments') && "View All Comments"}
+                      <ArrowRight className="w-4 h-4 ms-2 transition-transform group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1" />
+                   </Button>
+                </Link>
+             </div>
+          )}
         </Card>
 
         {/* Top Pages & Usage Column */}
         <div className="space-y-8">
-          {/* Usage & Plan Status - Now integrated as a main card */}
+          {/* Usage Card (Same as before) */}
           {usage && (
             <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-white relative group" padding="lg">
               <div className="absolute top-0 end-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-brand-500/10"></div>
@@ -499,14 +511,15 @@ const DashboardPage: NextPageWithLayout = () => {
       </div>
     </div>
 
-      {/* Comment Detail Modal */}
-      {selectedComment && (
+      {/* Comment Detail Modal - Now handles both modes */}
+      {selectedCommentData && (
         <CommentDetailModal
-          comment={selectedComment}
-          onClose={() => setSelectedComment(null)}
+          comment={selectedCommentData.comment}
+          onClose={() => setSelectedCommentData(null)}
           onReplySuccess={async () => {
             await fetchDashboardData();
           }}
+          mode={selectedCommentData.mode}
         />
       )}
     </>

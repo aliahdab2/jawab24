@@ -31,118 +31,153 @@ import type { Comment, Page } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
-type FilterType = 'all' | 'template' | 'ai' | 'pending' | 'needs_attention';
+  /* 
+    Updated FilterType to include 'replied_today'.
+    Note: 'flagged' is handled as an alias for 'needs_attention' in existing logic or explicit new type. 
+  */
+  type FilterType = 'all' | 'template' | 'ai' | 'pending' | 'needs_attention' | 'replied_today' | 'flagged';
 
-const CommentsPage: NextPageWithLayout = () => {
-  const { t, language } = useTranslation();
-  const { isAuthenticated } = useAuthStore();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  
-  const initialFilter = (searchParams.get('filter') as FilterType) || 'all';
-  const [filter, setFilter] = useState<FilterType>(initialFilter);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [pages, setPages] = useState<Page[]>([]);
-
-  //  Fetch pages on mount
-  useEffect(() => {
-    const fetchPages = async () => {
-      try {
-        const { data } = await pagesApi.getAll();
-        setPages(data);
-        if (data.length === 0) {
-           setLoading(false);
-        }
-      } catch (error) {
-        console.error('Failed to fetch pages', error);
-      }
-    };
-    if (isAuthenticated) {
-        fetchPages();
-    }
-  }, [isAuthenticated]);
-
-  // Sync Filter to URL
-  const updateFilter = (newFilter: FilterType) => {
-    if (newFilter === filter) return;
+  const CommentsPage: NextPageWithLayout = () => {
+    const { t, language } = useTranslation();
+    const { isAuthenticated } = useAuthStore();
+    const router = useRouter();
+    const searchParams = useSearchParams();
     
-    // Smart Transition: Instant crossfade
-    setIsTransitioning(true);
-    setTimeout(() => {
-      setFilter(newFilter);
-      setIsTransitioning(false);
-    }, 120);
-
-    const params = new URLSearchParams(window.location.search);
-    if (newFilter === 'all') {
-      params.delete('filter');
-    } else {
-      params.set('filter', newFilter);
-    }
-    router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
-  };
-
-  // Check if comment needs human attention
-  const checkNeedsAttention = useCallback((comment: Comment): boolean => {
-    if (comment.replied) return false;
-    const helpKeywords = ['human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue',
-      'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'];
-    const messageText = comment.message.toLowerCase();
-    return helpKeywords.some(kw => messageText.includes(kw));
-  }, []);
-
-  const filteredComments = useMemo(() => {
-    return comments.filter(comment => {
-      const matchesSearch = comment.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (comment.fromName || '').toLowerCase().includes(searchQuery.toLowerCase());
-
-      if (filter === 'needs_attention') {
-        return matchesSearch && checkNeedsAttention(comment);
+    const [comments, setComments] = useState<Comment[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isTransitioning, setIsTransitioning] = useState(false);
+    
+    // Map URL 'flagged' -> 'needs_attention' internally if preferred, or handle 'flagged' explicitly
+    const rawFilter = (searchParams.get('filter') as string) || 'all';
+    const initialFilter = rawFilter === 'flagged' ? 'needs_attention' : (rawFilter as FilterType);
+    
+    const [filter, setFilter] = useState<FilterType>(initialFilter);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
+    const [exporting, setExporting] = useState(false);
+    const [pages, setPages] = useState<Page[]>([]);
+  
+    //  Fetch pages on mount
+    useEffect(() => {
+      const fetchPages = async () => {
+        try {
+          const { data } = await pagesApi.getAll();
+          setPages(data);
+          if (data.length === 0) {
+             setLoading(false);
+          }
+        } catch (error) {
+          console.error('Failed to fetch pages', error);
+        }
+      };
+      if (isAuthenticated) {
+          fetchPages();
       }
-
-      let matchesFilter = false;
-      switch (filter) {
-        case 'all':
-          matchesFilter = true;
-          break;
-        case 'template':
-          // Replied by human/template (EXCLUDING AI)
-          matchesFilter = !!comment.replied && comment.replyMethod !== 'ai';
-          break;
-        case 'ai':
-          // Replied by AI
-          matchesFilter = comment.replyMethod === 'ai';
-          break;
-        case 'pending':
-          matchesFilter = !comment.replied;
-          break;
-      }
+    }, [isAuthenticated]);
+  
+    // Sync Filter to URL
+    const updateFilter = (newFilter: FilterType) => {
+      if (newFilter === filter) return;
       
-      return matchesSearch && matchesFilter;
-    });
-  }, [comments, filter, searchQuery, checkNeedsAttention]);
+      // Smart Transition: Instant crossfade
+      setIsTransitioning(true);
+      setTimeout(() => {
+        setFilter(newFilter);
+        setIsTransitioning(false);
+      }, 120);
+  
+      const params = new URLSearchParams(window.location.search);
+      
+      // Alias internal 'needs_attention' to 'flagged' in URL if desired, or keep as is.
+      // Requirements asked for 'flagged', so let's use that in URL.
+      let urlFilter = newFilter;
+      if (newFilter === 'needs_attention') urlFilter = 'flagged';
 
-  const stats = useMemo(() => ({
-    total: comments.length,
-    // "Replied" card now represents ONLY Template/Manual replies (Mutually exclusive from AI)
-    templateReplies: comments.filter(c => !!c.replied && c.replyMethod !== 'ai').length,
-    pending: comments.filter(c => !c.replied).length,
-    aiReplies: comments.filter(c => c.replyMethod === 'ai').length,
-    needsAttention: comments.filter(c => checkNeedsAttention(c)).length,
-  }), [comments, checkNeedsAttention]);
+      if (newFilter === 'all') {
+        params.delete('filter');
+      } else {
+        params.set('filter', urlFilter);
+      }
+      router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
+    };
 
-  // Update Page Title
-  useEffect(() => {
-    const filterLabel = filter === 'all' ? '' : ` — ${t(`comments.${filter}` as any)}`;
-    const countLabel = filteredComments.length > 0 ? ` (${filteredComments.length})` : '';
-    document.title = `${t('comments.title')}${filterLabel}${countLabel}`;
-  }, [filter, filteredComments.length, t]);
+    // Update internal filter when URL changes (e.g. back button)
+    useEffect(() => {
+      const currentParam = searchParams.get('filter');
+      if (currentParam === 'flagged') {
+        setFilter('needs_attention');
+      } else if (currentParam) {
+        setFilter(currentParam as FilterType);
+      } else {
+        setFilter('all');
+      }
+    }, [searchParams]);
+  
+    // Check if comment needs human attention
+    const checkNeedsAttention = useCallback((comment: Comment): boolean => {
+      if (comment.replied) return false;
+      const helpKeywords = ['human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue',
+        'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'];
+      const messageText = comment.message.toLowerCase();
+      return helpKeywords.some(kw => messageText.includes(kw));
+    }, []);
+  
+    const filteredComments = useMemo(() => {
+      return comments.filter(comment => {
+        const matchesSearch = comment.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (comment.fromName || '').toLowerCase().includes(searchQuery.toLowerCase());
+  
+        if (filter === 'needs_attention' || filter === 'flagged') {
+          return matchesSearch && checkNeedsAttention(comment);
+        }
+  
+        let matchesFilter = false;
+        switch (filter) {
+          case 'all':
+            matchesFilter = true;
+            break;
+          case 'template':
+            // Replied by human/template (EXCLUDING AI)
+            matchesFilter = !!comment.replied && comment.replyMethod !== 'ai';
+            break;
+          case 'ai':
+            matchesFilter = comment.replyMethod === 'ai';
+            break;
+          case 'pending':
+            matchesFilter = !comment.replied;
+            break;
+          case 'replied_today':
+            if (!comment.replied || !comment.repliedAt) {
+              matchesFilter = false;
+            } else {
+              const replyDate = new Date(comment.repliedAt);
+              const today = new Date();
+              matchesFilter = replyDate.getDate() === today.getDate() &&
+                              replyDate.getMonth() === today.getMonth() &&
+                              replyDate.getFullYear() === today.getFullYear();
+            }
+            break;
+        }
+        
+        return matchesSearch && matchesFilter;
+      });
+    }, [comments, filter, searchQuery, checkNeedsAttention]);
+  
+    const stats = useMemo(() => ({
+      total: comments.length,
+      // "Replied" card now represents ONLY Template/Manual replies (Mutually exclusive from AI)
+      templateReplies: comments.filter(c => !!c.replied && c.replyMethod !== 'ai').length,
+      pending: comments.filter(c => !c.replied).length,
+      aiReplies: comments.filter(c => c.replyMethod === 'ai').length,
+      needsAttention: comments.filter(c => checkNeedsAttention(c)).length,
+    }), [comments, checkNeedsAttention]);
+  
+    // Update Page Title
+    useEffect(() => {
+      const filterLabel = filter === 'all' ? '' : ` — ${t(`comments.${filter}` as any)}`;
+      const countLabel = filteredComments.length > 0 ? ` (${filteredComments.length})` : '';
+      document.title = `${t('comments.title')}${filterLabel}${countLabel}`;
+    }, [filter, filteredComments.length, t]);
 
   // Auto-scroll active card into view on mobile
   useEffect(() => {
