@@ -15,7 +15,12 @@ import {
   Crown,
   AlertTriangle,
   ChevronRight,
-  ArrowRight
+  ArrowRight,
+  TrendingUp,
+  TrendingDown,
+  Bot,
+  User,
+  Minus
 } from 'lucide-react';
 import { formatDistanceToNow, isToday } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -76,7 +81,12 @@ const DashboardPage: NextPageWithLayout = () => {
     repliedToday: 0,
     pendingReplies: 0,
     needsAttention: 0,
-    activePages: 0
+    activePages: 0,
+    // New metrics
+    commentsToday: 0,
+    commentsYesterday: 0,
+    aiReplies: 0,
+    manualReplies: 0
   });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
@@ -124,7 +134,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
       // Calculate stats
       const totalComments = allComments.length;
-      
+
       // Calculate Pending
       const pendingReplies = allComments.filter(c => !c.replied).length;
 
@@ -135,9 +145,28 @@ const DashboardPage: NextPageWithLayout = () => {
 
       // Calculate Needs Attention (simple heuristic same as comments page)
       const helpKeywords = ['human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue', 'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'];
-      const needsAttention = allComments.filter(c => 
+      const needsAttention = allComments.filter(c =>
         !c.replied && helpKeywords.some(kw => c.message.toLowerCase().includes(kw))
       ).length;
+
+      // Calculate Comments Today vs Yesterday
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const commentsToday = allComments.filter(c =>
+        c.createdAt && isToday(new Date(c.createdAt))
+      ).length;
+
+      const commentsYesterday = allComments.filter(c => {
+        if (!c.createdAt) return false;
+        const date = new Date(c.createdAt);
+        return date.toDateString() === yesterday.toDateString();
+      }).length;
+
+      // Calculate AI vs Manual replies
+      const aiReplies = allComments.filter(c => c.replied && c.replyMethod === 'ai').length;
+      const manualReplies = allComments.filter(c => c.replied && (c.replyMethod === 'manual' || c.replyMethod === 'template')).length;
 
       // Recent Comments Logic: Sort by newest, take top 5
       const sortedComments = [...allComments].sort((a, b) => {
@@ -152,7 +181,11 @@ const DashboardPage: NextPageWithLayout = () => {
         repliedToday,
         pendingReplies,
         needsAttention,
-        activePages: fetchedPages.filter(p => p.autoReplyEnabled).length
+        activePages: fetchedPages.filter(p => p.autoReplyEnabled).length,
+        commentsToday,
+        commentsYesterday,
+        aiReplies,
+        manualReplies
       });
 
     } catch (error) {
@@ -179,6 +212,25 @@ const DashboardPage: NextPageWithLayout = () => {
       return String(dateValue);
     }
   };
+
+  // Helper to get page name from pageId
+  const getPageName = (pageId: string | null): string | null => {
+    if (!pageId) return null;
+    const page = pages.find(p => p.id === pageId || p.facebookPageId === pageId);
+    return page?.name || null;
+  };
+
+  // Calculate trend for today vs yesterday
+  const getTrend = () => {
+    const { commentsToday, commentsYesterday } = statsData;
+    if (commentsYesterday === 0) return { direction: 'neutral' as const, percent: 0 };
+    const change = ((commentsToday - commentsYesterday) / commentsYesterday) * 100;
+    if (change > 0) return { direction: 'up' as const, percent: Math.round(change) };
+    if (change < 0) return { direction: 'down' as const, percent: Math.abs(Math.round(change)) };
+    return { direction: 'neutral' as const, percent: 0 };
+  };
+
+  const trend = getTrend();
 
   // Improved Stats Array
   const stats = [
@@ -266,7 +318,7 @@ const DashboardPage: NextPageWithLayout = () => {
       )}
 
       {/* Update Stats Grid - 4 Columns */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
         {stats.map((stat, i) => (
           <StatCard
             key={stat.id}
@@ -279,6 +331,67 @@ const DashboardPage: NextPageWithLayout = () => {
           />
         ))}
       </div>
+
+      {/* Today's Activity Summary */}
+      {(statsData.commentsToday > 0 || statsData.aiReplies > 0 || statsData.manualReplies > 0) && (
+        <div className="mb-8 p-4 bg-white rounded-2xl border border-surface-100 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Today vs Yesterday */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-surface-100 flex items-center justify-center">
+                {trend.direction === 'up' ? (
+                  <TrendingUp className="w-5 h-5 text-emerald-600" />
+                ) : trend.direction === 'down' ? (
+                  <TrendingDown className="w-5 h-5 text-red-500" />
+                ) : (
+                  <Minus className="w-5 h-5 text-surface-400" />
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-surface-900">
+                  {statsData.commentsToday} {t('dashboard.todayComments' as TranslationKey)}
+                </p>
+                <p className="text-xs text-surface-500">
+                  {trend.direction === 'up' && (
+                    <span className="text-emerald-600">+{trend.percent}% {t('dashboard.vsLastWeek' as TranslationKey)}</span>
+                  )}
+                  {trend.direction === 'down' && (
+                    <span className="text-red-500">-{trend.percent}% {t('dashboard.vsLastWeek' as TranslationKey)}</span>
+                  )}
+                  {trend.direction === 'neutral' && (
+                    <span className="text-surface-400">{t('dashboard.vsLastWeek' as TranslationKey)}</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="hidden sm:block w-px h-10 bg-surface-200"></div>
+
+            {/* AI vs Manual Breakdown */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-brand-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-surface-900">{statsData.aiReplies}</p>
+                  <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wide">{t('dashboard.aiReply' as TranslationKey)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
+                  <User className="w-4 h-4 text-violet-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-surface-900">{statsData.manualReplies}</p>
+                  <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wide">{t('common.manual' as TranslationKey)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -302,11 +415,19 @@ const DashboardPage: NextPageWithLayout = () => {
                   style={{ animationDelay: `${(i + 3) * 0.1}s` } as React.CSSProperties}
                 >
                   <div className="flex flex-col gap-2">
-                    {/* Row 1: Name + Time */}
-                    <div className="flex items-center gap-2">
+                    {/* Row 1: Name + Page + Time */}
+                    <div className="flex items-center gap-2 flex-wrap">
                        <span className="font-bold text-surface-900 text-sm">
                           {comment.fromName || t('common.unknownUser')}
                        </span>
+                       {getPageName(comment.pageId) && (
+                         <>
+                           <span className="text-surface-300">•</span>
+                           <span className="text-xs font-medium text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">
+                             {getPageName(comment.pageId)}
+                           </span>
+                         </>
+                       )}
                        <span className="text-surface-300">•</span>
                        <span className="text-xs font-medium text-surface-400">
                          {formatTime(comment.createdAt)}
@@ -467,44 +588,92 @@ const DashboardPage: NextPageWithLayout = () => {
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-white overflow-hidden">
-            <div className="p-5 sm:p-8 border-b border-surface-100 bg-surface-50/50">
-              <h3 className="text-xl font-display font-bold text-surface-900 tracking-tight">{t('dashboard.topPages')}</h3>
+            <div className="p-5 sm:p-6 border-b border-surface-100 bg-surface-50/50">
+              <h3 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.topPages')}</h3>
               <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.topPagesDesc')}</p>
             </div>
-            <div className="space-y-6 px-5 sm:px-8 py-5 sm:py-8">
-              {pages.length > 0 ? pages.slice(0, 3).map((page, i) => (
-                <Link href="/pages" key={page.id} className="flex items-center gap-5 group animate-slide-up cursor-pointer" style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}>
-                  <div className="relative">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm border ${i === 0 ? 'bg-brand-50 text-brand-600 border-brand-100' : 'bg-surface-50 text-surface-600 border-surface-100'
-                      } group-hover:scale-110 group-hover:rotate-3`}>
-                      <FileText className="w-7 h-7" />
+            <div className="divide-y divide-surface-100">
+              {pages.length > 0 ? pages.slice(0, 3).map((page, i) => {
+                // Calculate per-page stats from recentComments (approximation)
+                const pageComments = recentComments.filter(c => c.pageId === page.id || c.pageId === page.facebookPageId);
+                const pendingCount = pageComments.filter(c => !c.replied).length;
+
+                return (
+                  <Link
+                    href={`/comments?page=${page.id}`}
+                    key={page.id}
+                    className="flex items-center gap-4 p-4 sm:p-5 group hover:bg-brand-50/30 transition-all cursor-pointer animate-slide-up"
+                    style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}
+                  >
+                    <div className="relative flex-shrink-0">
+                      <div className={clsx(
+                        "w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-sm border",
+                        page.autoReplyEnabled
+                          ? 'bg-brand-50 text-brand-600 border-brand-100'
+                          : 'bg-surface-50 text-surface-500 border-surface-200',
+                        "group-hover:scale-105"
+                      )}>
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      {/* Auto-reply status indicator */}
+                      <div className={clsx(
+                        "absolute -bottom-1 -end-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center",
+                        page.autoReplyEnabled ? 'bg-emerald-500' : 'bg-surface-300'
+                      )}>
+                        {page.autoReplyEnabled ? (
+                          <Bot className="w-3 h-3 text-white" />
+                        ) : (
+                          <Minus className="w-3 h-3 text-white" />
+                        )}
+                      </div>
                     </div>
-                    <div className="absolute -top-2 -end-2 w-7 h-7 rounded-xl bg-surface-900 shadow-lg border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">
-                      {i + 1}
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0 text-start">
-                    <p className="font-bold text-surface-900 truncate group-hover:text-brand-600 transition-colors text-lg tracking-tight">{page.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className={`w-1.5 h-1.5 rounded-full ${page.autoReplyEnabled ? 'bg-emerald-500' : 'bg-surface-300'}`}></div>
-                      <p className="text-xs font-bold text-surface-400 uppercase tracking-widest">
-                        {page.commentsCount || 0} {t('dashboard.comments')}
+                    <div className="flex-1 min-w-0 text-start">
+                      <p className="font-bold text-surface-900 truncate group-hover:text-brand-600 transition-colors">
+                        {page.name}
                       </p>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="text-xs text-surface-500">
+                          {page.commentsCount || 0} {t('dashboard.comments')}
+                        </span>
+                        {pendingCount > 0 && (
+                          <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                            {pendingCount} {t('dashboard.pending')}
+                          </span>
+                        )}
+                      </div>
                     </div>
+                    <ChevronRight className={clsx(
+                      "w-5 h-5 text-surface-300 group-hover:text-brand-500 transition-all",
+                      "group-hover:translate-x-1",
+                      language === 'ar' && "rotate-180 group-hover:-translate-x-1"
+                    )} />
+                  </Link>
+                );
+              }) : (
+                <div className="py-10 text-center">
+                  <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
+                    <FileText className="w-6 h-6 text-surface-300" />
                   </div>
-                </Link>
-              )) : (
-                <div className="py-10 text-center text-surface-400 font-bold uppercase tracking-widest text-xs">
-                  {t('common.noData')}
+                  <p className="text-sm text-surface-500 mb-3">{t('pages.noPagesDesc')}</p>
+                  <Link href="/pages">
+                    <Button variant="primary" size="sm">
+                      {t('pages.connectPage')}
+                    </Button>
+                  </Link>
                 </div>
               )}
             </div>
-            <div className="px-5 sm:px-8 py-5 border-t border-surface-100 bg-surface-50/30">
-              <Link href="/pages" className="text-sm text-brand-600 hover:text-brand-700 font-bold flex items-center justify-center gap-2 group transition-all">
-                {t('dashboard.managePages')}
-                <ChevronRight className={`w-4 h-4 transition-transform group-hover:translate-x-1 ${language === 'ar' ? 'rotate-180 group-hover:-translate-x-1' : ''}`} />
-              </Link>
-            </div>
+            {pages.length > 0 && (
+              <div className="px-5 sm:px-6 py-4 border-t border-surface-100 bg-surface-50/30">
+                <Link href="/pages" className="text-sm text-brand-600 hover:text-brand-700 font-bold flex items-center justify-center gap-2 group transition-all">
+                  {t('dashboard.managePages')}
+                  <ChevronRight className={clsx(
+                    "w-4 h-4 transition-transform group-hover:translate-x-1",
+                    language === 'ar' && "rotate-180 group-hover:-translate-x-1"
+                  )} />
+                </Link>
+              </div>
+            )}
           </Card>
       </div>
     </div>

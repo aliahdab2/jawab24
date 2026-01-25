@@ -226,6 +226,7 @@
   "comments.viewOnFacebook": "View on Facebook",
   "comments.noComments": "No comments yet",
   "comments.noCommentsDesc": "Your comments will appear here once your page receives activity.",
+  "comments.noCommentsForFilter": "No comments match this filter. Try another filter or wait for new comments.",
   "comments.needsAttention": "Needs attention",
   "comments.needsAttentionDesc": "Comments that require action.",
   "comments.overview": "Overview of your activity",
