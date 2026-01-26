@@ -37,7 +37,7 @@ describe('MessagesPage', () => {
   });
 
   it('renders messages list', async () => {
-    render(<MessagesPage />);
+
     const mockMessages = [
       {
         id: '1',
