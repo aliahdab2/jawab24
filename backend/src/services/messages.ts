@@ -15,26 +15,65 @@ export interface CreateMessageDTO {
 
 export class MessagesService {
     /**
-     * Get all messages for a user's pages
+     * Get all messages for a user's pages with cursor-based pagination
      */
-    async getMessages(userId: string, limit: number = 50): Promise<Message[]> {
+    async getMessages(userId: string, options?: {
+        limit?: number;
+        cursor?: string;
+        direction?: 'incoming' | 'outgoing';
+    }): Promise<{
+        data: Message[];
+        pagination: { hasMore: boolean; nextCursor: string | null; limit: number };
+    }> {
+        const limit = options?.limit || 50;
+
         const userPages = await db.query.pages.findMany({
             where: eq(pages.userId, userId),
         });
 
         if (userPages.length === 0) {
-            return [];
+            return {
+                data: [],
+                pagination: { hasMore: false, nextCursor: null, limit }
+            };
         }
 
         const pageIds = userPages.map(p => p.id);
 
+        // Build conditions
+        const conditions = [
+            sql`${messages.pageId} IN (${sql.join(pageIds.map(id => sql`${id}`), sql`, `)})`
+        ];
+
+        // Filter by direction if specified
+        if (options?.direction) {
+            conditions.push(eq(messages.direction, options.direction));
+        }
+
+        // Cursor-based pagination
+        if (options?.cursor) {
+            const cursorMessage = await db.query.messages.findFirst({
+                where: eq(messages.id, options.cursor),
+            });
+            if (cursorMessage?.createdAt) {
+                conditions.push(sql`${messages.createdAt} < ${cursorMessage.createdAt}`);
+            }
+        }
+
         const result = await db.query.messages.findMany({
-            where: sql`${messages.pageId} IN (${sql.join(pageIds.map(id => sql`${id}`), sql`, `)})`,
+            where: and(...conditions),
             orderBy: [desc(messages.createdAt)],
-            limit,
+            limit: limit + 1,
         });
 
-        return result.map(this.mapToMessage);
+        const hasMore = result.length > limit;
+        const data = hasMore ? result.slice(0, limit) : result;
+        const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : null;
+
+        return {
+            data: data.map(this.mapToMessage),
+            pagination: { hasMore, nextCursor, limit }
+        };
     }
 
     /**

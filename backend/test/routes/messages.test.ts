@@ -27,7 +27,10 @@ describe('Messages Routes', () => {
                 { id: 'msg_1', message: 'Hello!', direction: 'incoming', senderId: 'user_1' },
                 { id: 'msg_2', message: 'Hi there!', direction: 'outgoing', senderId: 'user_1' }
             ];
-            vi.mocked(messagesService.getMessages).mockResolvedValue(messagesList as any);
+            vi.mocked(messagesService.getMessages).mockResolvedValue({
+                data: messagesList as any,
+                pagination: { hasMore: false, nextCursor: null, limit: 50 }
+            });
 
             const response = await app.inject({
                 method: 'GET',
@@ -35,19 +38,25 @@ describe('Messages Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(JSON.parse(response.payload)).toEqual(messagesList);
-            expect(messagesService.getMessages).toHaveBeenCalledWith('test_user_id', 50);
+            expect(JSON.parse(response.payload)).toEqual({
+                data: messagesList,
+                pagination: { hasMore: false, nextCursor: null, limit: 50 }
+            });
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_user_id', {});
         });
 
         it('should respect limit parameter', async () => {
-            vi.mocked(messagesService.getMessages).mockResolvedValue([]);
+            vi.mocked(messagesService.getMessages).mockResolvedValue({
+                data: [],
+                pagination: { hasMore: false, nextCursor: null, limit: 100 }
+            });
 
             await app.inject({
                 method: 'GET',
                 url: '/messages?limit=100'
             });
 
-            expect(messagesService.getMessages).toHaveBeenCalledWith('test_user_id', 100);
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_user_id', { limit: 100 });
         });
     });
 

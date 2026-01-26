@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback, type ReactElement } from 'react';
+import React, { useState, useEffect, useCallback, type ReactElement, useMemo, useRef } from 'react';
 import clsx from 'clsx';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
-import { api } from '@/lib/api';
+import { messagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
 import {
   MessageCircle,
   Search,
@@ -18,12 +19,12 @@ import {
   AlertTriangle,
   UserCheck,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { formatDistanceToNow, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-import { Message } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -37,38 +38,41 @@ interface Conversation {
   needsHumanAttention: boolean;
 }
 
+// Custom hook for debounced value
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+const MESSAGES_PER_PAGE = 50;
+
 const MessagesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { isAuthenticated } = useAuthStore();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
+  
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [filter, setFilter] = useState<FilterType>('all');
   const [stats, setStats] = useState({ total: 0, replied: 0, pending: 0 });
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [exporting, setExporting] = useState(false);
 
+  // Infinite scroll observer ref
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
   // ESC key to close modal
   useEscapeKey(() => setSelectedConversation(null), !!selectedConversation);
 
-  const fetchMessages = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await api.get('/messages');
-      const data = Array.isArray(response.data)
-        ? response.data
-        : (Array.isArray(response.data?.data) ? response.data.data : []);
-      setMessages(data);
-    } catch (error) {
-      console.error('Failed to fetch messages:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Fetch Stats
   const fetchStats = useCallback(async () => {
     try {
-      const response = await api.get('/messages/stats');
+      const response = await messagesApi.getStats();
       setStats(response.data);
     } catch (error) {
       console.error('Failed to fetch message stats:', error);
@@ -76,16 +80,53 @@ const MessagesPage: NextPageWithLayout = () => {
   }, []);
 
   useEffect(() => {
-    // Use isAuthenticated instead of token - on web, auth is via cookies
     if (isAuthenticated) {
-      fetchMessages();
       fetchStats();
     }
-  }, [isAuthenticated, fetchMessages, fetchStats]);
+  }, [isAuthenticated, fetchStats]);
+
+  // Infinite Query
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  } = useInfiniteQuery({
+    queryKey: ['messages', filter], // Refresh when filter changes? Or keep all calls generic?
+    // We should probably pass the 'direction' filter to the backend if possible to optimize
+    // 'needs_attention' must be client side. 'all' is default.
+    queryFn: async ({ pageParam }) => {
+      const params: MessagesQueryParams = {
+        limit: MESSAGES_PER_PAGE,
+        cursor: pageParam as string | undefined,
+      };
+
+      if (filter === 'incoming' || filter === 'outgoing') {
+        params.direction = filter;
+      }
+      
+      const response = await messagesApi.getAll(params);
+      return response.data;
+    },
+    getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
+    initialPageParam: undefined as string | undefined,
+    enabled: isAuthenticated,
+  });
+
+  // Flatten messages
+  const allMessages = useMemo(() => {
+    if (!data?.pages) return [];
+    return data.pages.flatMap(page => page.data);
+  }, [data]);
 
   // Check if a conversation needs human attention
-  const checkNeedsAttention = (msgs: Message[]): boolean => {
-    const lastIncoming = msgs.filter(m => m.direction === 'incoming').slice(-1)[0];
+  const checkConversationNeedsAttention = useCallback((msgs: Message[]): boolean => {
+    // Sort logic handled in formatting, but here input might be unsorted depending on group logic
+    const lastIncoming = [...msgs].filter(m => m.direction === 'incoming').sort((a,b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )[0];
+
     if (lastIncoming && !lastIncoming.replied) {
       const helpKeywords = ['human', 'agent', 'help', 'support', 'talk to someone', 'مساعدة', 'بشري', 'شخص', 'موظف'];
       const messageText = lastIncoming.message.toLowerCase();
@@ -94,18 +135,107 @@ const MessagesPage: NextPageWithLayout = () => {
       }
     }
     return false;
+  }, []);
+
+  // Process conversations
+  const conversations = useMemo(() => {
+    // 1. Filter raw messages first based on Search
+    let filteredMsgs = allMessages;
+    if (debouncedSearch) {
+      const query = debouncedSearch.toLowerCase();
+      filteredMsgs = allMessages.filter(m => 
+        m.message.toLowerCase().includes(query) || 
+        (m.senderName || '').toLowerCase().includes(query)
+      );
+    }
+
+    // 2. Group by Sender
+    const groups = filteredMsgs.reduce((acc, msg) => {
+      const key = msg.senderId;
+      if (!acc[key]) {
+        acc[key] = {
+          senderId: msg.senderId,
+          senderName: msg.senderName,
+          messages: [],
+          lastMessage: msg,
+          needsHumanAttention: false,
+        };
+      }
+      acc[key].messages.push(msg);
+      
+      const msgDate = new Date(msg.createdAt).getTime();
+      const lastMsgDate = new Date(acc[key].lastMessage.createdAt).getTime();
+      
+      if (msgDate > lastMsgDate) {
+        acc[key].lastMessage = msg;
+      }
+      return acc;
+    }, {} as Record<string, Conversation>);
+
+    // 3. Apply Conversation-level filters (Needs Attention) and Sort
+    let convList = Object.values(groups).map(conv => {
+       conv.needsHumanAttention = checkConversationNeedsAttention(conv.messages);
+       return conv;
+    });
+
+    if (filter === 'needs_attention') {
+      convList = convList.filter(c => c.needsHumanAttention);
+    }
+    // Note: 'incoming'/'outgoing' filters are applied at API level, so allMessages already filtered
+    // But if we switch filter, the queryKey changes, so data reloads. Correct.
+
+    // 4. Sort by latest message
+    return convList.sort((a, b) => {
+      const dateA = new Date(a.lastMessage.createdAt).getTime();
+      const dateB = new Date(b.lastMessage.createdAt).getTime();
+      return dateB - dateA;
+    });
+
+  }, [allMessages, debouncedSearch, filter, checkConversationNeedsAttention]);
+
+  // Intersection Observer
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // CSV Export
+  const exportToCSV = () => {
+    setExporting(true);
+    try {
+      const headers = ['ID', 'Sender ID', 'Sender Name', 'Message', 'Direction', 'Replied', 'Reply Text', 'Reply Method', 'Created At'];
+      const rows = allMessages.map(msg => [
+        msg.id, msg.senderId, msg.senderName || '', `"${(msg.message || '').replace(/"/g, '""')}"`,
+        msg.direction, msg.replied ? 'Yes' : 'No', `"${(msg.replyText || '').replace(/"/g, '""')}"`,
+        msg.replyMethod || '', msg.createdAt ? new Date(msg.createdAt).toISOString() : ''
+      ]);
+      const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `messages_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+    } finally {
+      setExporting(false);
+    }
   };
-
-  const filteredMessages = messages.filter(message => {
-    const matchesSearch = message.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (message.senderName || '').toLowerCase().includes(searchQuery.toLowerCase());
-    if (filter === 'needs_attention') return matchesSearch;
-    const matchesFilter = filter === 'all' ||
-      (filter === 'incoming' && message.direction === 'incoming') ||
-      (filter === 'outgoing' && message.direction === 'outgoing');
-    return matchesSearch && matchesFilter;
-  });
-
 
   const formatTime = (dateValue: string | Date | null | undefined) => {
     if (!dateValue) return '-';
@@ -128,69 +258,6 @@ const MessagesPage: NextPageWithLayout = () => {
     }
   };
 
-  // Group messages by sender
-  const groupedMessages = filteredMessages.reduce((acc, msg) => {
-    const key = msg.senderId;
-    if (!acc[key]) {
-      acc[key] = {
-        senderId: msg.senderId,
-        senderName: msg.senderName,
-        messages: [],
-        lastMessage: msg,
-        needsHumanAttention: false,
-      };
-    }
-    acc[key].messages.push(msg);
-    const msgDate = msg.createdAt ? new Date(msg.createdAt) : new Date(0);
-    const lastMsgDate = acc[key].lastMessage.createdAt ? new Date(acc[key].lastMessage.createdAt) : new Date(0);
-    if (msgDate > lastMsgDate) {
-      acc[key].lastMessage = msg;
-    }
-    return acc;
-  }, {} as Record<string, Conversation>);
-
-  Object.values(groupedMessages).forEach(conv => {
-    conv.needsHumanAttention = checkNeedsAttention(conv.messages);
-  });
-
-  let conversations = Object.values(groupedMessages).sort((a, b) => {
-    const dateA = a.lastMessage.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
-    const dateB = b.lastMessage.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
-    return dateB - dateA;
-  });
-
-  if (filter === 'needs_attention') {
-    conversations = conversations.filter(c => c.needsHumanAttention);
-  }
-
-  const needsAttentionCount = Object.values(groupedMessages).filter(c => c.needsHumanAttention).length;
-
-  const exportToCSV = () => {
-    setExporting(true);
-    try {
-      const headers = ['ID', 'Sender ID', 'Sender Name', 'Message', 'Direction', 'Replied', 'Reply Text', 'Reply Method', 'Created At'];
-      const rows = messages.map(msg => [
-        msg.id, msg.senderId, msg.senderName || '', `"${(msg.message || '').replace(/"/g, '""')}"`,
-        msg.direction, msg.replied ? 'Yes' : 'No', `"${(msg.replyText || '').replace(/"/g, '""')}"`,
-        msg.replyMethod || '', msg.createdAt ? new Date(msg.createdAt).toISOString() : ''
-      ]);
-      const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `messages_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const getSortedMessages = (conv: Conversation) => {
     return [...conv.messages].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -198,6 +265,8 @@ const MessagesPage: NextPageWithLayout = () => {
       return dateA - dateB;
     });
   };
+
+  const needsAttentionCount = conversations.filter(c => c.needsHumanAttention).length;
 
   const StatCard = ({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) => (
     <Card
@@ -235,13 +304,12 @@ const MessagesPage: NextPageWithLayout = () => {
     </Card>
   );
 
-  if (loading && messages.length === 0) {
+  if (isLoading && !data) {
     return <PageSkeleton type="list" />;
   }
 
   return (
     <>
-      {/* Header */}
       <PageHeader
         title={t('messages.title')}
         description={t('messages.description')}
@@ -258,7 +326,7 @@ const MessagesPage: NextPageWithLayout = () => {
         }
       />
 
-      {/* Stats - Horizontal scroll on mobile if they don't fit, otherwise 2-col then 4-col */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
         <div onClick={() => setFilter('all')} className="cursor-pointer transition-transform active:scale-95">
           <StatCard title={t('messages.totalMessages')} value={stats.total} icon={<MessageCircle />} color="brand" />
@@ -274,7 +342,7 @@ const MessagesPage: NextPageWithLayout = () => {
         </div>
       </div>
 
-      {/* Filters & Search - Compact unified section */}
+      {/* Filters & Search */}
       <Card className="mb-8 border-none shadow-md shadow-surface-200/20 overflow-visible" padding="none">
         <div className="p-5 sm:p-7 flex flex-col gap-5">
           <div className="relative group">
@@ -289,13 +357,12 @@ const MessagesPage: NextPageWithLayout = () => {
               className="py-3.5 ps-14 rounded-2xl bg-surface-50 border-none focus:ring-4 focus:ring-brand-500/10 focus:bg-white transition-all shadow-sm"
             />
           </div>
-          {/* Filter buttons - 2x2 grid on mobile, row on larger screens */}
-          {/* Filter buttons removed */}
         </div>
       </Card>
 
       {/* Conversations List */}
       {conversations.length > 0 ? (
+        <>
         <div className="space-y-4 pb-12">
           {conversations.map((conv, i) => (
             <Card
@@ -305,7 +372,7 @@ const MessagesPage: NextPageWithLayout = () => {
                 "animate-slide-up group/card cursor-pointer border-none shadow-sm hover:shadow-lg transition-all duration-300 rounded-2xl overflow-hidden relative",
                 conv.needsHumanAttention && 'ring-1 ring-red-100'
               )}
-              style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
+              style={{ animationDelay: `${Math.min(i, 10) * 0.05}s` } as React.CSSProperties}
               onClick={() => setSelectedConversation(conv)}
             >
               {/* Left Accent Bar */}
@@ -333,7 +400,7 @@ const MessagesPage: NextPageWithLayout = () => {
                           </div>
                       </div>
 
-                      {/* Status Badges - Top Right */}
+                      {/* Status Badges */}
                       <div className="flex items-center gap-2">
                           {conv.needsHumanAttention ? (
                             <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-100 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft">
@@ -349,9 +416,8 @@ const MessagesPage: NextPageWithLayout = () => {
                       </div>
                    </div>
 
-                   {/* Message Preview Box */}
+                   {/* Message Preview */}
                    <div className="relative group/box mt-1">
-                      {/* Speech Bubble Arrow */}
                       <div className="absolute -top-1.5 start-6 w-3 h-3 bg-surface-50 rotate-45 border-t border-l border-surface-100/60 z-0"></div>
                       
                       <div className="relative z-10 p-4 bg-surface-50 rounded-2xl rounded-tl-sm border border-surface-100/60 transition-colors group-hover/card:bg-brand-50/30 group-hover/card:border-brand-100/30">
@@ -368,7 +434,7 @@ const MessagesPage: NextPageWithLayout = () => {
                       </div>
                    </div>
 
-                   {/* Footer / Reply Hint */}
+                   {/* Reply Hint */}
                    <div className="flex items-center justify-end mt-1">
                        <div className="flex items-center gap-1 text-xs font-bold text-brand-600 opacity-0 group-hover/card:opacity-100 transition-opacity transform translate-y-1 group-hover/card:translate-y-0 duration-300">
                           <span>{t('comments.reply')}</span>
@@ -383,18 +449,41 @@ const MessagesPage: NextPageWithLayout = () => {
             </Card>
           ))}
         </div>
+
+        {/* Load More Trigger */}
+        <div ref={loadMoreRef} className="pb-12">
+          {isFetchingNextPage ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
+              <span className="ms-3 text-sm text-surface-500">{t('common.loading')}...</span>
+            </div>
+          ) : hasNextPage ? (
+            <div className="flex justify-center py-8">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => fetchNextPage()}
+                className="rounded-full px-6"
+              >
+                {t('common.loadMore')}
+              </Button>
+            </div>
+          ) : conversations.length > 0 ? (
+            <div className="text-center py-8 text-sm text-surface-400">
+              ✓ {t('common.allLoaded')}
+            </div>
+          ) : null}
+        </div>
+        </>
       ) : (
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl" padding="lg">
           <div className="py-10 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
-              <MessageCircle className="w-8 h-8 text-surface-300 opacity-60" />
-            </div>
-            <p className="text-base font-semibold text-surface-600 mb-2">
-              {searchQuery ? t('common.noData') : t('messages.noMessages' as TranslationKey)}
-            </p>
-            <p className="text-sm text-surface-500">
-              {searchQuery ? '' : t('messages.noMessagesDesc' as TranslationKey)}
-            </p>
+             <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
+                <MessageCircle className="w-8 h-8 text-surface-300 opacity-60" />
+             </div>
+             <p className="text-base font-semibold text-surface-600 mb-2">
+                {searchQuery ? t('common.noData') : t('messages.noMessages' as TranslationKey)}
+             </p>
           </div>
         </Card>
       )}
@@ -435,7 +524,7 @@ const MessagesPage: NextPageWithLayout = () => {
               </button>
             </div>
 
-            {/* Modal Body - Conversation Thread */}
+            {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-surface-50/50">
               {getSortedMessages(selectedConversation).map((msg) => (
                 <div
@@ -497,7 +586,6 @@ const MessagesPage: NextPageWithLayout = () => {
   );
 };
 
-// Persistent layout - prevents Sidebar remounting on navigation
 MessagesPage.getLayout = (page: ReactElement) => (
   <DashboardLayout title="Messages">{page}</DashboardLayout>
 );

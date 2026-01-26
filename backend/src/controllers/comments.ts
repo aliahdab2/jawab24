@@ -5,29 +5,67 @@ import { AuthenticatedRequest } from '../middleware/auth';
 
 export class CommentsController {
     /**
-     * Get all comments for user
+     * Get all comments for user with pagination
      * GET /comments
+     *
+     * Query params:
+     * - cursor: Comment ID to start after (for infinite scroll)
+     * - limit: Number of comments per page (default 50, max 100)
+     * - replied: Filter by replied status ('true' | 'false')
+     * - replyMethod: Filter by reply method ('ai' | 'template' | 'manual')
+     *
+     * Response:
+     * {
+     *   data: Comment[],
+     *   pagination: { hasMore: boolean, nextCursor: string | null, limit: number }
+     * }
      */
-    async getAll(request: FastifyRequest<{ Querystring: { replied?: string; limit?: string } }>, reply: FastifyReply) {
+    async getAll(request: FastifyRequest<{
+        Querystring: {
+            cursor?: string;
+            limit?: string;
+            replied?: string;
+            replyMethod?: 'ai' | 'template' | 'manual';
+        }
+    }>, reply: FastifyReply) {
         const user = (request as AuthenticatedRequest).user;
         if (!user) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { userId } = user;
-        const { replied, limit } = request.query;
-        
+        const { cursor, limit, replied, replyMethod } = request.query;
+
         try {
-            const options: { replied?: boolean; limit?: number } = {};
-            
+            const options: {
+                cursor?: string;
+                limit?: number;
+                replied?: boolean;
+                replyMethod?: 'ai' | 'template' | 'manual';
+            } = {};
+
+            // Parse cursor for pagination
+            if (cursor) {
+                options.cursor = cursor;
+            }
+
+            // Parse limit (default 50, max 100)
+            if (limit) {
+                const parsedLimit = parseInt(limit, 10);
+                options.limit = Math.min(Math.max(parsedLimit, 1), 100);
+            }
+
+            // Parse replied filter
             if (replied !== undefined) {
                 options.replied = replied === 'true';
             }
-            if (limit) {
-                options.limit = parseInt(limit, 10);
+
+            // Parse replyMethod filter
+            if (replyMethod && ['ai', 'template', 'manual'].includes(replyMethod)) {
+                options.replyMethod = replyMethod;
             }
 
-            const comments = await commentsService.getCommentsByUser(userId, options);
-            return reply.send(comments);
+            const result = await commentsService.getCommentsByUser(userId, options);
+            return reply.send(result);
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch comments' });

@@ -1,16 +1,13 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Card, Button } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import {
-  MessageSquare,
   Clock,
   AlertTriangle,
   Sparkles,
   Zap,
   CheckCircle,
-  FileText,
-  Globe,
   User
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -51,9 +48,7 @@ export function CommentCard({
   onQuickReply,
   variant = 'compact',
   pageName,
-  showPageName = true,
   showPlatformIcon = false,
-  showPostInfo = false,
   animationDelay = 0,
   className
 }: CommentCardProps) {

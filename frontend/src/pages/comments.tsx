@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useCallback, type ReactElement, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, type ReactElement, useMemo, useRef } from 'react';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useSearchParams } from 'next/navigation';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { CommentDetailModal, CommentCard, checkNeedsAttention } from '@/components/comments';
 import { useAuthStore } from '@/lib/store';
-import { commentsApi, pagesApi } from '@/lib/api';
+import { commentsApi, pagesApi, type CommentsQueryParams } from '@/lib/api';
 import {
   MessageSquare,
   Search,
@@ -19,7 +20,8 @@ import {
   AlertTriangle,
   ExternalLink,
   X,
-  Zap
+  Zap,
+  Loader2
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { format, isToday } from 'date-fns';
@@ -27,146 +29,208 @@ import type { Comment, Page } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
-  /* 
-    Updated FilterType to include 'replied_today'.
-    Note: 'flagged' is handled as an alias for 'needs_attention' in existing logic or explicit new type. 
-  */
-  type FilterType = 'all' | 'template' | 'ai' | 'pending' | 'needs_attention' | 'replied_today' | 'flagged';
+// Filter types - server-side filters use API params, client-side filters use local filtering
+type FilterType = 'all' | 'template' | 'ai' | 'pending' | 'needs_attention' | 'replied_today' | 'flagged';
 
-  const CommentsPage: NextPageWithLayout = () => {
-    const { t } = useTranslation();
-    const { isAuthenticated } = useAuthStore();
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    
-    const [comments, setComments] = useState<Comment[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [isTransitioning, setIsTransitioning] = useState(false);
-    
-    // Map URL 'flagged' -> 'needs_attention' internally if preferred, or handle 'flagged' explicitly
-    const rawFilter = (searchParams.get('filter') as string) || 'all';
-    const initialFilter = rawFilter === 'flagged' ? 'needs_attention' : (rawFilter as FilterType);
-    
-    const [filter, setFilter] = useState<FilterType>(initialFilter);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
-    const [exporting, setExporting] = useState(false);
-    const [pages, setPages] = useState<Page[]>([]);
-  
-    //  Fetch pages on mount
-    useEffect(() => {
-      const fetchPages = async () => {
-        try {
-          const { data } = await pagesApi.getAll();
-          setPages(data);
-          if (data.length === 0) {
-             setLoading(false);
-          }
-        } catch (error) {
-          console.error('Failed to fetch pages', error);
-        }
+// Map frontend filters to API params
+function getApiParams(filter: FilterType): CommentsQueryParams {
+  switch (filter) {
+    case 'pending':
+      return { replied: false };
+    case 'ai':
+      return { replied: true, replyMethod: 'ai' };
+    case 'template':
+      return { replied: true, replyMethod: 'template' };
+    // These filters need client-side filtering on top of server data
+    case 'needs_attention':
+    case 'flagged':
+    case 'replied_today':
+    case 'all':
+    default:
+      return {};
+  }
+}
+
+
+// Custom hook for debounced value
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+const COMMENTS_PER_PAGE = 50;
+
+const CommentsPage: NextPageWithLayout = () => {
+  const { t } = useTranslation();
+  const { isAuthenticated } = useAuthStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // Map URL 'flagged' -> 'needs_attention' internally
+  const rawFilter = (searchParams.get('filter') as string) || 'all';
+  const initialFilter = rawFilter === 'flagged' ? 'needs_attention' : (rawFilter as FilterType);
+
+  const [filter, setFilter] = useState<FilterType>(initialFilter);
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
+  const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  // Infinite scroll observer ref
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Fetch pages
+  const { data: pagesData = [] } = useQuery({
+    queryKey: ['pages'],
+    queryFn: async () => {
+      const { data } = await pagesApi.getAll();
+      return Array.isArray(data) ? data : (data?.data || []);
+    },
+    enabled: isAuthenticated,
+  });
+  const pages = pagesData as Page[];
+
+  // Get API params based on current filter
+  const apiParams = useMemo(() => getApiParams(filter), [filter]);
+
+  // Infinite query for comments
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    refetch,
+  } = useInfiniteQuery({
+    queryKey: ['comments', apiParams],
+    queryFn: async ({ pageParam }) => {
+      const params: CommentsQueryParams = {
+        ...apiParams,
+        limit: COMMENTS_PER_PAGE,
+        cursor: pageParam as string | undefined,
       };
-      if (isAuthenticated) {
-          fetchPages();
-      }
-    }, [isAuthenticated]);
-  
-    // Sync Filter to URL
-    const updateFilter = (newFilter: FilterType) => {
-      if (newFilter === filter) return;
-      
-      // Smart Transition: Instant crossfade
-      setIsTransitioning(true);
-      setTimeout(() => {
-        setFilter(newFilter);
-        setIsTransitioning(false);
-      }, 120);
-  
-      const params = new URLSearchParams(window.location.search);
-      
-      // Alias internal 'needs_attention' to 'flagged' in URL if desired, or keep as is.
-      // Requirements asked for 'flagged', so let's use that in URL.
-      let urlFilter = newFilter;
-      if (newFilter === 'needs_attention') urlFilter = 'flagged';
+      const response = await commentsApi.getAll(params);
+      return response.data;
+    },
+    getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
+    initialPageParam: undefined as string | undefined,
+    enabled: isAuthenticated,
+  });
 
-      if (newFilter === 'all') {
-        params.delete('filter');
-      } else {
-        params.set('filter', urlFilter);
-      }
-      router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
+  // Flatten all pages of comments
+  const allComments = useMemo((): Comment[] => {
+    if (!data?.pages) return [];
+    // The API returns CommentData which is compatible with Comment
+    return data.pages.flatMap(page => page.data as unknown as Comment[]);
+  }, [data]);
+
+  // Client-side filtering for search and special filters
+  const filteredComments = useMemo(() => {
+    let result = allComments;
+
+    // Apply client-side filter for special filters
+    if (filter === 'needs_attention' || filter === 'flagged') {
+      result = result.filter(c => checkNeedsAttention(c));
+    } else if (filter === 'replied_today') {
+      result = result.filter(c => c.replied && c.repliedAt && isToday(new Date(c.repliedAt)));
+    }
+
+    // Apply search filter
+    if (debouncedSearch) {
+      const query = debouncedSearch.toLowerCase();
+      result = result.filter(c =>
+        c.message.toLowerCase().includes(query) ||
+        (c.fromName || '').toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [allComments, filter, debouncedSearch]);
+
+  // Calculate stats from loaded comments
+  const stats = useMemo(() => {
+    const today = new Date();
+    return {
+      total: allComments.length,
+      templateReplies: allComments.filter(c => !!c.replied && c.replyMethod !== 'ai').length,
+      pending: allComments.filter(c => !c.replied).length,
+      aiReplies: allComments.filter(c => c.replyMethod === 'ai').length,
+      needsAttention: allComments.filter(c => checkNeedsAttention(c)).length,
+      repliedToday: allComments.filter(c => {
+        if (!c.replied || !c.repliedAt) return false;
+        const replyDate = new Date(c.repliedAt);
+        return replyDate.getDate() === today.getDate() &&
+          replyDate.getMonth() === today.getMonth() &&
+          replyDate.getFullYear() === today.getFullYear();
+      }).length,
     };
+  }, [allComments]);
 
-    // Update internal filter when URL changes (e.g. back button)
-    useEffect(() => {
-      const currentParam = searchParams.get('filter');
-      if (currentParam === 'flagged') {
-        setFilter('needs_attention');
-      } else if (currentParam) {
-        setFilter(currentParam as FilterType);
-      } else {
-        setFilter('all');
-      }
-    }, [searchParams]);
-  
-    const filteredComments = useMemo(() => {
-      return comments.filter(comment => {
-        const matchesSearch = comment.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (comment.fromName || '').toLowerCase().includes(searchQuery.toLowerCase());
-  
-        if (filter === 'needs_attention' || filter === 'flagged') {
-          return matchesSearch && checkNeedsAttention(comment);
-        }
-  
-        let matchesFilter = false;
-        switch (filter) {
-          case 'all':
-            matchesFilter = true;
-            break;
-          case 'template':
-            // Replied by human/template (EXCLUDING AI)
-            matchesFilter = !!comment.replied && comment.replyMethod !== 'ai';
-            break;
-          case 'ai':
-            matchesFilter = comment.replyMethod === 'ai';
-            break;
-          case 'pending':
-            matchesFilter = !comment.replied;
-            break;
-          case 'replied_today':
-            matchesFilter = !!comment.replied && !!comment.repliedAt && isToday(new Date(comment.repliedAt));
-            break;
-        }
-        
-        return matchesSearch && matchesFilter;
-      });
-    }, [comments, filter, searchQuery]);
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
 
-    const stats = useMemo(() => {
-      const today = new Date();
-      return {
-        total: comments.length,
-        // "Replied" card now represents ONLY Template/Manual replies (Mutually exclusive from AI)
-        templateReplies: comments.filter(c => !!c.replied && c.replyMethod !== 'ai').length,
-        pending: comments.filter(c => !c.replied).length,
-        aiReplies: comments.filter(c => c.replyMethod === 'ai').length,
-        needsAttention: comments.filter(c => checkNeedsAttention(c)).length,
-        repliedToday: comments.filter(c => {
-          if (!c.replied || !c.repliedAt) return false;
-          const replyDate = new Date(c.repliedAt);
-          return replyDate.getDate() === today.getDate() &&
-                 replyDate.getMonth() === today.getMonth() &&
-                 replyDate.getFullYear() === today.getFullYear();
-        }).length,
-      };
-    }, [comments]);
-  
-    // Update Page Title
-    useEffect(() => {
-      const filterLabel = filter === 'all' ? '' : ` — ${t(`comments.${filter}` as any)}`;
-      const countLabel = filteredComments.length > 0 ? ` (${filteredComments.length})` : '';
-      document.title = `${t('comments.title')}${filterLabel}${countLabel}`;
-    }, [filter, filteredComments.length, t]);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Sync Filter to URL
+  const updateFilter = useCallback((newFilter: FilterType) => {
+    if (newFilter === filter) return;
+
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setFilter(newFilter);
+      setIsTransitioning(false);
+    }, 120);
+
+    const params = new URLSearchParams(window.location.search);
+    let urlFilter = newFilter;
+    if (newFilter === 'needs_attention') urlFilter = 'flagged';
+
+    if (newFilter === 'all') {
+      params.delete('filter');
+    } else {
+      params.set('filter', urlFilter);
+    }
+    router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
+  }, [filter, router]);
+
+  // Update internal filter when URL changes
+  useEffect(() => {
+    const currentParam = searchParams.get('filter');
+    if (currentParam === 'flagged') {
+      setFilter('needs_attention');
+    } else if (currentParam) {
+      setFilter(currentParam as FilterType);
+    } else {
+      setFilter('all');
+    }
+  }, [searchParams]);
+
+  // Update Page Title
+  useEffect(() => {
+    const filterLabel = filter === 'all' ? '' : ` — ${t(`comments.${filter}` as any)}`;
+    const countLabel = filteredComments.length > 0 ? ` (${filteredComments.length})` : '';
+    document.title = `${t('comments.title')}${filterLabel}${countLabel}`;
+  }, [filter, filteredComments.length, t]);
 
   // Auto-scroll active card into view on mobile
   useEffect(() => {
@@ -181,39 +245,9 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
   // ESC key to close modal
   useEscapeKey(() => setSelectedComment(null), !!selectedComment);
 
-  const fetchComments = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [commentsRes, pagesRes] = await Promise.all([
-        commentsApi.getAll(),
-        pagesApi.getAll()
-      ]);
-      
-      const commentsData = Array.isArray(commentsRes.data)
-        ? commentsRes.data
-        : (Array.isArray(commentsRes.data?.data) ? commentsRes.data.data : []);
-      setComments(commentsData);
-      
-      const pagesData = Array.isArray(pagesRes.data)
-        ? pagesRes.data
-        : (Array.isArray(pagesRes.data?.data) ? pagesRes.data.data : []);
-      setPages(pagesData);
-    } catch (error) {
-      console.error('Failed to fetch comments:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchComments();
-    }
-  }, [isAuthenticated, fetchComments]);
-
   const getFilterChipLabel = (filterType: FilterType) => {
     switch (filterType) {
-      case 'template': return t('comments.replied'); // Using generic 'Replied' label or add specific key if exists
+      case 'template': return t('comments.replied');
       case 'ai': return t('dashboard.aiReply');
       case 'pending': return t('comments.pending');
       case 'needs_attention': return t('comments.needsAttention');
@@ -226,7 +260,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
     setExporting(true);
     try {
       const headers = ['ID', 'Post ID', 'From ID', 'From Name', 'Message', 'Replied', 'Reply Text', 'Reply Method', 'Detected Language', 'Created At', 'Replied At'];
-      const rows = comments.map(c => [
+      const rows = allComments.map(c => [
         c.id, c.postId, c.fromId || '', c.fromName || '', `"${(c.message || '').replace(/"/g, '""')}"`,
         c.replied ? 'Yes' : 'No', `"${(c.replyText || '').replace(/"/g, '""')}"`, c.replyMethod || '',
         c.detectedLanguage || '', c.createdAt ? new Date(c.createdAt).toISOString() : '', c.repliedAt ? new Date(c.repliedAt).toISOString() : ''
@@ -248,9 +282,15 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
     }
   };
 
-  if (loading && comments.length === 0) {
+  if (isLoading && allComments.length === 0) {
     return <PageSkeleton type="list" />;
   }
+
+  // Calculate platform visibility logic
+  const showPageName = pages.length > 1;
+  const hasFacebook = pages.some(p => !!p.facebookPageId);
+  const hasInstagram = pages.some(p => !!p.instagramAccountId);
+  const showPlatformIcon = hasFacebook && hasInstagram;
 
   return (
     <>
@@ -270,8 +310,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
         }
       />
 
-      {/* Stats - Premium Physical Feedback */}
-      {/* Stats - Grid Layout */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-12">
         <div onClick={() => updateFilter('all')}>
           <StatCard
@@ -335,7 +374,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
         </div>
       </div>
 
-      {/* Filters & Search - Integrated Chip Row */}
+      {/* Filters & Search */}
       <Card className="mb-12 border-none shadow-md shadow-surface-200/20 overflow-visible" padding="none">
         <div className="p-4 sm:p-5 flex flex-col md:flex-row items-center gap-4">
           <div className="relative group flex-1 w-full">
@@ -350,10 +389,10 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
               className="py-3.5 ps-14 rounded-2xl bg-surface-50 border-none focus:ring-4 focus:ring-brand-500/10 focus:bg-white transition-all shadow-sm"
             />
           </div>
-          
+
           {filter !== 'all' && (
             <div className="flex shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
-               <button 
+              <button
                 onClick={() => updateFilter('all')}
                 className={clsx(
                   "group relative flex items-center gap-2.5 py-2.5 px-5 rounded-full shadow-sm hover:shadow-md transition-all duration-300 ring-1 ring-inset",
@@ -362,73 +401,85 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
                   filter === 'needs_attention' && "bg-red-50 text-red-700 ring-red-200 hover:bg-red-100",
                   (filter === 'template' || filter === 'replied_today') && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100"
                 )}
-               >
-                 {/* Icon */}
-                 {filter === 'pending' && <Clock className="w-4 h-4" />}
-                 {filter === 'ai' && <Bot className="w-4 h-4" />}
-                 {filter === 'needs_attention' && <AlertTriangle className="w-4 h-4" />}
-                 {(filter === 'template' || filter === 'replied_today') && <CheckCircle className="w-4 h-4" />}
-                 
-                 <span className="font-bold text-sm tracking-wide">{getFilterChipLabel(filter)}</span>
-                 
-                 {/* Divider */}
-                 <div className={clsx(
-                   "w-px h-4 mx-1 opacity-20 bg-current"
-                 )} />
+              >
+                {filter === 'pending' && <Clock className="w-4 h-4" />}
+                {filter === 'ai' && <Bot className="w-4 h-4" />}
+                {filter === 'needs_attention' && <AlertTriangle className="w-4 h-4" />}
+                {(filter === 'template' || filter === 'replied_today') && <CheckCircle className="w-4 h-4" />}
 
-                 {/* Close Icon (Animated) */}
-                 <div className="bg-white/50 rounded-full p-0.5 group-hover:bg-white transition-colors">
-                    <X className="w-3.5 h-3.5" />
-                 </div>
-               </button>
+                <span className="font-bold text-sm tracking-wide">{getFilterChipLabel(filter)}</span>
+
+                <div className="w-px h-4 mx-1 opacity-20 bg-current" />
+
+                <div className="bg-white/50 rounded-full p-0.5 group-hover:bg-white transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </div>
+              </button>
             </div>
           )}
 
           {filteredComments.length > 0 && (
-            <div className="hidden md:block text-[10px] font-bold text-surface-400 uppercase tracking-widest whitespace-nowrap">
-              {filteredComments.length} {t('dashboard.comments')}
+            <div className="hidden md:flex items-center gap-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest whitespace-nowrap">
+              <span>{filteredComments.length} {t('dashboard.comments')}</span>
+              {hasNextPage && <span className="text-brand-500">+</span>}
             </div>
           )}
         </div>
       </Card>
 
-      {/* Comments List - Smart Transitions + XL Grid */}
+      {/* Comments List */}
       {filteredComments.length > 0 ? (
-        (() => {
-           // Calculate platform visibility logic (same as Dashboard)
-           const showPageName = pages.length > 1;
-           const hasFacebook = pages.some(p => !!p.facebookPageId);
-           const hasInstagram = pages.some(p => !!p.instagramAccountId);
-           const showPlatformIcon = hasFacebook && hasInstagram;
+        <>
+          <div
+            className={clsx(
+              "grid grid-cols-1 lg:grid-cols-2 gap-8 pb-8 transition-all duration-300 ease-out",
+              isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
+            )}
+          >
+            {filteredComments.map((comment, i) => {
+              const page = pages.find(p => p.id === (comment as any).pageId);
+              return (
+                <CommentCard
+                  key={comment.id}
+                  comment={comment}
+                  variant="full"
+                  pageName={page?.name}
+                  showPageName={showPageName}
+                  showPlatformIcon={showPlatformIcon}
+                  showPostInfo={true}
+                  animationDelay={i < 10 ? i * 0.05 : 0}
+                  onClick={() => setSelectedComment(comment)}
+                  onQuickReply={() => setSelectedComment(comment)}
+                />
+              );
+            })}
+          </div>
 
-           return (
-            <div 
-              className={clsx(
-                "grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12 transition-all duration-300 ease-out",
-                isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
-              )}
-            >
-              {filteredComments.map((comment, i) => {
-                const pageId = comment.pageId;
-                const page = pages.find(p => p.id === pageId);
-                return (
-                  <CommentCard
-                    key={comment.id}
-                    comment={comment}
-                    variant="full"
-                    pageName={page?.name}
-                    showPageName={showPageName}
-                    showPlatformIcon={showPlatformIcon}
-                    showPostInfo={true}
-                    animationDelay={(i % 10) * 0.05}
-                    onClick={() => setSelectedComment(comment)}
-                    onQuickReply={() => setSelectedComment(comment)}
-                  />
-                );
-              })}
-            </div>
-          );
-        })()
+          {/* Infinite Scroll Trigger / Load More */}
+          <div ref={loadMoreRef} className="pb-12">
+            {isFetchingNextPage ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
+                <span className="ms-3 text-sm text-surface-500">{t('common.loading')}...</span>
+              </div>
+            ) : hasNextPage ? (
+              <div className="flex justify-center py-8">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => fetchNextPage()}
+                  className="rounded-full px-6"
+                >
+                  {t('common.loadMore')}
+                </Button>
+              </div>
+            ) : allComments.length > COMMENTS_PER_PAGE ? (
+              <div className="text-center py-8 text-sm text-surface-400">
+                ✓ {t('common.allLoaded')}
+              </div>
+            ) : null}
+          </div>
+        </>
       ) : (
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl" padding="lg">
           <div className="py-10 text-center">
@@ -436,12 +487,12 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
               <MessageSquare className="w-8 h-8 text-surface-300 opacity-60" />
             </div>
             <p className="text-base font-semibold text-surface-600 mb-2">
-              {searchQuery ? t('common.noData') : t('comments.noComments')}
+              {debouncedSearch ? t('common.noData') : t('comments.noComments')}
             </p>
             <p className="text-sm text-surface-500 mb-5">
-              {searchQuery ? t('comments.tryDifferentSearch') : (pages.length > 0) ? t('comments.noCommentsForFilter') : t('comments.noCommentsDesc')}
+              {debouncedSearch ? t('comments.tryDifferentSearch') : (pages.length > 0) ? t('comments.noCommentsForFilter') : t('comments.noCommentsDesc')}
             </p>
-            {!searchQuery && pages.length === 0 && (
+            {!debouncedSearch && pages.length === 0 && (
               <Link href="/pages">
                 <Button variant="primary" size="sm" icon={<ExternalLink className="w-[18px] h-[18px]" />}>
                   {t('comments.connectPage')}
@@ -456,7 +507,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
         <CommentDetailModal
           comment={selectedComment}
           onClose={() => setSelectedComment(null)}
-          onReplySuccess={fetchComments}
+          onReplySuccess={() => refetch()}
         />
       )}
     </>

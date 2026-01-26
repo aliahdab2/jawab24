@@ -129,8 +129,8 @@ const DashboardPage: NextPageWithLayout = () => {
       }
 
       const allComments: Comment[] = Array.isArray(commentsRes.data)
-        ? commentsRes.data
-        : (Array.isArray(commentsRes.data?.data) ? commentsRes.data.data : []);
+        ? commentsRes.data as unknown as Comment[]
+        : (Array.isArray(commentsRes.data?.data) ? commentsRes.data.data : []) as unknown as Comment[];
 
       const fetchedPages: Page[] = Array.isArray(pagesRes.data)
         ? pagesRes.data

@@ -24,6 +24,8 @@
   "common.next": "Next",
   "common.previous": "Previous",
   "common.viewAll": "View All",
+  "common.loadMore": "Load More",
+  "common.allLoaded": "All loaded",
   "common.noData": "No data yet",
   "common.unknown": "Unknown",
   "common.unknownUser": "Unknown User",

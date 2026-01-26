@@ -8,6 +8,8 @@
  * - CSRF protection for state-changing requests
  * - Request retry with exponential backoff
  * - Request timeout configuration
+ *
+ * NOTE: When adding new API types, ensure they match the backend DTOs exactly.
  */
 
 import axios, { AxiosRequestConfig } from 'axios';
@@ -119,10 +121,45 @@ export const postsApi = {
     api.patch(`/posts/${id}/auto-reply`, { enabled }),
 };
 
+// Comments API Types
+export interface CommentData {
+  id: string;
+  postId: string;
+  facebookCommentId: string;
+  message: string;
+  fromId: string | null;
+  fromName: string | null;
+  replied: boolean;
+  replyText: string | null;
+  replyMethod: 'ai' | 'template' | 'manual' | null;
+  detectedLanguage: string | null;
+  createdTime: string | null;
+  repliedAt: string | null;
+  createdAt: string;
+  postMessage: string | null;
+  pageName: string | null;
+}
+
+export interface CommentsPaginatedResponse {
+  data: CommentData[];
+  pagination: {
+    hasMore: boolean;
+    nextCursor: string | null;
+    limit: number;
+  };
+}
+
+export interface CommentsQueryParams {
+  cursor?: string;           // Comment ID to start after (for infinite scroll)
+  limit?: number;            // Comments per page (default 50, max 100)
+  replied?: boolean;         // Filter: true = replied only, false = unreplied only
+  replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
+}
+
 // Comments API
 export const commentsApi = {
-  getAll: (params?: { page?: number; limit?: number; replied?: boolean }) =>
-    api.get('/comments', { params }),
+  getAll: (params?: CommentsQueryParams) =>
+    api.get<CommentsPaginatedResponse>('/comments', { params }),
   getByPost: (postId: string) => api.get(`/posts/${postId}/comments`),
   reply: (id: string, text: string) =>
     api.post(`/comments/${id}/reply`, { text }),
@@ -195,6 +232,17 @@ export const subscriptionApi = {
   checkRuleLimit: () => api.get('/subscription/limits/rules'),
 };
 
+// Messages API
+export const messagesApi = {
+  getAll: (params?: MessagesQueryParams) => 
+    api.get<MessagesPaginatedResponse>('/messages', { params }),
+  
+  getStats: () => api.get('/messages/stats'),
+  
+  getConversation: (senderId: string, params: { pageId: string; limit?: number }) =>
+    api.get<Message[]>(`/messages/conversation/${senderId}`, { params }),
+};
+
 // AI API
 export const aiApi = {
   generateAsync: (data: { comment: string; language?: string; context?: unknown }) =>
@@ -203,6 +251,38 @@ export const aiApi = {
   getJobStatus: (jobId: string) =>
     api.get<{ jobId: string; status: string; result?: { reply: string }; error?: string }>(`/ai/jobs/${jobId}`),
 };
+
+// Messages API Types
+export interface Message {
+  id: string;
+  pageId: string;
+  facebookMessageId: string;
+  senderId: string;
+  senderName: string | null;
+  message: string;
+  direction: 'incoming' | 'outgoing';
+  replied: boolean;
+  replyText: string | null;
+  replyMethod: 'template' | 'ai' | 'manual' | null;
+  createdTime: string | null;
+  repliedAt: string | null;
+  createdAt: string;
+}
+
+export interface MessagesPaginatedResponse {
+  data: Message[];
+  pagination: {
+    hasMore: boolean;
+    nextCursor: string | null;
+    limit: number;
+  };
+}
+
+export interface MessagesQueryParams {
+  cursor?: string;
+  limit?: number;
+  direction?: 'incoming' | 'outgoing';
+}
 
 // Admin API - Protected routes for admin users only
 export const adminApi = {

@@ -8,15 +8,52 @@ interface AuthenticatedRequest extends FastifyRequest {
 
 export class MessagesController {
     /**
-     * Get all messages
+     * Get all messages with pagination
      * GET /messages
+     *
+     * Query params:
+     * - cursor: Message ID to start after (for infinite scroll)
+     * - limit: Number of messages per page (default 50, max 100)
+     * - direction: Filter by direction ('incoming' | 'outgoing')
+     *
+     * Response:
+     * {
+     *   data: Message[],
+     *   pagination: { hasMore: boolean, nextCursor: string | null, limit: number }
+     * }
      */
-    async getAll(request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) {
+    async getAll(request: FastifyRequest<{
+        Querystring: {
+            cursor?: string;
+            limit?: string;
+            direction?: 'incoming' | 'outgoing';
+        }
+    }>, reply: FastifyReply) {
         try {
             const userId = (request as AuthenticatedRequest).user.userId;
-            const limit = request.query.limit ? parseInt(request.query.limit) : 50;
-            const messages = await messagesService.getMessages(userId, limit);
-            return reply.send(messages);
+            const { cursor, limit, direction } = request.query;
+
+            const options: {
+                cursor?: string;
+                limit?: number;
+                direction?: 'incoming' | 'outgoing';
+            } = {};
+
+            if (cursor) {
+                options.cursor = cursor;
+            }
+
+            if (limit) {
+                const parsedLimit = parseInt(limit, 10);
+                options.limit = Math.min(Math.max(parsedLimit, 1), 100);
+            }
+
+            if (direction && ['incoming', 'outgoing'].includes(direction)) {
+                options.direction = direction;
+            }
+
+            const result = await messagesService.getMessages(userId, options);
+            return reply.send(result);
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error getting messages');
             return reply.status(500).send({ error: 'Failed to get messages' });

@@ -36,9 +36,46 @@ export class CommentsService {
 
     /**
      * Get all comments for a user (across all their pages/posts)
+     * Supports cursor-based pagination for efficient infinite scroll
+     * Supports server-side filtering for efficient paginated filtering
      */
-    async getCommentsByUser(userId: string, options?: { replied?: boolean; limit?: number }) {
-        let query = db
+    async getCommentsByUser(userId: string, options?: {
+        replied?: boolean;
+        replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
+        limit?: number;
+        cursor?: string;  // Comment ID to start after (for pagination)
+    }) {
+        const limit = options?.limit || 50;
+
+        // Build base conditions
+        const conditions = [eq(pages.userId, userId)];
+
+        // Filter by replied status
+        if (options?.replied !== undefined) {
+            conditions.push(eq(comments.replied, options.replied));
+        }
+
+        // Filter by reply method (ai, template, manual)
+        if (options?.replyMethod) {
+            conditions.push(eq(comments.replyMethod, options.replyMethod));
+        }
+
+        // For cursor-based pagination, we need to get the createdAt of the cursor comment
+        // and fetch comments older than that
+        if (options?.cursor) {
+            const cursorComment = await db
+                .select({ createdAt: comments.createdAt })
+                .from(comments)
+                .where(eq(comments.id, options.cursor))
+                .limit(1);
+
+            if (cursorComment[0]) {
+                conditions.push(sql`${comments.createdAt} < ${cursorComment[0].createdAt}`);
+            }
+        }
+
+        // Fetch limit + 1 to check if there are more
+        const data = await db
             .select({
                 id: comments.id,
                 postId: comments.postId,
@@ -59,26 +96,68 @@ export class CommentsService {
             .from(comments)
             .innerJoin(posts, eq(comments.postId, posts.id))
             .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(eq(pages.userId, userId))
+            .where(and(...conditions))
             .orderBy(desc(comments.createdAt))
-            .$dynamic();
+            .limit(limit + 1);
+
+        // Check if there are more results
+        const hasMore = data.length > limit;
+        const results = hasMore ? data.slice(0, limit) : data;
+        const nextCursor = hasMore && results.length > 0 ? results[results.length - 1].id : null;
+
+        return {
+            data: results,
+            pagination: {
+                hasMore,
+                nextCursor,
+                limit,
+            }
+        };
+    }
+
+    /**
+     * Get all comments for a user without pagination (for backwards compatibility)
+     * @deprecated Use getCommentsByUser with pagination instead
+     */
+    async getAllCommentsByUser(userId: string, options?: { replied?: boolean }) {
+        const conditions = [eq(pages.userId, userId)];
 
         if (options?.replied !== undefined) {
-            query = query.where(eq(comments.replied, options.replied));
+            conditions.push(eq(comments.replied, options.replied));
         }
 
-        if (options?.limit) {
-            query = query.limit(options.limit);
-        }
-
-        return query;
+        return db
+            .select({
+                id: comments.id,
+                postId: comments.postId,
+                facebookCommentId: comments.facebookCommentId,
+                message: comments.message,
+                fromId: comments.fromId,
+                fromName: comments.fromName,
+                replied: comments.replied,
+                replyText: comments.replyText,
+                replyMethod: comments.replyMethod,
+                detectedLanguage: comments.detectedLanguage,
+                createdTime: comments.createdTime,
+                repliedAt: comments.repliedAt,
+                createdAt: comments.createdAt,
+                postMessage: posts.message,
+                pageName: pages.name,
+            })
+            .from(comments)
+            .innerJoin(posts, eq(comments.postId, posts.id))
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(...conditions))
+            .orderBy(desc(comments.createdAt));
     }
 
     /**
      * Get unreplied comments for a user
+     * Returns array directly for backwards compatibility
      */
     async getUnrepliedComments(userId: string, limit?: number) {
-        return this.getCommentsByUser(userId, { replied: false, limit });
+        const result = await this.getCommentsByUser(userId, { replied: false, limit });
+        return result.data;
     }
 
     /**
