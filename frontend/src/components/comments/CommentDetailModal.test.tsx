@@ -35,6 +35,7 @@ vi.mock('sonner', () => ({
 const mockComment: Comment = {
   id: 'c1',
   postId: 'p1',
+  pageId: 'page1',
   message: 'Hello world',
   createdAt: new Date().toISOString(),
   replied: false,

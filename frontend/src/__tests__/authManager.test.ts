@@ -408,7 +408,7 @@ describe('AuthManager', () => {
       const error500 = {
         response: { status: 500 },
         config: { url: '/api/test' },
-      } as AxiosError;
+      } as unknown as AxiosError;
       
       const refreshSpy = vi.spyOn(authManager, 'refreshToken');
       
@@ -432,7 +432,7 @@ describe('AuthManager', () => {
       const error403 = {
         response: { status: 403 },
         config: { url: '/api/test' },
-      } as AxiosError;
+      } as unknown as AxiosError;
       
       const refreshSpy = vi.spyOn(authManager, 'refreshToken');
       
@@ -456,7 +456,7 @@ describe('AuthManager', () => {
       const networkError = {
         message: 'Network Error',
         config: { url: '/api/test' },
-      } as AxiosError;
+      } as unknown as AxiosError;
       
       await expect(responseInterceptor.onRejected(networkError)).rejects.toBeDefined();
     });
@@ -476,7 +476,7 @@ describe('AuthManager', () => {
       
       const error401NoConfig = {
         response: { status: 401 },
-      } as AxiosError;
+      } as unknown as AxiosError;
       
       await expect(responseInterceptor.onRejected(error401NoConfig)).rejects.toBeDefined();
     });
@@ -498,7 +498,7 @@ describe('AuthManager', () => {
       const error401Retry = {
         response: { status: 401 },
         config: { url: '/api/test', _retry: true },
-      } as AxiosError;
+      } as unknown as AxiosError;
       
       const refreshSpy = vi.spyOn(authManager, 'refreshToken');
       
@@ -536,7 +536,7 @@ describe('AuthManager', () => {
         const error401 = {
           response: { status: 401 },
           config: { url: endpoint },
-        } as AxiosError;
+        } as unknown as AxiosError;
         
         const logoutSpy = vi.spyOn(authManager, 'logout');
         const refreshSpy = vi.spyOn(authManager, 'refreshToken');
@@ -570,7 +570,7 @@ describe('AuthManager', () => {
       const error401 = {
         response: { status: 401 },
         config: { url: '/auth/me', _retry: false },
-      } as AxiosError;
+      } as unknown as AxiosError;
       
       // Mock refreshToken to fail (expired refresh token)
       mockAxiosInstance.post = vi.fn().mockRejectedValue({
@@ -608,18 +608,18 @@ describe('AuthManager', () => {
       const error401 = {
         response: { status: 401 },
         config: { url: '/auth/me', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       mockAxiosInstance.post = vi.fn().mockRejectedValue({
         response: { status: 401 },
       });
-      
+
       try {
         await responseInterceptor.onRejected(error401);
       } catch {
         // Expected
       }
-      
+
       expect(localStorage.removeItem).toHaveBeenCalledWith('token');
       expect(localStorage.removeItem).toHaveBeenCalledWith('user');
     });
@@ -640,10 +640,10 @@ describe('AuthManager', () => {
       const error401 = {
         response: { status: 401 },
         config: { url: '/api/test', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       mockAxiosInstance.post = vi.fn().mockRejectedValue(new Error('Refresh failed'));
-      
+
       // This should complete (not hang) within a reasonable time
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Test timed out - possible hang')), 1000)
@@ -685,18 +685,18 @@ describe('AuthManager', () => {
       const error401_1 = {
         response: { status: 401 },
         config: { url: '/api/endpoint1', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       const error401_2 = {
         response: { status: 401 },
         config: { url: '/api/endpoint2', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       const promise1 = responseInterceptor.onRejected(error401_1).catch(() => {});
       const promise2 = responseInterceptor.onRejected(error401_2).catch(() => {});
-      
+
       await Promise.all([promise1, promise2]);
-      
+
       // Refresh should only be called ONCE
       expect(refreshCallCount).toBe(1);
     });
@@ -721,19 +721,19 @@ describe('AuthManager', () => {
       const error401_1 = {
         response: { status: 401 },
         config: { url: '/api/endpoint1', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       const error401_2 = {
         response: { status: 401 },
         config: { url: '/api/endpoint2', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       let rejectedCount = 0;
       const promise1 = responseInterceptor.onRejected(error401_1).catch(() => { rejectedCount++; });
       const promise2 = responseInterceptor.onRejected(error401_2).catch(() => { rejectedCount++; });
-      
+
       await Promise.all([promise1, promise2]);
-      
+
       expect(rejectedCount).toBe(2);
     });
 
@@ -760,15 +760,15 @@ describe('AuthManager', () => {
       const error401_1 = {
         response: { status: 401 },
         config: { url: '/api/test1', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       await responseInterceptor.onRejected(error401_1).catch(() => {});
-      
+
       // Second 401 (after first completed)
       const error401_2 = {
         response: { status: 401 },
         config: { url: '/api/test2', _retry: false },
-      } as AxiosError;
+      } as unknown as AxiosError;
       
       await responseInterceptor.onRejected(error401_2).catch(() => {});
       
@@ -801,14 +801,14 @@ describe('AuthManager', () => {
       const error401 = {
         response: { status: 401 },
         config: { url: '/api/test', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       // First should fail
       await responseInterceptor.onRejected({ ...error401, config: { ...error401.config, _retry: false } }).catch(() => {});
-      
+
       // Second should work (isRefreshing was reset)
       await responseInterceptor.onRejected({ ...error401, config: { ...error401.config, _retry: false } }).catch(() => {});
-      
+
       expect(callCount).toBe(2);
     });
   });
@@ -836,14 +836,14 @@ describe('AuthManager', () => {
       const error401 = {
         response: { status: 401 },
         config: { url: '/api/test', _retry: false },
-      } as AxiosError;
-      
+      } as unknown as AxiosError;
+
       try {
         await responseInterceptor.onRejected(error401);
       } catch {
         // May throw depending on mock setup
       }
-      
+
       // Verify refresh was called
       expect(postMock).toHaveBeenCalledWith('/auth/refresh');
     });
@@ -867,7 +867,7 @@ describe('AuthManager', () => {
       const error401 = {
         response: { status: 401 },
         config: originalConfig,
-      } as AxiosError;
+      } as unknown as AxiosError;
       
       try {
         await responseInterceptor.onRejected(error401);
