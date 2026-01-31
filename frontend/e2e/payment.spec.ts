@@ -30,6 +30,19 @@ test.describe('Payment Flow', () => {
         // Enable console logging from the browser
         page.on('console', msg => console.log(`BROWSER LOG: ${msg.text()}`));
 
+        // Mock Generic API Catch-all to prevent CORS errors in Production Build
+        // (Since prep-deploy-check.sh builds with production URL)
+        await page.route('**/api/**', async route => {
+             const url = route.request().url();
+             if (url.includes('/api/plans') || url.includes('/api/subscription/usage') || url.includes('/api/geo/check')) {
+                 // Allow fall-through to specific mocks defined later
+                 return route.continue();
+             }
+             // Block other API calls to prevent CORS/External hits
+             console.log('Blocking unmocked API call:', url);
+             await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+        });
+
         // Mock Plans API
         await page.route('**/api/plans**', async route => {
             console.log('Intercepted /api/plans request:', route.request().url());
