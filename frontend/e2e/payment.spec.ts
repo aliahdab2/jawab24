@@ -27,8 +27,12 @@ const MOCK_PLANS = [
 test.describe('Payment Flow', () => {
 
     test.beforeEach(async ({ page }) => {
+        // Enable console logging from the browser
+        page.on('console', msg => console.log(`BROWSER LOG: ${msg.text()}`));
+
         // Mock Plans API
         await page.route('**/api/plans**', async route => {
+            console.log('Intercepted /api/plans request:', route.request().url());
             await route.fulfill({
                 status: 200,
                 contentType: 'application/json',
@@ -38,6 +42,7 @@ test.describe('Payment Flow', () => {
 
         // Mock Usage API (not authenticated)
         await page.route('**/api/subscription/usage**', async route => {
+            console.log('Intercepted /api/subscription/usage request');
             await route.fulfill({ status: 401 });
         });
     });
