@@ -84,7 +84,9 @@ export default function CheckoutPage() {
     try {
       // Check if user is authenticated (web uses cookies, mobile uses token)
       if (!isAuthenticated) {
-        router.push('/login?redirect=/checkout?planId=' + planId);
+        // ENCODE THE REDIRECT URL PROPERLY
+        const returnUrl = `/checkout?planId=${planId}`;
+        router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
         return;
       }
 
@@ -119,7 +121,8 @@ export default function CheckoutPage() {
 
       if (errorData?.code === 'EMAIL_REQUIRED') {
         // Email is missing - redirect to complete profile then back to checkout
-        router.push(`/complete-profile?redirect=/checkout?planId=${planId}`);
+        const returnUrl = `/checkout?planId=${planId}`;
+        router.push(`/complete-profile?redirect=${encodeURIComponent(returnUrl)}`);
         return;
       }
 

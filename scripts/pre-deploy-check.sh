@@ -79,12 +79,23 @@ else
 fi
 
 # Frontend Tests
-echo "   Testing Frontend..."
+echo "   Testing Frontend (Unit)..."
 if npm test --workspace=jawab24-frontend -- --run > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ Frontend tests pass${NC}"
+    echo -e "${GREEN}   ✅ Frontend unit tests pass${NC}"
 else
-    echo -e "${RED}   ❌ Frontend tests failed!${NC}"
+    echo -e "${RED}   ❌ Frontend unit tests failed!${NC}"
     npm test --workspace=jawab24-frontend -- --run
+    exit 1
+fi
+
+# Frontend E2E Tests
+echo "   Testing Frontend (E2E)..."
+# Use subshell to avoid changing directory main script
+if (cd frontend && npx playwright test); then
+    echo -e "${GREEN}   ✅ Frontend E2E tests pass${NC}"
+else
+    echo -e "${RED}   ❌ Frontend E2E tests failed!${NC}"
+    echo "   Check playwright report for details."
     exit 1
 fi
 

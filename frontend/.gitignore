@@ -1,3 +1,10 @@
 
 # APK output folder
 dist/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+

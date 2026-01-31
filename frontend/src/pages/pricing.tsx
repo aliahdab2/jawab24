@@ -265,8 +265,6 @@ const PricingPage: NextPageWithLayout = () => {
         // Run geo check and plans fetch in parallel (non-blocking)
         const [geoResult, plansResult, usageResult] = await Promise.all([
           // Geo check with 1s timeout (non-blocking for display)
-          // Reduced to 1s to make offline/slow network experience snappier
-          // Reduced to 1s to make offline/slow network experience snappier
           isUserSanctionedNonBlocking(1000).catch(() => ({ sanctioned: false, cached: false, timedOut: true })),
           // Plans API with fallback and 3s timeout
           plansApi.getAll({ timeout: 3000 }).catch(() => null),
