@@ -30,17 +30,30 @@ test.describe('Payment Flow', () => {
         // Enable console logging from the browser
         page.on('console', msg => console.log(`BROWSER LOG: ${msg.text()}`));
 
-        // Mock Generic API Catch-all to prevent CORS errors in Production Build
-        // (Since prep-deploy-check.sh builds with production URL)
+        // 1. Generic Catch-all (Base Layer)
+        // Prevent CORS/External hits for any unhandled API calls
         await page.route('**/api/**', async route => {
              const url = route.request().url();
-             if (url.includes('/api/plans') || url.includes('/api/subscription/usage') || url.includes('/api/geo/check')) {
-                 // Allow fall-through to specific mocks defined later
-                 return route.continue();
-             }
-             // Block other API calls to prevent CORS/External hits
              console.log('Blocking unmocked API call:', url);
              await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+        });
+
+        // 2. Specific Overrides (Top Layer - Defined LAST to take precedence in LIFO order)
+        
+        // Mock Geo Check (Allowed by default)
+        await page.route('**/api/geo/check*', async route => {
+             console.log('Intercepted /api/geo/check request');
+             await route.fulfill({
+                 status: 200,
+                 contentType: 'application/json',
+                 body: JSON.stringify({ sanctioned: false })
+             });
+        });
+
+        // Mock Usage API (not authenticated)
+        await page.route('**/api/subscription/usage**', async route => {
+            console.log('Intercepted /api/subscription/usage request');
+            await route.fulfill({ status: 401 });
         });
 
         // Mock Plans API
@@ -52,24 +65,9 @@ test.describe('Payment Flow', () => {
                 body: JSON.stringify({ data: MOCK_PLANS })
             });
         });
-
-        // Mock Usage API (not authenticated)
-        await page.route('**/api/subscription/usage**', async route => {
-            console.log('Intercepted /api/subscription/usage request');
-            await route.fulfill({ status: 401 });
-        });
     });
     
   test('should redirect to login with correct planId when not authenticated', async ({ page }) => {
-    // Mock Geo Check (Allowed)
-    await page.route('**/api/geo/check*', async route => {
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({ sanctioned: false })
-        });
-    });
-
     // Navigate to pricing page
     await page.goto('/pricing');
     
@@ -100,8 +98,9 @@ test.describe('Payment Flow', () => {
   });
 
   test('should block payment for sanctioned users (mocked)', async ({ page }) => {
-     // Mock Geo Check (Sanctioned)
+     // Mock Geo Check (Sanctioned) - Override the default allowed mock
      await page.route('**/api/geo/check*', async route => {
+        console.log('Intercepted /api/geo/check request (Sanctioned Override)');
         await route.fulfill({
             status: 200,
             contentType: 'application/json',
