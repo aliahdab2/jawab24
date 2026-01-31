@@ -1,32 +1,62 @@
 import { test, expect } from '@playwright/test';
 
-// Mock data
+// Mock data - structured like FALLBACK_PLANS
 const MOCK_PLANS = [
   {
     id: 'plan_starter',
     slug: 'starter',
     name: 'Starter',
+    description: 'Starter plan description',
     price: 900,
+    currency: 'USD',
+    interval: 'month',
     trialDays: 30,
     isActive: true,
+    isDefault: true,
     maxAiRepliesPerMonth: 100,
-    maxPages: 1
+    maxPages: 1,
+    maxTemplates: 5,
+    maxRules: 5,
+    facebookEnabled: true,
+    instagramEnabled: true,
+    whatsappEnabled: false,
+    showBranding: true,
+    prioritySupport: false,
+    regionalPricing: {},
+    sortOrder: 0
   },
   {
     id: 'plan_business',
     slug: 'business',
     name: 'Business',
+    description: 'Business plan description',
     price: 2900,
+    currency: 'USD',
+    interval: 'month',
     trialDays: 0,
     isActive: true,
+    isDefault: false,
     maxAiRepliesPerMonth: 1000,
-    maxPages: 5
+    maxPages: 5,
+    maxTemplates: null,
+    maxRules: null,
+    facebookEnabled: true,
+    instagramEnabled: true,
+    whatsappEnabled: false,
+    showBranding: false,
+    prioritySupport: true,
+    regionalPricing: {},
+    sortOrder: 1
   }
 ];
 
 test.describe('Payment Flow', () => {
 
     test.beforeEach(async ({ page }) => {
+        // Enable console logging from the browser
+        page.on('console', msg => console.log(`BROWSER LOG: ${msg.text()}`));
+        page.on('pageerror', err => console.log(`BROWSER ERROR: ${err}`));
+
         // 1. Generic Catch-all (Base Layer)
         // Prevent CORS/External hits for any unhandled API calls
         await page.route('**/api/**', async route => {
