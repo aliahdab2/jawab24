@@ -156,10 +156,24 @@ export interface CommentsQueryParams {
   replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
 }
 
+// Comments Stats Interface
+export interface CommentStats {
+  total: number;
+  replied: number;
+  unreplied: number;
+  replyRate: string;
+  byMethod: {
+    template: number;
+    ai: number;
+    manual: number;
+  };
+}
+
 // Comments API
 export const commentsApi = {
   getAll: (params?: CommentsQueryParams) =>
     api.get<CommentsPaginatedResponse>('/comments', { params }),
+  getStats: () => api.get<CommentStats>('/comments/stats'),
   getByPost: (postId: string) => api.get(`/posts/${postId}/comments`),
   reply: (id: string, text: string) =>
     api.post(`/comments/${id}/reply`, { text }),
@@ -237,7 +251,7 @@ export const messagesApi = {
   getAll: (params?: MessagesQueryParams) => 
     api.get<MessagesPaginatedResponse>('/messages', { params }),
   
-  getStats: () => api.get('/messages/stats'),
+  getStats: () => api.get<{ total: number; replied: number; pending: number }>('/messages/stats'),
   
   getConversation: (senderId: string, params: { pageId: string; limit?: number }) =>
     api.get<Message[]>(`/messages/conversation/${senderId}`, { params }),
