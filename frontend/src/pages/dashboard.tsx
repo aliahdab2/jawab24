@@ -269,6 +269,14 @@ const DashboardPage: NextPageWithLayout = () => {
   // Comments Stats Array
   const commentStats = [
     {
+      id: 'all',
+      nameKey: 'comments.totalComments' as TranslationKey,
+      value: statsData.totalComments.toLocaleString(),
+      icon: MessageSquare,
+      color: 'brand' as const,
+      href: '/comments'
+    },
+    {
       id: 'pending',
       nameKey: 'comments.pending' as TranslationKey,
       value: statsData.pendingReplies.toLocaleString(),
@@ -291,19 +299,19 @@ const DashboardPage: NextPageWithLayout = () => {
       icon: AlertTriangle,
       color: 'red' as const,
       href: '/comments?filter=flagged'
-    },
-    {
-      id: 'all',
-      nameKey: 'comments.totalComments' as TranslationKey,
-      value: statsData.totalComments.toLocaleString(),
-      icon: MessageSquare,
-      color: 'brand' as const,
-      href: '/comments'
     }
   ];
 
   // Messages Stats Array
   const messageStats = [
+    {
+      id: 'all',
+      nameKey: 'messages.totalMessages' as TranslationKey,
+      value: statsData.totalMessages.toLocaleString(),
+      icon: MessageCircle,
+      color: 'brand' as const,
+      href: '/messages'
+    },
     {
       id: 'pending',
       nameKey: 'comments.pending' as TranslationKey,
@@ -327,14 +335,6 @@ const DashboardPage: NextPageWithLayout = () => {
       icon: AlertTriangle,
       color: 'red' as const,
       href: '/messages?filter=needs_attention'
-    },
-    {
-      id: 'all',
-      nameKey: 'messages.totalMessages' as TranslationKey,
-      value: statsData.totalMessages.toLocaleString(),
-      icon: MessageCircle,
-      color: 'brand' as const,
-      href: '/messages'
     }
   ];
 
