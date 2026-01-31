@@ -91,7 +91,8 @@ fi
 # Frontend E2E Tests
 echo "   Testing Frontend (E2E)..."
 # Use subshell to avoid changing directory main script
-if (cd frontend && npx playwright test); then
+# Set CI=true to force Playwright to use 'npm start' (production build) instead of 'next dev'
+if (cd frontend && CI=true npx playwright test); then
     echo -e "${GREEN}   ✅ Frontend E2E tests pass${NC}"
 else
     echo -e "${RED}   ❌ Frontend E2E tests failed!${NC}"
