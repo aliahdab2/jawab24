@@ -139,11 +139,13 @@ if [ ! -f "$SSH_KEY" ]; then
     echo -e "Set SSH_KEY environment variable or create the key."
     exit 1
 fi
-if ! ssh -i "$SSH_KEY" -o ConnectTimeout=10 -o BatchMode=yes ${SERVER_USER}@${SERVER_HOST} "echo 'connected'" > /dev/null 2>&1; then
+if ! ssh -i "$SSH_KEY" -o ConnectTimeout=10 -o BatchMode=yes ${SERVER_USER}@${SERVER_HOST} "echo 'connected'" > /tmp/ssh_error.log 2>&1; then
     echo -e "${RED}❌ Cannot connect to server!${NC}"
+    echo -e "${RED}   Error Details: $(cat /tmp/ssh_error.log)${NC}"
     echo -e "Make sure your SSH key is added to the server."
     exit 1
 fi
+rm -f /tmp/ssh_error.log
 echo -e "${GREEN}✅ SSH connection successful (using ${SSH_KEY})${NC}"
 
 # ═══════════════════════════════════════════════════════════════════
