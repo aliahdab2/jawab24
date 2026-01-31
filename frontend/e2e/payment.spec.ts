@@ -92,8 +92,8 @@ test.describe('Payment Flow', () => {
     });
     
   test('should redirect to login with correct planId when not authenticated', async ({ page }) => {
-    // Navigate to pricing page
-    await page.goto('/pricing');
+    // Navigate to pricing page (Force English)
+    await page.goto('/en/pricing');
     
     // Find a subscribe button for a paid plan.
     // Based on en.json: "Subscribe", "Start Free for 30 Days", "Get Started"
@@ -131,8 +131,8 @@ test.describe('Payment Flow', () => {
         });
      });
 
-     // Go to checkout directly
-     await page.goto('/checkout?planId=plan_business');
+     // Go to checkout directly (Force English)
+     await page.goto('/en/checkout?planId=plan_business');
      
      // Should see blocked message (match title from en.json)
      await expect(page.locator('text=Payments are not available in your region')).toBeVisible({ timeout: 10000 });
