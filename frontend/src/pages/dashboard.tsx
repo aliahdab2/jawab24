@@ -25,10 +25,10 @@ import {
 } from 'lucide-react';
 import { isToday } from 'date-fns';
 import clsx from 'clsx';
-import type { Comment, Page, UsageSummary, Message } from '@jawab24/shared';
+import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
 import type { NextPageWithLayout } from './_app';
-import { CommentDetailModal, CommentCard, checkNeedsAttention } from '@/components/comments';
+import { CommentDetailModal, CommentCard } from '@/components/comments';
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (

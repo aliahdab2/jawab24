@@ -281,6 +281,9 @@ export interface Message {
   createdTime: string | null;
   repliedAt: string | null;
   createdAt: string;
+  needsAttention?: boolean;
+  flagReason?: string | null;
+  aiIntent?: string | null;
 }
 
 export interface MessagesPaginatedResponse {
