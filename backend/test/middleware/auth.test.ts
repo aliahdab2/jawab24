@@ -58,6 +58,7 @@ describe('Authenticate Middleware', () => {
     expect(mockRequest.user).toEqual({
       userId: 'user-123',
       facebookId: 'fb-123',
+      isAdmin: false,
     });
     expect(mockReply.status).not.toHaveBeenCalled();
   });

@@ -111,6 +111,7 @@ export class AuthService {
         const payload: JWTPayload & { exp: number } = {
             userId: user.id,
             facebookId: user.facebookId,
+            isAdmin: user.isAdmin || false,
             exp: Date.now() + expiryMs,
         };
 
@@ -158,6 +159,7 @@ export class AuthService {
             return {
                 userId: payload.userId,
                 facebookId: payload.facebookId,
+                isAdmin: payload.isAdmin || false,
             };
         } catch {
             return null;

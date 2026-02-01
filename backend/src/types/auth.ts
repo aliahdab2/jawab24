@@ -20,6 +20,7 @@ export interface User {
 export interface JWTPayload {
     userId: string;
     facebookId: string;
+    isAdmin?: boolean;
     iat?: number;
     exp?: number;
 }
