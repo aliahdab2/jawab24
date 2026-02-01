@@ -226,7 +226,7 @@ describe('PagesPage', () => {
 
       // Modal should be open
       await waitFor(() => {
-        expect(screen.getByText('pages.businessInfo')).toBeInTheDocument();
+        expect(screen.getByText('kb.title')).toBeInTheDocument();
       });
     });
   });
