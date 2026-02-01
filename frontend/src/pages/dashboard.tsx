@@ -152,16 +152,17 @@ const DashboardPage: NextPageWithLayout = () => {
       // --- Process Stats from Server ---
       
       // Comments Stats
-      const stats = statsRes?.data || { 
-        total: 0, 
-        replied: 0, 
-        unreplied: 0, 
-        replyRate: '0.0', 
-        byMethod: { ai: 0, template: 0, manual: 0 } 
+      const stats = statsRes?.data || {
+        total: 0,
+        replied: 0,
+        unreplied: 0,
+        needsAttention: 0,
+        replyRate: '0.0',
+        byMethod: { ai: 0, template: 0, manual: 0 }
       };
 
       // Messages Stats
-      const msgStats = messagesStatsRes?.data || { total: 0, replied: 0, pending: 0 };
+      const msgStats = messagesStatsRes?.data || { total: 0, replied: 0, pending: 0, needsAttention: 0 };
 
       // Calculate Comments Today using recent list (Approximate/Fallback)
       // Note: Ideal would be a 'today' field in getStats(), but we use available data
