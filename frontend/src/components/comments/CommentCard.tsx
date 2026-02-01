@@ -107,7 +107,7 @@ export function CommentCard({
   return (
     <div
       className={clsx(
-        "relative rounded-3xl bg-white border border-surface-100 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden cursor-pointer group",
+        "relative rounded-3xl bg-white border border-surface-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group",
         needsAttention && 'ring-1 ring-red-100',
         className
       )}
