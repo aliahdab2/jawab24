@@ -85,8 +85,11 @@ server.post<{ Body: { requests: GenerateRequest[] } }>('/generate/batch', async 
 
 const start = async () => {
     try {
+        const isProduction = process.env.NODE_ENV === 'production';
         await server.register(cors, {
-            origin: process.env.CORS_ORIGIN || true, // Configure properly for production
+            origin: isProduction
+                ? (process.env.CORS_ORIGIN || false)  // Block all if not configured in production
+                : true,                                // Allow all in development
         });
 
         // Register rate limiting

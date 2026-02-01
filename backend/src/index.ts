@@ -138,10 +138,11 @@ const start = async () => {
     await server.register(versionRoutes);
 
     // Register cookie plugin
+    // COOKIE_SECRET is validated at startup via validateEnv() - no fallback needed
     await server.register(cookie, {
-        secret: process.env.COOKIE_SECRET || 'dev_cookie_secret_change_in_production',
+        secret: process.env.COOKIE_SECRET!,
         hook: 'onRequest',
-        parseOptions: {} 
+        parseOptions: {}
     });
 
     // Register rate limiting

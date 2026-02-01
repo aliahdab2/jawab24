@@ -23,6 +23,9 @@ const EnvSchema = z.object({
     FACEBOOK_REDIRECT_URI: z.string().url('FACEBOOK_REDIRECT_URI must be a valid URL'),
     FACEBOOK_WEBHOOK_VERIFY_TOKEN: z.string().min(1, 'FACEBOOK_WEBHOOK_VERIFY_TOKEN is required'),
 
+    // Cookie
+    COOKIE_SECRET: z.string().min(32, 'COOKIE_SECRET must be at least 32 characters for security'),
+
     // JWT
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters for security'),
     JWT_EXPIRES_IN: z.string().default('7d'),
