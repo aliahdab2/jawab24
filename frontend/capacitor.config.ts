@@ -17,7 +17,7 @@ const config: CapacitorConfig = {
   },
   ios: {
     scheme: 'Jawab24',
-    contentInset: 'automatic',
+    contentInset: 'never',
   },
   plugins: {
     Keyboard: {

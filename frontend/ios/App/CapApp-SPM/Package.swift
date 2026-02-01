@@ -22,7 +22,7 @@ let package = Package(
         .package(name: "CapacitorPushNotifications", path: "../../../../node_modules/@capacitor/push-notifications"),
         .package(name: "CapacitorSplashScreen", path: "../../../../node_modules/@capacitor/splash-screen"),
         .package(name: "CapacitorStatusBar", path: "../../../../node_modules/@capacitor/status-bar"),
-        .package(name: "CapacitorSecureStoragePlugin", path: "../../../../node_modules/capacitor-secure-storage-plugin")
+        .package(name: "CapacitorSecureStoragePlugin", path: "../../../node_modules/capacitor-secure-storage-plugin")
     ],
     targets: [
         .target(

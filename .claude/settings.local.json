@@ -25,7 +25,15 @@
       "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb logcat -c)",
       "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb shell am force-stop:*)",
       "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb shell am start -n com.jawab24.app/.MainActivity)",
-      "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb install:*)"
+      "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb install:*)",
+      "Bash(npx cap:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(python3:*)",
+      "Bash(npm ls:*)",
+      "Bash(npm info:*)",
+      "Bash(npm install:*)",
+      "Bash(npx cap sync:*)",
+      "Bash(npm run build:mobile:*)"
     ]
   }
 }
