@@ -252,7 +252,7 @@ export const messagesApi = {
   getAll: (params?: MessagesQueryParams) => 
     api.get<MessagesPaginatedResponse>('/messages', { params }),
   
-  getStats: () => api.get<{ total: number; replied: number; pending: number; needsAttention: number }>('/messages/stats'),
+  getStats: () => api.get<{ total: number; replied: number; pending: number; needsAttention: number; byMethod: { template: number; ai: number; manual: number } }>('/messages/stats'),
   
   getConversation: (senderId: string, params: { pageId: string; limit?: number }) =>
     api.get<Message[]>(`/messages/conversation/${senderId}`, { params }),

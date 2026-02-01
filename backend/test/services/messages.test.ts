@@ -42,11 +42,27 @@ describe('MessagesService', () => {
                 })
             };
 
+            // Mock byMethod query (has groupBy chain)
+            const mockByMethodQuery = {
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            groupBy: vi.fn().mockResolvedValue([
+                                { method: 'ai', count: 15 },
+                                { method: 'template', count: 10 },
+                                { method: 'manual', count: 5 },
+                            ])
+                        })
+                    })
+                })
+            };
+
             // Sequence of calls matching service implementation
             vi.mocked(db.select)
                 .mockReturnValueOnce(mockTotalQuery as any)
                 .mockReturnValueOnce(mockRepliedQuery as any)
-                .mockReturnValueOnce(mockNeedsAttentionQuery as any);
+                .mockReturnValueOnce(mockNeedsAttentionQuery as any)
+                .mockReturnValueOnce(mockByMethodQuery as any);
 
             const stats = await messagesService.getStats('user-123');
 
@@ -54,7 +70,8 @@ describe('MessagesService', () => {
                 total: 50,
                 replied: 30,
                 pending: 20,
-                needsAttention: 3
+                needsAttention: 3,
+                byMethod: { template: 10, ai: 15, manual: 5 }
             });
         });
 
@@ -76,7 +93,8 @@ describe('MessagesService', () => {
                 total: 0,
                 replied: 0,
                 pending: 0,
-                needsAttention: 0
+                needsAttention: 0,
+                byMethod: { template: 0, ai: 0, manual: 0 }
             });
         });
     });

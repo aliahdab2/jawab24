@@ -271,6 +271,7 @@ export class MessagesService {
         replied: number;
         pending: number;
         needsAttention: number;
+        byMethod: { template: number; ai: number; manual: number };
     }> {
         const totalResult = await db
             .select({ count: sql<number>`count(*)` })
@@ -284,7 +285,7 @@ export class MessagesService {
         const total = Number(totalResult[0]?.count || 0);
 
         if (total === 0) {
-            return { total: 0, replied: 0, pending: 0, needsAttention: 0 };
+            return { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
         }
 
         const repliedResult = await db
@@ -312,11 +313,34 @@ export class MessagesService {
 
         const needsAttention = Number(needsAttentionResult[0]?.count || 0);
 
+        // Get counts by reply method
+        const byMethodResult = await db
+            .select({
+                method: messages.replyMethod,
+                count: sql<number>`count(*)`,
+            })
+            .from(messages)
+            .innerJoin(pages, eq(messages.pageId, pages.id))
+            .where(and(
+                eq(pages.userId, userId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, true)
+            ))
+            .groupBy(messages.replyMethod);
+
+        const byMethod = { template: 0, ai: 0, manual: 0 };
+        byMethodResult.forEach((row) => {
+            if (row.method === 'template') byMethod.template = Number(row.count);
+            else if (row.method === 'ai') byMethod.ai = Number(row.count);
+            else if (row.method === 'manual') byMethod.manual = Number(row.count);
+        });
+
         return {
             total,
             replied,
             pending: total - replied,
             needsAttention,
+            byMethod,
         };
     }
 
