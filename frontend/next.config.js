@@ -9,8 +9,8 @@ const nextConfig = {
   // Standard Server Config (no static export)
   outputFileTracingRoot: path.join(__dirname, '../'),
   reactStrictMode: true,
-  // Enable static export for mobile builds (puts files in 'out' folder for Capacitor)
-  output: isMobile ? 'export' : undefined,
+  // Mobile: static export for Capacitor; Production: standalone for minimal Docker images
+  output: isMobile ? 'export' : 'standalone',
 
   images: {
     unoptimized: isMobile,

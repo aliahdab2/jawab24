@@ -33,29 +33,28 @@ COPY frontend ./frontend
 RUN npm run build --workspace=@jawab24/shared
 RUN npm run build --workspace=jawab24-frontend
 
-# Production Stage
+# Production Stage — standalone output (only traced dependencies, no full node_modules)
 FROM node:20-alpine AS production
 WORKDIR /app
 RUN apk add --no-cache dumb-init wget
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
-# Copy the entire monorepo structure needed for Next.js
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/package-lock.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/frontend ./frontend
+# Copy standalone server (includes only the node_modules files actually needed)
+COPY --from=builder --chown=nodejs:nodejs /app/frontend/.next/standalone ./
+# Copy static assets (not included in standalone output)
+COPY --from=builder --chown=nodejs:nodejs /app/frontend/.next/static ./frontend/.next/static
+# Copy public folder (if it exists)
+COPY --from=builder --chown=nodejs:nodejs /app/frontend/public ./frontend/public
 
-WORKDIR /app/frontend
-RUN chown -R nodejs:nodejs /app
 USER nodejs
 
 EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV HOSTNAME=0.0.0.0
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3001 || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["npm", "run", "start"]
+CMD ["node", "frontend/server.js"]
