@@ -77,7 +77,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         // If an update was downloaded while app was backgrounded, install it
         if (appUpdateManager != null) {
@@ -90,7 +90,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         super.onDestroy();
         if (appUpdateManager != null) {
             appUpdateManager.unregisterListener(installStateListener);

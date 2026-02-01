@@ -65,12 +65,24 @@ describe('CommentsService', () => {
                 })
             };
 
+            // Mock repliedToday query
+            const mockRepliedTodayQuery = {
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        innerJoin: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([{ count: 5 }])
+                        })
+                    })
+                })
+            };
+
             // Sequence of calls
             vi.mocked(db.select)
                 .mockReturnValueOnce(mockTotalQuery as any)
                 .mockReturnValueOnce(mockRepliedQuery as any)
                 .mockReturnValueOnce(mockMethodQuery as any)
-                .mockReturnValueOnce(mockNeedsAttentionQuery as any);
+                .mockReturnValueOnce(mockNeedsAttentionQuery as any)
+                .mockReturnValueOnce(mockRepliedTodayQuery as any);
 
             const stats = await commentsService.getStats('user-123');
 
@@ -79,6 +91,7 @@ describe('CommentsService', () => {
                 replied: 60,
                 unreplied: 40,
                 needsAttention: 2,
+                repliedToday: 5,
                 replyRate: '60.0',
                 byMethod: {
                     template: 30,
@@ -109,6 +122,7 @@ describe('CommentsService', () => {
                 replied: 0,
                 unreplied: 0,
                 needsAttention: 0,
+                repliedToday: 0,
                 replyRate: '0',
                 byMethod: { template: 0, ai: 0, manual: 0 }
             });
