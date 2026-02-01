@@ -108,6 +108,8 @@ const CommentsPage: NextPageWithLayout = () => {
     hasNextPage,
     isFetchingNextPage,
     isLoading,
+    isPending,
+    error,
     refetch,
   } = useInfiniteQuery({
     queryKey: ['comments', apiParams],
@@ -316,8 +318,28 @@ const CommentsPage: NextPageWithLayout = () => {
     }
   };
 
-  if (isLoading && allComments.length === 0) {
+  if ((isLoading || isPending) && allComments.length === 0) {
     return <PageSkeleton type="list" />;
+  }
+
+  // Show error state if the query failed
+  if (error && allComments.length === 0) {
+    return (
+      <div className="py-16 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle className="w-8 h-8 text-red-400" />
+        </div>
+        <p className="text-base font-semibold text-surface-600 mb-2">
+          {t('errors.somethingWentWrong' as any)}
+        </p>
+        <p className="text-sm text-surface-500 mb-5">
+          {(error as Error)?.message || t('errors.tryAgain' as any)}
+        </p>
+        <Button variant="primary" size="sm" onClick={() => refetch()}>
+          {t('errors.tryAgain' as any)}
+        </Button>
+      </div>
+    );
   }
 
   // Calculate platform visibility logic

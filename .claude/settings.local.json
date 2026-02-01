@@ -8,7 +8,8 @@
       "Bash(npx vitest run)",
       "WebFetch(domain:www.tidio.com)",
       "Bash(npm audit:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(find:*)"
     ]
   }
 }
