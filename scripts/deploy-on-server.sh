@@ -297,9 +297,51 @@ cleanup() {
     echo "✅ Cleanup complete"
 }
 
+# Validate required environment variables exist in env files
+validate_env_files() {
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🔐 ENV VALIDATION: Checking required variables"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    local failed=false
+
+    # Backend required vars
+    local backend_required=("DATABASE_URL" "JWT_SECRET" "COOKIE_SECRET" "FACEBOOK_APP_ID" "FACEBOOK_APP_SECRET" "FACEBOOK_REDIRECT_URI" "FACEBOOK_WEBHOOK_VERIFY_TOKEN")
+    if [ -f ./env/backend.env ]; then
+        for var in "${backend_required[@]}"; do
+            if ! grep -q "^${var}=" ./env/backend.env; then
+                echo "❌ Missing ${var} in env/backend.env"
+                failed=true
+            fi
+        done
+    else
+        echo "❌ env/backend.env not found!"
+        failed=true
+    fi
+
+    # AI Worker required vars
+    if [ -f ./env/ai.env ]; then
+        if ! grep -q "^OPENAI_API_KEY=" ./env/ai.env; then
+            echo "❌ Missing OPENAI_API_KEY in env/ai.env"
+            failed=true
+        fi
+    else
+        echo "❌ env/ai.env not found!"
+        failed=true
+    fi
+
+    if [ "$failed" = true ]; then
+        echo ""
+        echo "❌ ENV VALIDATION FAILED - fix the above before deploying."
+        exit 1
+    fi
+    echo "✅ All required environment variables present"
+}
+
 # --- Main Execution ---
 validate_setup
 pull_code
+validate_env_files  # Fail early if required env vars are missing
 determine_target
 pre_build_cleanup  # Clean disk BEFORE building to prevent "no space" errors
 build_images
