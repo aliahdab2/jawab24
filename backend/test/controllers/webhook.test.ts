@@ -1,7 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import crypto from 'crypto';
 import fastify from 'fastify';
 import webhookRoutes from '../../src/routes/webhook';
 import { enqueueComment, enqueueMessage } from '../../src/lib/replyQueue';
+
+/** Generate a valid X-Hub-Signature-256 header for a given payload */
+function generateSignature(payload: object): string {
+    const body = JSON.stringify(payload);
+    const signature = crypto
+        .createHmac('sha256', 'test_app_secret')
+        .update(body)
+        .digest('hex');
+    return `sha256=${signature}`;
+}
 
 // Mock the reply queue - use vi.hoisted to create mock functions before hoisting
 const { mockEnqueueComment, mockEnqueueMessage } = vi.hoisted(() => ({
@@ -28,6 +39,8 @@ vi.mock('../../src/config', () => ({
     config: {
         facebook: {
             webhookVerifyToken: 'test_verify_token',
+            appSecret: 'test_app_secret',
+            graphApiVersion: 'v18.0',
         },
     },
 }));
@@ -37,6 +50,17 @@ describe('Webhook Controller', () => {
 
     beforeEach(async () => {
         app = fastify();
+
+        // Capture raw body for webhook signature verification
+        app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req: any, body: Buffer, done: any) => {
+            req.rawBody = body;
+            try {
+                done(null, JSON.parse(body.toString()));
+            } catch (err) {
+                done(err, undefined);
+            }
+        });
+
         app.register(webhookRoutes);
         await app.ready();
         vi.clearAllMocks();
@@ -97,6 +121,33 @@ describe('Webhook Controller', () => {
         });
     });
 
+    describe('POST /webhook (Signature Verification)', () => {
+        it('should reject requests without a signature header', async () => {
+            const webhookPayload = { object: 'page', entry: [] };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(403);
+        });
+
+        it('should reject requests with an invalid signature', async () => {
+            const webhookPayload = { object: 'page', entry: [] };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': 'sha256=0000000000000000000000000000000000000000000000000000000000000000' },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(403);
+        });
+    });
+
     describe('POST /webhook (Event Handling)', () => {
         it('should accept page events and return 200', async () => {
             const webhookPayload = {
@@ -128,6 +179,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -144,6 +196,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -192,6 +245,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -223,6 +277,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -255,6 +310,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -286,6 +342,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -313,6 +370,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -362,6 +420,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -413,6 +472,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -455,6 +515,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -496,6 +557,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -531,6 +593,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 
@@ -572,6 +635,7 @@ describe('Webhook Controller', () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
                 payload: webhookPayload,
             });
 

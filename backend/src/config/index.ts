@@ -21,17 +21,18 @@ export const config = {
         password: process.env.REDIS_PASSWORD || undefined,
     },
 
-    // Facebook
+    // Facebook (validated by validateEnv — no insecure fallbacks)
     facebook: {
-        appId: process.env.FACEBOOK_APP_ID || 'dev_app_id',
-        appSecret: process.env.FACEBOOK_APP_SECRET || 'dev_app_secret',
-        redirectUri: process.env.FACEBOOK_REDIRECT_URI || 'http://localhost:3000/auth/facebook/callback',
-        webhookVerifyToken: process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || 'dev_verify_token',
+        appId: process.env.FACEBOOK_APP_ID || '',
+        appSecret: process.env.FACEBOOK_APP_SECRET || '',
+        redirectUri: process.env.FACEBOOK_REDIRECT_URI || '',
+        webhookVerifyToken: process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || '',
+        graphApiVersion: process.env.FACEBOOK_GRAPH_API_VERSION || 'v18.0',
     },
 
-    // JWT
+    // JWT (validated by validateEnv — no insecure fallbacks)
     jwt: {
-        secret: process.env.JWT_SECRET || 'dev_jwt_secret_change_in_production',
+        secret: process.env.JWT_SECRET || '',
         expiresIn: process.env.JWT_EXPIRES_IN || '7d',
     },
 

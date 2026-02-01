@@ -28,6 +28,17 @@ class ErrorBoundary extends Component<Props, State> {
     // }
   }
 
+  getLanguage = (): string => {
+    try {
+      const stored = localStorage.getItem('ui-storage');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed?.state?.language || 'en';
+      }
+    } catch { /* fallback to en */ }
+    return 'en';
+  };
+
   handleReload = (): void => {
     window.location.reload();
   };
@@ -65,10 +76,12 @@ class ErrorBoundary extends Component<Props, State> {
 
             {/* Error Message */}
             <h1 className="text-xl font-semibold text-white mb-2">
-              عذراً، حدث خطأ ما
+              {this.getLanguage() === 'ar' ? 'حدث خطأ ما' : 'Something went wrong'}
             </h1>
             <p className="text-zinc-400 mb-6">
-              Something went wrong. Please try refreshing the page.
+              {this.getLanguage() === 'ar'
+                ? 'يرجى تحديث الصفحة والمحاولة مرة أخرى.'
+                : 'Please try refreshing the page.'}
             </p>
 
             {/* Error Details (only in development) */}
@@ -86,13 +99,13 @@ class ErrorBoundary extends Component<Props, State> {
                 onClick={this.handleReload}
                 className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
               >
-                Refresh Page
+                {this.getLanguage() === 'ar' ? 'تحديث الصفحة' : 'Refresh Page'}
               </button>
               <button
                 onClick={this.handleGoHome}
                 className="px-5 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg font-medium transition-colors"
               >
-                Go Home
+                {this.getLanguage() === 'ar' ? 'الصفحة الرئيسية' : 'Go Home'}
               </button>
             </div>
           </div>

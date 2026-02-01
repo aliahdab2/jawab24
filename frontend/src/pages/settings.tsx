@@ -27,7 +27,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
-import { useTranslation, useLanguage } from '@/i18n';
+import { useTranslation, useLanguage, type TranslationKey } from '@/i18n';
 import type { NextPageWithLayout } from './_app';
 
 // Simple toggle row component with better design
@@ -526,6 +526,11 @@ const SettingsPage: NextPageWithLayout = () => {
                       />
                     </div>
                   </div>
+                  {settings.businessHoursEnd <= settings.businessHoursStart && (
+                    <p className="col-span-2 text-xs text-red-500 font-medium mt-1">
+                      {t('settings.businessHoursError' as TranslationKey)}
+                    </p>
+                  )}
                 </div>
               )}
             </Card>
@@ -689,7 +694,7 @@ const SettingsPage: NextPageWithLayout = () => {
                 <Input
                   value={deleteConfirmation}
                   onChange={(e) => setDeleteConfirmation(e.target.value)}
-                  placeholder="DELETE"
+                  placeholder={t('settings.deleteConfirmPlaceholder' as TranslationKey)}
                   className="border-red-200 focus:border-red-500 focus:ring-red-500"
                 />
               </div>

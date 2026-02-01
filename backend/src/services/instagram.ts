@@ -9,7 +9,9 @@ import {
     InstagramCommentsResponse 
 } from '../types';
 
-const INSTAGRAM_GRAPH_API = 'https://graph.facebook.com/v18.0';
+import { config } from '../config';
+
+const INSTAGRAM_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
 export class InstagramService {
     private logger: Logger = noopLogger;

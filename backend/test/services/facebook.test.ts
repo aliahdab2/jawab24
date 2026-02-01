@@ -12,6 +12,7 @@ vi.mock('../../src/config', () => ({
             appId: 'test_app_id',
             appSecret: 'test_app_secret',
             redirectUri: 'http://localhost:3000/auth/callback',
+            graphApiVersion: 'v18.0',
         },
     },
 }));

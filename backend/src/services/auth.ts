@@ -82,10 +82,14 @@ export class AuthService {
     private async createSubscriptionForNewUser(userId: string): Promise<void> {
         try {
             await subscriptionsService.createSubscription(userId);
-            // Note: In production, use a proper logger
-        } catch {
-            // Log but don't fail the auth if subscription creation fails
-            // Error is silently handled to not block authentication
+        } catch (error) {
+            console.error('Failed to create subscription for new user', { userId, error: String(error) });
+            // Retry once before giving up
+            try {
+                await subscriptionsService.createSubscription(userId);
+            } catch (retryError) {
+                console.error('Subscription creation retry also failed', { userId, error: String(retryError) });
+            }
         }
     }
 
@@ -98,8 +102,8 @@ export class AuthService {
             if (!existing) {
                 await subscriptionsService.createSubscription(userId);
             }
-        } catch {
-            // Error is silently handled to not block authentication
+        } catch (error) {
+            console.error('Failed to ensure subscription', { userId, error: String(error) });
         }
     }
 

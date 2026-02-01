@@ -337,14 +337,14 @@ const MessagesPage: NextPageWithLayout = () => {
             isActive={filter === 'pending'}
           />
         </div>
-        <div onClick={() => updateFilter('replied_today')}>
+        <div>
           <StatCard
-            nameKey="comments.repliedToday"
-            value={stats.repliedToday.toLocaleString()}
+            nameKey="comments.replied"
+            value={stats.replied.toLocaleString()}
             icon={CheckCircle}
             color="emerald"
             index={2}
-            isActive={filter === 'replied_today'}
+            isActive={false}
           />
         </div>
         <div onClick={() => updateFilter('ai')}>

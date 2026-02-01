@@ -45,8 +45,12 @@ const TemplatesPage: NextPageWithLayout = () => {
     keywords: '',
   });
   
+  const [showFormErrors, setShowFormErrors] = useState(false);
+
   // Form validation: name required + at least one translation
   const isFormValid = formData.name.trim() !== '' && (formData.en.trim() !== '' || formData.ar.trim() !== '');
+  const nameError = showFormErrors && formData.name.trim() === '';
+  const translationError = showFormErrors && formData.en.trim() === '' && formData.ar.trim() === '';
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -84,10 +88,15 @@ const TemplatesPage: NextPageWithLayout = () => {
       setFormData({ name: '', en: '', ar: '', keywords: '' });
     }
     setActiveLang(getDefaultLang());
+    setShowFormErrors(false);
     setIsModalOpen(true);
   };
 
   const handleSave = async () => {
+    if (!isFormValid) {
+      setShowFormErrors(true);
+      return;
+    }
     // Build translations object only with non-empty values
     const translations: Record<string, string> = {};
     if (formData.en) translations.en = formData.en;
@@ -316,13 +325,18 @@ const TemplatesPage: NextPageWithLayout = () => {
         size="md"
       >
         <div className="space-y-4">
-          <Input
-            label={t('templates.templateName')}
-            placeholder={t('templates.templateNamePlaceholder')}
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="!py-2.5"
-          />
+          <div>
+            <Input
+              label={t('templates.templateName')}
+              placeholder={t('templates.templateNamePlaceholder')}
+              value={formData.name}
+              onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
+              className={clsx("!py-2.5", nameError && "!border-red-300 !ring-red-500")}
+            />
+            {nameError && (
+              <p className="text-xs text-red-500 mt-1">{t('templates.templateNameRequired')}</p>
+            )}
+          </div>
 
           <Input
             label={t('templates.keywords')}
@@ -384,13 +398,16 @@ const TemplatesPage: NextPageWithLayout = () => {
                 dir="rtl"
               />
             )}
+            {translationError && (
+              <p className="text-xs text-red-500 mt-1">{t('templates.translationRequired')}</p>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-surface-100">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>
-            <Button onClick={handleSave} disabled={!isFormValid}>
+            <Button onClick={handleSave}>
               {editingTemplate ? t('common.save') : t('common.add')}
             </Button>
           </div>

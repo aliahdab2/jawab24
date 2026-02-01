@@ -78,9 +78,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       
       // Configure StatusBar overlay EARLY (before full init) for consistent safe areas
       import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
-        StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
-        StatusBar.setStyle({ style: Style.Default }).catch(() => {});
-      }).catch(() => {});
+        StatusBar.setOverlaysWebView({ overlay: true }).catch((e) => console.warn('StatusBar overlay init:', e));
+        StatusBar.setStyle({ style: Style.Default }).catch((e) => console.warn('StatusBar style init:', e));
+      }).catch((e) => console.warn('StatusBar import failed:', e));
     }
   }, []); // Empty deps = runs once on mount
 
@@ -132,7 +132,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
       try {
         await Keyboard.setResizeMode({ mode: 'body' } as any);
-      } catch {}
+      } catch (err) {
+        console.warn('Keyboard resize mode setup:', err);
+      }
 
       // Clear existing listeners if any (prevent duplicates)
       listenersRef.current.forEach(remove => remove());

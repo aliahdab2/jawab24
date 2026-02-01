@@ -6,7 +6,9 @@
       "Bash(npm run build:*)",
       "Bash(npx next build:*)",
       "Bash(npx vitest run)",
-      "WebFetch(domain:www.tidio.com)"
+      "WebFetch(domain:www.tidio.com)",
+      "Bash(npm audit:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

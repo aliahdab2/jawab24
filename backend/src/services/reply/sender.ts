@@ -2,8 +2,9 @@ import axios from 'axios';
 import { facebookService } from '../facebook';
 import { detectLanguageCode } from '../../utils/language';
 import { Logger, noopLogger } from '../../types';
+import { config } from '../../config';
 
-const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v18.0';
+const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
 export type ReplyMode = 'public' | 'private' | 'dual';
 

@@ -3,7 +3,7 @@ import { config } from '../config';
 import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, Logger } from '../types';
 import { noopLogger } from '../types';
 
-const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v18.0';
+const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
 export class FacebookService {
     private logger: Logger = noopLogger;

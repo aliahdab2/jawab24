@@ -149,8 +149,16 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
     /**
      * Get AI cache statistics
      * GET /health/cache-stats
+     * Protected by the same cleanup token to prevent info disclosure
      */
-    fastify.get('/health/cache-stats', async (request, reply) => {
+    fastify.get<{ Headers: { 'x-cleanup-token'?: string } }>('/health/cache-stats', async (request, reply) => {
+        const cleanupToken = process.env.CLEANUP_SECRET_TOKEN;
+        const providedToken = request.headers['x-cleanup-token'];
+
+        if (!cleanupToken || providedToken !== cleanupToken) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
         try {
             const stats = await getAiCacheStats();
             return reply.send(stats);
@@ -163,9 +171,12 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
     /**
      * Test Sentry error tracking
      * GET /health/sentry-test
-     * Only available in production to verify Sentry is working
+     * Only available in non-production environments
      */
-    fastify.get('/health/sentry-test', async () => {
+    fastify.get('/health/sentry-test', async (request, reply) => {
+        if (config.nodeEnv === 'production') {
+            return reply.status(404).send({ error: 'Not found' });
+        }
         throw new Error('Sentry Test Error - This is intentional');
     });
 };

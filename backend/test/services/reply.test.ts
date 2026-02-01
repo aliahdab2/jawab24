@@ -51,6 +51,9 @@ vi.mock('../../src/config', () => ({
             serviceUrl: 'http://localhost:3002',
             defaultModel: 'gpt-4-mini',
         },
+        facebook: {
+            graphApiVersion: 'v18.0',
+        },
     },
 }));
 

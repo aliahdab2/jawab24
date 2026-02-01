@@ -59,16 +59,20 @@ function WelcomeStep({
 }
 
 // Step 2: Pick Page
-function PickPageStep({ 
-  pages, 
+function PickPageStep({
+  pages,
   loading,
+  fetchError,
+  onRetry,
   onToggle,
   isLandscape,
   t,
   language
-}: { 
+}: {
   pages: Page[];
   loading: boolean;
+  fetchError: boolean;
+  onRetry: () => void;
   onToggle: (pageId: string, enabled: boolean) => void;
   isLandscape: boolean;
   t: TFunction;
@@ -85,12 +89,35 @@ function PickPageStep({
     );
   }
 
+  if (fetchError) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+          <X className="w-6 h-6 text-red-500" />
+        </div>
+        <p className="text-surface-600 font-medium">{t('onboarding.fetchError' as TranslationKey)}</p>
+        <button
+          onClick={onRetry}
+          className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors"
+        >
+          {t('errors.tryAgain' as TranslationKey)}
+        </button>
+      </div>
+    );
+  }
+
   if (pages.length === 0) {
     return (
       <div className="text-center py-8">
         <FileText className="w-12 h-12 text-surface-300 mx-auto mb-4" />
         <p className="text-surface-600 font-medium">{t('pages.noPages')}</p>
-        <p className="text-surface-400 text-sm mt-2">{t('pages.noPagesDesc')}</p>
+        <p className="text-surface-400 text-sm mt-2">{t('onboarding.noPagesHelp' as TranslationKey)}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors"
+        >
+          {t('onboarding.refreshPages' as TranslationKey)}
+        </button>
       </div>
     );
   }
@@ -283,40 +310,45 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const [knowledgeBase, setKnowledgeBase] = useState('');
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   
   // Reusable hooks
   const isLandscape = useLandscape();
   useBodyScrollLock(true);
   useEscapeKey(onSkip);
 
+  // Fetch pages
+  const fetchPages = useCallback(async () => {
+    try {
+      setLoading(true);
+      setFetchError(false);
+      const response = await pagesApi.getAll();
+      const data = Array.isArray(response.data)
+        ? response.data
+        : (Array.isArray(response.data?.data) ? response.data.data : []);
+      setPages(data);
+
+      // Auto-select first enabled page, or first page
+      const enabledPage = data.find((p: Page) => p.autoReplyEnabled);
+      const firstPage = data[0];
+      const selected = enabledPage || firstPage;
+      if (selected) {
+        setSelectedPageId(selected.id);
+        // Use existing knowledgeBase, or fall back to suggestedKnowledgeBase from Facebook
+        setKnowledgeBase(selected.knowledgeBase || selected.suggestedKnowledgeBase || '');
+      }
+    } catch (error) {
+      console.error('Failed to fetch pages:', error);
+      setFetchError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Fetch pages on mount
   useEffect(() => {
-    const fetchPages = async () => {
-      try {
-        setLoading(true);
-        const response = await pagesApi.getAll();
-        const data = Array.isArray(response.data)
-          ? response.data
-          : (Array.isArray(response.data?.data) ? response.data.data : []);
-        setPages(data);
-        
-        // Auto-select first enabled page, or first page
-        const enabledPage = data.find((p: Page) => p.autoReplyEnabled);
-        const firstPage = data[0];
-        const selected = enabledPage || firstPage;
-        if (selected) {
-          setSelectedPageId(selected.id);
-          // Use existing knowledgeBase, or fall back to suggestedKnowledgeBase from Facebook
-          setKnowledgeBase(selected.knowledgeBase || selected.suggestedKnowledgeBase || '');
-        }
-      } catch (error) {
-        console.error('Failed to fetch pages:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchPages();
-  }, []);
+  }, [fetchPages]);
 
   const handleToggle = useCallback(async (pageId: string, enabled: boolean) => {
     // Optimistic update
@@ -425,9 +457,11 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
             <WelcomeStep isLandscape={isLandscape} t={t} />
           )}
           {currentStep === 1 && (
-            <PickPageStep 
-              pages={pages} 
+            <PickPageStep
+              pages={pages}
               loading={loading}
+              fetchError={fetchError}
+              onRetry={fetchPages}
               onToggle={handleToggle}
               isLandscape={isLandscape}
               t={t}

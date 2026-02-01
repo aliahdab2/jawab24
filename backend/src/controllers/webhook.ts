@@ -1,7 +1,33 @@
+import crypto from 'crypto';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { Logger, noopLogger, createRequestLogger } from '../types';
+
+/**
+ * Verify Facebook/Instagram webhook signature using X-Hub-Signature-256 header.
+ * Returns true if the signature is valid, false otherwise.
+ */
+function verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undefined): boolean {
+    if (!signatureHeader) {
+        return false;
+    }
+
+    const [algorithm, signature] = signatureHeader.split('=');
+    if (algorithm !== 'sha256' || !signature) {
+        return false;
+    }
+
+    const expectedSignature = crypto
+        .createHmac('sha256', config.facebook.appSecret)
+        .update(rawBody)
+        .digest('hex');
+
+    return crypto.timingSafeEqual(
+        Buffer.from(signature, 'hex'),
+        Buffer.from(expectedSignature, 'hex'),
+    );
+}
 
 /** Messaging event from Facebook/Instagram webhook */
 interface MessagingEvent {
@@ -91,6 +117,19 @@ export class WebhookController {
      */
     async handleWebhook(request: FastifyRequest, reply: FastifyReply) {
         this.setLogger(request);
+
+        // Verify webhook signature from Facebook/Instagram
+        const rawBody = (request as any).rawBody as Buffer | undefined;
+        const signatureHeader = request.headers['x-hub-signature-256'] as string | undefined;
+
+        if (!rawBody || !verifyWebhookSignature(rawBody, signatureHeader)) {
+            this.log().warn('Webhook signature verification failed', {
+                hasRawBody: !!rawBody,
+                hasSignature: !!signatureHeader,
+            });
+            return reply.status(403).send('Invalid signature');
+        }
+
         const body = request.body as WebhookBody;
 
         // Log the webhook for debugging (only in debug level)
