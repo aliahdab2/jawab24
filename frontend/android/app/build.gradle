@@ -1,5 +1,22 @@
 apply plugin: 'com.android.application'
 
+// Read local.properties for build secrets (Facebook, Sentry)
+// Required keys: FACEBOOK_APP_ID, FACEBOOK_CLIENT_TOKEN
+// Optional keys: SENTRY_DSN
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localProperties.load(new FileInputStream(localPropertiesFile))
+}
+
+def facebookAppId = localProperties.getProperty('FACEBOOK_APP_ID', '')
+def facebookClientToken = localProperties.getProperty('FACEBOOK_CLIENT_TOKEN', '')
+def sentryDsn = localProperties.getProperty('SENTRY_DSN', '')
+
+if (facebookAppId.isEmpty()) {
+    logger.warn("WARNING: FACEBOOK_APP_ID not set in local.properties. Facebook login will not work.")
+}
+
 def getTimestamp() {
     return new Date().format('yyyyMMdd-HHmm')
 }
@@ -14,6 +31,15 @@ android {
         versionCode 2
         versionName "1.0.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // Inject Facebook secrets as string resources from local.properties
+        resValue "string", "facebook_app_id", facebookAppId
+        resValue "string", "facebook_client_token", facebookClientToken
+        resValue "string", "fb_login_protocol_scheme", "fb${facebookAppId}"
+
+        // Sentry DSN available at runtime via BuildConfig.SENTRY_DSN
+        buildConfigField "String", "SENTRY_DSN", "\"${sentryDsn}\""
+
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -21,6 +47,11 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:*.apk'
         }
     }
+
+    buildFeatures {
+        buildConfig true
+    }
+
     buildTypes {
         release {
             minifyEnabled true
@@ -49,6 +80,13 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+
+    // Sentry — native crash reporting & ANR detection
+    implementation 'io.sentry:sentry-android:7.14.0'
+
+    // Google Play In-App Updates
+    implementation 'com.google.android.play:app-update:2.1.0'
+
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

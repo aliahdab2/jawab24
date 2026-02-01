@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Block cleartext (HTTP) traffic globally -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Domain-specific config for jawab24.com -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">jawab24.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+        <!--
+        To enable certificate pinning, add pin-set with your server's
+        SHA-256 certificate pins. Generate pins using:
+
+        openssl s_client -connect jawab24.com:443 2>/dev/null \
+          | openssl x509 -pubkey -noout \
+          | openssl pkey -pubin -outform der \
+          | openssl dgst -sha256 -binary \
+          | openssl enc -base64
+
+        Then uncomment and replace the placeholders below:
+
+        <pin-set expiration="2027-01-01">
+            <pin digest="SHA-256">YOUR_PRIMARY_PIN_HERE=</pin>
+            <pin digest="SHA-256">YOUR_BACKUP_PIN_HERE=</pin>
+        </pin-set>
+        -->
+    </domain-config>
+</network-security-config>
