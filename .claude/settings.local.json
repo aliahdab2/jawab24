@@ -13,7 +13,19 @@
       "Bash(ls:*)",
       "Bash(git add:*)",
       "Bash(npx cap sync ios)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash($HOME/Library/Android/sdk/platform-tools/adb devices:*)",
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash($HOME/Library/Android/sdk/platform-tools/adb kill-server)",
+      "Bash($HOME/Library/Android/sdk/platform-tools/adb start-server)",
+      "Bash($HOME/Library/Android/sdk/platform-tools/adb logcat:*)",
+      "Bash($HOME/Library/Android/sdk/platform-tools/adb shell am force-stop com.jawab24.app)",
+      "Bash($HOME/Library/Android/sdk/platform-tools/adb shell am start -n com.jawab24.app/.MainActivity)",
+      "Bash($HOME/Library/Android/sdk/platform-tools/adb logcat -d -s \"AndroidRuntime:E\" \"Jawab24:*\" \"System.err:W\" \"ActivityManager:E\" \"FATAL:E\")",
+      "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb logcat -c)",
+      "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb shell am force-stop:*)",
+      "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb shell am start -n com.jawab24.app/.MainActivity)",
+      "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb install:*)"
     ]
   }
 }

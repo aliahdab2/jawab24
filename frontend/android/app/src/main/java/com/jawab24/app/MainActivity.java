@@ -1,6 +1,7 @@
 package com.jawab24.app;
 
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
@@ -19,14 +20,10 @@ import com.google.android.play.core.install.model.UpdateAvailability;
 
 public class MainActivity extends BridgeActivity {
 
+    private static final String TAG = "Jawab24";
     private long backPressedTime = 0;
     private AppUpdateManager appUpdateManager;
-
-    private final ActivityResultLauncher<IntentSenderRequest> updateLauncher =
-            registerForActivityResult(
-                    new ActivityResultContracts.StartIntentSenderForResult(),
-                    result -> { /* Update flow completed or cancelled by user */ }
-            );
+    private ActivityResultLauncher<IntentSenderRequest> updateLauncher;
 
     private final InstallStateUpdatedListener installStateListener = state -> {
         if (state.installStatus() == InstallStatus.DOWNLOADED) {
@@ -39,53 +36,74 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         // Back button: navigate WebView history or double-press to exit
-        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override
-            public void handleOnBackPressed() {
-                if (getBridge() != null && getBridge().getWebView().canGoBack()) {
-                    getBridge().getWebView().goBack();
-                } else if (backPressedTime + 2000 > System.currentTimeMillis()) {
-                    finish();
-                } else {
-                    Toast.makeText(MainActivity.this, "Press back again to exit", Toast.LENGTH_SHORT).show();
-                    backPressedTime = System.currentTimeMillis();
+        try {
+            getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+                @Override
+                public void handleOnBackPressed() {
+                    if (getBridge() != null && getBridge().getWebView().canGoBack()) {
+                        getBridge().getWebView().goBack();
+                    } else if (backPressedTime + 2000 > System.currentTimeMillis()) {
+                        finish();
+                    } else {
+                        Toast.makeText(MainActivity.this, "Press back again to exit", Toast.LENGTH_SHORT).show();
+                        backPressedTime = System.currentTimeMillis();
+                    }
                 }
-            }
-        });
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "Back button setup failed", e);
+        }
 
-        checkForAppUpdate();
+        try {
+            updateLauncher = registerForActivityResult(
+                    new ActivityResultContracts.StartIntentSenderForResult(),
+                    result -> { /* Update flow completed or cancelled by user */ }
+            );
+            checkForAppUpdate();
+        } catch (Exception e) {
+            Log.e(TAG, "In-app update setup failed", e);
+        }
     }
 
     private void checkForAppUpdate() {
-        appUpdateManager = AppUpdateManagerFactory.create(this);
-        appUpdateManager.registerListener(installStateListener);
+        try {
+            appUpdateManager = AppUpdateManagerFactory.create(this);
+            appUpdateManager.registerListener(installStateListener);
 
-        appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
-            if (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
-                    && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)) {
-                try {
-                    appUpdateManager.startUpdateFlowForResult(
-                            info,
-                            updateLauncher,
-                            AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build()
-                    );
-                } catch (Exception e) {
-                    // Non-critical: update check failure should not affect app usage
+            appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
+                if (info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                        && info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)) {
+                    try {
+                        appUpdateManager.startUpdateFlowForResult(
+                                info,
+                                updateLauncher,
+                                AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build()
+                        );
+                    } catch (Exception e) {
+                        Log.w(TAG, "Could not start update flow", e);
+                    }
                 }
-            }
-        });
+            }).addOnFailureListener(e -> {
+                Log.w(TAG, "Update check failed", e);
+            });
+        } catch (Exception e) {
+            Log.e(TAG, "AppUpdateManager init failed", e);
+        }
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        // If an update was downloaded while app was backgrounded, install it
         if (appUpdateManager != null) {
-            appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
-                if (info.installStatus() == InstallStatus.DOWNLOADED) {
-                    appUpdateManager.completeUpdate();
-                }
-            });
+            try {
+                appUpdateManager.getAppUpdateInfo().addOnSuccessListener(info -> {
+                    if (info.installStatus() == InstallStatus.DOWNLOADED) {
+                        appUpdateManager.completeUpdate();
+                    }
+                });
+            } catch (Exception e) {
+                Log.w(TAG, "Resume update check failed", e);
+            }
         }
     }
 
@@ -93,7 +111,11 @@ public class MainActivity extends BridgeActivity {
     public void onDestroy() {
         super.onDestroy();
         if (appUpdateManager != null) {
-            appUpdateManager.unregisterListener(installStateListener);
+            try {
+                appUpdateManager.unregisterListener(installStateListener);
+            } catch (Exception e) {
+                Log.w(TAG, "Listener cleanup failed", e);
+            }
         }
     }
 }

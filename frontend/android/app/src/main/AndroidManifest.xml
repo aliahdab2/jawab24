@@ -104,6 +104,9 @@
       />
         </provider>
 
+        <!-- Disable Sentry auto-init; we initialise manually in Jawab24Application -->
+        <meta-data android:name="io.sentry.auto-init" android:value="false" />
+
         <!-- Facebook SDK Config -->
         <meta-data
       android:name="com.facebook.sdk.ApplicationId"
