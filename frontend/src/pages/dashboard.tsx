@@ -178,28 +178,13 @@ const DashboardPage: NextPageWithLayout = () => {
       // Calculate active pages
       const activePages = fetchedPages.filter(p => p.autoReplyEnabled).length;
 
-      // Needs attention counts from backend stats
-      const needsAttention = stats.needsAttention ?? 0;
       const messagesNeedsAttention = msgStats.needsAttention ?? 0;
 
-      // Replied Today - heuristic from recent list or just use total replied
-      // The dashboard visual uses "Replied Today". 
-      // If `stats.replied` is TOTAL replied ever, we can't use it for "Replied Today".
-      // However, the UI label says "Replied Today".
-      // If we don't have a "replied_today" stat from backend, we can't show it accurately.
-      // We will assume `stats.replied` is total. 
-      // Workaround: We will change the UI label to "Total Replied" or similar if we can't get "Today",
-      // OR we just show total replied in that box.
-      // Looking at `CommentStats`, it doesn't have `repliedToday`.
-      // We will map stats.replied to the box that was "Replied Today" but maybe rename it conceptually?
-      // Actually, the previous code filtered `isToday`.
-      // Let's use `stats.replied` for the "Replied" box, even if it says "Replied Today" in key, we interpret as Total for now or accept 0.
-      
       setStatsData({
         totalComments: stats.total,
-        repliedToday: stats.replied, // Using Total Replied as proxy since backend doesn't give today
+        repliedToday: stats.repliedToday,
         pendingReplies: stats.unreplied,
-        needsAttention: needsAttention, // Not available from backend
+        needsAttention: stats.needsAttention,
         activePages,
         commentsToday,
         commentsYesterday,

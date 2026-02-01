@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { comments, posts, pages, logs } from '../db/schema';
-import { eq, desc, sql, and } from 'drizzle-orm';
+import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 
 export class CommentsService {
@@ -284,6 +284,7 @@ export class CommentsService {
                 replied: 0,
                 unreplied: 0,
                 needsAttention: 0,
+                repliedToday: 0,
                 replyRate: '0',
                 byMethod: { template: 0, ai: 0, manual: 0 },
             };
@@ -333,11 +334,29 @@ export class CommentsService {
 
         const needsAttention = Number(needsAttentionResult[0]?.count || 0);
 
+        // Get replied today count
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const repliedTodayResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(comments)
+            .innerJoin(posts, eq(comments.postId, posts.id))
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(
+                eq(pages.userId, userId),
+                eq(comments.replied, true),
+                gte(comments.repliedAt, todayStart)
+            ));
+
+        const repliedToday = Number(repliedTodayResult[0]?.count || 0);
+
         return {
             total,
             replied,
             unreplied: total - replied,
             needsAttention,
+            repliedToday,
             replyRate: (replied / total * 100).toFixed(1),
             byMethod,
         };

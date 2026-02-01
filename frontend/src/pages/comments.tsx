@@ -168,7 +168,7 @@ const CommentsPage: NextPageWithLayout = () => {
     refetchInterval: 30000, // Refresh every 30s
   });
 
-  // Use server stats or fallback to defaults (preserving structure)
+  // Use server stats or fallback to defaults
   const stats = useMemo(() => {
     if (statsData) {
       return {
@@ -176,30 +176,11 @@ const CommentsPage: NextPageWithLayout = () => {
         templateReplies: statsData.byMethod.template,
         pending: statsData.unreplied,
         aiReplies: statsData.byMethod.ai,
-         // Note: needsAttention is not currently in CommentStats from backend (based on browser test),
-         // using local calculation as fallback or 0 if we want strictly server data.
-         // Given the user wants "Show All" to be stable 10, using local 'allComments' for needsAttention
-         // would still cause fluctuation if filtered.
-         // Ideally backend should provide this. For now, we will use the local calculation for needsAttention
-         // ONLY if we can't get it from server, but knowing it might fluctuate.
-         // OR, distinct: stable stats vs filtered view stats.
-         // User complaint was about "Show All" (Total) fluctuation.
-         // Server stats provides stable Total, Pending, Replied.
-        needsAttention: allComments.filter(c => checkNeedsAttention(c)).length, // Still local for now
-        repliedToday:  0, // Backend doesn't provide 'repliedToday' yet, was calculated locally.
-        // If we switch to purely server, we lose 'active' needsAttention calculation on all data?
-        // No, 'allComments' is only the LOADED page. so local calc was ALREADY wrong for total.
-        // It was only correct for the "current view".
-        // The fix is to rely on server.
-        // Browser test showed: {"total":10,"replied":8,"unreplied":2,"replyRate":"80.0","byMethod":{...}}
-        // It does NOT have repliedToday or needsAttention.
-        // We will keep 'needsAttention' as local for now (fluctuating) or set to 0?
-        // User cares about "Show All" and "In Queue" mainly.
-        // Let's use server data for the main counters.
+        needsAttention: statsData.needsAttention,
+        repliedToday: statsData.repliedToday,
       };
     }
 
-    // Fallback/Loading state (or if query fails)
     return {
       total: 0,
       templateReplies: 0,
@@ -208,7 +189,7 @@ const CommentsPage: NextPageWithLayout = () => {
       needsAttention: 0,
       repliedToday: 0,
     };
-  }, [statsData, allComments]);
+  }, [statsData]);
 
   // Intersection Observer for infinite scroll
   useEffect(() => {

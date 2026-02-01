@@ -162,6 +162,7 @@ export interface CommentStats {
   replied: number;
   unreplied: number;
   needsAttention: number;
+  repliedToday: number;
   replyRate: string;
   byMethod: {
     template: number;
