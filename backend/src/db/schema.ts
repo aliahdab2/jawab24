@@ -11,6 +11,7 @@ export const users = pgTable('users', {
     facebookAccessToken: text('facebook_access_token'),
     facebookTokenExpiresAt: timestamp('facebook_token_expires_at'),
     isAdmin: boolean('is_admin').default(false), // Admin flag for manual upgrades
+    hasInstagramPermission: boolean('has_instagram_permission').default(false),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 });

@@ -45,7 +45,7 @@ describe('AuthController - Native Login', () => {
 
         mockRequest = {
             body: { accessToken: 'valid-fb-token' },
-            log: { error: vi.fn() }
+            log: { error: vi.fn(), info: vi.fn() }
         };
 
         mockReply = {

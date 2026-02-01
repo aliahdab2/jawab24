@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "has_instagram_permission" boolean DEFAULT false;

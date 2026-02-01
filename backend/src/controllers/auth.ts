@@ -97,6 +97,10 @@ export class AuthController {
                 });
             }
 
+            // Track Instagram permission status (informational, not blocking)
+            const hasInstagram = scopes.includes('instagram_basic');
+            request.log.info({ hasInstagram, scopes }, 'Login permissions granted');
+
             // 2. Exchange for Long-Lived Token (Critical for Background Jobs)
             const { token: longLivedToken, expiresAt } = await facebookService.getLongLivedToken(accessToken);
 
@@ -113,10 +117,17 @@ export class AuthController {
                 fbProfile.picture
             );
 
-            // 5. Generate Internal JWT
+            // 5. Store Instagram permission status
+            if (hasInstagram) {
+                db.update(users).set({ hasInstagramPermission: true }).where(eq(users.id, user.id)).catch((err) => {
+                    request.log.error({ err }, 'Failed to update Instagram permission flag');
+                });
+            }
+
+            // 6. Generate Internal JWT
             const token = authService.generateToken(user);
 
-            // 6. Auto-sync pages (Non-blocking)
+            // 7. Auto-sync pages (Non-blocking)
             pagesService.syncFromFacebook(user.id, longLivedToken).catch((err) => {
                 request.log.error({ err }, 'Auto-sync pages failed (Native Flow)');
             });
