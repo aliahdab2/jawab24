@@ -157,6 +157,7 @@ const DashboardPage: NextPageWithLayout = () => {
         replied: 0,
         unreplied: 0,
         needsAttention: 0,
+        repliedToday: 0,
         replyRate: '0.0',
         byMethod: { ai: 0, template: 0, manual: 0 }
       };

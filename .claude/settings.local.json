@@ -12,7 +12,8 @@
       "Bash(find:*)",
       "Bash(ls:*)",
       "Bash(git add:*)",
-      "Bash(npx cap sync ios)"
+      "Bash(npx cap sync ios)",
+      "Bash(git commit:*)"
     ]
   }
 }
