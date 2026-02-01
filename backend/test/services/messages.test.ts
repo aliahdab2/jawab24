@@ -33,17 +33,28 @@ describe('MessagesService', () => {
                 })
             };
 
+            // Mock needsAttention count query
+            const mockNeedsAttentionQuery = {
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([{ count: 3 }])
+                    })
+                })
+            };
+
             // Sequence of calls matching service implementation
             vi.mocked(db.select)
                 .mockReturnValueOnce(mockTotalQuery as any)
-                .mockReturnValueOnce(mockRepliedQuery as any);
+                .mockReturnValueOnce(mockRepliedQuery as any)
+                .mockReturnValueOnce(mockNeedsAttentionQuery as any);
 
             const stats = await messagesService.getStats('user-123');
 
             expect(stats).toEqual({
                 total: 50,
                 replied: 30,
-                pending: 20
+                pending: 20,
+                needsAttention: 3
             });
         });
 
@@ -64,7 +75,8 @@ describe('MessagesService', () => {
             expect(stats).toEqual({
                 total: 0,
                 replied: 0,
-                pending: 0
+                pending: 0,
+                needsAttention: 0
             });
         });
     });
