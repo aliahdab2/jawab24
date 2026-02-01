@@ -19,6 +19,11 @@ vi.mock('../../src/services/ai');
 vi.mock('../../src/services/settings');
 vi.mock('../../src/services/messages');
 vi.mock('../../src/services/facebook');
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: {
+        sendTemplateNotification: vi.fn().mockResolvedValue('notif-123'),
+    },
+}));
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canUseAiReplies: vi.fn().mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 }),
@@ -329,6 +334,163 @@ describe('Reply Service', () => {
 
             // Should still succeed because fail-open
             expect(result.success).toBe(true);
+        });
+
+        it('should pass flag data to markAsReplied when AI returns flags', async () => {
+            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'We apologize for the inconvenience.',
+                language: 'en',
+                cached: false,
+                intent: 'COMPLAINT',
+                confidence: 'high',
+                flags: ['angry_customer'],
+            });
+            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
+
+            const axios = await import('axios');
+            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
+
+            const result = await replyService.processComment(
+                'fb_page_123',
+                'fb_post_123',
+                'fb_comment_123',
+                'This is terrible!',
+                'user_123',
+                'John Doe'
+            );
+
+            expect(result.success).toBe(true);
+            // Verify markAsReplied was called with flag data
+            expect(commentsService.markAsReplied).toHaveBeenCalledWith(
+                'comment_uuid',
+                'We apologize for the inconvenience.',
+                'ai',
+                undefined, // templateId
+                expect.any(String), // language
+                true, // needsAttention
+                'angry_customer', // flagReason
+                'COMPLAINT' // aiIntent
+            );
+        });
+
+        it('should send flagged_reply notification when needsAttention is true', async () => {
+            const { notificationService } = await import('../../src/services/notifications');
+
+            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'We apologize.',
+                language: 'en',
+                cached: false,
+                intent: 'COMPLAINT',
+                confidence: 'high',
+                flags: ['angry_customer'],
+            });
+            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
+
+            const axios = await import('axios');
+            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
+
+            await replyService.processComment(
+                'fb_page_123',
+                'fb_post_123',
+                'fb_comment_123',
+                'Angry message!',
+                'user_123',
+                'John Doe'
+            );
+
+            // Verify notification was sent
+            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+                'user_uuid',
+                'flagged_reply',
+                expect.objectContaining({
+                    senderName: 'John Doe',
+                    reason: expect.any(String),
+                }),
+                expect.objectContaining({
+                    commentId: 'comment_uuid',
+                    type: 'comment',
+                })
+            );
+        });
+
+        it('should NOT send notification when needsAttention is false', async () => {
+            const { notificationService } = await import('../../src/services/notifications');
+
+            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Thank you!',
+                language: 'en',
+                cached: false,
+                intent: 'COMPLIMENT',
+                confidence: 'high',
+                flags: [],
+            });
+            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
+
+            const axios = await import('axios');
+            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
+
+            await replyService.processComment(
+                'fb_page_123',
+                'fb_post_123',
+                'fb_comment_123',
+                'Great product!',
+                'user_123',
+                'John Doe'
+            );
+
+            // Should NOT have sent notification
+            expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+        });
+
+        it('should pass needsAttention: false for template replies', async () => {
+            const mockRule = { id: 'rule_1', templateId: 'template_1' };
+            const mockTemplate = {
+                id: 'template_1',
+                translations: { en: 'Thank you for your feedback!' },
+            };
+
+            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
+            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
+
+            const axios = await import('axios');
+            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
+
+            await replyService.processComment(
+                'fb_page_123',
+                'fb_post_123',
+                'fb_comment_123',
+                'Great product!',
+                'user_123',
+                'John Doe'
+            );
+
+            // markAsReplied should have needsAttention=false for template replies
+            expect(commentsService.markAsReplied).toHaveBeenCalledWith(
+                'comment_uuid',
+                'Thank you for your feedback!',
+                'template',
+                'template_1',
+                expect.any(String),
+                false, // needsAttention
+                undefined, // flagReason
+                undefined // aiIntent
+            );
         });
 
         it('should set TTL on first rate limit increment', async () => {

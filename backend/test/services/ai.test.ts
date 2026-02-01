@@ -149,6 +149,107 @@ describe('AI Service', () => {
         });
     });
 
+    describe('generateReply - flag propagation', () => {
+        it('should propagate intent, confidence, and flags from AI worker', async () => {
+            const mockResponse = {
+                data: {
+                    reply: 'We apologize for the issue.',
+                    language: 'en',
+                    intent: 'COMPLAINT',
+                    confidence: 'high',
+                    flags: ['angry_customer'],
+                },
+            };
+
+            vi.mocked(axios.post).mockResolvedValue(mockResponse);
+
+            const result = await service.generateReply({
+                comment: 'This product is broken!',
+            });
+
+            expect(result.reply).toBe('We apologize for the issue.');
+            expect(result.intent).toBe('COMPLAINT');
+            expect(result.confidence).toBe('high');
+            expect(result.flags).toEqual(['angry_customer']);
+            expect(result.cached).toBe(false);
+        });
+
+        it('should propagate empty flags array when no flags', async () => {
+            const mockResponse = {
+                data: {
+                    reply: 'Thank you!',
+                    language: 'en',
+                    intent: 'COMPLIMENT',
+                    confidence: 'high',
+                    flags: [],
+                },
+            };
+
+            vi.mocked(axios.post).mockResolvedValue(mockResponse);
+
+            const result = await service.generateReply({
+                comment: 'Love this!',
+            });
+
+            expect(result.intent).toBe('COMPLIMENT');
+            expect(result.confidence).toBe('high');
+            expect(result.flags).toEqual([]);
+        });
+
+        it('should return no flag data for cached replies', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue('Cached response');
+
+            const result = await service.generateReply({
+                comment: 'Hello',
+            });
+
+            expect(result.cached).toBe(true);
+            expect(result.intent).toBeUndefined();
+            expect(result.confidence).toBeUndefined();
+            expect(result.flags).toBeUndefined();
+        });
+
+        it('should return no flag data on fallback error response', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(axios.post).mockRejectedValue(new Error('timeout'));
+
+            const result = await service.generateReply({
+                comment: 'Hello',
+            });
+
+            expect(result.model).toBe('fallback');
+            expect(result.intent).toBeUndefined();
+            expect(result.confidence).toBeUndefined();
+            expect(result.flags).toBeUndefined();
+        });
+
+        it('should handle AI worker response without flag fields (backward compat)', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+
+            const mockResponse = {
+                data: {
+                    reply: 'Thanks!',
+                    language: 'en',
+                    // No intent, confidence, or flags
+                },
+            };
+
+            vi.mocked(axios.post).mockResolvedValue(mockResponse);
+
+            const result = await service.generateReply({
+                comment: 'Hello!',
+            });
+
+            expect(result.reply).toBe('Thanks!');
+            expect(result.intent).toBeUndefined();
+            expect(result.confidence).toBeUndefined();
+            expect(result.flags).toBeUndefined();
+        });
+    });
+
     describe('getCacheStats', () => {
         it('should return cache statistics', async () => {
             const { db } = await import('../../src/db');

@@ -38,6 +38,16 @@ describe('NotificationService', () => {
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('page_disconnected');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('subscription_renewed');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('trial_ending');
+            expect(NOTIFICATION_TEMPLATES).toHaveProperty('flagged_reply');
+        });
+
+        it('should have flagged_reply template with correct placeholders', () => {
+            const template = NOTIFICATION_TEMPLATES.flagged_reply;
+            expect(template.titleEn).toBe('Reply Needs Your Attention');
+            expect(template.bodyEn).toContain('{senderName}');
+            expect(template.bodyEn).toContain('{reason}');
+            expect(template.bodyAr).toContain('{senderName}');
+            expect(template.bodyAr).toContain('{reason}');
         });
 
         it('should have bilingual content for each template', () => {
@@ -162,6 +172,39 @@ describe('NotificationService', () => {
                 type: 'subscription_expiring',
                 bodyEn: expect.stringContaining('3 days'),
                 bodyAr: expect.stringContaining('3'),
+            }));
+        });
+
+        it('should replace variables in flagged_reply template', async () => {
+            (db.select as any).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-789' }]),
+                }),
+            });
+
+            const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
+
+            await notificationService.sendTemplateNotification(
+                'user-123',
+                'flagged_reply',
+                { senderName: 'Ahmed', reason: 'angry_customer' },
+                { commentId: 'c-123', type: 'comment', deepLink: '/comments?filter=flagged' }
+            );
+
+            expect(sendNotificationSpy).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                type: 'flagged_reply',
+                bodyEn: expect.stringContaining('Ahmed'),
+                bodyEn: expect.stringContaining('angry_customer'),
+                data: expect.objectContaining({
+                    commentId: 'c-123',
+                    type: 'comment',
+                }),
             }));
         });
     });
