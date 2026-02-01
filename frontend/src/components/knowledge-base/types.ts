@@ -1,7 +1,5 @@
 export type PresetSectionId =
   | 'products'
-  | 'contact'
-  | 'location'
   | 'notes';
 
 export type CustomSectionId = `custom:${string}`;
@@ -32,31 +30,27 @@ export interface SectionConfig {
   placeholderKey: string;
 }
 
-/** Ordered list of preset section configs (4 core sections) */
+/** Ordered list of preset section configs (2 core sections) */
 export const SECTION_CONFIGS: SectionConfig[] = [
   { id: 'products', emoji: '💰', titleKey: 'kb.section.products', descKey: 'kb.section.products.desc', placeholderKey: 'kb.section.products.placeholder' },
-  { id: 'contact',  emoji: '📱', titleKey: 'kb.section.contact',  descKey: 'kb.section.contact.desc',  placeholderKey: 'kb.section.contact.placeholder' },
-  { id: 'location', emoji: '📍', titleKey: 'kb.section.location', descKey: 'kb.section.location.desc', placeholderKey: 'kb.section.location.placeholder' },
   { id: 'notes',    emoji: '📝', titleKey: 'kb.section.notes',    descKey: 'kb.section.notes.desc',    placeholderKey: 'kb.section.notes.placeholder' },
 ];
 
 /** Map emoji → presetSectionId */
 export const EMOJI_TO_SECTION: Record<string, PresetSectionId> = {
   '💰': 'products',
-  '📱': 'contact',
-  '📍': 'location',
   '📝': 'notes',
-  // Backend generateKnowledgeBase() produces these when syncing Facebook pages:
+  // Legacy markers (previously contact/location) → all map to notes now
+  '📱': 'notes',
+  '📍': 'notes',
   '⏰': 'notes',
   '🏷️': 'notes',
-  '📞': 'contact',
-  '🌐': 'contact',
+  '📞': 'notes',
+  '🌐': 'notes',
 };
 
 /** Map presetSectionId → label used in stored text */
 export const SECTION_LABELS: Record<PresetSectionId, { en: string; ar: string }> = {
   products: { en: 'Products & Services',  ar: 'المنتجات والخدمات' },
-  contact:  { en: 'Contact Info',        ar: 'معلومات التواصل' },
-  location: { en: 'Location',            ar: 'الموقع' },
   notes:    { en: 'Other Notes',         ar: 'ملاحظات أخرى' },
 };

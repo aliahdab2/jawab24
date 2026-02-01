@@ -26,8 +26,6 @@ export function parseKnowledgeBase(text: string): KnowledgeSection[] {
   // Start with empty preset sections
   const presetMap: Record<PresetSectionId, string[]> = {
     products: [],
-    contact: [],
-    location: [],
     notes: [],
   };
 

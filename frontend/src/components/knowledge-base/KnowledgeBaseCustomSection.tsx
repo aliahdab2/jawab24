@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, Trash2 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { CUSTOM_SECTION_MARKER } from './types';
@@ -26,6 +26,14 @@ export function KnowledgeBaseCustomSection({
   const titleRef = useRef<HTMLInputElement>(null);
   const hasContent = section.content.trim().length > 0;
 
+  // Auto-resize textarea to fit content
+  const autoResize = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(80, el.scrollHeight)}px`;
+  }, []);
+
   // Auto-focus title input when expanded (if title is default)
   useEffect(() => {
     if (isExpanded) {
@@ -34,9 +42,10 @@ export function KnowledgeBaseCustomSection({
         titleRef.current.select();
       } else if (textareaRef.current) {
         textareaRef.current.focus();
+        autoResize();
       }
     }
-  }, [isExpanded, section.content]);
+  }, [isExpanded, section.content, autoResize]);
 
   // Preview: first line of content, truncated
   const preview = hasContent
@@ -132,10 +141,11 @@ export function KnowledgeBaseCustomSection({
           </p>
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[80px] max-h-[150px] p-3 border-2 border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-sm leading-relaxed text-surface-900 placeholder:text-surface-300"
+            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed text-surface-900 placeholder:text-surface-300"
             placeholder={t('kb.customSection.placeholder' as TranslationKey)}
             value={section.content}
             onChange={(e) => onChange(e.target.value)}
+            onInput={autoResize}
             dir={language === 'ar' ? 'rtl' : 'ltr'}
             rows={3}
           />
