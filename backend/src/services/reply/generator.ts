@@ -24,6 +24,9 @@ export interface GenerateReplyResult {
     replyText: string | null;
     replyMethod: 'template' | 'ai';
     templateId?: string;
+    needsAttention?: boolean;
+    flagReason?: string;
+    aiIntent?: string;
 }
 
 /**
@@ -100,7 +103,17 @@ export class ReplyGenerator {
                 replyText = aiResponse.reply;
                 replyMethod = 'ai';
 
+                // Determine flagging from AI metadata
+                const flags = aiResponse.flags || [];
+                const needsAttention = flags.length > 0 ||
+                    aiResponse.confidence === 'low' ||
+                    aiResponse.intent === 'COMPLAINT';
+                const flagReason = flags.join(',') || (aiResponse.intent === 'COMPLAINT' ? 'complaint' : undefined);
+                const aiIntent = aiResponse.intent;
+
                 await subscriptionsService.incrementAiReplies(userId);
+
+                return { replyText, replyMethod, templateId, needsAttention, flagReason, aiIntent };
             }
         }
 
@@ -111,7 +124,7 @@ export class ReplyGenerator {
             this.logger.debug('[Generator] Using fallback reply');
         }
 
-        return { replyText, replyMethod, templateId };
+        return { replyText, replyMethod, templateId, needsAttention: false };
     }
 
     /**
@@ -168,11 +181,21 @@ export class ReplyGenerator {
                 replyText = aiResponse.reply;
                 replyMethod = 'ai';
 
+                // Determine flagging from AI metadata
+                const flags = aiResponse.flags || [];
+                const needsAttention = flags.length > 0 ||
+                    aiResponse.confidence === 'low' ||
+                    aiResponse.intent === 'COMPLAINT';
+                const flagReason = flags.join(',') || (aiResponse.intent === 'COMPLAINT' ? 'complaint' : undefined);
+                const aiIntent = aiResponse.intent;
+
                 await subscriptionsService.incrementAiReplies(userId);
+
+                return { replyText, replyMethod, needsAttention, flagReason, aiIntent };
             }
         }
 
-        return { replyText, replyMethod };
+        return { replyText, replyMethod, needsAttention: false };
     }
 }
 

@@ -162,13 +162,19 @@ export class MessagesService {
     async markAsReplied(
         messageId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual'
+        replyMethod: 'template' | 'ai' | 'manual',
+        needsAttention?: boolean,
+        flagReason?: string,
+        aiIntent?: string
     ): Promise<void> {
         await db.update(messages)
             .set({
                 replied: true,
                 replyText,
                 replyMethod,
+                needsAttention: needsAttention ?? false,
+                flagReason: flagReason ?? null,
+                aiIntent: aiIntent ?? null,
                 repliedAt: new Date(),
                 updatedAt: new Date(),
             })
@@ -264,6 +270,7 @@ export class MessagesService {
         total: number;
         replied: number;
         pending: number;
+        needsAttention: number;
     }> {
         const totalResult = await db
             .select({ count: sql<number>`count(*)` })
@@ -277,7 +284,7 @@ export class MessagesService {
         const total = Number(totalResult[0]?.count || 0);
 
         if (total === 0) {
-            return { total: 0, replied: 0, pending: 0 };
+            return { total: 0, replied: 0, pending: 0, needsAttention: 0 };
         }
 
         const repliedResult = await db
@@ -292,10 +299,24 @@ export class MessagesService {
 
         const replied = Number(repliedResult[0]?.count || 0);
 
-        return { 
-            total, 
-            replied, 
-            pending: total - replied 
+        // Get needs attention count
+        const needsAttentionResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(messages)
+            .innerJoin(pages, eq(messages.pageId, pages.id))
+            .where(and(
+                eq(pages.userId, userId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.needsAttention, true)
+            ));
+
+        const needsAttention = Number(needsAttentionResult[0]?.count || 0);
+
+        return {
+            total,
+            replied,
+            pending: total - replied,
+            needsAttention,
         };
     }
 

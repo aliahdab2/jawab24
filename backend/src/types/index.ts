@@ -77,6 +77,9 @@ export interface AiGenerateResponse {
     language: string;
     cached: boolean;
     model?: string;
+    intent?: string;
+    confidence?: string;
+    flags?: string[];
 }
 
 export interface AiCacheEntry {
@@ -156,6 +159,9 @@ export interface Comment {
     templateId: string | null;
     detectedLanguage: string | null;
     replyLanguage: string | null;
+    needsAttention: boolean | null;
+    flagReason: string | null;
+    aiIntent: string | null;
     createdTime: Date | null;
     repliedAt: Date | null;
     createdAt: Date | null;

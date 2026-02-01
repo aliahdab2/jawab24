@@ -128,6 +128,9 @@ export const comments = pgTable('comments', {
     templateId: uuid('template_id').references(() => templates.id),
     detectedLanguage: varchar('detected_language', { length: 10 }),
     replyLanguage: varchar('reply_language', { length: 10 }),
+    needsAttention: boolean('needs_attention').default(false),
+    flagReason: varchar('flag_reason', { length: 255 }),
+    aiIntent: varchar('ai_intent', { length: 50 }),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -138,6 +141,7 @@ export const comments = pgTable('comments', {
         facebookCommentIdIdx: index('idx_comments_facebook_comment_id').on(table.facebookCommentId),
         repliedIdx: index('idx_comments_replied').on(table.replied),
         detectedLanguageIdx: index('idx_comments_detected_language').on(table.detectedLanguage),
+        needsAttentionIdx: index('idx_comments_needs_attention').on(table.needsAttention),
     };
 });
 
@@ -154,6 +158,9 @@ export const instagramComments = pgTable('instagram_comments', {
     replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
     detectedLanguage: varchar('detected_language', { length: 10 }),
     replyLanguage: varchar('reply_language', { length: 10 }),
+    needsAttention: boolean('needs_attention').default(false),
+    flagReason: varchar('flag_reason', { length: 255 }),
+    aiIntent: varchar('ai_intent', { length: 50 }),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -163,6 +170,7 @@ export const instagramComments = pgTable('instagram_comments', {
         mediaIdIdx: index('idx_instagram_comments_media_id').on(table.mediaId),
         instagramCommentIdIdx: index('idx_instagram_comments_id').on(table.instagramCommentId),
         repliedIdx: index('idx_instagram_comments_replied').on(table.replied),
+        needsAttentionIdx: index('idx_instagram_comments_needs_attention').on(table.needsAttention),
     };
 });
 
@@ -226,6 +234,9 @@ export const messages = pgTable('messages', {
     replied: boolean('replied').default(false),
     replyText: text('reply_text'),
     replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
+    needsAttention: boolean('needs_attention').default(false),
+    flagReason: varchar('flag_reason', { length: 255 }),
+    aiIntent: varchar('ai_intent', { length: 50 }),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -237,6 +248,7 @@ export const messages = pgTable('messages', {
         facebookMessageIdIdx: index('idx_messages_facebook_message_id').on(table.facebookMessageId),
         directionIdx: index('idx_messages_direction').on(table.direction),
         platformIdx: index('idx_messages_platform').on(table.platform),
+        needsAttentionIdx: index('idx_messages_needs_attention').on(table.needsAttention),
     };
 });
 

@@ -3,12 +3,13 @@ import { deviceTokens, notifications, settings } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
 // Notification types
-export type NotificationType = 
+export type NotificationType =
     | 'payment_failed'
     | 'subscription_expiring'
     | 'page_disconnected'
     | 'subscription_renewed'
-    | 'trial_ending';
+    | 'trial_ending'
+    | 'flagged_reply';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -50,6 +51,12 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationP
         titleAr: 'تنتهي الفترة التجريبية قريباً',
         bodyEn: 'Your free trial ends in {days} days. Subscribe now to keep using Jawab24.',
         bodyAr: 'تنتهي فترتك التجريبية المجانية خلال {days} أيام. اشترك الآن للاستمرار في استخدام Jawab24.',
+    },
+    flagged_reply: {
+        titleEn: 'Reply Needs Your Attention',
+        titleAr: 'رد يحتاج انتباهك',
+        bodyEn: 'An AI reply to "{senderName}" was flagged: {reason}. Please review it.',
+        bodyAr: 'تم وضع علامة على رد لـ "{senderName}": {reason}. يرجى مراجعته.',
     },
 };
 

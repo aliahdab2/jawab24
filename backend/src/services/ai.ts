@@ -151,7 +151,13 @@ export class AiService {
 
         try {
             // Call AI Worker service
-            const response = await axios.post<{ reply: string; language: string }>(
+            const response = await axios.post<{
+                reply: string;
+                language: string;
+                intent?: string;
+                confidence?: string;
+                flags?: string[];
+            }>(
                 `${config.ai.serviceUrl}/generate`,
                 {
                     comment: request.comment,
@@ -174,6 +180,9 @@ export class AiService {
                 language: detectedLanguage,
                 cached: false,
                 model: config.ai.model,
+                intent: response.data.intent,
+                confidence: response.data.confidence,
+                flags: response.data.flags,
             };
         } catch (error) {
             this.logger.error('AI Service error', {

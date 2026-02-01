@@ -121,9 +121,13 @@ const MessagesPage: NextPageWithLayout = () => {
   }, [data]);
 
   // Check if a conversation needs human attention
+  // Uses backend flags first, falls back to client-side keyword matching
   const checkConversationNeedsAttention = useCallback((msgs: Message[]): boolean => {
-    // Sort logic handled in formatting, but here input might be unsorted depending on group logic
-    const lastIncoming = [...msgs].filter(m => m.direction === 'incoming').sort((a,b) => 
+    // Check backend flags first
+    if (msgs.some(m => m.needsAttention)) return true;
+
+    // Fallback: client-side keyword check for messages predating the flagging system
+    const lastIncoming = [...msgs].filter(m => m.direction === 'incoming').sort((a,b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )[0];
 

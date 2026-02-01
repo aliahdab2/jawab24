@@ -34,9 +34,12 @@ const ATTENTION_KEYWORDS = [
 ];
 
 /**
- * Check if a comment needs human attention based on keywords
+ * Check if a comment needs human attention.
+ * Uses backend flag first, falls back to client-side keyword matching
+ * for comments that predate the flagging system.
  */
 export function checkNeedsAttention(comment: Comment): boolean {
+  if (comment.needsAttention) return true;
   if (comment.replied) return false;
   const messageText = comment.message.toLowerCase();
   return ATTENTION_KEYWORDS.some(kw => messageText.includes(kw));

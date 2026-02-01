@@ -15,6 +15,9 @@ export interface Message {
   createdAt: string | Date | null;
   createdTime?: string | Date | null;
   repliedAt?: string | Date | null;
+  needsAttention?: boolean;
+  flagReason?: string | null;
+  aiIntent?: string | null;
 }
 
 // --- Comment Types ---
@@ -32,6 +35,9 @@ export interface Comment {
   repliedAt?: string | Date | null;
   postId: string | null;
   facebookCommentId?: string;
+  needsAttention?: boolean;
+  flagReason?: string | null;
+  aiIntent?: string | null;
 }
 
 // --- Page Types ---
@@ -82,6 +88,9 @@ export interface InstagramComment {
   createdTime?: string | Date | null;
   repliedAt?: string | Date | null;
   createdAt: string | Date | null;
+  needsAttention?: boolean;
+  flagReason?: string | null;
+  aiIntent?: string | null;
 }
 
 // --- Template Types ---
@@ -256,6 +265,9 @@ export interface ReplyJobResult {
   replyText?: string;
   replyMethod?: 'template' | 'ai';
   error?: string;
+  needsAttention?: boolean;
+  flagReason?: string;
+  aiIntent?: string;
 }
 
 export const REPLY_QUEUE_NAME = 'reply-processing-queue';

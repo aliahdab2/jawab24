@@ -177,18 +177,9 @@ const DashboardPage: NextPageWithLayout = () => {
       // Calculate active pages
       const activePages = fetchedPages.filter(p => p.autoReplyEnabled).length;
 
-      // Needs attention (flagged) - server stats doesn't return this yet for comments?
-      // Check interface: CommentStats has unreplied. "needs_attention" logic is complex (keywords/negative feedback).
-      // If backend doesn't provide it, we can't accurately know total needs_attention without fetching all.
-      // Compromise: Use 'unreplied' for Pending, but for 'Needs Attention' we might show 0 or remove it if we can't count it.
-      // Wait, let's check what we used before: local filtering. To be accurate we need backend support.
-      // For now we'll set needsAttention to 0 or use unreplied as a proxy if appropriate, but distinct.
-      // Let's rely on what we can get. The browser console showed:
-      // COMMENTS_STATS: {"total":10,"replied":8,"unreplied":2,...}
-      // It did NOT show `needsAttention`.
-      // We will leave needsAttention as 0 for now until backend supports it, to avoid showing incorrect low numbers.
-      const needsAttention = 0; 
-      const messagesNeedsAttention = 0; 
+      // Needs attention counts from backend stats
+      const needsAttention = stats.needsAttention ?? 0;
+      const messagesNeedsAttention = msgStats.needsAttention ?? 0;
 
       // Replied Today - heuristic from recent list or just use total replied
       // The dashboard visual uses "Replied Today". 

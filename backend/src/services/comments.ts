@@ -203,7 +203,16 @@ export class CommentsService {
     /**
      * Mark comment as replied
      */
-    async markAsReplied(commentId: string, replyText: string, replyMethod: 'template' | 'ai' | 'manual', templateId?: string, replyLanguage?: string) {
+    async markAsReplied(
+        commentId: string,
+        replyText: string,
+        replyMethod: 'template' | 'ai' | 'manual',
+        templateId?: string,
+        replyLanguage?: string,
+        needsAttention?: boolean,
+        flagReason?: string,
+        aiIntent?: string
+    ) {
         const [updatedComment] = await db
             .update(comments)
             .set({
@@ -212,12 +221,15 @@ export class CommentsService {
                 replyMethod,
                 templateId,
                 replyLanguage,
+                needsAttention: needsAttention ?? false,
+                flagReason: flagReason ?? null,
+                aiIntent: aiIntent ?? null,
                 repliedAt: new Date(),
                 updatedAt: new Date(),
             })
             .where(eq(comments.id, commentId))
             .returning();
-        
+
         return updatedComment;
     }
 
@@ -271,6 +283,7 @@ export class CommentsService {
                 total: 0,
                 replied: 0,
                 unreplied: 0,
+                needsAttention: 0,
                 replyRate: '0',
                 byMethod: { template: 0, ai: 0, manual: 0 },
             };
@@ -310,10 +323,21 @@ export class CommentsService {
             else if (row.method === 'manual') byMethod.manual = Number(row.count);
         });
 
+        // Get needs attention count
+        const needsAttentionResult = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(comments)
+            .innerJoin(posts, eq(comments.postId, posts.id))
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(eq(pages.userId, userId), eq(comments.needsAttention, true)));
+
+        const needsAttention = Number(needsAttentionResult[0]?.count || 0);
+
         return {
             total,
             replied,
             unreplied: total - replied,
+            needsAttention,
             replyRate: (replied / total * 100).toFixed(1),
             byMethod,
         };

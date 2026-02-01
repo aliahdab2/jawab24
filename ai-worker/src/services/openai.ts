@@ -23,6 +23,9 @@ export interface GenerateResponse {
     reply: string;
     language: string;
     tokensUsed?: number;
+    intent?: string;
+    confidence?: string;
+    flags?: string[];
 }
 
 export class OpenAIService {
@@ -62,13 +65,25 @@ export class OpenAIService {
                 temperature: config.openai.temperature,
             });
 
-            const reply = completion.choices[0]?.message?.content?.trim() || '';
+            const content = completion.choices[0]?.message?.content?.trim() || '';
             const detectedLanguage = this.detectLanguage(request.comment);
 
+            // Parse structured JSON response; fall back to plain text if parsing fails
+            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] };
+            try {
+                parsed = JSON.parse(content);
+            } catch {
+                // AI returned plain text instead of JSON — use as reply directly
+                parsed = { reply: content };
+            }
+
             return {
-                reply: reply || this.getFallbackReply(request).reply,
+                reply: parsed.reply || this.getFallbackReply(request).reply,
                 language: request.language || detectedLanguage,
                 tokensUsed: completion.usage?.total_tokens,
+                intent: parsed.intent,
+                confidence: parsed.confidence,
+                flags: parsed.flags,
             };
         } catch (error) {
             // Log error using proper structure (will be handled by Fastify logger in production)
@@ -179,7 +194,16 @@ Use the above business information to answer customer questions accurately. If a
 
         prompt += `
 
-Important: Only output the reply text, nothing else. Do not include any prefixes like "Reply:" or "Assistant:".`;
+IMPORTANT: Output a JSON object with these fields:
+- "reply": your reply text (string, no prefixes like "Reply:" or "Assistant:")
+- "intent": the intent you classified (one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, SPAM_OR_IRRELEVANT)
+- "confidence": how confident you are in your reply ("high", "medium", or "low")
+- "flags": an array of flag strings if applicable (empty array [] if none):
+  - "price_not_in_kb" if your reply mentions any price, cost, or fee NOT found in BUSINESS INFORMATION
+  - "angry_customer" if the customer seems angry, frustrated, or threatening
+  - "low_confidence" if you are uncertain about your reply
+  - "redirect_to_human" if you advised the customer to contact a human
+Output ONLY the JSON object, nothing else.`;
 
         return prompt;
     }
@@ -237,6 +261,8 @@ Important: Only output the reply text, nothing else. Do not include any prefixes
         return {
             reply: fallbacks[language] || fallbacks['en'],
             language,
+            confidence: 'low',
+            flags: ['fallback_reply'],
         };
     }
 }

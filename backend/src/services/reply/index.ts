@@ -5,6 +5,7 @@ import { facebookService } from '../facebook';
 import { settingsService } from '../settings';
 import { messagesService } from '../messages';
 import { rateLimiter } from '../protection';
+import { notificationService } from '../notifications';
 import { replyGenerator } from './generator';
 import { replySender, ReplyMode } from './sender';
 import { detectLanguageCode } from '../../utils/language';
@@ -91,7 +92,7 @@ export class ReplyService {
 
             // 8. Generate reply
             const userSettings = await settingsService.getSettings(userId);
-            const { replyText, replyMethod } = await replyGenerator.generateForMessage(
+            const { replyText, replyMethod, needsAttention, flagReason, aiIntent } = await replyGenerator.generateForMessage(
                 {
                     userId,
                     text: messageText,
@@ -111,8 +112,18 @@ export class ReplyService {
             await facebookService.sendPrivateMessage(page.accessToken, senderId, replyText);
 
             // 10. Update database
-            await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod);
+            await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent);
             await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
+
+            // 11. Send notification if flagged
+            if (needsAttention && page.userId) {
+                notificationService.sendTemplateNotification(
+                    page.userId,
+                    'flagged_reply',
+                    { senderName: senderId, reason: flagReason || 'AI flagged this reply' },
+                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' }
+                ).catch(err => this.logger.error('Flagged notification failed', { err }));
+            }
 
             return { success: true, messageId, replyText, replyMethod };
 
@@ -198,7 +209,7 @@ export class ReplyService {
 
             // 8. Generate reply
             const userSettings = await settingsService.getSettings(pageUserId);
-            const { replyText, replyMethod, templateId } = await replyGenerator.generateForComment(
+            const { replyText, replyMethod, templateId, needsAttention, flagReason, aiIntent } = await replyGenerator.generateForComment(
                 {
                     userId: pageUserId,
                     text: commentMessage,
@@ -242,8 +253,21 @@ export class ReplyService {
                 replyText,
                 replyMethod,
                 templateId,
-                detectedLanguage === 'unknown' ? 'en' : detectedLanguage
+                detectedLanguage === 'unknown' ? 'en' : detectedLanguage,
+                needsAttention,
+                flagReason,
+                aiIntent
             );
+
+            // 11. Send notification if flagged
+            if (needsAttention && page.userId) {
+                notificationService.sendTemplateNotification(
+                    page.userId,
+                    'flagged_reply',
+                    { senderName: fromName || 'Unknown', reason: flagReason || 'AI flagged this reply' },
+                    { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' }
+                ).catch(err => this.logger.error('Flagged notification failed', { err }));
+            }
 
             return { success: true, commentId: comment.id, replyText, replyMethod };
 
