@@ -86,6 +86,7 @@ export class InstagramReplyService {
                 const aiResponse = await aiService.generateReply({
                     comment: commentMessage,
                     context: {
+                        pageId: page.id,
                         pageName: page.name || undefined,
                         postMessage: media.caption || undefined,
                         knowledgeBase: page.knowledgeBase || undefined,
@@ -230,6 +231,7 @@ export class InstagramReplyService {
                 const aiResponse = await aiService.generateReply({
                     comment: messageText,
                     context: {
+                        pageId: page.id,
                         pageName: page.name || undefined,
                         knowledgeBase: page.knowledgeBase || undefined,
                         conversationHistory,

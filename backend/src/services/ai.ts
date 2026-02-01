@@ -17,8 +17,9 @@ export class AiService {
 
     /**
      * Generate a hash for a comment to use as cache key
+     * Includes pageId to prevent cross-page cache collisions
      */
-    private hashComment(comment: string, language?: string): string {
+    private hashComment(comment: string, language?: string, pageId?: string): string {
         // Remove punctuation, emojis, and extra whitespace to increase cache hits
         const normalized = comment
             .toLowerCase()
@@ -26,19 +27,19 @@ export class AiService {
             .replace(/\s+/g, ' ') // Collapse multiple spaces
             .trim();
 
-        const key = `${normalized}:${language || 'auto'}`;
+        const key = `${normalized}:${language || 'auto'}:${pageId || 'global'}`;
         return crypto.createHash('sha256').update(key).digest('hex');
     }
 
     /**
      * Check cache for existing reply
      */
-    async checkCache(comment: string, language?: string): Promise<string | null> {
+    async checkCache(comment: string, language?: string, pageId?: string): Promise<string | null> {
         if (!config.ai.cacheEnabled) {
             return null;
         }
 
-        const hash = this.hashComment(comment, language);
+        const hash = this.hashComment(comment, language, pageId);
         const cacheKey = `cache:ai_reply:${hash}`;
 
         try {
@@ -89,12 +90,12 @@ export class AiService {
     /**
      * Save reply to cache
      */
-    async saveToCache(comment: string, reply: string, language?: string): Promise<void> {
+    async saveToCache(comment: string, reply: string, language?: string, pageId?: string): Promise<void> {
         if (!config.ai.cacheEnabled) {
             return;
         }
 
-        const hash = this.hashComment(comment, language);
+        const hash = this.hashComment(comment, language, pageId);
         const cacheKey = `cache:ai_reply:${hash}`;
 
         // Save to Redis (30 days TTL)
@@ -126,8 +127,10 @@ export class AiService {
      * Generate AI reply for a comment
      */
     async generateReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
-        // Check cache first
-        const cachedReply = await this.checkCache(request.comment, request.language);
+        const pageId = request.context?.pageId;
+
+        // Check cache first (scoped per page to avoid cross-page collisions)
+        const cachedReply = await this.checkCache(request.comment, request.language, pageId);
         if (cachedReply) {
             return {
                 reply: cachedReply,
@@ -163,8 +166,8 @@ export class AiService {
             const aiReply = response.data.reply;
             const detectedLanguage = response.data.language || request.language || 'en';
 
-            // Save to cache
-            await this.saveToCache(request.comment, aiReply, detectedLanguage);
+            // Save to cache (scoped per page)
+            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId);
 
             return {
                 reply: aiReply,

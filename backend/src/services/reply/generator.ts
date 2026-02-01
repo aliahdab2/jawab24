@@ -91,6 +91,7 @@ export class ReplyGenerator {
                 const aiResponse = await aiService.generateReply({
                     comment: text,
                     context: {
+                        pageId,
                         pageName,
                         postMessage,
                         knowledgeBase,
@@ -158,6 +159,7 @@ export class ReplyGenerator {
                 const aiResponse = await aiService.generateReply({
                     comment: text,
                     context: {
+                        pageId,
                         pageName,
                         knowledgeBase,
                         conversationHistory,

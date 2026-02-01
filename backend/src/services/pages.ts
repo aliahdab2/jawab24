@@ -59,6 +59,10 @@ function formatBusinessHours(hours: FacebookPageHours | undefined): string | nul
 function generateKnowledgeBase(fbPage: FacebookPage): string {
     const parts: string[] = [];
 
+    if (fbPage.category) {
+        parts.push(`🏷️ نوع النشاط: ${fbPage.category}`);
+    }
+
     if (fbPage.about) {
         parts.push(fbPage.about);
     }
