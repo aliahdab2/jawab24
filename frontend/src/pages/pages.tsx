@@ -8,17 +8,14 @@ import {
   RefreshCw,
   ExternalLink,
   BookOpen,
-  X,
-  Save,
-  Check,
   Instagram,
   ChevronRight,
   Clock
 } from 'lucide-react';
 import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
+import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseModal';
 import type { NextPageWithLayout } from './_app';
-import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 const PagesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
@@ -27,17 +24,10 @@ const PagesPage: NextPageWithLayout = () => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [editingPage, setEditingPage] = useState<Page | null>(null);
-  const [knowledgeBase, setKnowledgeBase] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // ESC key to close modal
-  const closeKnowledgeBaseModal = useCallback(() => {
-    setEditingPage(null);
-    setKnowledgeBase('');
-    setSaved(false);
-  }, []);
-  useEscapeKey(closeKnowledgeBaseModal, !!editingPage);
+  // ESC key handled inside KnowledgeBaseModal
 
   const fetchPages = useCallback(async () => {
     try {
@@ -143,36 +133,12 @@ const PagesPage: NextPageWithLayout = () => {
 
   const openKnowledgeBase = (page: Page) => {
     setEditingPage(page);
-    setKnowledgeBase(page.knowledgeBase || '');
     setSaved(false);
   };
 
   const closeKnowledgeBase = () => {
     setEditingPage(null);
-    setKnowledgeBase('');
     setSaved(false);
-  };
-
-  const saveKnowledgeBase = async () => {
-    if (!editingPage) return;
-
-    setSaving(true);
-    setSaved(false);
-    try {
-      await api.put(`/pages/${editingPage.id}`, { knowledgeBase });
-
-      // Update local state
-      setPages(pages.map(p =>
-        p.id === editingPage.id ? { ...p, knowledgeBase } : p
-      ));
-
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (error) {
-      console.error('Failed to save knowledge base:', error);
-    } finally {
-      setSaving(false);
-    }
   };
 
   if (loading && pages.length === 0) {
@@ -373,114 +339,30 @@ const PagesPage: NextPageWithLayout = () => {
         </Card>
       )}
 
-      {/* Knowledge Base Modal - Responsive for portrait, landscape, and desktop */}
+      {/* Knowledge Base Modal - Structured sections */}
       {editingPage && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
-          <div 
-            className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden"
-            style={{ paddingBottom: '8px' }}
-          >
-            {/* Modal Header - Ultra compact in landscape */}
-            <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-surface-100 flex-shrink-0">
-              <div className="flex items-center gap-3 landscape:gap-2">
-                <div className="w-9 h-9 landscape:w-8 landscape:h-8 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center">
-                  <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
-                </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-surface-900">
-                    {t('pages.businessInfo')}
-                  </h2>
-                  <p className="text-xs sm:text-sm text-surface-500 landscape:hidden">{editingPage.name}</p>
-                </div>
-              </div>
-              <button
-                onClick={closeKnowledgeBase}
-                className="p-2 rounded-lg hover:bg-surface-100 text-surface-500"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body - Textarea takes maximum space */}
-            <div className="flex-1 flex flex-col min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5">
-              {/* Brief hint - hidden in landscape to save vertical space */}
-              <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start landscape:hidden">
-                {t('pages.businessInfoModalDesc')}
-              </p>
-
-              {/* Quick chips - tap to insert label */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                {[
-                  { label: language === 'ar' ? 'ساعات العمل' : 'Hours', icon: '⏰' },
-                  { label: language === 'ar' ? 'العنوان' : 'Location', icon: '📍' },
-                  { label: language === 'ar' ? 'الأسعار' : 'Prices', icon: '💰' },
-                  { label: language === 'ar' ? 'التواصل' : 'Contact', icon: '📱' },
-                ].map((chip) => (
-                  <button
-                    key={chip.label}
-                    type="button"
-                    onClick={() => {
-                      const prefix = knowledgeBase.length > 0 && !knowledgeBase.endsWith('\n') ? '\n' : '';
-                      setKnowledgeBase(prev => `${prev}${prefix}${chip.icon} ${chip.label}: `);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-100 hover:bg-brand-50 text-surface-600 hover:text-brand-700 rounded-full text-xs font-medium transition-colors border border-surface-200 hover:border-brand-200"
-                  >
-                    <span>{chip.icon}</span>
-                    <span>{chip.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Textarea - THE HERO of the modal */}
-              <div className="flex-1 flex flex-col min-h-0">
-                <textarea
-                  className="flex-1 w-full min-h-[100px] landscape:min-h-0 sm:min-h-[200px] p-4 landscape:p-3 border-2 border-surface-200 rounded-2xl landscape:rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-base leading-relaxed"
-                  placeholder={language === 'ar' 
-                    ? 'مثال:\n⏰ ساعات العمل: 9 صباحاً - 9 مساءً\n📍 العنوان: الرياض، حي...\n💰 الأسعار: تبدأ من 50 ريال\n📱 التواصل: واتساب 05...'
-                    : 'Example:\n⏰ Hours: 9am - 9pm\n📍 Location: Riyadh, ...\n💰 Prices: Starting from 50 SAR\n📱 Contact: WhatsApp 05...'
-                  }
-                  value={knowledgeBase}
-                  onChange={(e) => setKnowledgeBase(e.target.value.slice(0, 2000))}
-                  maxLength={2000}
-                  dir={language === 'ar' ? 'rtl' : 'ltr'}
-                  autoFocus
-                />
-                
-                {/* Character Counter */}
-                <div className="flex items-center justify-end mt-2 landscape:mt-1 px-1">
-                  <span className={`text-xs font-medium ${
-                    knowledgeBase.length > 1900
-                      ? 'text-red-500'
-                      : knowledgeBase.length > 1500
-                        ? 'text-amber-500'
-                        : 'text-surface-400'
-                  }`}>
-                    {knowledgeBase.length.toLocaleString()}/2,000
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer - Compact, extra compact in landscape */}
-            <div className="flex items-center justify-end gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
-              <Button variant="secondary" size="sm" onClick={closeKnowledgeBase}>
-                {t('common.cancel')}
-              </Button>
-              <Button
-                size="sm"
-                onClick={saveKnowledgeBase}
-                loading={saving}
-                icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                variant={saved ? 'secondary' : 'primary'}
-              >
-                {saved
-                  ? t('pages.savedStatus')
-                  : t('common.save')
-                }
-              </Button>
-            </div>
-          </div>
-        </div>
+        <KnowledgeBaseModal
+          page={editingPage}
+          onClose={closeKnowledgeBase}
+          onSave={async (text) => {
+            setSaving(true);
+            setSaved(false);
+            try {
+              await api.put(`/pages/${editingPage.id}`, { knowledgeBase: text });
+              setPages(pages.map(p =>
+                p.id === editingPage.id ? { ...p, knowledgeBase: text } : p
+              ));
+              setSaved(true);
+              setTimeout(() => setSaved(false), 3000);
+            } catch (error) {
+              console.error('Failed to save knowledge base:', error);
+            } finally {
+              setSaving(false);
+            }
+          }}
+          saving={saving}
+          saved={saved}
+        />
       )}
     </>
   );
