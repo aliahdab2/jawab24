@@ -54,12 +54,24 @@ export class ReplyService {
             // 2. Check user settings
             const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(userId);
 
+            // 2.5 Fetch sender name from Facebook (best-effort, within 24h window)
+            let senderName: string | undefined;
+            try {
+                const profile = await facebookService.getSenderProfile(senderId, page.accessToken);
+                if (profile?.name) {
+                    senderName = profile.name;
+                }
+            } catch {
+                // Non-critical — continue without sender name
+            }
+
             // 3. Store the incoming message
             const { message: storedMessage, isNew } = await messagesService.findOrCreateFromWebhook(
                 page.id,
                 messageId,
                 senderId,
-                messageText
+                messageText,
+                senderName
             );
 
             // 4. Rate limit check
@@ -120,7 +132,7 @@ export class ReplyService {
                 notificationService.sendTemplateNotification(
                     page.userId,
                     'flagged_reply',
-                    { senderName: senderId, reason: flagReason || 'AI flagged this reply' },
+                    { senderName: senderName || senderId, reason: flagReason || 'AI flagged this reply' },
                     { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' }
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }

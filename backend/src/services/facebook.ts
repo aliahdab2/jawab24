@@ -242,6 +242,33 @@ export class FacebookService {
         }
     }
     /**
+     * Fetch a Messenger sender's profile (name, profile pic) using the page access token.
+     * Must be called within 24 hours of the user's last message.
+     */
+    async getSenderProfile(senderId: string, pageAccessToken: string): Promise<{ name: string; profilePic?: string } | null> {
+        try {
+            const response = await axios.get(`${FACEBOOK_GRAPH_API}/${senderId}`, {
+                params: {
+                    fields: 'first_name,last_name,profile_pic',
+                    access_token: pageAccessToken,
+                },
+            });
+
+            const { first_name, last_name, profile_pic } = response.data;
+            const name = [first_name, last_name].filter(Boolean).join(' ');
+            return { name: name || senderId, profilePic: profile_pic };
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                this.logger.warn('[Facebook] Could not fetch sender profile', {
+                    senderId,
+                    error: error.response?.data?.error?.message || error.message,
+                });
+            }
+            return null;
+        }
+    }
+
+    /**
      * Subscribe a page to receive webhook events (feed + messages)
      * Must be called after connecting a page so Facebook sends events to our webhook
      */
