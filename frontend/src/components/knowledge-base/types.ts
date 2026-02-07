@@ -40,13 +40,6 @@ export const SECTION_CONFIGS: SectionConfig[] = [
 export const EMOJI_TO_SECTION: Record<string, PresetSectionId> = {
   '💰': 'products',
   '📝': 'notes',
-  // Legacy markers (previously contact/location) → all map to notes now
-  '📱': 'notes',
-  '📍': 'notes',
-  '⏰': 'notes',
-  '🏷️': 'notes',
-  '📞': 'notes',
-  '🌐': 'notes',
 };
 
 /** Map presetSectionId → label used in stored text */
