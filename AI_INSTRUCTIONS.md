@@ -148,6 +148,10 @@ This check must happen:
 <button>{t('common.save')}</button>
 ```
 
+- Always add new keys to **both** `en.json` and `ar.json`
+- Run `npm run translation:validate` before committing translation changes
+- See `frontend/docs/TRANSLATION_GUIDE.md` for full rules (key naming, RTL, interpolation, brand terms)
+
 ### 4. Linting
 
 **Always check for lint errors after editing files.**

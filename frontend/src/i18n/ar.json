@@ -785,13 +785,6 @@
   "profile.saveFailed": "فشل حفظ البريد الإلكتروني. يرجى المحاولة مرة أخرى.",
   "profile.encrypted": "تشفير آمن",
   "profile.neverShared": "لن نشارك بريدك",
-  "notifications.title": "الإشعارات",
-  "notifications.noNotifications": "لا توجد إشعارات",
-  "notifications.markAllRead": "تحديد الكل كمقروء",
-  "notifications.justNow": "الآن",
-  "notifications.minutesAgo": "منذ {count} دقيقة",
-  "notifications.hoursAgo": "منذ {count} ساعة",
-  "notifications.daysAgo": "منذ {count} يوم",
 
   "admin.title": "الإدارة",
   "admin.backToDashboard": "العودة للوحة التحكم",

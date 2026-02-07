@@ -59,7 +59,8 @@
       "Bash(npm run lint)",
       "Bash(git rm:*)",
       "Bash(IS_MOBILE_BUILD=true npm run build:*)",
-      "Bash(IS_MOBILE_BUILD=true npx next build:*)"
+      "Bash(IS_MOBILE_BUILD=true npx next build:*)",
+      "Bash(npm run translation:validate:*)"
     ]
   }
 }
