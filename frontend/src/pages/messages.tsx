@@ -146,6 +146,10 @@ const MessagesPage: NextPageWithLayout = () => {
         };
       }
       acc[key].messages.push(msg);
+      // Use the first non-null sender name we find
+      if (!acc[key].senderName && msg.senderName) {
+        acc[key].senderName = msg.senderName;
+      }
 
       const msgDate = msg.createdAt ? new Date(msg.createdAt).getTime() : 0;
       const lastMsgDate = acc[key].lastMessage.createdAt ? new Date(acc[key].lastMessage.createdAt).getTime() : 0;
