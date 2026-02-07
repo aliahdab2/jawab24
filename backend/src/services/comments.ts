@@ -92,6 +92,9 @@ export class CommentsService {
                 createdAt: comments.createdAt,
                 postMessage: posts.message,
                 pageName: pages.name,
+                needsAttention: comments.needsAttention,
+                flagReason: comments.flagReason,
+                aiIntent: comments.aiIntent,
             })
             .from(comments)
             .innerJoin(posts, eq(comments.postId, posts.id))
@@ -143,6 +146,9 @@ export class CommentsService {
                 createdAt: comments.createdAt,
                 postMessage: posts.message,
                 pageName: pages.name,
+                needsAttention: comments.needsAttention,
+                flagReason: comments.flagReason,
+                aiIntent: comments.aiIntent,
             })
             .from(comments)
             .innerJoin(posts, eq(comments.postId, posts.id))

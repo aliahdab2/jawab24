@@ -388,6 +388,9 @@ export class MessagesService {
             createdTime: record.createdTime,
             repliedAt: record.repliedAt,
             createdAt: record.createdAt,
+            needsAttention: record.needsAttention ?? false,
+            flagReason: record.flagReason ?? null,
+            aiIntent: record.aiIntent ?? null,
         };
     }
 }
