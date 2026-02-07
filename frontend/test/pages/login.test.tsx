@@ -155,10 +155,11 @@ describe('LoginPage', () => {
 
     describe('Native Mobile Login', () => {
         beforeEach(async () => {
-            // Mock Capacitor for Mobile
+            // Mock Capacitor for Android Mobile
             const { Capacitor } = await import('@capacitor/core');
             (Capacitor.isNativePlatform as any).mockReturnValue(true);
-            
+            (Capacitor.getPlatform as any).mockReturnValue('android');
+
             // Setup Facebook Login mock BEFORE rendering (component pre-initializes SDK on mount)
             (FacebookLogin.login as any).mockResolvedValue({ accessToken: { token: 'native-fb-token' } });
         });

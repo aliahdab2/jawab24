@@ -1,6 +1,5 @@
 import {
   type KnowledgeSection,
-  type SectionId,
   type PresetSectionId,
   type CustomSectionId,
   SECTION_CONFIGS,

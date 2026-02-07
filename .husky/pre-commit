@@ -1,1 +1,24 @@
+# Guard against accidental deletion of critical config files
+CRITICAL_FILES=(
+  "frontend/postcss.config.js"
+  "frontend/tailwind.config.ts"
+  "frontend/next.config.js"
+  "frontend/tsconfig.json"
+  "backend/tsconfig.json"
+)
+
+DELETED_CRITICAL=""
+for file in "${CRITICAL_FILES[@]}"; do
+  if git diff --cached --name-only --diff-filter=D | grep -qx "$file"; then
+    DELETED_CRITICAL="$DELETED_CRITICAL\n  - $file"
+  fi
+done
+
+if [ -n "$DELETED_CRITICAL" ]; then
+  echo "🚨 BLOCKED: Commit deletes critical config file(s):$DELETED_CRITICAL"
+  echo ""
+  echo "If this is intentional, use: git commit --no-verify"
+  exit 1
+fi
+
 npx lint-staged

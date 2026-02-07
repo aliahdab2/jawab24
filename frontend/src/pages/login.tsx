@@ -90,13 +90,12 @@ export default function LoginPage() {
       return;
     }
 
-    // Check if running in Native Mobile App
     const isMobile = Capacitor.isNativePlatform();
+    const platform = Capacitor.getPlatform();
 
-    if (isMobile) {
-      // --- NATIVE MOBILE LOGIN FLOW ---
+    if (isMobile && platform === 'android') {
+      // --- ANDROID NATIVE LOGIN FLOW (uses native FB SDK) ---
       try {
-        // Use pre-loaded SDK if available, otherwise load now
         let FacebookLogin = fbSdkRef.current;
         if (!FacebookLogin) {
           const fbModule = await import('@capacitor-community/facebook-login');
@@ -104,55 +103,44 @@ export default function LoginPage() {
           try {
             await FacebookLogin.initialize({ appId: fbAppId });
           } catch {
-            // May already be initialized - that's OK
+            // May already be initialized
           }
         }
-        
-        // Note: We clear stale sessions on page load (in useEffect), not here
-        // This avoids the double-logout performance issue
-        
-        // Create a timeout promise (30 seconds)
+
         const TIMEOUT_MS = 30000;
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS);
         });
-        
-        // Open native Facebook login dialog with timeout protection
+
         const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging', 'instagram_basic', 'instagram_manage_messages'];
-        
+
         const result = await Promise.race([
           FacebookLogin.login({ permissions, tracking: 'enabled' } as any),
           timeoutPromise
         ]) as any;
 
         if (!result.accessToken) {
-          // User cancelled - show friendly message
           toast.info(t('auth.loginCancelled'));
           return;
         }
 
-        // Facebook returned! Show dashboard skeleton while we authenticate with backend
         setIsProcessing(true);
 
-        // Exchange FB token for our session token
         const response = await authApi.nativeFacebookLogin(result.accessToken.token);
         const { user, token, settings } = response.data;
-        
-        // Set auth state
+
         setAuth(user, token, result.accessToken.token);
-        
+
         const finalLocale = settings?.dashboardLanguage || language || 'ar';
         useUIStore.getState().setLanguage(finalLocale);
 
-        // Navigate to dashboard
         const returnUrl = router.query.redirect as string || '/dashboard';
         await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
       } catch (error: any) {
-        console.error('Native login error:', error);
+        console.error('Android login error:', error);
         setIsProcessing(false);
-        
-        // Specific error messages based on error type
+
         if (error.message === 'TIMEOUT') {
           toast.error(t('auth.loginTimeout'));
         } else if (error.message?.includes('cancel') || error.message?.includes('Cancel')) {
@@ -166,16 +154,41 @@ export default function LoginPage() {
         }
       }
 
+    } else if (isMobile && platform === 'ios') {
+      // --- iOS LOGIN FLOW (in-app browser OAuth) ---
+      // Uses SFSafariViewController via @capacitor/browser since the native FB SDK
+      // requires additional Facebook Developer Console config on iOS.
+      // The callback redirects back via com.jawab24.app:// custom URL scheme,
+      // which is handled by the appUrlOpen listener in _app.tsx.
+      try {
+        const { Browser } = await import('@capacitor/browser');
+
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+        const normalizedOrigin = siteUrl.replace(/\/$/, '');
+        const localePath = language === 'ar' ? '' : `/${language}`;
+        const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
+        const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages');
+
+        const returnUrl = router.query.redirect as string || '/dashboard';
+        const state = encodeURIComponent(`${returnUrl}|mobile|${language}`);
+
+        const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
+
+        await Browser.open({ url: oauthUrl });
+      } catch (error: any) {
+        console.error('iOS login error:', error);
+        toast.error(t('auth.loginError'));
+      }
+
     } else {
       // --- WEB BROWSER LOGIN FLOW ---
-      // Redirect immediately to Facebook - no loading spinner
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const normalizedOrigin = siteUrl.replace(/\/$/, '');
       const localePath = language === 'ar' ? '' : `/${language}`;
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
       const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages');
-      
+
       const urlParams = new URLSearchParams(window.location.search);
       const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
       const state = encodeURIComponent(`${returnUrl}|web|${language}`);
@@ -184,7 +197,6 @@ export default function LoginPage() {
       const displayMode = isMobileWeb ? 'touch' : 'page';
 
       window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}`;
-      // Note: isLoggingIn stays true as page navigates away
     }
   }
 

@@ -119,7 +119,7 @@ export class WebhookController {
         this.setLogger(request);
 
         // Verify webhook signature from Facebook/Instagram
-        const rawBody = (request as any).rawBody as Buffer | undefined;
+        const rawBody = (request as unknown as { rawBody?: Buffer }).rawBody;
         const signatureHeader = request.headers['x-hub-signature-256'] as string | undefined;
 
         if (!rawBody || !verifyWebhookSignature(rawBody, signatureHeader)) {
