@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, Clock } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount } from '@/lib/notifications';
 
 interface Notification {
@@ -77,6 +78,9 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Lock background scroll when dropdown is open
+    useBodyScrollLock(isOpen);
 
     // Fetch unread count on mount and periodically
     useEffect(() => {
@@ -199,15 +203,20 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                 )}
             </button>
 
-            {/* Dropdown */}
+            {/* Backdrop + Dropdown */}
             {isOpen && (
+                <>
+                <div
+                    className="fixed inset-0 bg-black/30 z-[99] animate-fade-in"
+                    onClick={() => setIsOpen(false)}
+                />
                 <div
                     className={`fixed start-4 end-4 bg-white rounded-2xl shadow-2xl shadow-surface-900/10 border border-surface-100 overflow-hidden z-[100] animate-fade-in ${
                         isDark
                             ? 'max-h-[60vh]'
                             : 'top-20 sm:end-auto sm:start-[272px] sm:w-[420px] max-h-[70vh]'
                     }`}
-                    style={isDark ? { top: 'calc(env(safe-area-inset-top, 0px) + 5rem)' } : undefined}
+                    style={isDark ? { top: 'calc(env(safe-area-inset-top, 0px) + 4.5rem)' } : undefined}
                     dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
                     {/* Header */}
@@ -340,6 +349,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         )}
                     </div>
                 </div>
+                </>
             )}
         </div>
     );

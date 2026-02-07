@@ -155,34 +155,20 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             </div>
           </nav>
         ) : (
-          /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+
-             Uses box-content so pt-safe adds to height rather than squishing content
-             dir="ltr" keeps header layout fixed (logo left, bell right) in both LTR and RTL */
+          /* Mobile APP Header — Instagram/YouTube style
+             Logo left, bell right. Page context comes from bottom nav.
+             dir="ltr" keeps layout fixed in both LTR and RTL */
           <div
-            className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 px-safe-landscape z-40 pt-safe box-content"
+            className="lg:hidden sticky top-0 left-0 right-0 h-14 sm:h-16 flex items-center justify-between px-4 px-safe-landscape z-40 pt-safe box-content"
             dir="ltr"
             style={{
-              background: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 75%, transparent 100%)'
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.5) 60%, transparent 100%)'
             }}
           >
-            <Link href="/dashboard" className="flex items-center p-2 -ml-2 min-w-[44px] min-h-[44px] justify-center">
-              <BrandLogo variant="vector" className="w-10 h-10" />
+            <Link href="/dashboard" className="flex items-center min-w-[44px] min-h-[44px] justify-center">
+              <BrandLogo variant="vector" className="w-9 h-9" />
             </Link>
 
-            {/* Dynamic Active Page Icon */}
-            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 text-white/90">
-              {router.pathname.includes('/comments') ? (
-                <MessageSquare className="w-6 h-6" />
-              ) : router.pathname.includes('/messages') ? (
-                <MessageCircle className="w-6 h-6" />
-              ) : router.pathname.includes('/settings') ? (
-                <Settings className="w-6 h-6" />
-              ) : (
-                <LayoutDashboard className="w-6 h-6" />
-              )}
-            </div>
-
-            {/* Notification Bell - Instagram/YouTube style top-right */}
             <NotificationBell variant="dark" />
           </div>
         )}
