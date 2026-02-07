@@ -134,6 +134,8 @@ fi
 
 # Frontend E2E Tests
 echo "   Testing Frontend (E2E)..."
+# Clean production build artifacts — the standalone output conflicts with the dev server
+rm -rf frontend/.next
 # Use subshell to avoid changing directory main script
 # Set CI=true to force Playwright to use 'npm start' (production build) instead of 'next dev'
 if (cd frontend && CI=true npx playwright test); then
