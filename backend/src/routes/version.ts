@@ -76,15 +76,18 @@ function getVersionInfo() {
 
 export default async function versionRoutes(fastify: FastifyInstance) {
     // Public endpoint - no auth required
-    fastify.get('/version', async (_request, reply) => {
+    fastify.get('/version', {
+        schema: { tags: ['Health'], summary: 'Get full version and deployment info' },
+    }, async (_request, reply) => {
         const info = getVersionInfo();
         return reply.send(info);
     });
 
     // Simple version for health checks
-    fastify.get('/version/short', async (_request, reply) => {
+    fastify.get('/version/short', {
+        schema: { tags: ['Health'], summary: 'Get short version string' },
+    }, async (_request, reply) => {
         const info = getVersionInfo();
         return reply.send({ v: info.shortVersion });
     });
 }
-

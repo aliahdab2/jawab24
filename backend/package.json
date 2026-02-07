@@ -29,6 +29,8 @@
     "@fastify/helmet": "^11.1.1",
     "@fastify/jwt": "^8.0.0",
     "@fastify/rate-limit": "^9.1.0",
+    "@fastify/swagger": "^9.7.0",
+    "@fastify/swagger-ui": "^5.2.5",
     "@jawab24/shared": "*",
     "@sentry/node": "^10.35.0",
     "axios": "^1.13.2",
@@ -41,7 +43,8 @@
     "ioredis": "^5.8.2",
     "postgres": "^3.4.3",
     "stripe": "^14.11.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
     "@types/geoip-lite": "^1.4.4",

@@ -1,22 +1,76 @@
 import { FastifyInstance } from 'fastify';
 import { commentsController } from '../controllers/comments';
 import { authenticate } from '../middleware/auth';
+import { auth, IdParam, CursorQuery, ErrorResponse, MessageResponse } from '../utils/swagger';
 
 export default async function commentsRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
 
         // Comments
-        protectedRoutes.get('/comments', commentsController.getAll);
-        protectedRoutes.get('/comments/inbox', commentsController.getInbox);
-        protectedRoutes.get('/comments/stats', commentsController.getStats);
-        protectedRoutes.get('/comments/:id', commentsController.getOne);
-        protectedRoutes.put('/comments/:id', commentsController.update);
-        protectedRoutes.delete('/comments/:id', commentsController.delete);
+        protectedRoutes.get('/comments', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'List all comments',
+                security: auth,
+            },
+        }, commentsController.getAll);
+
+        protectedRoutes.get('/comments/inbox', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Get comments inbox',
+                security: auth,
+            },
+        }, commentsController.getInbox);
+
+        protectedRoutes.get('/comments/stats', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Get comment statistics',
+                security: auth,
+            },
+        }, commentsController.getStats);
+
+        protectedRoutes.get('/comments/:id', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Get a single comment by ID',
+                security: auth,
+            },
+        }, commentsController.getOne);
+
+        protectedRoutes.put('/comments/:id', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Update a comment',
+                security: auth,
+            },
+        }, commentsController.update);
+
+        protectedRoutes.delete('/comments/:id', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Delete a comment',
+                security: auth,
+            },
+        }, commentsController.delete);
 
         // Reply to comment
-        protectedRoutes.post('/comments/:id/reply', commentsController.reply);
-        protectedRoutes.post('/comments/:id/feedback', commentsController.feedback);
+        protectedRoutes.post('/comments/:id/reply', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Reply to a comment',
+                security: auth,
+            },
+        }, commentsController.reply);
+
+        protectedRoutes.post('/comments/:id/feedback', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Submit feedback for a comment reply',
+                security: auth,
+            },
+        }, commentsController.feedback);
     });
 }
-

@@ -2,22 +2,24 @@ import { FastifyInstance } from 'fastify';
 
 /**
  * Geo Check Routes
- * 
+ *
  * Public endpoint for frontend to check if user's geo is sanctioned
  */
 export default async function geoRoutes(fastify: FastifyInstance) {
     /**
      * GET /geo/check
-     * 
+     *
      * Returns whether the user's geographic location is sanctioned.
      * This endpoint is public (no authentication required) and uses
      * server-derived geo data from the geo middleware.
-     * 
+     *
      * Response:
      * - sanctioned: boolean - true if location is sanctioned
      * - country: string | undefined - ISO country code (if available)
      */
-    fastify.get('/check', async (request, reply) => {
+    fastify.get('/check', {
+        schema: { tags: ['Geo'], summary: 'Check if user location is sanctioned' },
+    }, async (request, reply) => {
         const { isSanctionedGeo } = await import('../utils/sanctions');
         const { shouldBlockUnknownGeo } = await import('../middleware/geo');
 

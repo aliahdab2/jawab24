@@ -2,12 +2,13 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { paymentController } from '../controllers/payment';
 import { authenticate } from '../middleware/auth';
 import { CreateCheckoutSessionRequest } from '../types/payment';
+import { auth } from '../utils/swagger';
 
 export default async function paymentRoutes(fastify: FastifyInstance) {
     // Create Stripe Checkout Session
     fastify.post<{ Body: CreateCheckoutSessionRequest }>(
         '/create-checkout-session',
-        { preHandler: [authenticate] },
+        { schema: { tags: ['Payment'], summary: 'Create Stripe checkout session', security: auth }, preHandler: [authenticate] },
         async (request, reply) => {
             return paymentController.createCheckoutSession(request, reply);
         }
@@ -16,7 +17,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     // Get subscription status
     fastify.get(
         '/subscription-status',
-        { preHandler: [authenticate] },
+        { schema: { tags: ['Payment'], summary: 'Get subscription status', security: auth }, preHandler: [authenticate] },
         async (request: FastifyRequest, reply: FastifyReply) => {
             return paymentController.getSubscriptionStatus(request, reply);
         }
@@ -25,7 +26,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     // Cancel subscription
     fastify.post(
         '/cancel-subscription',
-        { preHandler: [authenticate] },
+        { schema: { tags: ['Payment'], summary: 'Cancel subscription', security: auth }, preHandler: [authenticate] },
         async (request: FastifyRequest, reply: FastifyReply) => {
             return paymentController.cancelSubscription(request, reply);
         }
@@ -34,7 +35,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     // Create billing portal session
     fastify.post(
         '/billing-portal',
-        { preHandler: [authenticate] },
+        { schema: { tags: ['Payment'], summary: 'Create billing portal session', security: auth }, preHandler: [authenticate] },
         async (request: FastifyRequest, reply: FastifyReply) => {
             return paymentController.createBillingPortalSession(request, reply);
         }
@@ -43,6 +44,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     // Stripe webhook (no authentication needed - verified by signature)
     fastify.post(
         '/webhook',
+        { schema: { tags: ['Payment'], summary: 'Stripe webhook handler (signature-verified)' } },
         async (request: FastifyRequest, reply: FastifyReply) => {
             return paymentController.handleWebhook(request, reply);
         }

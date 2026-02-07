@@ -3,6 +3,7 @@ import { plansService } from '../services/plans';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { CreatePlanSchema, UpdatePlanSchema, UUIDSchema, validateSchema } from '../utils/validation';
+import { auth } from '../utils/swagger';
 
 interface PlanParams {
     planId: string;
@@ -19,7 +20,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
     /**
      * GET /plans - Get all active plans (public)
      */
-    fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
+    fastify.get('/', { schema: { tags: ['Plans'], summary: 'Get all active plans (public)' } }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const plans = await plansService.getActivePlans();
             return reply.send({
@@ -40,6 +41,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
      */
     fastify.get<{ Params: PlanParams }>(
         '/:planId',
+        { schema: { tags: ['Plans'], summary: 'Get plan details by ID (public)', params: { type: 'object', properties: { planId: { type: 'string', format: 'uuid' } }, required: ['planId'] } } },
         async (request, reply) => {
             try {
                 const plan = await plansService.getPlanById(request.params.planId);
@@ -78,7 +80,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
         /**
          * GET /plans/admin/all - Get all plans including inactive (admin only)
          */
-        protectedRoutes.get('/admin/all', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.get('/admin/all', { schema: { tags: ['Plans'], summary: 'Get all plans including inactive (admin)', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             try {
                 const plans = await plansService.getAllPlans();
                 return reply.send({
@@ -99,6 +101,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
          */
         protectedRoutes.post<{ Body: unknown }>(
             '/admin',
+            { schema: { tags: ['Plans'], summary: 'Create a new plan (admin)', security: auth } },
             async (request, reply) => {
                 // Validate request body
                 const validation = validateSchema(CreatePlanSchema, request.body);
@@ -131,6 +134,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
          */
         protectedRoutes.put<{ Params: PlanParams; Body: unknown }>(
             '/admin/:planId',
+            { schema: { tags: ['Plans'], summary: 'Update a plan (admin)', security: auth, params: { type: 'object', properties: { planId: { type: 'string', format: 'uuid' } }, required: ['planId'] } } },
             async (request, reply) => {
                 // Validate plan ID
                 const idValidation = UUIDSchema.safeParse(request.params.planId);
@@ -183,6 +187,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
          */
         protectedRoutes.delete<{ Params: PlanParams }>(
             '/admin/:planId',
+            { schema: { tags: ['Plans'], summary: 'Soft delete a plan (admin)', security: auth, params: { type: 'object', properties: { planId: { type: 'string', format: 'uuid' } }, required: ['planId'] } } },
             async (request, reply) => {
                 // Validate plan ID
                 const idValidation = UUIDSchema.safeParse(request.params.planId);
@@ -222,6 +227,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
          */
         protectedRoutes.post<{ Params: PlanParams }>(
             '/admin/:planId/set-default',
+            { schema: { tags: ['Plans'], summary: 'Set plan as default (admin)', security: auth, params: { type: 'object', properties: { planId: { type: 'string', format: 'uuid' } }, required: ['planId'] } } },
             async (request, reply) => {
                 // Validate plan ID
                 const idValidation = UUIDSchema.safeParse(request.params.planId);

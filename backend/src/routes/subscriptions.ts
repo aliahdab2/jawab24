@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { subscriptionsService } from '../services/subscriptions';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
+import { auth } from '../utils/swagger';
 
 interface ChangePlanBody {
     planId: string;
@@ -21,7 +22,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         /**
          * GET /subscription - Get current user's subscription
          */
-        protectedRoutes.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.get('/', { schema: { tags: ['Subscriptions'], summary: 'Get current user subscription', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             const user = (request as AuthenticatedRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
@@ -54,7 +55,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         /**
          * GET /subscription/usage - Get current usage summary
          */
-        protectedRoutes.get('/usage', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.get('/usage', { schema: { tags: ['Subscriptions'], summary: 'Get current usage summary', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             const user = (request as AuthenticatedRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
@@ -87,7 +88,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         /**
          * GET /subscription/limits/ai - Check AI reply limits
          */
-        protectedRoutes.get('/limits/ai', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.get('/limits/ai', { schema: { tags: ['Subscriptions'], summary: 'Check AI reply limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             const user = (request as AuthenticatedRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
@@ -113,7 +114,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         /**
          * GET /subscription/limits/pages - Check page limits
          */
-        protectedRoutes.get('/limits/pages', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.get('/limits/pages', { schema: { tags: ['Subscriptions'], summary: 'Check page limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             const user = (request as AuthenticatedRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
@@ -139,7 +140,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         /**
          * GET /subscription/limits/templates - Check template limits
          */
-        protectedRoutes.get('/limits/templates', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.get('/limits/templates', { schema: { tags: ['Subscriptions'], summary: 'Check template limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             const user = (request as AuthenticatedRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
@@ -165,7 +166,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         /**
          * GET /subscription/limits/rules - Check rule limits
          */
-        protectedRoutes.get('/limits/rules', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.get('/limits/rules', { schema: { tags: ['Subscriptions'], summary: 'Check rule limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             const user = (request as AuthenticatedRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
@@ -193,6 +194,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          */
         protectedRoutes.post<{ Body: ChangePlanBody }>(
             '/change-plan',
+            { schema: { tags: ['Subscriptions'], summary: 'Change subscription plan', security: auth } },
             async (request, reply) => {
                 const user = (request as AuthenticatedRequest).user;
                 if (!user) {
@@ -238,6 +240,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          */
         protectedRoutes.post<{ Body: CancelBody }>(
             '/cancel',
+            { schema: { tags: ['Subscriptions'], summary: 'Cancel subscription', security: auth } },
             async (request, reply) => {
                 const user = (request as AuthenticatedRequest).user;
                 if (!user) {
@@ -276,7 +279,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         /**
          * POST /subscription/pause - Pause subscription
          */
-        protectedRoutes.post('/pause', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.post('/pause', { schema: { tags: ['Subscriptions'], summary: 'Pause subscription', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             const user = (request as AuthenticatedRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
@@ -310,7 +313,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         /**
          * POST /subscription/resume - Resume subscription
          */
-        protectedRoutes.post('/resume', async (request: FastifyRequest, reply: FastifyReply) => {
+        protectedRoutes.post('/resume', { schema: { tags: ['Subscriptions'], summary: 'Resume subscription', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             const user = (request as AuthenticatedRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });

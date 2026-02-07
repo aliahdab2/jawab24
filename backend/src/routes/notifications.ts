@@ -8,26 +8,39 @@ import {
     markAsRead,
     markAllAsRead,
 } from '../controllers/notifications';
+import { auth } from '../utils/swagger';
 
 export default async function notificationRoutes(fastify: FastifyInstance) {
     // All routes require authentication
     fastify.addHook('preHandler', authenticate);
 
     // Register device token for push notifications
-    fastify.post('/register-token', registerToken);
+    fastify.post('/register-token', {
+        schema: { tags: ['Notifications'], summary: 'Register a device token for push notifications', security: auth },
+    }, registerToken);
 
     // Remove device token (on logout)
-    fastify.post('/remove-token', removeToken);
+    fastify.post('/remove-token', {
+        schema: { tags: ['Notifications'], summary: 'Remove a device token', security: auth },
+    }, removeToken);
 
     // Get user's notifications
-    fastify.get('/', getNotifications);
+    fastify.get('/', {
+        schema: { tags: ['Notifications'], summary: 'Get user notifications', security: auth },
+    }, getNotifications);
 
     // Get unread notification count
-    fastify.get('/unread-count', getUnreadCount);
+    fastify.get('/unread-count', {
+        schema: { tags: ['Notifications'], summary: 'Get unread notification count', security: auth },
+    }, getUnreadCount);
 
     // Mark a notification as read
-    fastify.patch('/:id/read', markAsRead);
+    fastify.patch('/:id/read', {
+        schema: { tags: ['Notifications'], summary: 'Mark a notification as read', security: auth },
+    }, markAsRead);
 
     // Mark all notifications as read
-    fastify.post('/mark-all-read', markAllAsRead);
+    fastify.post('/mark-all-read', {
+        schema: { tags: ['Notifications'], summary: 'Mark all notifications as read', security: auth },
+    }, markAllAsRead);
 }

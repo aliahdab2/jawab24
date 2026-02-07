@@ -3,6 +3,7 @@ import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage } from '../db/schema';
 import { eq, ilike, desc, and, gte, lte } from 'drizzle-orm';
+import { auth } from '../utils/swagger';
 
 // Request body types
 interface ManualUpgradeBody {
@@ -41,6 +42,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          */
         adminProtected.get<{ Querystring: ListAllUsersQuery }>(
             '/users/all',
+            { schema: { tags: ['Admin'], summary: 'List all users with pagination and filters', security: auth } },
             async (request: FastifyRequest<{ Querystring: ListAllUsersQuery }>, reply: FastifyReply) => {
                 const { 
                     page = '1', 
@@ -149,6 +151,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          */
         adminProtected.get<{ Querystring: SearchUsersQuery }>(
             '/users',
+            { schema: { tags: ['Admin'], summary: 'Search users by email', security: auth } },
             async (request: FastifyRequest<{ Querystring: SearchUsersQuery }>, reply: FastifyReply) => {
                 const { email } = request.query;
 
@@ -219,6 +222,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          */
         adminProtected.get<{ Params: { userId: string } }>(
             '/users/:userId',
+            { schema: { tags: ['Admin'], summary: 'Get single user details with pages and usage', security: auth, params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] } } },
             async (request: FastifyRequest<{ Params: { userId: string } }>, reply: FastifyReply) => {
                 const { userId } = request.params;
 
@@ -325,6 +329,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          */
         adminProtected.post<{ Params: { userId: string }; Body: ManualUpgradeBody }>(
             '/users/:userId/upgrade',
+            { schema: { tags: ['Admin'], summary: 'Manual subscription upgrade for a user', security: auth, params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] } } },
             async (
                 request: FastifyRequest<{ Params: { userId: string }; Body: ManualUpgradeBody }>,
                 reply: FastifyReply
@@ -484,7 +489,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         /**
          * GET /admin/plans - List all plans (for admin dropdown)
          */
-        adminProtected.get('/plans', async (request: FastifyRequest, reply: FastifyReply) => {
+        adminProtected.get('/plans', { schema: { tags: ['Admin'], summary: 'List all plans for admin dropdown', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             try {
                 const allPlans = await db
                     .select({
@@ -513,7 +518,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         /**
          * GET /admin/audit-logs - View recent audit logs
          */
-        adminProtected.get('/audit-logs', async (request: FastifyRequest, reply: FastifyReply) => {
+        adminProtected.get('/audit-logs', { schema: { tags: ['Admin'], summary: 'View recent audit logs', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
             try {
                 const logs = await db
                     .select({

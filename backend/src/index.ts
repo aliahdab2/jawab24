@@ -40,6 +40,7 @@ import { startEscalationCron, stopEscalationCron } from "./services/escalation";
 import { createRequestLogger } from "./types";
 import { config } from "./config";
 import demoPlugin from "./plugins/demo";
+import swaggerPlugin from "./plugins/swagger";
 import { ensureAdminUsers } from "./utils/adminSetup";
 
 // ⚡ Validate environment variables on startup
@@ -133,6 +134,9 @@ const start = async () => {
       threshold: 1024, // Only compress responses > 1KB
       encodings: ["br", "gzip", "deflate"], // Prefer brotli, fallback to gzip
     });
+
+    // Register Swagger API docs (must be before routes)
+    await server.register(swaggerPlugin);
 
     // Register health and version routes BEFORE rate limit to exempt them
     await server.register(healthRoutes);
