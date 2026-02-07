@@ -42,7 +42,13 @@
       "Bash(git fetch:*)",
       "Bash(npx playwright test --list)",
       "Bash(npm run lint:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(git checkout:*)",
+      "Bash(grep:*)",
+      "Bash(node -e:*)",
+      "Bash(cat:*)",
+      "Bash(pbcopy)",
+      "Bash(ssh:*)"
     ]
   }
 }

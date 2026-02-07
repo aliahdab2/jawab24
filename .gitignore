@@ -21,3 +21,10 @@ frontend/out/
 # APK files - should not be in git or bundled in builds
 frontend/public/apk/
 *.apk
+
+# Firebase config files (contain project secrets)
+google-services.json
+GoogleService-Info.plist
+
+# CocoaPods (generated from Podfile)
+frontend/ios/App/Pods/

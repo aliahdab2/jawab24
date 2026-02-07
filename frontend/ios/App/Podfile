@@ -1,0 +1,25 @@
+require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+
+platform :ios, '15.0'
+
+use_frameworks!
+
+# workaround to avoid Xcode caching of Pods that requires
+# temporary directory cleanup for pod install to succeed
+install! 'cocoapods', :disable_input_output_paths => true
+
+def capacitor_pods
+  pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/ios'
+end
+
+target 'App' do
+  capacitor_pods
+
+  # Firebase Cloud Messaging for push notifications
+  pod 'Firebase/Messaging'
+end
+
+post_install do |installer|
+  assertDeploymentTarget(installer)
+end

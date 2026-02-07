@@ -42,6 +42,9 @@ const EnvSchema = z.object({
 
     // Frontend URL
     FRONTEND_URL: z.string().url('FRONTEND_URL must be a valid URL').default('http://localhost:3001'),
+
+    // Firebase (optional - push notifications require this)
+    FIREBASE_SERVICE_ACCOUNT_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
