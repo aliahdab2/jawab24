@@ -48,7 +48,11 @@
       "Bash(node -e:*)",
       "Bash(cat:*)",
       "Bash(pbcopy)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(npx next lint:*)",
+      "Bash(npx jest:*)",
+      "Bash(npm run test:run:*)",
+      "Bash(git status:*)"
     ]
   }
 }
