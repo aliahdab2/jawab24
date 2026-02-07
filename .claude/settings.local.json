@@ -56,7 +56,8 @@
       "WebFetch(domain:www.npmjs.com)",
       "Bash(npm view:*)",
       "Bash(docker system:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(git rm:*)"
     ]
   }
 }

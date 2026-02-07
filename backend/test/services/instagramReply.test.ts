@@ -124,32 +124,27 @@ describe('InstagramReplyService', () => {
     function setupDbForMessage(opts: { existingMessage?: any } = {}) {
         const { existingMessage } = opts;
 
-        const mockFrom = vi.fn();
-        const mockWhere = vi.fn();
         const mockSet = vi.fn();
-        const mockValues = vi.fn();
 
         let selectCallCount = 0;
-        mockFrom.mockImplementation(() => {
+        const mockFrom = vi.fn().mockImplementation(() => {
             selectCallCount++;
-            return {
-                where: mockWhere,
+            const currentCall = selectCallCount;
+
+            const whereResult = {
+                then: (resolve: any) => resolve(currentCall === 1
+                    ? (existingMessage ? [existingMessage] : [])
+                    : []),
                 orderBy: vi.fn().mockReturnValue({
                     limit: vi.fn().mockResolvedValue([]),
                 }),
             };
-        });
 
-        mockWhere.mockImplementation(() => {
-            if (selectCallCount === 1) {
-                // storeMessage check
-                return Promise.resolve(existingMessage ? [existingMessage] : []);
-            }
-            return Promise.resolve([]);
+            return { where: vi.fn().mockReturnValue(whereResult) };
         });
 
         mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
-        mockValues.mockReturnValue({
+        const mockValues = vi.fn().mockReturnValue({
             returning: vi.fn().mockResolvedValue([existingMessage || {
                 id: 'msg-uuid',
                 replied: false,
