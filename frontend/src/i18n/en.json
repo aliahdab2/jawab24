@@ -889,5 +889,9 @@
   "notifications.justNow": "Just now",
   "notifications.minutesAgo": "{count}m ago",
   "notifications.hoursAgo": "{count}h ago",
-  "notifications.daysAgo": "{count}d ago"
+  "notifications.daysAgo": "{count}d ago",
+  "notifications.prePrompt.title": "Stay in the loop",
+  "notifications.prePrompt.body": "Get notified when comments need your attention or when something important happens with your pages.",
+  "notifications.prePrompt.enable": "Enable notifications",
+  "notifications.prePrompt.later": "Not now"
 }

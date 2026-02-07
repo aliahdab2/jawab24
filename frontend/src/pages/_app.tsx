@@ -13,6 +13,7 @@ import type { Language } from '@/i18n';
 import { dmSans, cairo, tajawal } from '@/lib/fonts';
 import { Toaster } from 'sonner';
 import { AppSkeleton } from '@/components/ui';
+import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
 
 /**
@@ -225,9 +226,10 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     };
   }, [hasHydrated, queryClient, router]);
 
-  // Initialize push notifications when authenticated on native
+  // Push notifications: init listeners (no permission request) + deferred pre-prompt
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const authToken = useAuthStore((state) => state.token);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated || !isAuthenticated || !authToken) return;
@@ -235,10 +237,34 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     const cap = (window as any).Capacitor;
     if (!cap?.isNativePlatform?.()) return;
 
-    import('@/lib/notifications').then(({ initPushNotifications }) => {
+    // 1. Set up listeners if permission already granted (returning users)
+    import('@/lib/notifications').then(({ initPushNotifications, shouldShowNotificationPrePrompt }) => {
       initPushNotifications(authToken).catch(console.error);
+
+      // 2. Check if we should show the pre-prompt (deferred by 5 seconds)
+      const timer = setTimeout(() => {
+        shouldShowNotificationPrePrompt().then((should) => {
+          if (should) setShowPushPrompt(true);
+        });
+      }, 5000);
+      return () => clearTimeout(timer);
     });
   }, [hasHydrated, isAuthenticated, authToken]);
+
+  const handleEnablePush = useCallback(() => {
+    setShowPushPrompt(false);
+    if (!authToken) return;
+    import('@/lib/notifications').then(({ requestAndRegisterPush }) => {
+      requestAndRegisterPush(authToken).catch(console.error);
+    });
+  }, [authToken]);
+
+  const handleDismissPush = useCallback(() => {
+    setShowPushPrompt(false);
+    import('@/lib/notifications').then(({ dismissNotificationPrePrompt }) => {
+      dismissNotificationPrePrompt();
+    });
+  }, []);
 
   // Dedicated Deep Link Handling - Separate effect for reliability
   useEffect(() => {
@@ -342,6 +368,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         <ErrorBoundary>
           {getLayout(<Component {...pageProps} />)}
           <Toaster richColors position="top-center" closeButton duration={4000} />
+          {showPushPrompt && (
+            <NotificationPrePrompt onEnable={handleEnablePush} onDismiss={handleDismissPush} />
+          )}
         </ErrorBoundary>
       </AppShell>
     </QueryClientProvider>

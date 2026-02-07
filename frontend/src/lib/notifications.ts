@@ -6,51 +6,97 @@ import { toast } from 'sonner';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
+const PERM_DISMISSED_KEY = 'push_prompt_dismissed_at';
+const DISMISS_COOLDOWN_DAYS = 7;
+
 /**
- * Initialize push notifications for native platforms
- * Should be called after user login
+ * Check if we should show the pre-prompt to the user.
+ * Returns true if: native platform, permission not yet decided, and cooldown expired.
  */
-export async function initPushNotifications(token: string): Promise<void> {
-    // Only run on native platforms
-    if (!Capacitor.isNativePlatform()) {
-        return;
-    }
+export async function shouldShowNotificationPrePrompt(): Promise<boolean> {
+    if (!Capacitor.isNativePlatform()) return false;
 
     try {
-        // Request permission
-        const permResult = await PushNotifications.requestPermissions();
-        
-        if (permResult.receive !== 'granted') {
-            console.warn('[Push] Permission not granted');
-            return;
+        const permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive === 'granted' || permStatus.receive === 'denied') return false;
+
+        const dismissedAt = localStorage.getItem(PERM_DISMISSED_KEY);
+        if (dismissedAt) {
+            const daysSince = (Date.now() - Number(dismissedAt)) / (1000 * 60 * 60 * 24);
+            if (daysSince < DISMISS_COOLDOWN_DAYS) return false;
         }
 
-        // Register for push notifications
-        await PushNotifications.register();
+        return true;
+    } catch {
+        return false;
+    }
+}
 
-        // Listen for registration success
-        PushNotifications.addListener('registration', async (tokenData: Token) => {
-            await registerTokenWithBackend(token, tokenData.value);
-        });
+/**
+ * Record that the user tapped "Not now" on the pre-prompt.
+ */
+export function dismissNotificationPrePrompt(): void {
+    localStorage.setItem(PERM_DISMISSED_KEY, String(Date.now()));
+}
 
-        // Listen for registration errors
-        PushNotifications.addListener('registrationError', (error) => {
-            console.error('[Push] Registration error:', error);
-        });
+/**
+ * Request notification permission and register for push.
+ * Call this ONLY after user taps "Enable" on the pre-prompt.
+ */
+export async function requestAndRegisterPush(authToken: string): Promise<boolean> {
+    if (!Capacitor.isNativePlatform()) return false;
 
-        // Listen for push notifications received while app is in foreground
-        PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
-            handleForegroundNotification(notification);
-        });
+    try {
+        const permResult = await PushNotifications.requestPermissions();
+        if (permResult.receive !== 'granted') return false;
 
-        // Listen for push notification taps (app opened from notification)
-        PushNotifications.addListener('pushNotificationActionPerformed', (action: ActionPerformed) => {
-            handleNotificationTap(action);
-        });
+        await registerPushListeners(authToken);
+        return true;
+    } catch (error) {
+        console.error('[Push] Permission request error:', error);
+        return false;
+    }
+}
 
+/**
+ * Initialize push notifications for native platforms.
+ * Only sets up listeners if permission was already granted (e.g. on subsequent app launches).
+ * Does NOT request permission — use requestAndRegisterPush() for that.
+ */
+export async function initPushNotifications(token: string): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+
+    try {
+        const permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive !== 'granted') return;
+
+        await registerPushListeners(token);
     } catch (error) {
         console.error('[Push] Init error:', error);
     }
+}
+
+/**
+ * Internal: register for push and set up all listeners.
+ */
+async function registerPushListeners(authToken: string): Promise<void> {
+    await PushNotifications.register();
+
+    PushNotifications.addListener('registration', async (tokenData: Token) => {
+        await registerTokenWithBackend(authToken, tokenData.value);
+    });
+
+    PushNotifications.addListener('registrationError', (error) => {
+        console.error('[Push] Registration error:', error);
+    });
+
+    PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
+        handleForegroundNotification(notification);
+    });
+
+    PushNotifications.addListener('pushNotificationActionPerformed', (action: ActionPerformed) => {
+        handleNotificationTap(action);
+    });
 }
 
 /**
