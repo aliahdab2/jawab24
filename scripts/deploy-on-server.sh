@@ -370,6 +370,15 @@ smoke_test_content() {
 
     echo "   ✅ Dashboard page returns valid HTML with Next.js content"
 
+    # Verify CSS is loaded (catches missing postcss.config.js / tailwind failures)
+    if ! echo "$DASHBOARD_HTML" | grep -q '/_next/static/css/'; then
+        echo "   ❌ No CSS stylesheet reference found in dashboard HTML!"
+        echo "   This likely means Tailwind CSS was not built correctly."
+        echo "   Check that postcss.config.js and tailwind.config.js exist."
+        exit 1
+    fi
+    echo "   ✅ CSS stylesheets are present in the page"
+
     # Also verify the API health endpoint
     B_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "backend-$DEPLOY_ENV")
     HEALTH_RESPONSE=$(docker exec "$B_ID" wget -qO- http://127.0.0.1:3000/health 2>/dev/null || echo "FETCH_FAILED")

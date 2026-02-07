@@ -327,11 +327,43 @@ jobs:
           
           echo "✅ No duplicate API paths found"
 
+      - name: Verify critical config files
+        run: |
+          echo "🔍 Checking critical config files..."
+          MISSING=false
+          for f in frontend/postcss.config.js frontend/tailwind.config.js frontend/next.config.js frontend/tsconfig.json; do
+            if [ ! -f "$f" ]; then
+              echo "❌ MISSING: $f"
+              MISSING=true
+            fi
+          done
+          if [ "$MISSING" = true ]; then
+            echo "❌ Critical config files are missing! This will silently break CSS."
+            exit 1
+          fi
+          echo "✅ All critical config files present"
+
       - name: Build Frontend
         run: npm run build --workspace=jawab24-frontend
         env:
           NEXT_PUBLIC_API_URL: https://jawab24.com/api
           NEXT_PUBLIC_FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+
+      - name: Verify CSS output size
+        run: |
+          echo "🔍 Checking CSS output is non-trivial..."
+          CSS_DIR="frontend/.next/static/css"
+          if [ ! -d "$CSS_DIR" ]; then
+            echo "❌ No CSS output directory found after build!"
+            exit 1
+          fi
+          CSS_SIZE=$(find "$CSS_DIR" -name "*.css" -exec cat {} + 2>/dev/null | wc -c | tr -d ' ')
+          if [ "$CSS_SIZE" -lt 5000 ]; then
+            echo "❌ CSS output is suspiciously small (${CSS_SIZE} bytes)!"
+            echo "   Tailwind CSS may not be processing. Check postcss.config.js and tailwind.config.js"
+            exit 1
+          fi
+          echo "✅ CSS output size OK (${CSS_SIZE} bytes)"
 
       - name: Run linter
         run: npm run lint --workspace=jawab24-frontend

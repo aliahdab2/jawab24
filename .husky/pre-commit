@@ -1,7 +1,7 @@
 # Guard against accidental deletion of critical config files
 CRITICAL_FILES=(
   "frontend/postcss.config.js"
-  "frontend/tailwind.config.ts"
+  "frontend/tailwind.config.js"
   "frontend/next.config.js"
   "frontend/tsconfig.json"
   "backend/tsconfig.json"

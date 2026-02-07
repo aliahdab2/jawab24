@@ -20,6 +20,34 @@ NC='\033[0m' # No Color
 
 ERRORS=0
 
+# 0. Verify critical config files exist (prevents silent CSS/build failures)
+echo "0️⃣  Checking critical config files..."
+
+CRITICAL_CONFIGS=(
+    "frontend/postcss.config.js"
+    "frontend/tailwind.config.js"
+    "frontend/next.config.js"
+    "frontend/tsconfig.json"
+    "backend/tsconfig.json"
+)
+
+MISSING_CONFIG=false
+for config in "${CRITICAL_CONFIGS[@]}"; do
+    if [ ! -f "$config" ]; then
+        echo -e "${RED}   ❌ MISSING: $config${NC}"
+        MISSING_CONFIG=true
+    fi
+done
+
+if [ "$MISSING_CONFIG" = true ]; then
+    echo ""
+    echo -e "${RED}   CRITICAL CONFIG FILES ARE MISSING!${NC}"
+    echo -e "${RED}   This will silently break the production build (e.g., no CSS).${NC}"
+    echo -e "${RED}   Restore the missing files before deploying.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}   ✅ All critical config files present${NC}"
+
 # 1. Check for ESM-only packages
 echo "1️⃣  Checking for ESM-only packages..."
 
@@ -54,6 +82,22 @@ if npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
 else
     echo -e "${RED}   ❌ Frontend build failed!${NC}"
     npm run build --workspace=jawab24-frontend
+    exit 1
+fi
+
+# Verify CSS output is non-trivial (catches silent Tailwind/PostCSS failures)
+CSS_DIR="frontend/.next/static/css"
+if [ -d "$CSS_DIR" ]; then
+    CSS_SIZE=$(find "$CSS_DIR" -name "*.css" -exec cat {} + 2>/dev/null | wc -c | tr -d ' ')
+    if [ "$CSS_SIZE" -lt 5000 ]; then
+        echo -e "${RED}   ❌ CSS output is suspiciously small (${CSS_SIZE} bytes)!${NC}"
+        echo -e "${RED}   This likely means Tailwind CSS is not processing correctly.${NC}"
+        echo -e "${RED}   Check postcss.config.js and tailwind.config.js${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}   ✅ CSS output size OK (${CSS_SIZE} bytes)${NC}"
+else
+    echo -e "${RED}   ❌ No CSS output directory found after build!${NC}"
     exit 1
 fi
 
