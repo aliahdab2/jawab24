@@ -268,6 +268,37 @@ export class FacebookService {
     }
 
     /**
+     * Verify/refresh the app-level webhook subscription with Facebook.
+     * This ensures Facebook has verified our callback URL and will deliver events.
+     * Should be called on server startup to guarantee webhook delivery after deploys.
+     */
+    async ensureAppWebhookSubscription(callbackUrl: string): Promise<boolean> {
+        const appToken = `${config.facebook.appId}|${config.facebook.appSecret}`;
+
+        try {
+            this.logger.info('[Facebook] Verifying app-level webhook subscription', { callbackUrl });
+            await axios.post(`${FACEBOOK_GRAPH_API}/${config.facebook.appId}/subscriptions`, null, {
+                params: {
+                    object: 'page',
+                    callback_url: callbackUrl,
+                    verify_token: config.facebook.webhookVerifyToken,
+                    fields: 'feed,messages',
+                    access_token: appToken,
+                },
+            });
+            this.logger.info('[Facebook] App-level webhook subscription verified successfully');
+            return true;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                this.logger.error('[Facebook] Failed to verify app-level webhook subscription', {
+                    error: error.response?.data?.error?.message || error.message,
+                });
+            }
+            return false;
+        }
+    }
+
+    /**
      * Unsubscribe a page from webhook events
      */
     async unsubscribePageFromWebhooks(pageId: string, pageAccessToken: string): Promise<boolean> {

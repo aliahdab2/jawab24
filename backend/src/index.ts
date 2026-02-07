@@ -42,6 +42,7 @@ import { config } from "./config";
 import demoPlugin from "./plugins/demo";
 import swaggerPlugin from "./plugins/swagger";
 import { ensureAdminUsers } from "./utils/adminSetup";
+import { facebookService } from "./services/facebook";
 
 // ⚡ Validate environment variables on startup
 try {
@@ -216,6 +217,18 @@ const start = async () => {
 
     // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
     startEscalationCron();
+
+    // Verify app-level webhook subscription with Facebook on startup
+    // This ensures the callback URL is verified after every deploy
+    const webhookCallbackUrl = process.env.WEBHOOK_CALLBACK_URL || 'https://jawab24.com/webhook';
+    facebookService.setLogger(createRequestLogger(server.log));
+    facebookService.ensureAppWebhookSubscription(webhookCallbackUrl).then(ok => {
+      if (ok) {
+        console.log(`✅ Facebook webhook subscription verified (${webhookCallbackUrl})`);
+      } else {
+        console.warn(`⚠️  Facebook webhook subscription verification failed — webhooks may not be delivered`);
+      }
+    });
   } catch (err) {
     server.log.error(err);
     process.exit(1);
