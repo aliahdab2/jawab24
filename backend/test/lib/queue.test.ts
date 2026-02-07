@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mockQueue = vi.fn();
+const mockQueue = vi.fn(() => ({}));
 vi.mock('bullmq', () => ({
     Queue: mockQueue,
 }));
@@ -17,19 +17,17 @@ vi.mock('@jawab24/shared', () => ({
 
 describe('queue', () => {
     beforeEach(() => {
+        vi.resetModules();
         vi.clearAllMocks();
     });
 
     it('should create a BullMQ Queue with correct name', async () => {
-        // Re-import to trigger module execution
-        mockQueue.mockImplementation(() => ({}));
         await import('../../src/lib/queue');
 
         expect(mockQueue).toHaveBeenCalledWith('ai-generate', expect.any(Object));
     });
 
     it('should use Redis connection from config', async () => {
-        mockQueue.mockImplementation(() => ({}));
         await import('../../src/lib/queue');
 
         const opts = mockQueue.mock.calls[0][1];
@@ -41,7 +39,6 @@ describe('queue', () => {
     });
 
     it('should set default job options with retries', async () => {
-        mockQueue.mockImplementation(() => ({}));
         await import('../../src/lib/queue');
 
         const opts = mockQueue.mock.calls[0][1];
@@ -53,7 +50,6 @@ describe('queue', () => {
     });
 
     it('should export AI_QUEUE_NAME', async () => {
-        mockQueue.mockImplementation(() => ({}));
         const mod = await import('../../src/lib/queue');
         expect(mod.AI_QUEUE_NAME).toBe('ai-generate');
     });

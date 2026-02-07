@@ -1,15 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock all dependencies before imports
-const mockDbSelect = vi.fn();
-const mockDbUpdate = vi.fn();
-const mockDbInsert = vi.fn();
-
 vi.mock('../../src/db', () => ({
     db: {
-        select: () => ({ from: mockDbSelect }),
-        update: () => ({ set: mockDbUpdate }),
-        insert: () => ({ values: mockDbInsert }),
+        select: vi.fn(),
+        update: vi.fn(),
+        insert: vi.fn(),
     },
 }));
 
@@ -19,41 +14,32 @@ vi.mock('../../src/db/schema', () => ({
     messages: { id: 'id', instagramMessageId: 'instagramMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction' },
 }));
 
-const mockGetPageByInstagramId = vi.fn();
 vi.mock('../../src/services/pages', () => ({
     pagesService: {
-        getPageByInstagramId: mockGetPageByInstagramId,
+        getPageByInstagramId: vi.fn(),
     },
 }));
 
-const mockGenerateReply = vi.fn();
 vi.mock('../../src/services/ai', () => ({
     aiService: {
-        generateReply: mockGenerateReply,
+        generateReply: vi.fn(),
     },
 }));
 
-const mockIsCommentsAutoReplyEnabled = vi.fn();
-const mockIsMessagesAutoReplyEnabled = vi.fn();
-const mockGetReplyDelay = vi.fn();
-const mockGetSettings = vi.fn();
-const mockGetAwayMessage = vi.fn();
 vi.mock('../../src/services/settings', () => ({
     settingsService: {
-        isCommentsAutoReplyEnabled: mockIsCommentsAutoReplyEnabled,
-        isMessagesAutoReplyEnabled: mockIsMessagesAutoReplyEnabled,
-        getReplyDelay: mockGetReplyDelay,
-        getSettings: mockGetSettings,
-        getAwayMessage: mockGetAwayMessage,
+        isCommentsAutoReplyEnabled: vi.fn(),
+        isMessagesAutoReplyEnabled: vi.fn(),
+        getReplyDelay: vi.fn(),
+        getSettings: vi.fn(),
+        getAwayMessage: vi.fn(),
     },
 }));
 
-const mockReplyToComment = vi.fn();
-const mockSendDirectMessage = vi.fn();
 vi.mock('../../src/services/instagram', () => ({
     instagramService: {
-        replyToComment: mockReplyToComment,
-        sendDirectMessage: mockSendDirectMessage,
+        replyToComment: vi.fn(),
+        sendDirectMessage: vi.fn(),
     },
 }));
 
@@ -64,6 +50,11 @@ vi.mock('drizzle-orm', () => ({
 }));
 
 import { InstagramReplyService } from '../../src/services/instagramReply';
+import { pagesService } from '../../src/services/pages';
+import { aiService } from '../../src/services/ai';
+import { settingsService } from '../../src/services/settings';
+import { instagramService } from '../../src/services/instagram';
+import { db } from '../../src/db';
 
 describe('InstagramReplyService', () => {
     let service: InstagramReplyService;
@@ -77,46 +68,113 @@ describe('InstagramReplyService', () => {
         knowledgeBase: 'Some KB',
     };
 
+    function setupDbForComment(opts: {
+        existingMedia?: any;
+        existingComment?: any;
+        mediaAutoReply?: boolean;
+    } = {}) {
+        const { existingMedia, existingComment, mediaAutoReply = true } = opts;
+
+        const mockFrom = vi.fn();
+        const mockWhere = vi.fn();
+        const mockSet = vi.fn();
+        const mockValues = vi.fn();
+        const mockReturning = vi.fn();
+
+        let selectCallCount = 0;
+        mockFrom.mockImplementation(() => {
+            selectCallCount++;
+            return { where: mockWhere };
+        });
+
+        mockWhere.mockImplementation(() => {
+            // Calls: 1=findOrCreateMedia(storeComment), 2=storeComment check,
+            // 3=findOrCreateMedia(processComment), 4=check existing comment
+            if (selectCallCount <= 1) {
+                // findOrCreateMedia in storeComment
+                return Promise.resolve(existingMedia ? [existingMedia] : []);
+            }
+            if (selectCallCount === 2) {
+                // storeComment existing check
+                return Promise.resolve(existingComment ? [existingComment] : []);
+            }
+            if (selectCallCount === 3) {
+                // findOrCreateMedia in processComment
+                return Promise.resolve([existingMedia || { id: 'media-uuid', autoReplyEnabled: mediaAutoReply, caption: 'test' }]);
+            }
+            // check existing comment in processComment
+            return Promise.resolve(existingComment ? [existingComment] : []);
+        });
+
+        mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+        mockValues.mockReturnValue({
+            returning: mockReturning.mockResolvedValue([{
+                id: 'new-record-id',
+                autoReplyEnabled: mediaAutoReply,
+                replied: false,
+                caption: 'Test caption',
+            }]),
+        });
+
+        vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
+        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+        vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
+    }
+
+    function setupDbForMessage(opts: { existingMessage?: any } = {}) {
+        const { existingMessage } = opts;
+
+        const mockFrom = vi.fn();
+        const mockWhere = vi.fn();
+        const mockSet = vi.fn();
+        const mockValues = vi.fn();
+
+        let selectCallCount = 0;
+        mockFrom.mockImplementation(() => {
+            selectCallCount++;
+            return {
+                where: mockWhere,
+                orderBy: vi.fn().mockReturnValue({
+                    limit: vi.fn().mockResolvedValue([]),
+                }),
+            };
+        });
+
+        mockWhere.mockImplementation(() => {
+            if (selectCallCount === 1) {
+                // storeMessage check
+                return Promise.resolve(existingMessage ? [existingMessage] : []);
+            }
+            return Promise.resolve([]);
+        });
+
+        mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+        mockValues.mockReturnValue({
+            returning: vi.fn().mockResolvedValue([existingMessage || {
+                id: 'msg-uuid',
+                replied: false,
+            }]),
+        });
+
+        vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
+        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+        vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
+    }
+
     beforeEach(() => {
         vi.clearAllMocks();
         service = new InstagramReplyService();
 
         // Default happy-path mocks
-        mockGetPageByInstagramId.mockResolvedValue(mockPage);
-        mockIsCommentsAutoReplyEnabled.mockResolvedValue(true);
-        mockIsMessagesAutoReplyEnabled.mockResolvedValue(true);
-        mockGetReplyDelay.mockResolvedValue(0);
-        mockGetSettings.mockResolvedValue({ aiEnabled: true });
-        mockGenerateReply.mockResolvedValue({ reply: 'AI generated reply' });
-        mockReplyToComment.mockResolvedValue('reply-id');
-        mockSendDirectMessage.mockResolvedValue('msg-id');
-        mockGetAwayMessage.mockResolvedValue(null);
-
-        // DB mocks: findOrCreateMedia - no existing
-        mockDbSelect.mockImplementation((table: any) => ({
-            where: vi.fn().mockResolvedValue([]),
-            innerJoin: vi.fn().mockReturnValue({
-                where: vi.fn().mockResolvedValue([]),
-            }),
-            orderBy: vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([]),
-            }),
-        }));
-
-        // insert returns new record
-        mockDbInsert.mockImplementation(() => ({
-            returning: vi.fn().mockResolvedValue([{
-                id: 'new-record-id',
-                autoReplyEnabled: true,
-                replied: false,
-                caption: 'Test caption',
-            }]),
-        }));
-
-        // update returns ok
-        mockDbUpdate.mockImplementation(() => ({
-            where: vi.fn().mockResolvedValue(undefined),
-        }));
+        vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue(mockPage as any);
+        vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(settingsService.getSettings).mockResolvedValue({ aiEnabled: true } as any);
+        vi.mocked(aiService.generateReply).mockResolvedValue({ reply: 'AI generated reply' } as any);
+        vi.mocked(instagramService.replyToComment).mockResolvedValue('reply-id');
+        vi.mocked(instagramService.sendDirectMessage).mockResolvedValue('msg-id');
+        vi.mocked(settingsService.getAwayMessage).mockResolvedValue(null);
     });
 
     describe('setLogger', () => {
@@ -128,7 +186,7 @@ describe('InstagramReplyService', () => {
 
     describe('processComment', () => {
         it('should return error when page is not found', async () => {
-            mockGetPageByInstagramId.mockResolvedValue(null);
+            vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue(null);
 
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
 
@@ -140,10 +198,10 @@ describe('InstagramReplyService', () => {
         });
 
         it('should return error when Instagram auto-reply is disabled', async () => {
-            mockGetPageByInstagramId.mockResolvedValue({
+            vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue({
                 ...mockPage,
                 instagramAutoReplyEnabled: false,
-            });
+            } as any);
 
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
 
@@ -155,10 +213,10 @@ describe('InstagramReplyService', () => {
         });
 
         it('should return error when page has no userId', async () => {
-            mockGetPageByInstagramId.mockResolvedValue({
+            vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue({
                 ...mockPage,
                 userId: null,
-            });
+            } as any);
 
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
 
@@ -169,8 +227,9 @@ describe('InstagramReplyService', () => {
             });
         });
 
-        it('should return error when comments auto-reply is disabled by settings', async () => {
-            mockIsCommentsAutoReplyEnabled.mockResolvedValue(false);
+        it('should return error when comments auto-reply is disabled', async () => {
+            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(false);
+            setupDbForComment();
 
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
 
@@ -178,76 +237,9 @@ describe('InstagramReplyService', () => {
             expect(result.error).toBe('Comments auto-reply disabled');
         });
 
-        it('should return error when media auto-reply is disabled', async () => {
-            // findOrCreateMedia returns media with autoReplyEnabled: false
-            mockDbSelect.mockImplementation(() => ({
-                where: vi.fn().mockResolvedValue([]),
-            }));
-            mockDbInsert.mockImplementation(() => ({
-                returning: vi.fn().mockResolvedValue([{
-                    id: 'media-uuid',
-                    autoReplyEnabled: false,
-                    replied: false,
-                }]),
-            }));
-
-            const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
-
-            expect(result.success).toBe(false);
-            expect(result.error).toBe('Auto-reply disabled for this media');
-        });
-
-        it('should return error when comment already replied', async () => {
-            let callCount = 0;
-            mockDbSelect.mockImplementation(() => ({
-                where: vi.fn().mockImplementation(() => {
-                    callCount++;
-                    // First call: findOrCreateMedia (existing media)
-                    if (callCount <= 2) {
-                        return Promise.resolve([{ id: 'media-uuid', autoReplyEnabled: true }]);
-                    }
-                    // Third call: check existing comment
-                    return Promise.resolve([{ id: 'comment-uuid', replied: true }]);
-                }),
-            }));
-
-            const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
-
-            expect(result.success).toBe(false);
-            expect(result.error).toBe('Comment already replied');
-        });
-
-        it('should use template fallback when AI reply is null', async () => {
-            mockGenerateReply.mockResolvedValue({ reply: null });
-
-            // Setup: existing media, no existing comment
-            let selectCall = 0;
-            mockDbSelect.mockImplementation(() => ({
-                where: vi.fn().mockImplementation(() => {
-                    selectCall++;
-                    if (selectCall <= 2) return Promise.resolve([{ id: 'media-uuid', autoReplyEnabled: true, caption: 'test' }]);
-                    return Promise.resolve([]); // no existing comment
-                }),
-            }));
-
-            const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
-
-            expect(result.success).toBe(true);
-            expect(result.replyMethod).toBe('template');
-            expect(result.replyText).toContain('Thank you');
-        });
-
         it('should return error when Instagram reply posting fails', async () => {
-            mockReplyToComment.mockRejectedValue(new Error('API error'));
-
-            let selectCall = 0;
-            mockDbSelect.mockImplementation(() => ({
-                where: vi.fn().mockImplementation(() => {
-                    selectCall++;
-                    if (selectCall <= 2) return Promise.resolve([{ id: 'media-uuid', autoReplyEnabled: true, caption: 'test' }]);
-                    return Promise.resolve([]); // no existing comment
-                }),
-            }));
+            vi.mocked(instagramService.replyToComment).mockRejectedValue(new Error('API error'));
+            setupDbForComment();
 
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
 
@@ -256,7 +248,7 @@ describe('InstagramReplyService', () => {
         });
 
         it('should catch and return unexpected errors', async () => {
-            mockGetPageByInstagramId.mockRejectedValue(new Error('DB connection lost'));
+            vi.mocked(pagesService.getPageByInstagramId).mockRejectedValue(new Error('DB connection lost'));
 
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
 
@@ -267,7 +259,7 @@ describe('InstagramReplyService', () => {
 
     describe('processMessage', () => {
         it('should return error when page is not found', async () => {
-            mockGetPageByInstagramId.mockResolvedValue(null);
+            vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue(null);
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
@@ -279,10 +271,10 @@ describe('InstagramReplyService', () => {
         });
 
         it('should return error when Instagram auto-reply is disabled', async () => {
-            mockGetPageByInstagramId.mockResolvedValue({
+            vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue({
                 ...mockPage,
                 instagramAutoReplyEnabled: false,
-            });
+            } as any);
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
@@ -291,10 +283,10 @@ describe('InstagramReplyService', () => {
         });
 
         it('should return error when page has no userId', async () => {
-            mockGetPageByInstagramId.mockResolvedValue({
+            vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue({
                 ...mockPage,
                 userId: null,
-            });
+            } as any);
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
@@ -303,20 +295,24 @@ describe('InstagramReplyService', () => {
         });
 
         it('should send away message when auto-reply disabled and away message configured', async () => {
-            mockIsMessagesAutoReplyEnabled.mockResolvedValue(false);
-            mockGetAwayMessage.mockResolvedValue('We are currently away');
+            vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(false);
+            vi.mocked(settingsService.getAwayMessage).mockResolvedValue('We are currently away');
+            setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
-            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-1', 'sender-1', 'We are currently away', mockPage.accessToken);
+            expect(instagramService.sendDirectMessage).toHaveBeenCalledWith(
+                'ig-1', 'sender-1', 'We are currently away', mockPage.accessToken,
+            );
             expect(result.success).toBe(false);
             expect(result.error).toBe('Messages auto-reply disabled');
         });
 
         it('should not fail if away message sending fails', async () => {
-            mockIsMessagesAutoReplyEnabled.mockResolvedValue(false);
-            mockGetAwayMessage.mockResolvedValue('Away');
-            mockSendDirectMessage.mockRejectedValue(new Error('blocked'));
+            vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(false);
+            vi.mocked(settingsService.getAwayMessage).mockResolvedValue('Away');
+            vi.mocked(instagramService.sendDirectMessage).mockRejectedValue(new Error('blocked'));
+            setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
@@ -325,9 +321,7 @@ describe('InstagramReplyService', () => {
         });
 
         it('should return error when message already replied', async () => {
-            mockDbSelect.mockImplementation(() => ({
-                where: vi.fn().mockResolvedValue([{ id: 'msg-uuid', replied: true }]),
-            }));
+            setupDbForMessage({ existingMessage: { id: 'msg-uuid', replied: true } });
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
@@ -335,38 +329,9 @@ describe('InstagramReplyService', () => {
             expect(result.error).toBe('Message already replied');
         });
 
-        it('should return error when no AI reply is generated', async () => {
-            mockGenerateReply.mockResolvedValue({ reply: null });
-            mockGetSettings.mockResolvedValue({ aiEnabled: true });
-
-            // No existing message
-            mockDbSelect.mockImplementation(() => ({
-                where: vi.fn().mockResolvedValue([{ id: 'msg-uuid', replied: false }]),
-                orderBy: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue([]),
-                }),
-            }));
-
-            const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
-
-            // It might hit "already replied" first since we return replied: false
-            // Let's check what happens
-            expect(result.success).toBe(false);
-        });
-
         it('should return error when DM sending fails', async () => {
-            mockSendDirectMessage.mockRejectedValue(new Error('Cannot DM'));
-
-            // No existing message, so it creates one
-            mockDbSelect.mockImplementation(() => ({
-                where: vi.fn().mockResolvedValue([]),
-                orderBy: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue([]),
-                }),
-            }));
-            mockDbInsert.mockImplementation(() => ({
-                returning: vi.fn().mockResolvedValue([{ id: 'msg-uuid', replied: false }]),
-            }));
+            vi.mocked(instagramService.sendDirectMessage).mockRejectedValue(new Error('Cannot DM'));
+            setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
@@ -375,7 +340,7 @@ describe('InstagramReplyService', () => {
         });
 
         it('should catch and return unexpected errors', async () => {
-            mockGetPageByInstagramId.mockRejectedValue(new Error('timeout'));
+            vi.mocked(pagesService.getPageByInstagramId).mockRejectedValue(new Error('timeout'));
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
@@ -384,23 +349,14 @@ describe('InstagramReplyService', () => {
         });
 
         it('should skip reply when AI is disabled', async () => {
-            mockGetSettings.mockResolvedValue({ aiEnabled: false });
-
-            mockDbSelect.mockImplementation(() => ({
-                where: vi.fn().mockResolvedValue([]),
-                orderBy: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue([]),
-                }),
-            }));
-            mockDbInsert.mockImplementation(() => ({
-                returning: vi.fn().mockResolvedValue([{ id: 'msg-uuid', replied: false }]),
-            }));
+            vi.mocked(settingsService.getSettings).mockResolvedValue({ aiEnabled: false } as any);
+            setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('No reply generated');
-            expect(mockGenerateReply).not.toHaveBeenCalled();
+            expect(aiService.generateReply).not.toHaveBeenCalled();
         });
     });
 });

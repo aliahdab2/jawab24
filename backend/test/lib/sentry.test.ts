@@ -1,16 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as Sentry from '@sentry/node';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const mockSentryInit = vi.fn();
 vi.mock('@sentry/node', () => ({
-    init: vi.fn(),
+    init: mockSentryInit,
 }));
 
 describe('sentry', () => {
     const originalEnv = process.env;
 
     beforeEach(() => {
-        vi.clearAllMocks();
         vi.resetModules();
+        vi.clearAllMocks();
         process.env = { ...originalEnv };
     });
 
@@ -25,7 +25,7 @@ describe('sentry', () => {
         const { initSentry } = await import('../../src/lib/sentry');
         initSentry();
 
-        expect(Sentry.init).not.toHaveBeenCalled();
+        expect(mockSentryInit).not.toHaveBeenCalled();
     });
 
     it('should warn in production when SENTRY_DSN is not set', async () => {
@@ -37,7 +37,7 @@ describe('sentry', () => {
         initSentry();
 
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('SENTRY_DSN not set'));
-        expect(Sentry.init).not.toHaveBeenCalled();
+        expect(mockSentryInit).not.toHaveBeenCalled();
         warnSpy.mockRestore();
     });
 
@@ -49,7 +49,7 @@ describe('sentry', () => {
         const { initSentry } = await import('../../src/lib/sentry');
         initSentry();
 
-        expect(Sentry.init).toHaveBeenCalledWith(expect.objectContaining({
+        expect(mockSentryInit).toHaveBeenCalledWith(expect.objectContaining({
             dsn: 'https://test@sentry.io/123',
             environment: 'production',
         }));
@@ -64,7 +64,7 @@ describe('sentry', () => {
         const { initSentry } = await import('../../src/lib/sentry');
         initSentry();
 
-        expect(Sentry.init).toHaveBeenCalledWith(expect.objectContaining({
+        expect(mockSentryInit).toHaveBeenCalledWith(expect.objectContaining({
             tracesSampleRate: 0.1,
         }));
         logSpy.mockRestore();
@@ -78,7 +78,7 @@ describe('sentry', () => {
         const { initSentry } = await import('../../src/lib/sentry');
         initSentry();
 
-        expect(Sentry.init).toHaveBeenCalledWith(expect.objectContaining({
+        expect(mockSentryInit).toHaveBeenCalledWith(expect.objectContaining({
             tracesSampleRate: 1.0,
         }));
         logSpy.mockRestore();
@@ -92,7 +92,7 @@ describe('sentry', () => {
         const { initSentry } = await import('../../src/lib/sentry');
         initSentry();
 
-        const sentryConfig = (Sentry.init as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        const sentryConfig = mockSentryInit.mock.calls[0][0];
         expect(sentryConfig.ignoreErrors).toContain('Rate limit exceeded');
         expect(sentryConfig.ignoreErrors).toContain('ECONNREFUSED');
         logSpy.mockRestore();
@@ -107,9 +107,9 @@ describe('sentry', () => {
         const { initSentry } = await import('../../src/lib/sentry');
         initSentry();
 
-        const sentryConfig = (Sentry.init as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        const sentryConfig = mockSentryInit.mock.calls[0][0];
         const mockEvent = { message: 'test' };
-        expect(sentryConfig.beforeSend(mockEvent)).toBeNull(); // dev events filtered
+        expect(sentryConfig.beforeSend(mockEvent)).toBeNull();
         logSpy.mockRestore();
     });
 

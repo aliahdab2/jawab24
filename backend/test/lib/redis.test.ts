@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockOn = vi.fn();
-const mockRedisInstance = { on: mockOn };
-const MockRedis = vi.fn(() => mockRedisInstance);
+const MockRedis = vi.fn(() => ({ on: mockOn }));
 
 vi.mock('ioredis', () => ({
     default: MockRedis,
@@ -16,6 +15,7 @@ vi.mock('../../src/config', () => ({
 
 describe('redis', () => {
     beforeEach(() => {
+        vi.resetModules();
         vi.clearAllMocks();
     });
 
