@@ -155,12 +155,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             </div>
           </nav>
         ) : (
-          /* Mobile APP Header — Instagram/YouTube style
-             Logo left, bell right. Page context comes from bottom nav.
-             dir="ltr" keeps layout fixed in both LTR and RTL */
+          /* Mobile APP Header — Logo at start, bell at end.
+             Follows natural text direction (LTR/RTL). */
           <div
             className="lg:hidden sticky top-0 left-0 right-0 h-14 sm:h-16 flex items-center justify-between px-4 px-safe-landscape z-40 pt-safe box-content"
-            dir="ltr"
             style={{
               background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.5) 60%, transparent 100%)'
             }}
