@@ -1,5 +1,5 @@
 import { db } from '../../db';
-import { pages, posts, comments, templates, settings } from '../../db/schema';
+import { pages, posts, comments, templates, settings, notifications } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 
@@ -290,6 +290,79 @@ const DEMO_TEMPLATES = [
     },
 ];
 
+const DEMO_NOTIFICATIONS = [
+    {
+        type: 'stale_comment',
+        titleEn: 'Unreplied Comments Need Attention',
+        titleAr: 'تعليقات بدون رد تحتاج انتباهك',
+        bodyEn: '3 comments waiting for your reply for over 60 minutes.',
+        bodyAr: '3 تعليقات بانتظار ردك منذ أكثر من 60 دقيقة.',
+        data: { deepLink: '/comments?filter=flagged' },
+        read: false,
+        minutesAgo: 15,
+    },
+    {
+        type: 'new_comment',
+        titleEn: 'New Comment',
+        titleAr: 'تعليق جديد',
+        bodyEn: 'New comment from سارة أحمد is waiting for your reply.',
+        bodyAr: 'تعليق جديد من سارة أحمد بانتظار ردك.',
+        data: { deepLink: '/comments' },
+        read: false,
+        minutesAgo: 45,
+    },
+    {
+        type: 'flagged_reply',
+        titleEn: 'Reply Needs Your Attention',
+        titleAr: 'رد يحتاج انتباهك',
+        bodyEn: 'An AI reply to "فهد السعيد" was flagged: low confidence. Please review it.',
+        bodyAr: 'تم وضع علامة على رد لـ "فهد السعيد": ثقة منخفضة. يرجى مراجعته.',
+        data: { deepLink: '/comments' },
+        read: false,
+        minutesAgo: 120,
+    },
+    {
+        type: 'subscription_expiring',
+        titleEn: 'Subscription Expiring Soon',
+        titleAr: 'اشتراكك ينتهي قريباً',
+        bodyEn: 'Your subscription expires in 3 days. Renew now to avoid service interruption.',
+        bodyAr: 'ينتهي اشتراكك خلال 3 أيام. جدد الآن لتجنب انقطاع الخدمة.',
+        data: { deepLink: '/pricing' },
+        read: false,
+        minutesAgo: 360,
+    },
+    {
+        type: 'page_disconnected',
+        titleEn: 'Page Disconnected',
+        titleAr: 'تم فصل الصفحة',
+        bodyEn: 'Your page \'متجر الإلكترونيات\' has been disconnected. Please reconnect to resume auto-replies.',
+        bodyAr: 'تم فصل صفحتك \'متجر الإلكترونيات\'. يرجى إعادة الاتصال لاستئناف الرد التلقائي.',
+        data: { deepLink: '/pages' },
+        read: true,
+        minutesAgo: 1440, // 1 day ago
+    },
+    {
+        type: 'subscription_renewed',
+        titleEn: 'Subscription Renewed',
+        titleAr: 'تم تجديد الاشتراك',
+        bodyEn: 'Your subscription has been successfully renewed. Thank you for using Jawab24!',
+        bodyAr: 'تم تجديد اشتراكك بنجاح. شكراً لاستخدامك Jawab24!',
+        data: {},
+        read: true,
+        minutesAgo: 2880, // 2 days ago
+    },
+    {
+        type: 'trial_ending',
+        titleEn: 'Trial Ending Soon',
+        titleAr: 'تنتهي الفترة التجريبية قريباً',
+        bodyEn: 'Your free trial ends in 2 days. Subscribe now to keep using Jawab24.',
+        bodyAr: 'تنتهي فترتك التجريبية المجانية خلال يومين. اشترك الآن للاستمرار في استخدام Jawab24.',
+        data: { deepLink: '/pricing' },
+        read: true,
+        minutesAgo: 4320, // 3 days ago
+    },
+];
+
 /**
  * Seed demo data for a user
  * This function is idempotent - it won't create duplicates if called multiple times
@@ -307,7 +380,8 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
     const hasExistingDemoPages = existingPages.some(p => demoPageIds.includes(p.facebookPageId));
 
     if (hasExistingDemoPages) {
-        logger.info('[DemoData] Demo data already exists, skipping seed');
+        logger.info('[DemoData] Demo data already exists, refreshing notifications only');
+        await refreshDemoNotifications(userId, logger);
         return;
     }
 
@@ -407,10 +481,39 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
 
     logger.debug('[DemoData] Created demo templates', { count: DEMO_TEMPLATES.length });
 
+    // Create demo notifications (varied types, timestamps, and read states)
+    await refreshDemoNotifications(userId, logger);
+
     logger.info('[DemoData] Demo data seed complete', {
         pages: createdPages.length,
         posts: createdPosts.length,
         comments: DEMO_COMMENTS.length,
         templates: DEMO_TEMPLATES.length,
+        notifications: DEMO_NOTIFICATIONS.length,
     });
+}
+
+/**
+ * Clear existing notifications and re-seed demo notifications.
+ * Called on every demo login so the bell always shows fresh examples.
+ */
+async function refreshDemoNotifications(userId: string, logger: Logger): Promise<void> {
+    // Clear existing notifications for this user
+    await db.delete(notifications).where(eq(notifications.userId, userId));
+
+    for (const notif of DEMO_NOTIFICATIONS) {
+        await db.insert(notifications).values({
+            userId,
+            type: notif.type,
+            titleEn: notif.titleEn,
+            titleAr: notif.titleAr,
+            bodyEn: notif.bodyEn,
+            bodyAr: notif.bodyAr,
+            data: notif.data,
+            read: notif.read,
+            createdAt: new Date(Date.now() - notif.minutesAgo * 60 * 1000),
+        });
+    }
+
+    logger.debug('[DemoData] Refreshed demo notifications', { count: DEMO_NOTIFICATIONS.length });
 }
