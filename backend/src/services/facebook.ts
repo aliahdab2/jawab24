@@ -241,6 +241,55 @@ export class FacebookService {
             return null;
         }
     }
+    /**
+     * Subscribe a page to receive webhook events (feed + messages)
+     * Must be called after connecting a page so Facebook sends events to our webhook
+     */
+    async subscribePageToWebhooks(pageId: string, pageAccessToken: string): Promise<boolean> {
+        try {
+            this.logger.info('[Facebook] Subscribing page to webhooks', { pageId });
+            await axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
+                params: {
+                    subscribed_fields: 'feed,messages',
+                    access_token: pageAccessToken,
+                },
+            });
+            this.logger.info('[Facebook] Page subscribed to webhooks', { pageId });
+            return true;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                this.logger.error('[Facebook] Failed to subscribe page to webhooks', {
+                    pageId,
+                    error: error.response?.data?.error?.message || error.message,
+                });
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Unsubscribe a page from webhook events
+     */
+    async unsubscribePageFromWebhooks(pageId: string, pageAccessToken: string): Promise<boolean> {
+        try {
+            this.logger.info('[Facebook] Unsubscribing page from webhooks', { pageId });
+            await axios.delete(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, {
+                params: {
+                    access_token: pageAccessToken,
+                },
+            });
+            this.logger.info('[Facebook] Page unsubscribed from webhooks', { pageId });
+            return true;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                this.logger.error('[Facebook] Failed to unsubscribe page from webhooks', {
+                    pageId,
+                    error: error.response?.data?.error?.message || error.message,
+                });
+            }
+            return false;
+        }
+    }
 }
 
 export const facebookService = new FacebookService();

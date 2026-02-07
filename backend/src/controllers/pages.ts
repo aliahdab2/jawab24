@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { pagesService } from '../services/pages';
+import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
@@ -28,6 +29,12 @@ export class PagesController {
             }
             
             const page = await pagesService.createPage(userId, request.body);
+
+            // Subscribe page to webhook events so Facebook sends comments/messages
+            if (request.body.facebookPageId && request.body.accessToken) {
+                await facebookService.subscribePageToWebhooks(request.body.facebookPageId, request.body.accessToken);
+            }
+
             return reply.status(201).send(page);
         } catch (error) {
             request.log.error(error);
@@ -116,6 +123,12 @@ export class PagesController {
         const { id } = request.params;
         
         try {
+            // Unsubscribe from webhooks before deleting
+            const page = await pagesService.getPage(userId, id);
+            if (page) {
+                await facebookService.unsubscribePageFromWebhooks(page.facebookPageId, page.accessToken);
+            }
+
             await pagesService.deletePage(userId, id);
             return reply.status(204).send();
         } catch (error) {

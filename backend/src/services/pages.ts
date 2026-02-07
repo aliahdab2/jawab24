@@ -259,6 +259,9 @@ export class PagesService {
                     .where(eq(pages.id, existingPage.id))
                     .returning();
                 syncedPages.push(updated);
+
+                // Subscribe page to webhook events (idempotent — safe to re-subscribe)
+                await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
             } else {
                 // Create new page - save suggested knowledge base for user confirmation
                 // Best Practice: Don't auto-save to knowledgeBase, let user review first
@@ -289,6 +292,9 @@ export class PagesService {
                     })
                     .returning();
                 syncedPages.push(created);
+
+                // Subscribe new page to webhook events
+                await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
             }
         }
 
