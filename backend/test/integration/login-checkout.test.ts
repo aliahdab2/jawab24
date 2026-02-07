@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
 import authRoutes from '../../src/routes/auth';
 import paymentRoutes from '../../src/routes/payment';
@@ -139,6 +139,10 @@ describe('Integration: Login → Checkout Flow', () => {
         vi.clearAllMocks();
     });
 
+    afterEach(async () => {
+        await app.close();
+    });
+
     describe('Complete flow: Pricing → Login → Checkout', () => {
         it('should complete full flow from pricing page to Stripe checkout', async () => {
             const { facebookService } = await import('../../src/services/facebook');
@@ -266,7 +270,7 @@ describe('Integration: Login → Checkout Flow', () => {
             expect(checkoutBody.url).toBe('https://checkout.stripe.com/pay/cs_test_abc123');
 
             // Verify the entire flow
-            expect(facebookService.getAccessToken).toHaveBeenCalledWith('facebook_oauth_code');
+            expect(facebookService.getAccessToken).toHaveBeenCalledWith('facebook_oauth_code', undefined);
             expect(authService.findOrCreateUser).toHaveBeenCalled();
             expect(authService.verifyToken).toHaveBeenCalledWith(authToken);
             expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
@@ -429,8 +433,10 @@ describe('Integration: Login → Checkout Flow', () => {
                 },
             });
 
-            // Stripe will ask for email during checkout
-            expect(checkoutResponse.statusCode).toBe(200);
+            // Controller requires email for Stripe checkout
+            expect(checkoutResponse.statusCode).toBe(400);
+            const checkoutBody = JSON.parse(checkoutResponse.body);
+            expect(checkoutBody.code).toBe('EMAIL_REQUIRED');
         });
 
         it('should handle invalid plan ID in checkout', async () => {
