@@ -57,7 +57,9 @@
       "Bash(npm view:*)",
       "Bash(docker system:*)",
       "Bash(npm run lint)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(IS_MOBILE_BUILD=true npm run build:*)",
+      "Bash(IS_MOBILE_BUILD=true npx next build:*)"
     ]
   }
 }
