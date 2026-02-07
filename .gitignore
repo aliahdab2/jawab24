@@ -17,6 +17,7 @@ env/*.env
 !env/*.env.example
 *.backup
 *.tsbuildinfo
+coverage/
 frontend/out/
 # APK files - should not be in git or bundled in builds
 frontend/public/apk/

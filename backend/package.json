@@ -20,6 +20,7 @@
     "admin:remove": "ts-node scripts/manage-admin.ts remove",
     "admin:list": "ts-node scripts/manage-admin.ts list",
     "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "precommit": "npm run lint && npm run type-check"
   },
   "dependencies": {
@@ -51,6 +52,7 @@
     "@types/node": "^20.10.6",
     "@typescript-eslint/eslint-plugin": "^8.48.0",
     "@typescript-eslint/parser": "^8.48.0",
+    "@vitest/coverage-v8": "^0.34.6",
     "drizzle-kit": "^0.20.13",
     "eslint": "^8.56.0",
     "ts-node": "^10.9.2",

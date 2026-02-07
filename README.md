@@ -189,10 +189,14 @@ This validates all required variables are set correctly.
 ## Testing
 
 ```bash
-npm test
+# Run all tests
+cd backend && npm test
+
+# Run tests with coverage report
+cd backend && npm run test:coverage
 ```
 
-There are ~95 tests covering the backend. They run on every push.
+There are 570+ tests (unit + integration) covering the backend. They run on every push. Coverage reports are generated with V8 via `vitest` and output to `backend/coverage/`.
 
 ---
 

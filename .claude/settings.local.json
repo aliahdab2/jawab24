@@ -54,7 +54,8 @@
       "Bash(npm run test:run:*)",
       "Bash(git status:*)",
       "WebFetch(domain:www.npmjs.com)",
-      "Bash(npm view:*)"
+      "Bash(npm view:*)",
+      "Bash(docker system:*)"
     ]
   }
 }
