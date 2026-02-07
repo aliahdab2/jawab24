@@ -65,7 +65,7 @@ export class ReplyService {
                 // Non-critical — continue without sender name
             }
 
-            // 3. Store the incoming message
+            // 3. Store the incoming message (may already exist if stored at webhook time)
             const { message: storedMessage, isNew } = await messagesService.findOrCreateFromWebhook(
                 page.id,
                 messageId,
@@ -73,6 +73,14 @@ export class ReplyService {
                 messageText,
                 senderName
             );
+
+            // 3.5 Debounce: skip if a newer unreplied message exists from the same sender
+            // (the newer message's job will handle the reply with full conversation context)
+            const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, messageId);
+            if (hasNewer) {
+                this.logger.info('[Reply] Skipping — newer message from same sender exists', { messageId, senderId });
+                return { success: false, messageId, error: 'Skipped: newer message pending' };
+            }
 
             // 4. Rate limit check
             const rateCheck = await rateLimiter.check(pageId, senderId, 'message');

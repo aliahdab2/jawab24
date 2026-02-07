@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
+import { messagesService } from '../services/messages';
+import { pagesService } from '../services/pages';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 
 /**
@@ -183,7 +185,7 @@ export class WebhookController {
     }
 
     /**
-     * Process a messaging event - enqueue for async processing
+     * Process a messaging event - store immediately and enqueue for async reply
      */
     private async processMessage(pageId: string, event: MessagingEvent) {
         const senderId = event.sender?.id;
@@ -194,13 +196,25 @@ export class WebhookController {
             return;
         }
 
-        this.log().info('Enqueueing message for processing', { 
-            senderId, 
-            messageId, 
-            textLength: messageText.length 
+        this.log().info('Enqueueing message for processing', {
+            senderId,
+            messageId,
+            textLength: messageText.length
         });
 
         try {
+            // Store message immediately so rapid follow-ups build conversation context
+            const page = await pagesService.getPageByFacebookId(pageId);
+            if (page) {
+                await messagesService.findOrCreateFromWebhook(
+                    page.id,
+                    messageId,
+                    senderId,
+                    messageText
+                );
+            }
+
+            // Enqueue reply job with 3s delay to batch rapid-fire messages
             const jobId = await enqueueMessage({
                 jobType: 'facebook_message',
                 pageId,
@@ -208,13 +222,14 @@ export class WebhookController {
                 senderId,
                 text: messageText,
                 requestId: this.requestId,
+                replyDelay: 3,
             });
 
-            this.log().info('Message enqueued successfully', { messageId, jobId });
+            this.log().info('Message enqueued successfully', { messageId, jobId, delayMs: 3000 });
         } catch (error) {
-            this.log().error('Failed to enqueue message', { 
-                messageId, 
-                error: String(error) 
+            this.log().error('Failed to enqueue message', {
+                messageId,
+                error: String(error)
             });
         }
     }

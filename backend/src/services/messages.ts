@@ -264,6 +264,32 @@ export class MessagesService {
     }
 
     /**
+     * Check if there is a newer unreplied incoming message from the same sender.
+     * Used to debounce rapid-fire messages: skip older ones and let the newest job reply.
+     */
+    async hasNewerUnrepliedMessage(
+        pageId: string,
+        senderId: string,
+        currentMessageId: string
+    ): Promise<boolean> {
+        const currentMsg = await db.query.messages.findFirst({
+            where: eq(messages.facebookMessageId, currentMessageId),
+        });
+        if (!currentMsg?.createdAt) return false;
+
+        const newer = await db.query.messages.findFirst({
+            where: and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, false),
+                sql`${messages.createdAt} > ${currentMsg.createdAt}`
+            ),
+        });
+        return !!newer;
+    }
+
+    /**
      * Get message statistics
      */
     async getStats(userId: string): Promise<{
