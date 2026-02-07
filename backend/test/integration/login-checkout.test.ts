@@ -132,11 +132,11 @@ describe('Integration: Login → Checkout Flow', () => {
     let app: FastifyInstance;
 
     beforeEach(async () => {
+        vi.resetAllMocks();
         app = fastify();
         app.register(authRoutes);
         app.register(paymentRoutes, { prefix: '/payment' });
         await app.ready();
-        vi.clearAllMocks();
     });
 
     afterEach(async () => {
@@ -149,18 +149,14 @@ describe('Integration: Login → Checkout Flow', () => {
             const { authService } = await import('../../src/services/auth');
             const { stripeService } = await import('../../src/services/stripe');
             const { db } = await import('../../src/db');
+            const { settingsService } = await import('../../src/services/settings');
+            const { refreshTokenService } = await import('../../src/services/refreshToken');
+            const { cookiesService } = await import('../../src/services/cookies');
+            const { pagesService } = await import('../../src/services/pages');
 
-            // Step 1: User clicks upgrade on pricing page
             const planId = '92598acb-dde0-4d25-8312-17d7f9d9df9b';
-            const redirectUrl = encodeURIComponent(`/checkout?planId=${planId}`);
 
-            // Step 2: User is redirected to login page with redirect param
-            // Frontend: https://jawab24.com/en/login?redirect=%2Fcheckout%3FplanId%3D...
-
-            // Step 3: User clicks "Login with Facebook" and gets redirected to Facebook OAuth
-            // Facebook redirects back with code
-
-            // Step 4: Frontend sends code to backend
+            // Setup login service mocks
             vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_access_token_xyz');
             vi.mocked(facebookService.getUserProfile).mockResolvedValue({
                 id: 'fb_12345',
@@ -185,6 +181,11 @@ describe('Integration: Login → Checkout Flow', () => {
                     facebookId: 'fb_12345',
                 },
             });
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue([] as any);
+            vi.mocked(settingsService.getSettings).mockResolvedValue({ dashboardLanguage: 'en' } as any);
+            vi.mocked(refreshTokenService.createRefreshToken).mockResolvedValue('mock_refresh_token');
+            vi.mocked(cookiesService.setAuthCookies).mockReturnValue(undefined);
+            vi.mocked(cookiesService.setRefreshTokenCookie).mockReturnValue(undefined);
 
             const loginResponse = await app.inject({
                 method: 'POST',
@@ -207,39 +208,25 @@ describe('Integration: Login → Checkout Flow', () => {
                 facebookId: 'fb_12345',
             });
 
-            // Mock database queries for plan lookup
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([
-                        {
-                            id: 'user_uuid_789',
-                            email: 'testuser@example.com',
-                        },
-                    ]),
-                }),
-            } as any);
-
-            // For the second db.select call (plan lookup), need separate mock
+            // Mock database queries: user lookup, plan lookup, subscriptions check
             const dbSelectMock = vi.mocked(db.select);
             dbSelectMock.mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue([
-                        {
-                            id: 'user_uuid_789',
-                            email: 'testuser@example.com',
-                        },
+                        { id: 'user_uuid_789', email: 'testuser@example.com' },
                     ]),
                 }),
             } as any);
             dbSelectMock.mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue([
-                        {
-                            id: planId,
-                            name: 'Business Plan',
-                            stripePriceId: 'price_1234567890',
-                        },
+                        { id: planId, name: 'Business Plan', stripePriceId: 'price_1234567890', trialDays: 0 },
                     ]),
+                }),
+            } as any);
+            dbSelectMock.mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
                 }),
             } as any);
 
@@ -279,7 +266,8 @@ describe('Integration: Login → Checkout Flow', () => {
                 planId,
                 'price_1234567890',
                 expect.stringContaining('success'),
-                expect.stringContaining('cancel')
+                expect.stringContaining('cancel'),
+                0 // trialDays
             );
         });
 
@@ -345,13 +333,16 @@ describe('Integration: Login → Checkout Flow', () => {
         it('should handle user with no email trying to checkout', async () => {
             const { facebookService } = await import('../../src/services/facebook');
             const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
+            const { refreshTokenService } = await import('../../src/services/refreshToken');
+            const { cookiesService } = await import('../../src/services/cookies');
+            const { pagesService } = await import('../../src/services/pages');
 
-            // User logs in without email permission
+            // Setup login service mocks
             vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
             vi.mocked(facebookService.getUserProfile).mockResolvedValue({
                 id: 'fb_no_email',
                 name: 'Private User',
-                // No email
             });
             vi.mocked(authService.findOrCreateUser).mockResolvedValue({
                 id: 'user_no_email',
@@ -371,6 +362,11 @@ describe('Integration: Login → Checkout Flow', () => {
                     facebookId: 'fb_no_email',
                 },
             });
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue([] as any);
+            vi.mocked(settingsService.getSettings).mockResolvedValue({ dashboardLanguage: 'en' } as any);
+            vi.mocked(refreshTokenService.createRefreshToken).mockResolvedValue('mock_refresh_token');
+            vi.mocked(cookiesService.setAuthCookies).mockReturnValue(undefined);
+            vi.mocked(cookiesService.setRefreshTokenCookie).mockReturnValue(undefined);
 
             const loginResponse = await app.inject({
                 method: 'POST',
@@ -380,46 +376,21 @@ describe('Integration: Login → Checkout Flow', () => {
 
             expect(loginResponse.statusCode).toBe(200);
 
-            // Now try to checkout - should handle missing email gracefully
+            // Now try to checkout - controller requires email
             vi.mocked(authService.verifyToken).mockReturnValue({
                 userId: 'user_no_email',
                 facebookId: 'fb_no_email',
             });
 
             const { db } = await import('../../src/db');
-            const { stripeService } = await import('../../src/services/stripe');
-
             const dbSelectMock = vi.mocked(db.select);
+            // Only need user lookup — controller returns 400 before plan lookup
             dbSelectMock.mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue([
-                        {
-                            id: 'user_no_email',
-                            email: null, // No email
-                        },
+                        { id: 'user_no_email', email: null },
                     ]),
                 }),
-            } as any);
-            dbSelectMock.mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([
-                        {
-                            id: 'plan_123',
-                            name: 'Starter Plan',
-                            stripePriceId: 'price_starter',
-                        },
-                    ]),
-                }),
-            } as any);
-
-            vi.mocked(stripeService.createCheckoutSession).mockResolvedValue({
-                id: 'cs_no_email',
-                url: 'https://checkout.stripe.com/pay/cs_no_email',
-                object: 'checkout.session',
-                metadata: {
-                    userId: 'user_no_email',
-                    planId: 'plan_123',
-                },
             } as any);
 
             const checkoutResponse = await app.inject({
