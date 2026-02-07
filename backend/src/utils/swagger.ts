@@ -3,12 +3,10 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 
 /** Convert a Zod schema to JSON Schema for Fastify route definitions */
 export function zs(schema: z.ZodTypeAny): Record<string, unknown> {
-    // The `as any` cast is required — zodToJsonSchema has excessively deep type instantiation without it
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const jsonSchema = zodToJsonSchema(schema as any, { target: 'openApi3' }) as Record<string, unknown>;
-    // Remove the top-level $schema property that Fastify doesn't expect
-    const { $schema: _schema, ...rest } = jsonSchema;
-    return rest;
+    delete jsonSchema.$schema;
+    return jsonSchema;
 }
 
 // ── Shared parameter schemas ──
