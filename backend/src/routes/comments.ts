@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { commentsController } from '../controllers/comments';
 import { authenticate } from '../middleware/auth';
-import { auth, IdParam, CursorQuery, ErrorResponse, MessageResponse } from '../utils/swagger';
+import { auth } from '../utils/swagger';
 
 export default async function commentsRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {

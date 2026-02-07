@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { messagesController } from '../controllers/messages';
 import { authenticate } from '../middleware/auth';
-import { auth, ErrorResponse, MessageResponse } from '../utils/swagger';
+import { auth } from '../utils/swagger';
 
 export default async function messagesRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {

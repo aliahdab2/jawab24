@@ -2,11 +2,12 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 /** Convert a Zod schema to JSON Schema for Fastify route definitions */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function zs(schema: z.ZodTypeAny): Record<string, unknown> {
+    // The `as any` cast is required — zodToJsonSchema has excessively deep type instantiation without it
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const jsonSchema = zodToJsonSchema(schema as any, { target: 'openApi3' }) as Record<string, unknown>;
     // Remove the top-level $schema property that Fastify doesn't expect
-    const { $schema, ...rest } = jsonSchema;
+    const { $schema: _schema, ...rest } = jsonSchema;
     return rest;
 }
 

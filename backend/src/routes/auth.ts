@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { authController } from '../controllers/auth';
 import { authenticate } from '../middleware/auth';
-import { auth, ErrorResponse, MessageResponse } from '../utils/swagger';
+import { auth } from '../utils/swagger';
 
 export default async function authRoutes(fastify: FastifyInstance) {
     // Public routes

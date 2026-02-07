@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { templatesController } from '../controllers/templates';
 import { authenticate } from '../middleware/auth';
-import { auth, IdParam, ErrorResponse, MessageResponse } from '../utils/swagger';
+import { auth } from '../utils/swagger';
 
 export default async function templatesRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { pagesController } from '../controllers/pages';
 import { authenticate } from '../middleware/auth';
-import { auth, IdParam, ErrorResponse, MessageResponse } from '../utils/swagger';
+import { auth } from '../utils/swagger';
 
 export default async function pagesRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {

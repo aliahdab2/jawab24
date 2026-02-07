@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { postsController } from '../controllers/posts';
 import { commentsController } from '../controllers/comments';
 import { authenticate } from '../middleware/auth';
-import { auth, IdParam, ErrorResponse, MessageResponse } from '../utils/swagger';
+import { auth } from '../utils/swagger';
 
 export default async function postsRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {

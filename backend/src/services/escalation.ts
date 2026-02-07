@@ -170,10 +170,10 @@ async function escalateMessages(): Promise<void> {
  */
 export function startEscalationCron(): void {
     if (intervalHandle) return; // Already running
-    console.log('[Escalation] Cron started (every 5 min)');
+    console.warn('[Escalation] Cron started (every 5 min)');
     intervalHandle = setInterval(runEscalationSweep, SWEEP_INTERVAL_MS);
     // Run once immediately on startup
-    runEscalationSweep().catch(err => console.error('[Escalation] Initial sweep failed:', err));
+    runEscalationSweep().catch(err => console.warn('[Escalation] Initial sweep failed:', err));
 }
 
 /**
@@ -183,6 +183,6 @@ export function stopEscalationCron(): void {
     if (intervalHandle) {
         clearInterval(intervalHandle);
         intervalHandle = null;
-        console.log('[Escalation] Cron stopped');
+        console.warn('[Escalation] Cron stopped');
     }
 }

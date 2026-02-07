@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { aiController } from '../controllers/ai';
 import { authenticate } from '../middleware/auth';
-import { auth, ErrorResponse, MessageResponse } from '../utils/swagger';
+import { auth } from '../utils/swagger';
 
 export default async function aiRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
