@@ -48,6 +48,17 @@ if [ "$MISSING_CONFIG" = true ]; then
 fi
 echo -e "${GREEN}   ✅ All critical config files present${NC}"
 
+# 0.5. Validate translations (key sync, language integrity, empty values)
+echo ""
+echo "🌐 Validating translations..."
+if node frontend/scripts/validate-translations.js > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Translations valid${NC}"
+else
+    echo -e "${RED}   ❌ Translation validation failed!${NC}"
+    node frontend/scripts/validate-translations.js
+    exit 1
+fi
+
 # 1. Check for ESM-only packages
 echo "1️⃣  Checking for ESM-only packages..."
 
