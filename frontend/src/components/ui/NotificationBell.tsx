@@ -62,7 +62,13 @@ function getNotificationStyle(type: string): [string, string, string] {
     }
 }
 
-export function NotificationBell() {
+interface NotificationBellProps {
+    /** 'light' for sidebar (dark text), 'dark' for mobile header (white text on dark bg) */
+    variant?: 'light' | 'dark';
+}
+
+export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
+    const isDark = variant === 'dark';
     const { token } = useAuthStore();
     const { t, language } = useTranslation();
     const router = useRouter();
@@ -174,16 +180,20 @@ export function NotificationBell() {
             {/* Bell Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`relative p-2 rounded-xl transition-all duration-200 ${
-                    isOpen
-                        ? 'bg-brand-100 text-brand-700'
-                        : 'hover:bg-surface-100 text-surface-600'
+                className={`relative p-2 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center ${
+                    isDark
+                        ? isOpen
+                            ? 'bg-white/20 text-white'
+                            : 'hover:bg-white/10 text-white/90'
+                        : isOpen
+                            ? 'bg-brand-100 text-brand-700'
+                            : 'hover:bg-surface-100 text-surface-600'
                 }`}
                 aria-label={t('notifications.title')}
             >
                 <Bell className={`w-5 h-5 ${unreadCount > 0 ? 'animate-pulse-soft' : ''}`} />
                 {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[11px] font-bold text-white bg-red-500 rounded-full shadow-sm shadow-red-200 ring-2 ring-white">
+                    <span className={`absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[11px] font-bold text-white bg-red-500 rounded-full shadow-sm shadow-red-200 ring-2 ${isDark ? 'ring-black/30' : 'ring-white'}`}>
                         {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                 )}
@@ -192,7 +202,12 @@ export function NotificationBell() {
             {/* Dropdown */}
             {isOpen && (
                 <div
-                    className="fixed top-20 start-4 end-4 sm:end-auto sm:start-[272px] sm:w-[420px] bg-white rounded-2xl shadow-2xl shadow-surface-900/10 border border-surface-100 overflow-hidden z-[100] max-h-[70vh] animate-fade-in"
+                    className={`fixed start-4 end-4 bg-white rounded-2xl shadow-2xl shadow-surface-900/10 border border-surface-100 overflow-hidden z-[100] animate-fade-in ${
+                        isDark
+                            ? 'max-h-[60vh]'
+                            : 'top-20 sm:end-auto sm:start-[272px] sm:w-[420px] max-h-[70vh]'
+                    }`}
+                    style={isDark ? { top: 'calc(env(safe-area-inset-top, 0px) + 5rem)' } : undefined}
                     dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
                     {/* Header */}

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
-import { VersionBadge, WhatsAppHelpButton, BrandLogo } from '@/components/ui';
+import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell } from '@/components/ui';
 import { DemoBanner } from '@/features/demo';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -155,7 +155,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             </div>
           </nav>
         ) : (
-          /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+ 
+          /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+
              Uses box-content so pt-safe adds to height rather than squishing content */
           <div
             className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 px-safe-landscape z-40 pt-safe box-content"
@@ -179,6 +179,9 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 <LayoutDashboard className="w-6 h-6" />
               )}
             </div>
+
+            {/* Notification Bell - Instagram/YouTube style top-right */}
+            <NotificationBell variant="dark" />
           </div>
         )}
 
