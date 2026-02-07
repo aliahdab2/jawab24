@@ -156,9 +156,11 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           </nav>
         ) : (
           /* Mobile APP Header - Consistent: h-16 (64px) on mobile, h-20 (80px) on sm+
-             Uses box-content so pt-safe adds to height rather than squishing content */
+             Uses box-content so pt-safe adds to height rather than squishing content
+             dir="ltr" keeps header layout fixed (logo left, bell right) in both LTR and RTL */
           <div
             className="lg:hidden sticky top-0 left-0 right-0 h-16 sm:h-20 flex items-center justify-between px-5 px-safe-landscape z-40 pt-safe box-content"
+            dir="ltr"
             style={{
               background: 'linear-gradient(to bottom, #000000 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 75%, transparent 100%)'
             }}
