@@ -33,7 +33,9 @@
       "Bash(npm info:*)",
       "Bash(npm install:*)",
       "Bash(npx cap sync:*)",
-      "Bash(npm run build:mobile:*)"
+      "Bash(npm run build:mobile:*)",
+      "Bash(git config:*)",
+      "Bash(git push:*)"
     ]
   }
 }
