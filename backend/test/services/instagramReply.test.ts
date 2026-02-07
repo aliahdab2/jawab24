@@ -43,6 +43,12 @@ vi.mock('../../src/services/instagram', () => ({
     },
 }));
 
+vi.mock('../../src/services/messages', () => ({
+    messagesService: {
+        isManuallyPaused: vi.fn(),
+    },
+}));
+
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((...args: unknown[]) => args),
     and: vi.fn((...args: unknown[]) => args),
@@ -54,6 +60,7 @@ import { pagesService } from '../../src/services/pages';
 import { aiService } from '../../src/services/ai';
 import { settingsService } from '../../src/services/settings';
 import { instagramService } from '../../src/services/instagram';
+import { messagesService } from '../../src/services/messages';
 import { db } from '../../src/db';
 
 describe('InstagramReplyService', () => {
@@ -170,6 +177,7 @@ describe('InstagramReplyService', () => {
         vi.mocked(instagramService.replyToComment).mockResolvedValue('reply-id');
         vi.mocked(instagramService.sendDirectMessage).mockResolvedValue('msg-id');
         vi.mocked(settingsService.getAwayMessage).mockResolvedValue(null);
+        vi.mocked(messagesService.isManuallyPaused).mockResolvedValue(false);
     });
 
     describe('setLogger', () => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, type ReactElement, useMemo, useRef } from 'react';
 import clsx from 'clsx';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
@@ -20,7 +20,8 @@ import {
   UserCheck,
   Sparkles,
   Zap,
-  Loader2
+  Loader2,
+  Send
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
@@ -54,12 +55,54 @@ const MessagesPage: NextPageWithLayout = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [sendError, setSendError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Infinite scroll observer ref
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // ESC key to close modal
-  useEscapeKey(() => setSelectedConversation(null), !!selectedConversation);
+  useEscapeKey(() => { setSelectedConversation(null); setReplyText(''); setSendError(null); }, !!selectedConversation);
+
+  // Manual reply mutation
+  const sendReplyMutation = useMutation({
+    mutationFn: async ({ messageId, text }: { messageId: string; text: string }) => {
+      const res = await messagesApi.reply(messageId, text);
+      return res.data;
+    },
+    onSuccess: (outgoingMessage) => {
+      if (selectedConversation) {
+        setSelectedConversation({
+          ...selectedConversation,
+          messages: [...selectedConversation.messages, outgoingMessage],
+          lastMessage: outgoingMessage,
+        });
+      }
+      setReplyText('');
+      setSendError(null);
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+    },
+    onError: (error: Error) => {
+      setSendError(error.message || t('messages.replyFailed' as TranslationKey));
+    },
+  });
+
+  const getReplyTargetMessageId = (conv: Conversation): string | null => {
+    const incoming = conv.messages
+      .filter(m => m.direction === 'incoming')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const unreplied = incoming.find(m => !m.replied);
+    return unreplied?.id || incoming[0]?.id || null;
+  };
+
+  const handleSendReply = () => {
+    if (!selectedConversation || !replyText.trim()) return;
+    const targetId = getReplyTargetMessageId(selectedConversation);
+    if (!targetId) return;
+    sendReplyMutation.mutate({ messageId: targetId, text: replyText.trim() });
+  };
 
   // Fetch Stats via useQuery (matches comments pattern)
   const { data: statsData } = useQuery({
@@ -319,8 +362,11 @@ const MessagesPage: NextPageWithLayout = () => {
         }
       />
 
-      {/* Stats Grid - 6 cards matching comments page */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-12">
+      {/* Stats Grid */}
+      <div className={clsx(
+        "grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-12",
+        stats.pending > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"
+      )}>
         <div onClick={() => updateFilter('all')}>
           <StatCard
             nameKey="messages.totalMessages"
@@ -331,16 +377,18 @@ const MessagesPage: NextPageWithLayout = () => {
             isActive={filter === 'all'}
           />
         </div>
-        <div onClick={() => updateFilter('pending')}>
-          <StatCard
-            nameKey="comments.pending"
-            value={stats.pending.toLocaleString()}
-            icon={Clock}
-            color="amber"
-            index={1}
-            isActive={filter === 'pending'}
-          />
-        </div>
+        {stats.pending > 0 && (
+          <div onClick={() => updateFilter('pending')}>
+            <StatCard
+              nameKey="comments.pending"
+              value={stats.pending.toLocaleString()}
+              icon={Clock}
+              color="amber"
+              index={1}
+              isActive={filter === 'pending'}
+            />
+          </div>
+        )}
         <div>
           <StatCard
             nameKey="comments.replied"
@@ -524,7 +572,7 @@ const MessagesPage: NextPageWithLayout = () => {
                 </div>
               </div>
               <button
-                onClick={() => setSelectedConversation(null)}
+                onClick={() => { setSelectedConversation(null); setReplyText(''); setSendError(null); }}
                 className="p-2.5 rounded-xl hover:bg-surface-100 text-surface-400 transition-colors"
               >
                 <X className="w-6 h-6" />
@@ -551,7 +599,7 @@ const MessagesPage: NextPageWithLayout = () => {
                         {msg.replyMethod === 'ai' ? (
                           <>
                             <Sparkles className="w-2.5 h-2.5" />
-                            AI
+                            {t('dashboard.aiReply')}
                           </>
                         ) : msg.replyMethod === 'template' ? (
                           <>
@@ -571,18 +619,56 @@ const MessagesPage: NextPageWithLayout = () => {
               ))}
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-surface-100 bg-white">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-brand-600">
-                  <Bot className="w-5 h-5" />
-                  <span className="text-xs font-bold uppercase tracking-wider">
-                    {t('messages.aiAutomationActive')}
+            {/* Modal Footer — Reply Input */}
+            <div className="p-4 sm:p-6 border-t border-surface-100 bg-white flex-shrink-0">
+              {sendError && (
+                <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium">
+                  {sendError}
+                </div>
+              )}
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <textarea
+                    value={replyText}
+                    onChange={(e) => { setReplyText(e.target.value); setSendError(null); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendReply();
+                      }
+                    }}
+                    placeholder={t('messages.typeReply' as TranslationKey)}
+                    rows={1}
+                    className="w-full resize-none rounded-2xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all outline-none"
+                    style={{ minHeight: '44px', maxHeight: '120px' }}
+                    disabled={sendReplyMutation.isPending}
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSendReply}
+                  loading={sendReplyMutation.isPending}
+                  disabled={!replyText.trim() || sendReplyMutation.isPending}
+                  className="rounded-xl px-4 h-[44px] flex-shrink-0"
+                  icon={<Send className="w-4 h-4" />}
+                >
+                  {t('comments.reply')}
+                </Button>
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-1.5 text-surface-400">
+                  <Bot className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">
+                    {t('messages.autoReplyWillPause' as TranslationKey)}
                   </span>
                 </div>
-                <Button variant="secondary" onClick={() => setSelectedConversation(null)} className="rounded-xl px-8">
+                <button
+                  onClick={() => { setSelectedConversation(null); setReplyText(''); setSendError(null); }}
+                  className="text-xs text-surface-400 hover:text-surface-600 transition-colors font-medium"
+                >
                   {t('comments.close')}
-                </Button>
+                </button>
               </div>
             </div>
           </div>

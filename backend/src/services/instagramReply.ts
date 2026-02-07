@@ -2,6 +2,7 @@ import { pagesService } from './pages';
 import { aiService } from './ai';
 import { settingsService } from './settings';
 import { instagramService } from './instagram';
+import { messagesService } from './messages';
 import { db } from '../db';
 import { instagramMedia, instagramComments, messages } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
@@ -66,6 +67,16 @@ export class InstagramReplyService {
 
             if (existingComment[0]?.replied) {
                 return { success: false, commentId: instagramCommentId, error: 'Comment already replied' };
+            }
+
+            // 4.5 Manual handoff pause
+            if (fromId) {
+                const isPaused = await messagesService.isManuallyPaused(page.id, fromId);
+                if (isPaused) {
+                    this.logger.info('[Instagram] Comment skipped — manual handoff active', { fromId });
+                    await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
+                    return { success: false, commentId: instagramCommentId, error: 'Manual handoff active' };
+                }
             }
 
             // 5. Store the comment
@@ -207,6 +218,13 @@ export class InstagramReplyService {
             // 4. Skip if already replied
             if (storedMessage.replied) {
                 return { success: false, messageId, error: 'Message already replied' };
+            }
+
+            // 4.5 Manual handoff pause
+            const isPaused = await messagesService.isManuallyPaused(page.id, senderId);
+            if (isPaused) {
+                this.logger.info('[Instagram] Skipping DM — manual handoff active', { senderId });
+                return { success: false, messageId, error: 'Manual handoff active' };
             }
 
             // 5. Get reply delay

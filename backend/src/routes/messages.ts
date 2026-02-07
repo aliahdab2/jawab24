@@ -30,5 +30,13 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, messagesController.getConversation);
+
+        protectedRoutes.post('/messages/:id/reply', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Reply to a message manually',
+                security: auth,
+            },
+        }, messagesController.reply);
     });
 }

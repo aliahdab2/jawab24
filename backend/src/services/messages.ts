@@ -371,6 +371,45 @@ export class MessagesService {
     }
 
     /**
+     * Get a single message by internal ID
+     */
+    async getMessageById(id: string): Promise<(Message & { platform?: string }) | null> {
+        const result = await db.query.messages.findFirst({
+            where: eq(messages.id, id),
+        });
+        if (!result) return null;
+        return {
+            ...this.mapToMessage(result),
+            platform: result.platform || 'facebook',
+        };
+    }
+
+    /**
+     * Check if auto-reply should be paused for this sender.
+     * Returns true if a manual outgoing reply was sent within the given window.
+     */
+    async isManuallyPaused(
+        pageId: string,
+        senderId: string,
+        pauseMinutes: number = 30
+    ): Promise<boolean> {
+        const cutoff = new Date(Date.now() - pauseMinutes * 60 * 1000);
+
+        const recentManual = await db.query.messages.findFirst({
+            where: and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'outgoing'),
+                eq(messages.replyMethod, 'manual'),
+                sql`${messages.createdAt} > ${cutoff}`
+            ),
+            orderBy: [desc(messages.createdAt)],
+        });
+
+        return !!recentManual;
+    }
+
+    /**
      * Map database record to Message interface
      */
     private mapToMessage(record: typeof messages.$inferSelect): Message {

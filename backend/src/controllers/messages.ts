@@ -1,5 +1,8 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { messagesService } from '../services/messages';
+import { pagesService } from '../services/pages';
+import { facebookService } from '../services/facebook';
+import { instagramService } from '../services/instagram';
 
 /** Authenticated request with user info */
 interface AuthenticatedRequest extends FastifyRequest {
@@ -97,6 +100,69 @@ export class MessagesController {
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error getting conversation');
             return reply.status(500).send({ error: 'Failed to get conversation' });
+        }
+    }
+    /**
+     * Reply to a message manually
+     * POST /messages/:id/reply
+     */
+    async reply(
+        request: FastifyRequest<{ Params: { id: string }; Body: { replyText: string } }>,
+        reply: FastifyReply
+    ) {
+        const userId = (request as AuthenticatedRequest).user.userId;
+        const { id } = request.params;
+        const { replyText } = request.body;
+
+        if (!replyText || replyText.trim().length === 0) {
+            return reply.status(400).send({ error: 'Reply text is required' });
+        }
+
+        try {
+            // 1. Find the original incoming message
+            const message = await messagesService.getMessageById(id);
+            if (!message) {
+                return reply.status(404).send({ error: 'Message not found' });
+            }
+
+            // 2. Verify user owns the page
+            const page = await pagesService.getPage(userId, message.pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+            }
+
+            // 3. Send the reply via the appropriate platform API
+            const platform = message.platform || 'facebook';
+            if (platform === 'instagram' && page.instagramAccountId) {
+                await instagramService.sendDirectMessage(
+                    page.instagramAccountId,
+                    message.senderId,
+                    replyText.trim(),
+                    page.accessToken
+                );
+            } else {
+                await facebookService.sendPrivateMessage(
+                    page.accessToken,
+                    message.senderId,
+                    replyText.trim()
+                );
+            }
+
+            // 4. Mark the original message as replied (manual)
+            await messagesService.markAsReplied(message.id, replyText.trim(), 'manual');
+
+            // 5. Store the outgoing message
+            const outgoing = await messagesService.storeOutgoingMessage(
+                message.pageId,
+                message.senderId,
+                replyText.trim(),
+                'manual'
+            );
+
+            return reply.send(outgoing);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to send reply' });
         }
     }
 }

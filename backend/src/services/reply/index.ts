@@ -82,6 +82,13 @@ export class ReplyService {
                 return { success: false, messageId, error: 'Skipped: newer message pending' };
             }
 
+            // 3.6 Manual handoff pause: skip auto-reply if human recently replied manually
+            const isPaused = await messagesService.isManuallyPaused(page.id, senderId);
+            if (isPaused) {
+                this.logger.info('[Reply] Skipping — manual handoff active', { senderId, pageId });
+                return { success: false, messageId, error: 'Manual handoff active' };
+            }
+
             // 4. Rate limit check
             const rateCheck = await rateLimiter.check(pageId, senderId, 'message');
             if (!rateCheck.allowed) {
@@ -210,6 +217,15 @@ export class ReplyService {
                 if (!rateCheck.allowed) {
                     this.logger.info('[Reply] Comment rate limited', { fromId, count: rateCheck.count });
                     return { success: false, commentId: comment.id, error: 'Rate limited' };
+                }
+            }
+
+            // 5.5 Manual handoff pause: skip auto-reply if human recently replied to this user
+            if (fromId) {
+                const isCommentPaused = await messagesService.isManuallyPaused(page.id, fromId);
+                if (isCommentPaused) {
+                    this.logger.info('[Reply] Comment skipped — manual handoff active', { fromId, pageId });
+                    return { success: false, commentId: comment.id, error: 'Manual handoff active' };
                 }
             }
 
