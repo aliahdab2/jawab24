@@ -242,10 +242,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       initPushNotifications(authToken).catch(console.error);
 
       // 2. Check if we should show the pre-prompt (deferred by 5 seconds)
+      // shouldShowNotificationPrePrompt is sync (localStorage only, no Capacitor API)
       const timer = setTimeout(() => {
-        shouldShowNotificationPrePrompt().then((should) => {
-          if (should) setShowPushPrompt(true);
-        });
+        if (shouldShowNotificationPrePrompt()) setShowPushPrompt(true);
       }, 5000);
       return () => clearTimeout(timer);
     });

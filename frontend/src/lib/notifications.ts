@@ -7,29 +7,28 @@ import { toast } from 'sonner';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
 const PERM_DISMISSED_KEY = 'push_prompt_dismissed_at';
+const PERM_GRANTED_KEY = 'push_permission_granted';
 const DISMISS_COOLDOWN_DAYS = 7;
 
 /**
  * Check if we should show the pre-prompt to the user.
- * Returns true if: native platform, permission not yet decided, and cooldown expired.
+ * Uses localStorage only — does NOT call any Capacitor Push API to avoid
+ * triggering the Android 13+ system permission dialog prematurely.
  */
-export async function shouldShowNotificationPrePrompt(): Promise<boolean> {
+export function shouldShowNotificationPrePrompt(): boolean {
     if (!Capacitor.isNativePlatform()) return false;
 
-    try {
-        const permStatus = await PushNotifications.checkPermissions();
-        if (permStatus.receive === 'granted' || permStatus.receive === 'denied') return false;
+    // Already granted or user completed the flow before
+    if (localStorage.getItem(PERM_GRANTED_KEY) === 'true') return false;
 
-        const dismissedAt = localStorage.getItem(PERM_DISMISSED_KEY);
-        if (dismissedAt) {
-            const daysSince = (Date.now() - Number(dismissedAt)) / (1000 * 60 * 60 * 24);
-            if (daysSince < DISMISS_COOLDOWN_DAYS) return false;
-        }
-
-        return true;
-    } catch {
-        return false;
+    // User dismissed the pre-prompt recently
+    const dismissedAt = localStorage.getItem(PERM_DISMISSED_KEY);
+    if (dismissedAt) {
+        const daysSince = (Date.now() - Number(dismissedAt)) / (1000 * 60 * 60 * 24);
+        if (daysSince < DISMISS_COOLDOWN_DAYS) return false;
     }
+
+    return true;
 }
 
 /**
@@ -42,6 +41,7 @@ export function dismissNotificationPrePrompt(): void {
 /**
  * Request notification permission and register for push.
  * Call this ONLY after user taps "Enable" on the pre-prompt.
+ * This is the ONLY place that calls Capacitor Push APIs for permission.
  */
 export async function requestAndRegisterPush(authToken: string): Promise<boolean> {
     if (!Capacitor.isNativePlatform()) return false;
@@ -49,6 +49,10 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
     try {
         const permResult = await PushNotifications.requestPermissions();
         if (permResult.receive !== 'granted') return false;
+
+        // Store granted flag so we never show pre-prompt again
+        // and can silently re-register on subsequent launches
+        localStorage.setItem(PERM_GRANTED_KEY, 'true');
 
         await registerPushListeners(authToken);
         return true;
@@ -60,16 +64,16 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
 
 /**
  * Initialize push notifications for native platforms.
- * Only sets up listeners if permission was already granted (e.g. on subsequent app launches).
- * Does NOT request permission — use requestAndRegisterPush() for that.
+ * Only sets up listeners if user previously granted permission (checked via localStorage).
+ * Does NOT call checkPermissions() to avoid triggering Android 13+ system dialog.
  */
 export async function initPushNotifications(token: string): Promise<void> {
     if (!Capacitor.isNativePlatform()) return;
 
-    try {
-        const permStatus = await PushNotifications.checkPermissions();
-        if (permStatus.receive !== 'granted') return;
+    // Only proceed if we know permission was previously granted
+    if (localStorage.getItem(PERM_GRANTED_KEY) !== 'true') return;
 
+    try {
         await registerPushListeners(token);
     } catch (error) {
         console.error('[Push] Init error:', error);
