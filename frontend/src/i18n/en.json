@@ -879,5 +879,15 @@
   "kb.customSection.titlePlaceholder": "Section name (e.g., Menu, Team, Branches)",
   "kb.customSection.desc": "Add any info about your business",
   "kb.customSection.placeholder": "Type your info here...",
-  "kb.customSection.deleteConfirm": "Delete this section and its content?"
+  "kb.customSection.deleteConfirm": "Delete this section and its content?",
+
+  "notifications.title": "Notifications",
+  "notifications.markAllRead": "Mark all read",
+  "notifications.markAsRead": "Mark as read",
+  "notifications.loading": "Loading...",
+  "notifications.empty": "No notifications",
+  "notifications.justNow": "Just now",
+  "notifications.minutesAgo": "{count}m ago",
+  "notifications.hoursAgo": "{count}h ago",
+  "notifications.daysAgo": "{count}d ago"
 }

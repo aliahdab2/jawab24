@@ -69,8 +69,8 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationP
     stale_comment: {
         titleEn: 'Unreplied Comments Need Attention',
         titleAr: 'تعليقات بدون رد تحتاج انتباهك',
-        bodyEn: '{count} comment(s) waiting over {minutes} minutes without a reply.',
-        bodyAr: '{count} تعليق(ات) بانتظار الرد منذ أكثر من {minutes} دقيقة.',
+        bodyEn: '{count} comments waiting for your reply for over {minutes} minutes.',
+        bodyAr: '{count} تعليقات بانتظار ردك منذ أكثر من {minutes} دقيقة.',
     },
 };
 

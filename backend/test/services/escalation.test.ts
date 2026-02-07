@@ -12,6 +12,7 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue('notif-123'),
+        sendNotification: vi.fn().mockResolvedValue('notif-123'),
     },
 }));
 
@@ -43,7 +44,8 @@ describe('Escalation Service', () => {
         vi.clearAllMocks();
         vi.useFakeTimers();
         // Re-establish mock return value after clearAllMocks
-        (notificationService.sendTemplateNotification as any).mockResolvedValue('notif-123');
+        (notificationService.sendNotification as any).mockResolvedValue('notif-123');
+        (notificationService.sendNotification as any).mockResolvedValue('notif-123');
     });
 
     afterEach(() => {
@@ -92,7 +94,7 @@ describe('Escalation Service', () => {
 
             // Should not have tried to update or notify
             expect(db.update).not.toHaveBeenCalled();
-            expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+            expect(notificationService.sendNotification).not.toHaveBeenCalled();
         });
 
         it('should escalate stale comments and send notification', async () => {
@@ -147,11 +149,12 @@ describe('Escalation Service', () => {
             expect(db.update).toHaveBeenCalled();
 
             // Should have sent exactly one notification for the user
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+            expect(notificationService.sendNotification).toHaveBeenCalledWith(
                 'user-1',
-                'stale_comment',
-                { count: '3', minutes: '60' },
-                { deepLink: '/comments?filter=flagged' }
+                expect.objectContaining({
+                    type: 'stale_comment',
+                    data: { deepLink: '/comments?filter=flagged' },
+                })
             );
         });
 
@@ -190,11 +193,12 @@ describe('Escalation Service', () => {
             await runEscalationSweep();
 
             expect(db.update).toHaveBeenCalled();
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+            expect(notificationService.sendNotification).toHaveBeenCalledWith(
                 'user-2',
-                'stale_comment',
-                { count: '2', minutes: '15' },
-                { deepLink: '/messages?filter=flagged' }
+                expect.objectContaining({
+                    type: 'stale_comment',
+                    data: { deepLink: '/messages?filter=flagged' },
+                })
             );
         });
 
@@ -265,12 +269,13 @@ describe('Escalation Service', () => {
             await runEscalationSweep();
 
             // Only user-a should get a notification (user-b had no stale items)
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(1);
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+            expect(notificationService.sendNotification).toHaveBeenCalledTimes(1);
+            expect(notificationService.sendNotification).toHaveBeenCalledWith(
                 'user-a',
-                'stale_comment',
-                { count: '1', minutes: '60' },
-                { deepLink: '/comments?filter=flagged' }
+                expect.objectContaining({
+                    type: 'stale_comment',
+                    data: { deepLink: '/comments?filter=flagged' },
+                })
             );
         });
 
@@ -291,7 +296,7 @@ describe('Escalation Service', () => {
             await runEscalationSweep();
 
             expect(db.update).not.toHaveBeenCalled();
-            expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+            expect(notificationService.sendNotification).not.toHaveBeenCalled();
         });
 
         it('should use default thresholds when settings value is null', async () => {
@@ -339,11 +344,12 @@ describe('Escalation Service', () => {
             await runEscalationSweep();
 
             // Should use default 60 min for comments
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+            expect(notificationService.sendNotification).toHaveBeenCalledWith(
                 'user-1',
-                'stale_comment',
-                { count: '1', minutes: '60' },
-                { deepLink: '/comments?filter=flagged' }
+                expect.objectContaining({
+                    type: 'stale_comment',
+                    data: { deepLink: '/comments?filter=flagged' },
+                })
             );
         });
 

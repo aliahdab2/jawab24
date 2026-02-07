@@ -875,5 +875,15 @@
   "kb.customSection.titlePlaceholder": "اسم القسم (مثال: القائمة، الفريق، الفروع)",
   "kb.customSection.desc": "أضف أي معلومات عن عملك",
   "kb.customSection.placeholder": "اكتب معلوماتك هنا...",
-  "kb.customSection.deleteConfirm": "حذف هذا القسم ومحتواه؟"
+  "kb.customSection.deleteConfirm": "حذف هذا القسم ومحتواه؟",
+
+  "notifications.title": "الإشعارات",
+  "notifications.markAllRead": "تحديد الكل كمقروء",
+  "notifications.markAsRead": "تحديد كمقروء",
+  "notifications.loading": "جاري التحميل...",
+  "notifications.empty": "لا توجد إشعارات",
+  "notifications.justNow": "الآن",
+  "notifications.minutesAgo": "منذ {count} دقيقة",
+  "notifications.hoursAgo": "منذ {count} ساعة",
+  "notifications.daysAgo": "منذ {count} يوم"
 }

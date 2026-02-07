@@ -19,6 +19,14 @@ vi.mock('../../src/i18n', () => ({
     }),
 }));
 
+// Mock next/router
+vi.mock('next/router', () => ({
+    useRouter: () => ({
+        push: vi.fn(),
+        query: {},
+    }),
+}));
+
 // Mock notification functions
 const mockGetUnreadCount = vi.fn();
 const mockGetNotifications = vi.fn();
@@ -135,7 +143,7 @@ describe('NotificationBell', () => {
         fireEvent.click(button);
 
         await waitFor(() => {
-            expect(screen.getByText('Notifications')).toBeInTheDocument();
+            expect(screen.getByText('notifications.title')).toBeInTheDocument();
         });
     });
 
@@ -183,7 +191,7 @@ describe('NotificationBell', () => {
         fireEvent.click(button);
 
         await waitFor(() => {
-            expect(screen.getByText('No notifications')).toBeInTheDocument();
+            expect(screen.getByText('notifications.empty')).toBeInTheDocument();
         });
     });
 
@@ -254,11 +262,11 @@ describe('NotificationBell', () => {
 
         // Wait for "Mark all read" button to appear
         await waitFor(() => {
-            expect(screen.getByText('Mark all read')).toBeInTheDocument();
+            expect(screen.getByText('notifications.markAllRead')).toBeInTheDocument();
         });
 
         // Click mark all read
-        fireEvent.click(screen.getByText('Mark all read'));
+        fireEvent.click(screen.getByText('notifications.markAllRead'));
 
         await waitFor(() => {
             expect(mockMarkAllNotificationsAsRead).toHaveBeenCalledWith('test-token');

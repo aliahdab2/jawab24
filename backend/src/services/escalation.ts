@@ -10,6 +10,33 @@ const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
 /**
+ * Arabic pluralization for counted nouns.
+ * Arabic has: singular (1), dual (2), plural (3-10), singular-accusative (11+).
+ */
+function arabicPlural(count: number, singular: string, dual: string, plural: string, accusative: string): string {
+    if (count === 1) return `${singular}`;
+    if (count === 2) return `${dual}`;
+    if (count >= 3 && count <= 10) return `${count} ${plural}`;
+    return `${count} ${accusative}`;
+}
+
+function formatCommentCountAr(count: number): string {
+    return arabicPlural(count, 'تعليق واحد', 'تعليقان', 'تعليقات', 'تعليقًا');
+}
+
+function formatMessageCountAr(count: number): string {
+    return arabicPlural(count, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة');
+}
+
+function formatCommentCountEn(count: number): string {
+    return count === 1 ? '1 comment' : `${count} comments`;
+}
+
+function formatMessageCountEn(count: number): string {
+    return count === 1 ? '1 message' : `${count} messages`;
+}
+
+/**
  * Run a single escalation sweep.
  * Finds unreplied comments/messages past their SLA threshold,
  * flags them as needsAttention, and sends one notification per user.
@@ -71,15 +98,15 @@ async function escalateComments(): Promise<void> {
             .where(sql`${comments.id} IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})`);
 
         // Send one notification per user (not per comment)
-        notificationService.sendTemplateNotification(
-            us.userId,
-            'stale_comment',
-            {
-                count: String(staleComments.length),
-                minutes: String(thresholdMinutes),
-            },
-            { deepLink: '/comments?filter=flagged' }
-        ).catch(err => console.error('[Escalation] Notification failed:', err));
+        const count = staleComments.length;
+        notificationService.sendNotification(us.userId, {
+            type: 'stale_comment',
+            titleEn: 'Unreplied Comments Need Attention',
+            titleAr: 'تعليقات بدون رد تحتاج انتباهك',
+            bodyEn: `${formatCommentCountEn(count)} waiting for your reply for over ${thresholdMinutes} minutes.`,
+            bodyAr: `${formatCommentCountAr(count)} بانتظار ردك منذ أكثر من ${thresholdMinutes} دقيقة.`,
+            data: { deepLink: '/comments?filter=flagged' },
+        }).catch(err => console.error('[Escalation] Notification failed:', err));
     }
 }
 
@@ -126,15 +153,15 @@ async function escalateMessages(): Promise<void> {
             })
             .where(sql`${messages.id} IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})`);
 
-        notificationService.sendTemplateNotification(
-            us.userId,
-            'stale_comment',
-            {
-                count: String(staleMessages.length),
-                minutes: String(thresholdMinutes),
-            },
-            { deepLink: '/messages?filter=flagged' }
-        ).catch(err => console.error('[Escalation] Message notification failed:', err));
+        const msgCount = staleMessages.length;
+        notificationService.sendNotification(us.userId, {
+            type: 'stale_comment',
+            titleEn: 'Unreplied Messages Need Attention',
+            titleAr: 'رسائل بدون رد تحتاج انتباهك',
+            bodyEn: `${formatMessageCountEn(msgCount)} waiting for your reply for over ${thresholdMinutes} minutes.`,
+            bodyAr: `${formatMessageCountAr(msgCount)} بانتظار ردك منذ أكثر من ${thresholdMinutes} دقيقة.`,
+            data: { deepLink: '/messages?filter=flagged' },
+        }).catch(err => console.error('[Escalation] Message notification failed:', err));
     }
 }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, X, Check, CheckCheck } from 'lucide-react';
+import { useRouter } from 'next/router';
+import { Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount } from '@/lib/notifications';
@@ -16,9 +17,34 @@ interface Notification {
     createdAt: string;
 }
 
+/** Get the route a notification should navigate to when clicked */
+function getNotificationRoute(notification: Notification): string | null {
+    // 1. Use deepLink from backend data if available
+    const data = notification.data as Record<string, string> | undefined;
+    if (data?.deepLink) return data.deepLink;
+
+    // 2. Fallback: route based on notification type
+    switch (notification.type) {
+        case 'stale_comment':
+        case 'new_comment':
+        case 'flagged_reply':
+            return '/comments';
+        case 'payment_failed':
+        case 'subscription_expiring':
+        case 'subscription_renewed':
+        case 'trial_ending':
+            return '/pricing';
+        case 'page_disconnected':
+            return '/pages';
+        default:
+            return null;
+    }
+}
+
 export function NotificationBell() {
     const { token } = useAuthStore();
     const { t, language } = useTranslation();
+    const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -73,10 +99,24 @@ export function NotificationBell() {
     const handleMarkAsRead = async (notificationId: string) => {
         if (!token) return;
         await markNotificationAsRead(token, notificationId);
-        setNotifications(prev => 
+        setNotifications(prev =>
             prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
+    };
+
+    const handleNotificationClick = async (notification: Notification) => {
+        // Mark as read if not already
+        if (!notification.read) {
+            handleMarkAsRead(notification.id);
+        }
+
+        // Navigate to the relevant page
+        const route = getNotificationRoute(notification);
+        if (route) {
+            setIsOpen(false);
+            router.push(route);
+        }
     };
 
     const handleMarkAllAsRead = async () => {
@@ -102,19 +142,27 @@ export function NotificationBell() {
         const diffHours = Math.floor(diffMins / 60);
         const diffDays = Math.floor(diffHours / 24);
 
-        if (diffMins < 1) return language === 'ar' ? 'الآن' : 'Just now';
-        if (diffMins < 60) return language === 'ar' ? `منذ ${diffMins} دقيقة` : `${diffMins}m ago`;
-        if (diffHours < 24) return language === 'ar' ? `منذ ${diffHours} ساعة` : `${diffHours}h ago`;
-        return language === 'ar' ? `منذ ${diffDays} يوم` : `${diffDays}d ago`;
+        if (diffMins < 1) return t('notifications.justNow');
+        if (diffMins < 60) return t('notifications.minutesAgo', { count: diffMins });
+        if (diffHours < 24) return t('notifications.hoursAgo', { count: diffHours });
+        return t('notifications.daysAgo', { count: diffDays });
     };
 
     const getNotificationIcon = (type: string) => {
         switch (type) {
+            case 'stale_comment':
+                return '🔔';
+            case 'new_comment':
+                return '💬';
+            case 'flagged_reply':
+                return '⚠️';
             case 'payment_failed':
                 return '💳';
             case 'subscription_expiring':
             case 'trial_ending':
                 return '⏰';
+            case 'subscription_renewed':
+                return '✅';
             case 'page_disconnected':
                 return '🔌';
             default:
@@ -147,7 +195,7 @@ export function NotificationBell() {
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-surface-100 bg-surface-50">
                         <h3 className="font-semibold text-surface-900">
-                            {language === 'ar' ? 'الإشعارات' : 'Notifications'}
+                            {t('notifications.title')}
                         </h3>
                         <div className="flex items-center gap-2">
                             {unreadCount > 0 && (
@@ -156,7 +204,7 @@ export function NotificationBell() {
                                     className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1"
                                 >
                                     <CheckCheck className="w-3.5 h-3.5" />
-                                    {language === 'ar' ? 'تحديد الكل كمقروء' : 'Mark all read'}
+                                    {t('notifications.markAllRead')}
                                 </button>
                             )}
                             <button
@@ -173,13 +221,13 @@ export function NotificationBell() {
                         {loading ? (
                             <div className="p-8 text-center text-surface-500">
                                 <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                                {language === 'ar' ? 'جاري التحميل...' : 'Loading...'}
+                                {t('notifications.loading')}
                             </div>
                         ) : notifications.length === 0 ? (
                             <div className="p-8 text-center text-surface-500">
                                 <Bell className="w-10 h-10 mx-auto mb-3 text-surface-300" />
                                 <p className="text-sm">
-                                    {language === 'ar' ? 'لا توجد إشعارات' : 'No notifications'}
+                                    {t('notifications.empty')}
                                 </p>
                             </div>
                         ) : (
@@ -189,7 +237,7 @@ export function NotificationBell() {
                                     className={`px-4 py-3 border-b border-surface-50 hover:bg-surface-50 transition-colors cursor-pointer ${
                                         !notification.read ? 'bg-brand-50/30' : ''
                                     }`}
-                                    onClick={() => !notification.read && handleMarkAsRead(notification.id)}
+                                    onClick={() => handleNotificationClick(notification)}
                                 >
                                     <div className="flex items-start gap-3">
                                         <span className="text-xl flex-shrink-0">
@@ -211,18 +259,22 @@ export function NotificationBell() {
                                                 {getRelativeTime(notification.createdAt)}
                                             </p>
                                         </div>
-                                        {!notification.read && (
+                                        {getNotificationRoute(notification) ? (
+                                            <span className="p-1 text-surface-300 flex-shrink-0">
+                                                {language === 'ar' ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                            </span>
+                                        ) : !notification.read ? (
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleMarkAsRead(notification.id);
                                                 }}
-                                                className="p-1 rounded hover:bg-surface-200 text-surface-400"
-                                                title={language === 'ar' ? 'تحديد كمقروء' : 'Mark as read'}
+                                                className="p-1 rounded hover:bg-surface-200 text-surface-400 flex-shrink-0"
+                                                title={t('notifications.markAsRead')}
                                             >
                                                 <Check className="w-4 h-4" />
                                             </button>
-                                        )}
+                                        ) : null}
                                     </div>
                                 </div>
                             ))

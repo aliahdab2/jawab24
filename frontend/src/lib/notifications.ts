@@ -121,14 +121,29 @@ function handleNotificationTap(action: ActionPerformed): void {
     const data = action.notification.data as Record<string, string> | undefined;
     const type = data?.type;
 
-    // Navigate based on notification type
+    // 1. Use deepLink from backend data if available
+    let customData: Record<string, string> | undefined;
+    try {
+        if (data?.customData) customData = JSON.parse(data.customData);
+    } catch { /* ignore parse errors */ }
+
+    if (customData?.deepLink) {
+        if (typeof window !== 'undefined') window.location.href = customData.deepLink;
+        return;
+    }
+
+    // 2. Fallback: route based on notification type
     let route = '/dashboard';
-    
     switch (type) {
+        case 'stale_comment':
+        case 'new_comment':
+        case 'flagged_reply':
+            route = '/comments';
+            break;
         case 'payment_failed':
         case 'subscription_expiring':
         case 'trial_ending':
-            route = '/settings'; // Billing section
+            route = '/pricing';
             break;
         case 'page_disconnected':
             route = '/pages';
@@ -137,7 +152,6 @@ function handleNotificationTap(action: ActionPerformed): void {
             route = '/dashboard';
     }
 
-    // Navigate using router (this will be picked up by deep link handler in _app.tsx)
     if (typeof window !== 'undefined') {
         window.location.href = route;
     }
