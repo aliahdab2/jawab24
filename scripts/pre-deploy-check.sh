@@ -81,6 +81,8 @@ if npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
 else
     echo -e "${RED}   ❌ Frontend build failed!${NC}"
+    # Clean again — the failed first attempt may leave a corrupted .next
+    rm -rf frontend/.next
     npm run build --workspace=jawab24-frontend
     exit 1
 fi
