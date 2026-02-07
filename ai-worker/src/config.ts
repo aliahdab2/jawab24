@@ -19,7 +19,7 @@ export const config = {
         apiKey: process.env.OPENAI_API_KEY || '',
         // Fixed model - not configurable for cost control
         model: 'gpt-4o-mini',
-        maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '150', 10),
+        maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '300', 10),
         temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
     },
 
