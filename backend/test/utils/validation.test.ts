@@ -6,6 +6,7 @@ import {
     UpdateRuleSchema,
     CreateTemplateSchema,
     UpdateTemplateSchema,
+    UpdateSettingsSchema,
     PaginationSchema,
     UUIDSchema,
     validateSchema,
@@ -173,6 +174,55 @@ describe('Validation Schemas', () => {
             
             const result = CreateTemplateSchema.safeParse(invalidTemplate);
             expect(result.success).toBe(false);
+        });
+    });
+
+    describe('UpdateSettingsSchema', () => {
+        it('should accept valid escalation minutes', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 30,
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('should reject escalation minutes below minimum (5)', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                commentEscalationMinutes: 2,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should reject escalation minutes above maximum (1440)', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                messageEscalationMinutes: 2000,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should reject non-integer escalation minutes', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                commentEscalationMinutes: 30.5,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should accept boundary values (5 and 1440)', () => {
+            const minResult = UpdateSettingsSchema.safeParse({ commentEscalationMinutes: 5 });
+            const maxResult = UpdateSettingsSchema.safeParse({ messageEscalationMinutes: 1440 });
+            expect(minResult.success).toBe(true);
+            expect(maxResult.success).toBe(true);
+        });
+
+        it('should accept all existing settings fields', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                dashboardLanguage: 'en',
+                commentsAutoReply: true,
+                replyDelay: 10,
+                commentEscalationMinutes: 45,
+                messageEscalationMinutes: 15,
+            });
+            expect(result.success).toBe(true);
         });
     });
 

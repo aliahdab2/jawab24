@@ -5,6 +5,7 @@ import { db } from '../db';
 import { subscriptions, users, plans } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
+import { notificationService } from '../services/notifications';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
 import type Stripe from 'stripe';
 
@@ -629,16 +630,27 @@ export class PaymentController {
             return;
         }
 
-        // Update subscription status
-        await db
+        // Update subscription status and get userId
+        const result = await db
             .update(subscriptions)
             .set({
                 status: 'past_due',
                 updatedAt: new Date(),
             })
-            .where(eq(subscriptions.externalSubscriptionId, stripeSubscriptionId));
+            .where(eq(subscriptions.externalSubscriptionId, stripeSubscriptionId))
+            .returning({ userId: subscriptions.userId });
 
         request.log.info({ subscriptionId: stripeSubscriptionId }, 'Payment failed');
+
+        // Notify user about failed payment
+        if (result.length > 0) {
+            notificationService.sendTemplateNotification(
+                result[0].userId,
+                'payment_failed',
+                {},
+                { deepLink: '/settings' }
+            ).catch(err => request.log.error({ err }, 'Failed to send payment_failed notification'));
+        }
     }
 }
 

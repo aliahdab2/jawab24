@@ -35,7 +35,14 @@
       "Bash(npx cap sync:*)",
       "Bash(npm run build:mobile:*)",
       "Bash(git config:*)",
-      "Bash(git push:*)"
+      "Bash(npx playwright test:*)",
+      "Bash(CI=true npx playwright test:*)",
+      "Bash(npx eslint:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(npx playwright test --list)",
+      "Bash(npm run lint:*)",
+      "Bash(echo:*)"
     ]
   }
 }

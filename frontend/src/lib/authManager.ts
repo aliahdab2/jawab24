@@ -113,6 +113,22 @@ class AuthManager {
     }
 
     try {
+      // 0. Remove push notification token before clearing auth (best-effort)
+      if (typeof window !== 'undefined') {
+        try {
+          const { Capacitor } = await import('@capacitor/core');
+          if (Capacitor.isNativePlatform()) {
+            const token = localStorage.getItem('token');
+            if (token) {
+              const { removePushToken } = await import('./notifications');
+              await removePushToken(token);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to remove push token:', e);
+        }
+      }
+
       // 1. Clear local storage first (synchronous, always works)
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');

@@ -39,6 +39,8 @@ describe('NotificationService', () => {
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('subscription_renewed');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('trial_ending');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('flagged_reply');
+            expect(NOTIFICATION_TEMPLATES).toHaveProperty('new_comment');
+            expect(NOTIFICATION_TEMPLATES).toHaveProperty('stale_comment');
         });
 
         it('should have flagged_reply template with correct placeholders', () => {
@@ -48,6 +50,15 @@ describe('NotificationService', () => {
             expect(template.bodyEn).toContain('{reason}');
             expect(template.bodyAr).toContain('{senderName}');
             expect(template.bodyAr).toContain('{reason}');
+        });
+
+        it('should have stale_comment template with correct placeholders', () => {
+            const template = NOTIFICATION_TEMPLATES.stale_comment;
+            expect(template.titleEn).toBe('Unreplied Comments Need Attention');
+            expect(template.bodyEn).toContain('{count}');
+            expect(template.bodyEn).toContain('{minutes}');
+            expect(template.bodyAr).toContain('{count}');
+            expect(template.bodyAr).toContain('{minutes}');
         });
 
         it('should have bilingual content for each template', () => {

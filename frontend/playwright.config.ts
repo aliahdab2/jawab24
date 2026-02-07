@@ -23,7 +23,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.CI ? 'npm start' : 'npm run dev',
+    // In CI, use next dev since 'next start' doesn't work with output: 'standalone'
+    // The production build is validated separately via the Docker build step
+    command: 'npm run dev',
     port: 3001,
     reuseExistingServer: !process.env.CI,
   },

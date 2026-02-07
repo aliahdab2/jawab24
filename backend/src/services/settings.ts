@@ -145,6 +145,8 @@ export class SettingsService {
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
             replyDelay: record.replyDelay ?? 0,
+            commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
+            messageEscalationMinutes: record.messageEscalationMinutes ?? 30,
         };
     }
 }

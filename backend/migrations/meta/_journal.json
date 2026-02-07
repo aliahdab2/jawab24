@@ -71,6 +71,13 @@
       "when": 1769936331472,
       "tag": "0009_wooden_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1770403178962,
+      "tag": "0010_heavy_charles_xavier",
+      "breakpoints": true
     }
   ]
 }

@@ -249,10 +249,9 @@ run_migrations() {
         echo "   ✅ Migrations applied successfully"
     else
         echo "   ❌ Migration command failed (exit code non-zero)."
-        echo "   ⚠️  Viewing logs to check for success..."
+        echo "   ⚠️  Viewing logs for details..."
         docker logs "$container_id" --tail 20 2>&1
-        echo "   ⚠️  Continuing deployment (WARNING: Assuming specific error is non-fatal)..."
-        # exit 1  <-- DISABLED TO UNBLOCK DEPLOYMENT
+        exit 1
     fi
 }
 
@@ -338,6 +337,112 @@ validate_env_files() {
     echo "✅ All required environment variables present"
 }
 
+# Smoke test: verify pages return real HTML content (not just icons or error pages)
+smoke_test_content() {
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🔍 STEP 5b: Content Smoke Test"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    F_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "frontend-$DEPLOY_ENV")
+
+    # Check that the dashboard page returns HTML with expected content markers
+    DASHBOARD_HTML=$(docker exec "$F_ID" wget -qO- http://127.0.0.1:3001/en/dashboard 2>/dev/null || echo "FETCH_FAILED")
+
+    if echo "$DASHBOARD_HTML" | grep -q "FETCH_FAILED"; then
+        echo "   ❌ Could not fetch /en/dashboard from frontend container"
+        exit 1
+    fi
+
+    # Verify it's actual HTML (not a redirect, image, or error)
+    if ! echo "$DASHBOARD_HTML" | grep -qi "</html>"; then
+        echo "   ❌ /en/dashboard did not return valid HTML!"
+        echo "   First 500 chars of response:"
+        echo "$DASHBOARD_HTML" | head -c 500
+        exit 1
+    fi
+
+    # Verify the page contains Next.js app markers (script tags, __next div)
+    if ! echo "$DASHBOARD_HTML" | grep -q "__next"; then
+        echo "   ❌ /en/dashboard is missing Next.js app container (__next)"
+        echo "   The frontend may not have built correctly."
+        exit 1
+    fi
+
+    echo "   ✅ Dashboard page returns valid HTML with Next.js content"
+
+    # Also verify the API health endpoint
+    B_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "backend-$DEPLOY_ENV")
+    HEALTH_RESPONSE=$(docker exec "$B_ID" wget -qO- http://127.0.0.1:3000/health 2>/dev/null || echo "FETCH_FAILED")
+
+    if echo "$HEALTH_RESPONSE" | grep -qi "ok\|healthy\|status"; then
+        echo "   ✅ Backend health endpoint responds correctly"
+    else
+        echo "   ⚠️  Backend health endpoint returned unexpected response: $HEALTH_RESPONSE"
+    fi
+}
+
+# Post-deploy: verify the live public URL returns valid content
+post_deploy_check() {
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🌐 STEP 8: Post-Deploy Live URL Check"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    local LIVE_URL="https://jawab24.com/en/dashboard"
+    local MAX_RETRIES=3
+    local RETRY_DELAY=5
+
+    for attempt in $(seq 1 $MAX_RETRIES); do
+        echo "   Attempt $attempt/$MAX_RETRIES: checking $LIVE_URL ..."
+        LIVE_HTML=$(curl -sL --max-time 15 "$LIVE_URL" 2>/dev/null || echo "CURL_FAILED")
+
+        if echo "$LIVE_HTML" | grep -q "CURL_FAILED"; then
+            echo "   ⚠️  curl failed to reach $LIVE_URL"
+        elif ! echo "$LIVE_HTML" | grep -qi "</html>"; then
+            echo "   ⚠️  Response is not valid HTML"
+        elif ! echo "$LIVE_HTML" | grep -q "__next"; then
+            echo "   ⚠️  Response is missing Next.js __next container"
+        else
+            echo "   ✅ Live site returns valid HTML with Next.js content"
+            return 0
+        fi
+
+        if [ "$attempt" -lt "$MAX_RETRIES" ]; then
+            echo "   Retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+        fi
+    done
+
+    echo "   ❌ Live URL check FAILED after $MAX_RETRIES attempts!"
+    return 1
+}
+
+# Rollback: switch traffic back to the previous environment
+rollback() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "⏪ ROLLBACK: Switching traffic back to $ACTIVE_ENV"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    cat > ./nginx/upstream.conf << EOF
+# Active environment: $ACTIVE_ENV (rolled back)
+# Rolled back at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+upstream backend_active { server jawab24-backend-$ACTIVE_ENV:3000; }
+upstream frontend_active { server jawab24-frontend-$ACTIVE_ENV:3001; }
+upstream ai_worker_active { server jawab24-ai-worker-$ACTIVE_ENV:3002; }
+EOF
+
+    if docker restart jawab24-nginx; then
+        for i in {1..30}; do
+            if docker inspect jawab24-nginx | grep -q '"Status": "healthy"'; then break; fi
+            sleep 1
+        done
+        echo "$ACTIVE_ENV" > .active-env
+        echo "✅ Rolled back to $ACTIVE_ENV"
+    else
+        echo "❌ FATAL: Nginx failed to restart during rollback!"
+    fi
+}
+
 # --- Main Execution ---
 validate_setup
 pull_code
@@ -349,8 +454,21 @@ start_new_env
 # Run migrations BEFORE switching traffic, but AFTER starting new env
 run_migrations
 verify_and_wait
+smoke_test_content  # Verify pages return real content before switching traffic
 echo "⏳ Warm-up (10s)..." && sleep 10
 switch_traffic
+
+# Verify live URL after switching traffic; rollback if it fails
+if ! post_deploy_check; then
+    echo "❌ Post-deploy check failed! Initiating rollback..."
+    rollback
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "❌ DEPLOYMENT FAILED — rolled back to $ACTIVE_ENV"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    exit 1
+fi
+
 cleanup
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

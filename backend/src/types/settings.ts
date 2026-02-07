@@ -24,6 +24,8 @@ export interface UserSettings {
     awayMessage: string | null;
     greetingMessage: string | null;
     replyDelay: number;
+    commentEscalationMinutes: number;
+    messageEscalationMinutes: number;
 }
 
 export interface UpdateSettingsDTO {
@@ -43,4 +45,6 @@ export interface UpdateSettingsDTO {
     awayMessage?: string | null;
     greetingMessage?: string | null;
     replyDelay?: number;
+    commentEscalationMinutes?: number;
+    messageEscalationMinutes?: number;
 }

@@ -36,6 +36,7 @@ import { requestIdMiddleware } from "./middleware/requestId";
 import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
+import { startEscalationCron, stopEscalationCron } from "./services/escalation";
 import { createRequestLogger } from "./types";
 import { config } from "./config";
 import demoPlugin from "./plugins/demo";
@@ -208,6 +209,9 @@ const start = async () => {
     const workerLogger = createRequestLogger(server.log);
     startWorker(workerLogger);
     console.log(`⚙️  Reply processing worker started`);
+
+    // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
+    startEscalationCron();
   } catch (err) {
     server.log.error(err);
     process.exit(1);
@@ -219,6 +223,9 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`\n${signal} received, closing server gracefully...`);
 
   try {
+    // Stop the escalation cron
+    stopEscalationCron();
+
     // Stop the reply worker first (wait for in-progress jobs)
     console.log("⏳ Stopping reply worker...");
     await stopWorker();

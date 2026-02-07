@@ -54,6 +54,8 @@ describe('Settings Service', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                commentEscalationMinutes: 90,
+                messageEscalationMinutes: 15,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
@@ -65,6 +67,44 @@ describe('Settings Service', () => {
             expect(result.userId).toBe('user_123');
             expect(result.dashboardLanguage).toBe('ar');
             expect(result.commentReplyMode).toBe('public');
+            expect(result.commentEscalationMinutes).toBe(90);
+            expect(result.messageEscalationMinutes).toBe(15);
+        });
+
+        it('should return default escalation values when fields are null', async () => {
+            const { db } = await import('../../src/db');
+
+            const mockSettings = {
+                id: 'settings_456',
+                userId: 'user_456',
+                dashboardLanguage: 'ar',
+                defaultReplyLanguage: 'ar',
+                supportedLanguages: ['en', 'ar'],
+                autoDetectLanguage: true,
+                aiEnabled: true,
+                aiModel: 'gpt-4o-mini',
+                commentReplyMode: 'public',
+                commentsAutoReply: true,
+                messagesAutoReply: true,
+                dualReplyConfig: {},
+                businessHoursOnly: false,
+                businessHoursStart: '09:00',
+                businessHoursEnd: '18:00',
+                awayMessage: null,
+                greetingMessage: null,
+                replyDelay: 0,
+                commentEscalationMinutes: null,
+                messageEscalationMinutes: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
+
+            const result = await settingsService.getSettings('user_456');
+
+            expect(result.commentEscalationMinutes).toBe(60); // default
+            expect(result.messageEscalationMinutes).toBe(30); // default
         });
 
         it('should create default settings if none exist', async () => {

@@ -225,6 +225,21 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     };
   }, [hasHydrated, queryClient, router]);
 
+  // Initialize push notifications when authenticated on native
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authToken = useAuthStore((state) => state.token);
+
+  useEffect(() => {
+    if (!hasHydrated || !isAuthenticated || !authToken) return;
+    if (typeof window === 'undefined') return;
+    const cap = (window as any).Capacitor;
+    if (!cap?.isNativePlatform?.()) return;
+
+    import('@/lib/notifications').then(({ initPushNotifications }) => {
+      initPushNotifications(authToken).catch(console.error);
+    });
+  }, [hasHydrated, isAuthenticated, authToken]);
+
   // Dedicated Deep Link Handling - Separate effect for reliability
   useEffect(() => {
     if (!hasHydrated || typeof window === "undefined") return;

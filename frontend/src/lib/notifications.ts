@@ -1,7 +1,8 @@
-/* eslint-disable no-console */
+ 
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Token, ActionPerformed, PushNotificationSchema } from '@capacitor/push-notifications';
 import axios from 'axios';
+import { toast } from 'sonner';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -110,9 +111,7 @@ function handleForegroundNotification(notification: PushNotificationSchema): voi
     const title = language === 'ar' ? (data?.titleAr || notification.title) : (data?.titleEn || notification.title);
     const body = language === 'ar' ? (data?.bodyAr || notification.body) : (data?.bodyEn || notification.body);
 
-    // For now, we'll let the notification show in the status bar
-    // In the future, could show a custom in-app banner
-    console.log('[Push] Foreground notification:', { title, body });
+    toast(title, { description: body, duration: 5000 });
 }
 
 /**

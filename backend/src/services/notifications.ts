@@ -9,7 +9,9 @@ export type NotificationType =
     | 'page_disconnected'
     | 'subscription_renewed'
     | 'trial_ending'
-    | 'flagged_reply';
+    | 'flagged_reply'
+    | 'new_comment'
+    | 'stale_comment';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -57,6 +59,18 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationP
         titleAr: 'رد يحتاج انتباهك',
         bodyEn: 'An AI reply to "{senderName}" was flagged: {reason}. Please review it.',
         bodyAr: 'تم وضع علامة على رد لـ "{senderName}": {reason}. يرجى مراجعته.',
+    },
+    new_comment: {
+        titleEn: 'New Comment',
+        titleAr: 'تعليق جديد',
+        bodyEn: 'New comment from {senderName} is waiting for your reply.',
+        bodyAr: 'تعليق جديد من {senderName} بانتظار ردك.',
+    },
+    stale_comment: {
+        titleEn: 'Unreplied Comments Need Attention',
+        titleAr: 'تعليقات بدون رد تحتاج انتباهك',
+        bodyEn: '{count} comment(s) waiting over {minutes} minutes without a reply.',
+        bodyAr: '{count} تعليق(ات) بانتظار الرد منذ أكثر من {minutes} دقيقة.',
     },
 };
 

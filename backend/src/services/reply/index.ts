@@ -224,6 +224,15 @@ export class ReplyService {
             );
 
             if (!replyText) {
+                // Notify user about pending comment that couldn't be auto-replied
+                if (page.userId) {
+                    notificationService.sendTemplateNotification(
+                        page.userId,
+                        'new_comment',
+                        { senderName: fromName || 'Unknown' },
+                        { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' }
+                    ).catch(err => this.logger.error('New comment notification failed', { err }));
+                }
                 return { success: false, commentId: comment.id, error: 'No reply generated' };
             }
 

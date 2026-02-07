@@ -82,6 +82,8 @@ export const UpdateSettingsSchema = z.object({
     greetingMessage: z.string().max(500, 'Greeting message must be less than 500 characters').optional(),
     commentReplyMode: z.enum(['public', 'private', 'dual']).optional(),
     dualReplyConfig: z.record(z.string(), z.string()).optional(),
+    commentEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
+    messageEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
 });
 
 // ==========================================

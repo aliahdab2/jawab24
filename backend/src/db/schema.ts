@@ -213,6 +213,9 @@ export const settings = pgTable('settings', {
     awayMessage: text('away_message'),
     greetingMessage: text('greeting_message'),
     replyDelay: integer('reply_delay').default(0), // seconds
+    // SLA escalation thresholds (minutes) - auto-flag unreplied items as needsAttention
+    commentEscalationMinutes: integer('comment_escalation_minutes').default(60),
+    messageEscalationMinutes: integer('message_escalation_minutes').default(30),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
