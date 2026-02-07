@@ -52,7 +52,9 @@
       "Bash(npx next lint:*)",
       "Bash(npx jest:*)",
       "Bash(npm run test:run:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npm view:*)"
     ]
   }
 }

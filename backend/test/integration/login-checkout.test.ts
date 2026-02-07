@@ -13,9 +13,8 @@ import paymentRoutes from '../../src/routes/payment';
  * 4. User is redirected to checkout with plan ID
  * 5. User completes Stripe checkout
  * 
- * NOTE: These tests are currently skipped because they require
- * full app initialization with all routes and middleware.
- * The core login functionality is tested in test/routes/auth.test.ts
+ * NOTE: These tests use mocked services with Fastify's inject API.
+ * The core login functionality is also tested in test/routes/auth.test.ts
  */
 
 // Mock services
@@ -35,6 +34,7 @@ vi.mock('../../src/services/auth', () => ({
         verifyToken: vi.fn(),
         getUserById: vi.fn(),
     },
+    ACCESS_TOKEN_EXPIRY: 900000,
 }));
 
 vi.mock('../../src/services/stripe', () => ({
@@ -46,6 +46,46 @@ vi.mock('../../src/services/stripe', () => ({
 vi.mock('../../src/services/pages', () => ({
     pagesService: {
         syncFromFacebook: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+vi.mock('../../src/services/settings', () => ({
+    settingsService: {
+        getSettings: vi.fn().mockResolvedValue({ dashboardLanguage: 'en' }),
+    },
+}));
+
+vi.mock('../../src/services/refreshToken', () => ({
+    refreshTokenService: {
+        createRefreshToken: vi.fn().mockResolvedValue('mock_refresh_token'),
+    },
+}));
+
+vi.mock('../../src/services/cookies', () => ({
+    cookiesService: {
+        setAuthCookies: vi.fn(),
+        setRefreshTokenCookie: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/utils/sanctions', () => ({
+    isSanctionedGeo: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock('../../src/middleware/geo', () => ({
+    shouldBlockUnknownGeo: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock('../../src/config', () => ({
+    config: {
+        frontendUrl: 'http://localhost:3001',
+        stripe: { webhookSecret: 'whsec_test' },
+    },
+}));
+
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: {
+        sendTemplateNotification: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -88,13 +128,13 @@ vi.mock('../../src/middleware/auth', () => ({
     },
 }));
 
-describe.skip('Integration: Login → Checkout Flow', () => {
+describe('Integration: Login → Checkout Flow', () => {
     let app: FastifyInstance;
 
     beforeEach(async () => {
         app = fastify();
         app.register(authRoutes);
-        app.register(paymentRoutes);
+        app.register(paymentRoutes, { prefix: '/payment' });
         await app.ready();
         vi.clearAllMocks();
     });
