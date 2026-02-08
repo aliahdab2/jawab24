@@ -81,7 +81,7 @@ const SettingsPage: NextPageWithLayout = () => {
     aiEnabled: true,
     aiModel: 'gpt-4o-mini',
     notificationsEnabled: true,
-    emailNotifications: true,
+    pushNotifications: true,
     webhookRetries: 3,
     commentReplyMode: 'public',
     commentsAutoReply: true,
@@ -565,65 +565,57 @@ const SettingsPage: NextPageWithLayout = () => {
                 </div>
               </Card>
 
-              {/* Notifications */}
-              <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 flex flex-col justify-between">
-                <div className="flex items-center justify-between">
+              {/* Notifications & Reminders */}
+              <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3">
+                <div className="flex items-center justify-between mb-4 landscape:mb-3">
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
                       <Bell className="w-4 h-4 opacity-50" />
                     </div>
                     <div className="text-start">
                       <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.notifications')}</h4>
-                      <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.emailNotifications')}</p>
+                      <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.pushNotifications')}</p>
                     </div>
                   </div>
                   <Toggle enabled={settings.notificationsEnabled} onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })} />
                 </div>
+                {settings.notificationsEnabled && (
+                <>
+                <p className="text-xs text-surface-400 font-medium mb-3">{t('settings.escalationDesc' as TranslationKey)}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.commentEscalation' as TranslationKey)}</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={5}
+                        max={1440}
+                        value={settings.commentEscalationMinutes}
+                        onChange={(e) => setSettings({ ...settings, commentEscalationMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value) || 60)) })}
+                        className="w-full py-2.5 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
+                      />
+                      <span className="text-sm font-bold text-surface-400 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.messageEscalation' as TranslationKey)}</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={5}
+                        max={1440}
+                        value={settings.messageEscalationMinutes}
+                        onChange={(e) => setSettings({ ...settings, messageEscalationMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value) || 30)) })}
+                        className="w-full py-2.5 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
+                      />
+                      <span className="text-sm font-bold text-surface-400 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
+                    </div>
+                  </div>
+                </div>
+                </>
+                )}
               </Card>
             </div>
-
-            {/* SLA Escalation */}
-            <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3">
-              <div className="flex items-center gap-4 mb-4 landscape:mb-3">
-                <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center landscape:w-10 landscape:h-10">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <div className="text-start">
-                  <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.escalation' as TranslationKey)}</h4>
-                  <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.escalationDesc' as TranslationKey)}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.commentEscalation' as TranslationKey)}</label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min={5}
-                      max={1440}
-                      value={settings.commentEscalationMinutes}
-                      onChange={(e) => setSettings({ ...settings, commentEscalationMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value) || 60)) })}
-                      className="w-full py-3 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
-                    />
-                    <span className="text-sm font-bold text-surface-400 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.messageEscalation' as TranslationKey)}</label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min={5}
-                      max={1440}
-                      value={settings.messageEscalationMinutes}
-                      onChange={(e) => setSettings({ ...settings, messageEscalationMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value) || 30)) })}
-                      className="w-full py-3 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
-                    />
-                    <span className="text-sm font-bold text-surface-400 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
-                  </div>
-                </div>
-              </div>
-            </Card>
 
             {/* Messaging */}
             <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-6 landscape:gap-4">
