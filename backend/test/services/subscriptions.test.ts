@@ -760,16 +760,18 @@ describe('Subscriptions Service', () => {
     });
 
     describe('canAddRule - integration', () => {
-        it('should reject when trial is expired', async () => {
+        it('should reject when subscription expired beyond grace period', async () => {
             const { db } = await import('../../src/db');
 
-            const expiredTrial = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+            // Period ended 10 days ago — beyond the 7-day grace period
+            const expiredPeriodEnd = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
             const mockOrderBy = vi.fn().mockReturnValue({
                 limit: vi.fn().mockResolvedValue([{
                     subscription: {
                         id: 'sub_1', userId: 'user_1', planId: 'plan_1',
-                        status: 'trialing', trialEndsAt: expiredTrial,
-                        currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
+                        status: 'past_due', trialEndsAt: null,
+                        currentPeriodStart: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
+                        currentPeriodEnd: expiredPeriodEnd,
                         canceledAt: null, cancelReason: null,
                         createdAt: new Date(), updatedAt: new Date(),
                     },
@@ -793,7 +795,7 @@ describe('Subscriptions Service', () => {
 
             const result = await subscriptionsService.canAddRule('user_1');
             expect(result.allowed).toBe(false);
-            expect(result.reason).toContain('Trial has expired');
+            expect(result.reason).toContain('expired');
         });
 
         it('should allow when under rule limit', async () => {
