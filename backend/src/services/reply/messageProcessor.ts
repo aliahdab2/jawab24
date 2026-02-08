@@ -50,10 +50,15 @@ export class MessageProcessor {
     ): Promise<MessageResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_message` as Pipeline;
+        const t0 = Date.now();
+        const lap = (label: string) => {
+            this.logger.info(`[${platform}] ⏱ ${label}`, { ms: Date.now() - t0, messageId: platformMessageId });
+        };
 
         try {
             // 1. Validate page
             const page = await adapter.getPage(platformPageId);
+            lap('1-getPage');
             if (!page) {
                 pipelineMetrics.record(pipeline, 'page_not_found');
                 return { success: false, messageId: platformMessageId, error: 'Page not found' };
@@ -78,6 +83,7 @@ export class MessageProcessor {
             } catch {
                 // Non-critical — continue without sender name
             }
+            lap('3-fetchSenderName');
 
             // 4. Store incoming message
             const { message: storedMessage, isNew } = await adapter.storeIncomingMessage(
@@ -87,10 +93,12 @@ export class MessageProcessor {
                 messageText,
                 senderName,
             );
+            lap('4-storeMessage');
 
             // 5. Debounce: skip if a newer unreplied message exists from the same sender
             const internalMessageId = adapter.getInternalMessageId(platformMessageId);
             const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, internalMessageId);
+            lap('5-debounce');
             if (hasNewer) {
                 pipelineMetrics.record(pipeline, 'debounce_skipped');
                 this.logger.info(`[${platform}] Skipping — newer message pending`, { messageId: platformMessageId, senderId });
@@ -99,6 +107,7 @@ export class MessageProcessor {
 
             // 6. Handoff pause check
             const isPaused = await messagesService.isPaused(page.id, senderId);
+            lap('6-isPaused');
             if (isPaused) {
                 pipelineMetrics.record(pipeline, 'handoff_active');
                 this.logger.info(`[${platform}] Skipping — handoff active`, { senderId, pageId: page.id });
@@ -107,6 +116,7 @@ export class MessageProcessor {
 
             // 7. Rate limit check
             const rateCheck = await rateLimiter.check(page.id, senderId, 'message');
+            lap('7-rateLimit');
             if (!rateCheck.allowed) {
                 pipelineMetrics.record(pipeline, 'rate_limited');
                 this.logger.info(`[${platform}] Message rate limited`, { senderId, count: rateCheck.count });
@@ -115,6 +125,7 @@ export class MessageProcessor {
 
             // 8. User settings check
             const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(userId);
+            lap('8-settingsCheck');
             if (!isMessagesEnabled) {
                 const awayMessage = await settingsService.getAwayMessage(userId);
                 if (awayMessage && isNew) {
@@ -140,9 +151,11 @@ export class MessageProcessor {
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }
+            lap('10-replyDelay');
 
             // 11. Consolidate all unreplied messages from this sender
             const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
+            lap('11-consolidate');
             const consolidatedText = unrepliedMessages.length > 1
                 ? unrepliedMessages.map(m => m.message).join('\n')
                 : messageText;
@@ -161,6 +174,7 @@ export class MessageProcessor {
                     },
                     userSettings.aiEnabled ?? false,
                 );
+            lap('12-generateReply');
 
             if (!replyText) {
                 pipelineMetrics.record(pipeline, 'no_reply_generated');
@@ -175,12 +189,14 @@ export class MessageProcessor {
                 this.logger.error(`[${platform}] Failed to send reply`, { error: String(error) });
                 return { success: false, messageId: platformMessageId, error: 'Failed to send reply' };
             }
+            lap('13-sendReply');
 
             // 14. Mark as replied
             await adapter.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent);
 
             // 15. Store outgoing message
             await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
+            lap('15-postReply');
 
             // 16. Mark older debounced messages as replied
             if (unrepliedMessages.length > 1) {
@@ -203,6 +219,7 @@ export class MessageProcessor {
             }
 
             pipelineMetrics.record(pipeline, 'success');
+            lap('DONE');
             return { success: true, messageId: platformMessageId, replyText, replyMethod };
 
         } catch (error) {
