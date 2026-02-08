@@ -64,7 +64,7 @@ vi.mock('../../src/services/instagram', () => ({
 
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
-        isManuallyPaused: vi.fn(),
+        isPaused: vi.fn(),
         hasNewerUnrepliedMessage: vi.fn(),
         storeOutgoingMessage: vi.fn(),
     },
@@ -210,7 +210,7 @@ describe('InstagramReplyService', () => {
         vi.mocked(instagramService.replyToComment).mockResolvedValue('reply-id');
         vi.mocked(instagramService.sendDirectMessage).mockResolvedValue('msg-id');
         vi.mocked(settingsService.getAwayMessage).mockResolvedValue(null);
-        vi.mocked(messagesService.isManuallyPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
     });

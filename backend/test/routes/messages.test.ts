@@ -5,6 +5,22 @@ import { messagesService } from '../../src/services/messages';
 
 // Mock services
 vi.mock('../../src/services/messages');
+vi.mock('../../src/services/pages', () => ({
+    pagesService: {
+        getPage: vi.fn().mockResolvedValue({ id: 'page_1', userId: 'test_user_id' }),
+    },
+}));
+vi.mock('../../src/services/settings', () => ({
+    settingsService: {
+        getSettings: vi.fn().mockResolvedValue({ handoffPauseDurationMinutes: 30 }),
+    },
+}));
+vi.mock('../../src/services/facebook', () => ({
+    facebookService: {},
+}));
+vi.mock('../../src/services/instagram', () => ({
+    instagramService: {},
+}));
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: async (req: any) => {
         req.user = { id: 'test_user_id', userId: 'test_user_id', facebookId: 'test_fb_id' };
@@ -117,6 +133,91 @@ describe('Messages Routes', () => {
             const response = await app.inject({
                 method: 'GET',
                 url: '/messages/conversation/sender_123'
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(JSON.parse(response.payload)).toEqual({ error: 'pageId is required' });
+        });
+    });
+
+    describe('POST /messages/conversation/:senderId/pause', () => {
+        it('should pause conversation', async () => {
+            vi.mocked(messagesService.pauseConversation).mockResolvedValue({
+                pausedUntil: new Date('2026-02-07T12:30:00Z')
+            });
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/messages/conversation/sender_123/pause',
+                payload: { pageId: 'page_1' }
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.pausedUntil).toBeDefined();
+        });
+
+        it('should return 400 when pageId is missing', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/messages/conversation/sender_123/pause',
+                payload: {}
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(JSON.parse(response.payload)).toEqual({ error: 'pageId is required' });
+        });
+    });
+
+    describe('POST /messages/conversation/:senderId/resume', () => {
+        it('should resume conversation', async () => {
+            vi.mocked(messagesService.resumeConversation).mockResolvedValue(undefined);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/messages/conversation/sender_123/resume',
+                payload: { pageId: 'page_1' }
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.payload)).toEqual({ success: true });
+        });
+
+        it('should return 400 when pageId is missing', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/messages/conversation/sender_123/resume',
+                payload: {}
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(JSON.parse(response.payload)).toEqual({ error: 'pageId is required' });
+        });
+    });
+
+    describe('GET /messages/conversation/:senderId/pause-status', () => {
+        it('should return pause status', async () => {
+            vi.mocked(messagesService.getPauseStatus).mockResolvedValue({
+                paused: true,
+                pausedUntil: new Date('2026-02-07T12:30:00Z'),
+                remainingMinutes: 25
+            });
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/messages/conversation/sender_123/pause-status?pageId=page_1'
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.paused).toBe(true);
+            expect(payload.remainingMinutes).toBe(25);
+        });
+
+        it('should return 400 when pageId is missing', async () => {
+            const response = await app.inject({
+                method: 'GET',
+                url: '/messages/conversation/sender_123/pause-status'
             });
 
             expect(response.statusCode).toBe(400);

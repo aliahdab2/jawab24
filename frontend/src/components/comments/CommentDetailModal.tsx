@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { useTranslation } from '@/i18n';
-import { commentsApi, aiApi, subscriptionApi } from '@/lib/api';
+import { commentsApi, aiApi, subscriptionApi, messagesApi } from '@/lib/api';
 import type { Comment } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import {
@@ -15,6 +15,8 @@ import {
   X,
   ExternalLink,
   CheckCircle,
+  PauseCircle,
+  PlayCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -47,6 +49,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [isReplyGenerated, setIsReplyGenerated] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Pause state
+  const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
+  const [isPauseLoading, setIsPauseLoading] = useState(false);
+
   // Auto-focus textarea on open
   useEffect(() => {
     // Small timeout to allow modal animation to complete
@@ -74,6 +80,34 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       fetchLimits();
     }
   }, [fetchLimits, mode]);
+
+  // Fetch pause status for this commenter
+  useEffect(() => {
+    if (!comment.fromId || !comment.pageId) return;
+    messagesApi.getPauseStatus(comment.fromId, comment.pageId)
+      .then(({ data }) => setPauseStatus(data))
+      .catch(() => {}); // non-critical
+  }, [comment.fromId, comment.pageId]);
+
+  const handleTogglePause = async () => {
+    if (!comment.fromId || !comment.pageId) return;
+    setIsPauseLoading(true);
+    try {
+      if (pauseStatus?.paused) {
+        await messagesApi.resumeConversation(comment.fromId, comment.pageId);
+        setPauseStatus({ paused: false, pausedUntil: null, remainingMinutes: null });
+        toast.success(t('messages.resumeSuccess'));
+      } else {
+        const { data } = await messagesApi.pauseConversation(comment.fromId, comment.pageId);
+        setPauseStatus({ paused: true, pausedUntil: data.pausedUntil, remainingMinutes: 30 });
+        toast.success(t('messages.pauseSuccess'));
+      }
+    } catch {
+      toast.error(pauseStatus?.paused ? t('messages.resumeFailed') : t('messages.pauseFailed'));
+    } finally {
+      setIsPauseLoading(false);
+    }
+  };
 
   // Check if comment needs human attention
   const checkNeedsAttention = (c: Comment): boolean => {
@@ -191,6 +225,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {pauseStatus?.paused && (
+              <Badge variant="info" className="bg-violet-100 text-violet-700">
+                <PauseCircle className="w-3 h-3 mr-1" />
+                {t('messages.smartReplyPaused')}
+              </Badge>
+            )}
             {needsAttention && (
               <Badge variant="warning">
                 <AlertTriangle className="w-3 h-3 mr-1" />
@@ -336,6 +376,22 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   <ExternalLink className="w-4 h-4" />
                   {t('comments.viewOnFacebook')}
                 </a>
+              )}
+              {comment.fromId && comment.pageId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleTogglePause}
+                  disabled={isPauseLoading}
+                  className={pauseStatus?.paused
+                    ? 'text-emerald-600 hover:bg-emerald-50'
+                    : 'text-violet-600 hover:bg-violet-50'}
+                  icon={pauseStatus?.paused
+                    ? <PlayCircle className="w-4 h-4" />
+                    : <PauseCircle className="w-4 h-4" />}
+                >
+                  {pauseStatus?.paused ? t('messages.resumeSmartReply') : t('messages.pauseSmartReply')}
+                </Button>
               )}
             </div>
           </div>

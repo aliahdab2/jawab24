@@ -1,6 +1,6 @@
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, gt } from 'drizzle-orm';
 import { db } from '../db';
-import { messages, pages } from '../db/schema';
+import { messages, pages, conversationPauses } from '../db/schema';
 import { ConversationMessage } from '../types';
 import { Message } from '@jawab24/shared';
 
@@ -387,9 +387,44 @@ export class MessagesService {
 
     /**
      * Check if auto-reply should be paused for this sender.
-     * Returns true if a manual outgoing reply was sent within the given window.
+     * Checks both explicit pauses (conversation_pauses table) and
+     * implicit pauses (recent manual reply within time window).
      */
-    async isManuallyPaused(
+    async isPaused(
+        pageId: string,
+        senderId: string,
+        implicitPauseMinutes: number = 30
+    ): Promise<boolean> {
+        // Check explicit pause first (faster — single row lookup)
+        const explicitPause = await this.getExplicitPause(pageId, senderId);
+        if (explicitPause) return true;
+
+        // Fallback: check implicit pause (recent manual reply)
+        return this._hasRecentManualReply(pageId, senderId, implicitPauseMinutes);
+    }
+
+    /**
+     * Check if there's an active explicit pause for this conversation.
+     */
+    private async getExplicitPause(
+        pageId: string,
+        senderId: string
+    ): Promise<{ pausedUntil: Date } | null> {
+        const now = new Date();
+        const pause = await db.query.conversationPauses.findFirst({
+            where: and(
+                eq(conversationPauses.pageId, pageId),
+                eq(conversationPauses.senderId, senderId),
+                gt(conversationPauses.pausedUntil, now)
+            ),
+        });
+        return pause ? { pausedUntil: pause.pausedUntil } : null;
+    }
+
+    /**
+     * Legacy implicit pause: check if a manual outgoing reply was sent within the given window.
+     */
+    private async _hasRecentManualReply(
         pageId: string,
         senderId: string,
         pauseMinutes: number = 30
@@ -408,6 +443,64 @@ export class MessagesService {
         });
 
         return !!recentManual;
+    }
+
+    /**
+     * Explicitly pause smart replies for a conversation.
+     */
+    async pauseConversation(
+        pageId: string,
+        senderId: string,
+        durationMinutes: number = 30
+    ): Promise<{ pausedUntil: Date }> {
+        const pausedUntil = new Date(Date.now() + durationMinutes * 60 * 1000);
+
+        // Upsert: delete existing pause for this sender, then insert new one
+        await db.delete(conversationPauses)
+            .where(and(
+                eq(conversationPauses.pageId, pageId),
+                eq(conversationPauses.senderId, senderId)
+            ));
+
+        await db.insert(conversationPauses)
+            .values({ pageId, senderId, pausedUntil });
+
+        return { pausedUntil };
+    }
+
+    /**
+     * Resume smart replies for a conversation (remove explicit pause).
+     */
+    async resumeConversation(
+        pageId: string,
+        senderId: string
+    ): Promise<void> {
+        await db.delete(conversationPauses)
+            .where(and(
+                eq(conversationPauses.pageId, pageId),
+                eq(conversationPauses.senderId, senderId)
+            ));
+    }
+
+    /**
+     * Get the current pause status for a conversation.
+     */
+    async getPauseStatus(
+        pageId: string,
+        senderId: string
+    ): Promise<{ paused: boolean; pausedUntil: Date | null; remainingMinutes: number | null }> {
+        const explicitPause = await this.getExplicitPause(pageId, senderId);
+        if (explicitPause) {
+            const remaining = Math.max(0, Math.round(
+                (explicitPause.pausedUntil.getTime() - Date.now()) / 60000
+            ));
+            return {
+                paused: true,
+                pausedUntil: explicitPause.pausedUntil,
+                remainingMinutes: remaining,
+            };
+        }
+        return { paused: false, pausedUntil: null, remainingMinutes: null };
     }
 
     /**

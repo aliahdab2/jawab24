@@ -11,7 +11,6 @@ import {
   MessageSquare,
   MessageCircle,
   Zap,
-  Clock,
   FileText,
   Sparkles,
   Crown,
@@ -90,7 +89,6 @@ const DashboardPage: NextPageWithLayout = () => {
     // Comment stats
     totalComments: 0,
     repliedToday: 0,
-    pendingReplies: 0,
     needsAttention: 0,
     activePages: 0,
     commentsToday: 0,
@@ -100,7 +98,6 @@ const DashboardPage: NextPageWithLayout = () => {
     // Message stats
     totalMessages: 0,
     messagesReplied: 0,
-    messagesPending: 0,
     messagesNeedsAttention: 0,
     messagesRepliedToday: 0
   });
@@ -195,7 +192,6 @@ const DashboardPage: NextPageWithLayout = () => {
       setStatsData({
         totalComments: stats.total,
         repliedToday: stats.repliedToday,
-        pendingReplies: stats.unreplied,
         needsAttention: stats.needsAttention,
         activePages,
         commentsToday,
@@ -205,7 +201,6 @@ const DashboardPage: NextPageWithLayout = () => {
         // Message stats
         totalMessages: msgStats.total,
         messagesReplied: msgStats.replied,
-        messagesPending: msgStats.pending,
         messagesNeedsAttention: messagesNeedsAttention,
         messagesRepliedToday: msgStats.replied // Using total as proxy
       });
@@ -266,14 +261,6 @@ const DashboardPage: NextPageWithLayout = () => {
       href: '/comments'
     },
     {
-      id: 'pending',
-      nameKey: 'comments.pending' as TranslationKey,
-      value: statsData.pendingReplies.toLocaleString(),
-      icon: Clock,
-      color: 'amber' as const,
-      href: '/comments?filter=pending'
-    },
-    {
       id: 'replied_today',
       nameKey: 'comments.repliedToday' as TranslationKey,
       value: statsData.repliedToday.toLocaleString(),
@@ -300,14 +287,6 @@ const DashboardPage: NextPageWithLayout = () => {
       icon: MessageCircle,
       color: 'brand' as const,
       href: '/messages'
-    },
-    {
-      id: 'pending',
-      nameKey: 'comments.pending' as TranslationKey,
-      value: statsData.messagesPending.toLocaleString(),
-      icon: Clock,
-      color: 'amber' as const,
-      href: '/messages?filter=pending'
     },
     {
       id: 'replied_today',
@@ -380,7 +359,7 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('common.viewAll')} →
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-3 gap-3 sm:gap-4">
           {commentStats.map((stat, i) => (
             <StatCard
               key={stat.id}
@@ -406,7 +385,7 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('common.viewAll')} →
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-3 gap-3 sm:gap-4">
           {messageStats.map((stat, i) => (
             <StatCard
               key={stat.id}

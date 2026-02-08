@@ -3,6 +3,7 @@ import { messagesService } from '../services/messages';
 import { pagesService } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
+import { settingsService } from '../services/settings';
 
 /** Authenticated request with user info */
 interface AuthenticatedRequest extends FastifyRequest {
@@ -163,6 +164,107 @@ export class MessagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to send reply' });
+        }
+    }
+
+    /**
+     * Pause smart replies for a conversation
+     * POST /messages/conversation/:senderId/pause
+     */
+    async pauseConversation(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Body: { pageId: string; durationMinutes?: number };
+        }>,
+        reply: FastifyReply
+    ) {
+        const userId = (request as AuthenticatedRequest).user.userId;
+        const { senderId } = request.params;
+        const { pageId, durationMinutes } = request.body;
+
+        if (!pageId) {
+            return reply.status(400).send({ error: 'pageId is required' });
+        }
+
+        try {
+            // Verify user owns the page
+            const page = await pagesService.getPage(userId, pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+            }
+
+            // Use custom duration or fall back to user's default setting
+            let duration = durationMinutes;
+            if (!duration) {
+                const userSettings = await settingsService.getSettings(userId);
+                duration = userSettings.handoffPauseDurationMinutes;
+            }
+
+            const result = await messagesService.pauseConversation(page.id, senderId, duration);
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to pause conversation' });
+        }
+    }
+
+    /**
+     * Resume smart replies for a conversation
+     * POST /messages/conversation/:senderId/resume
+     */
+    async resumeConversation(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Body: { pageId: string };
+        }>,
+        reply: FastifyReply
+    ) {
+        const userId = (request as AuthenticatedRequest).user.userId;
+        const { senderId } = request.params;
+        const { pageId } = request.body;
+
+        if (!pageId) {
+            return reply.status(400).send({ error: 'pageId is required' });
+        }
+
+        try {
+            const page = await pagesService.getPage(userId, pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+            }
+
+            await messagesService.resumeConversation(page.id, senderId);
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to resume conversation' });
+        }
+    }
+
+    /**
+     * Get pause status for a conversation
+     * GET /messages/conversation/:senderId/pause-status
+     */
+    async getPauseStatus(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Querystring: { pageId?: string };
+        }>,
+        reply: FastifyReply
+    ) {
+        const { senderId } = request.params;
+        const { pageId } = request.query;
+
+        if (!pageId) {
+            return reply.status(400).send({ error: 'pageId is required' });
+        }
+
+        try {
+            const status = await messagesService.getPauseStatus(pageId, senderId);
+            return reply.send(status);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to get pause status' });
         }
     }
 }

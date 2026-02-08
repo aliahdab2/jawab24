@@ -38,5 +38,30 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, messagesController.reply);
+
+        // Conversation pause / human handoff endpoints
+        protectedRoutes.post('/messages/conversation/:senderId/pause', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Pause smart replies for a conversation',
+                security: auth,
+            },
+        }, messagesController.pauseConversation);
+
+        protectedRoutes.post('/messages/conversation/:senderId/resume', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Resume smart replies for a conversation',
+                security: auth,
+            },
+        }, messagesController.resumeConversation);
+
+        protectedRoutes.get('/messages/conversation/:senderId/pause-status', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Get pause status for a conversation',
+                security: auth,
+            },
+        }, messagesController.getPauseStatus);
     });
 }

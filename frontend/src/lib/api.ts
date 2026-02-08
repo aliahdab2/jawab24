@@ -288,6 +288,18 @@ export const messagesApi = {
 
   reply: (messageId: string, replyText: string) =>
     api.post<Message>(`/messages/${messageId}/reply`, { replyText }),
+
+  // Conversation pause / human handoff
+  pauseConversation: (senderId: string, pageId: string, durationMinutes?: number) =>
+    api.post<{ pausedUntil: string }>(`/messages/conversation/${senderId}/pause`, { pageId, durationMinutes }),
+
+  resumeConversation: (senderId: string, pageId: string) =>
+    api.post<{ success: boolean }>(`/messages/conversation/${senderId}/resume`, { pageId }),
+
+  getPauseStatus: (senderId: string, pageId: string) =>
+    api.get<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null }>(
+      `/messages/conversation/${senderId}/pause-status`, { params: { pageId } }
+    ),
 };
 
 // AI API

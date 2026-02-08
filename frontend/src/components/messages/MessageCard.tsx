@@ -10,6 +10,7 @@ import {
   User,
   MessageCircle,
   Send,
+  PauseCircle,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -21,6 +22,7 @@ export interface Conversation {
   messages: Message[];
   lastMessage: Message;
   needsHumanAttention: boolean;
+  pauseStatus?: { paused: boolean; pausedUntil: string | null; remainingMinutes: number | null };
 }
 
 export interface MessageCardProps {
@@ -96,7 +98,14 @@ export function MessageCard({
       style={{ animationDelay: `${animationDelay}s` } as React.CSSProperties}
     >
       {/* Status Badge (top-right) */}
-      {conv.needsHumanAttention ? (
+      {conv.pauseStatus?.paused ? (
+        <div className="absolute top-4 end-4 z-10 animate-fade-in">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-violet-50 text-violet-600 text-[10px] font-bold uppercase tracking-wider border border-violet-100">
+            <PauseCircle className="w-3 h-3" />
+            {t('messages.smartReplyPaused' as any)}
+          </div>
+        </div>
+      ) : conv.needsHumanAttention ? (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100">
             <AlertTriangle className="w-3 h-3" />
