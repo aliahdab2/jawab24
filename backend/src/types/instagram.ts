@@ -67,11 +67,5 @@ export interface InstagramReplyResult {
     error?: string;
 }
 
-/** Result for Instagram message operations */
-export interface InstagramMessageResult {
-    success: boolean;
-    messageId: string;
-    replyText?: string;
-    replyMethod?: 'template' | 'ai' | 'manual';
-    error?: string;
-}
+/** Result for Instagram message operations (same as shared MessageResult) */
+export type { MessageResult as InstagramMessageResult } from '../interfaces';

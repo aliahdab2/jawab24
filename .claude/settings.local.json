@@ -65,7 +65,10 @@
       "Bash(./scripts/deploy-production.sh:*)",
       "Bash(npx drizzle-kit:*)",
       "Bash(git cherry-pick:*)",
-      "Bash(git revert:*)"
+      "Bash(git revert:*)",
+      "Bash(pip3 install:*)",
+      "Bash(git branch:*)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)"
     ]
   }
 }

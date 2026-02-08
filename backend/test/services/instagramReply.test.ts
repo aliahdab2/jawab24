@@ -11,7 +11,7 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/db/schema', () => ({
     instagramMedia: { id: 'id', instagramMediaId: 'instagramMediaId' },
     instagramComments: { id: 'id', instagramCommentId: 'instagramCommentId' },
-    messages: { id: 'id', instagramMessageId: 'instagramMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction' },
+    messages: { id: 'id', instagramMessageId: 'instagramMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction', facebookMessageId: 'facebookMessageId', message: 'message' },
 }));
 
 vi.mock('../../src/services/pages', () => ({
@@ -29,6 +29,13 @@ vi.mock('../../src/services/reply/generator', () => ({
 }));
 
 vi.mock('../../src/services/protection/rate-limiter', () => ({
+    rateLimiter: {
+        check: vi.fn(),
+        setLogger: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/protection', () => ({
     rateLimiter: {
         check: vi.fn(),
         setLogger: vi.fn(),
@@ -69,6 +76,7 @@ vi.mock('../../src/services/messages', () => ({
         storeOutgoingMessage: vi.fn(),
         getUnrepliedFromSender: vi.fn(),
         markOlderMessagesAsReplied: vi.fn(),
+        markAsReplied: vi.fn(),
     },
 }));
 
@@ -82,7 +90,7 @@ vi.mock('drizzle-orm', () => ({
 import { InstagramReplyService } from '../../src/services/instagramReply';
 import { pagesService } from '../../src/services/pages';
 import { replyGenerator } from '../../src/services/reply/generator';
-import { rateLimiter } from '../../src/services/protection/rate-limiter';
+import { rateLimiter } from '../../src/services/protection';
 import { settingsService } from '../../src/services/settings';
 import { instagramService } from '../../src/services/instagram';
 import { messagesService } from '../../src/services/messages';
@@ -97,6 +105,8 @@ describe('InstagramReplyService', () => {
         name: 'Test Page',
         accessToken: 'page-token',
         instagramAutoReplyEnabled: true,
+        instagramAccountId: 'ig-1',
+        instagramAccountId: 'ig-1',
         knowledgeBase: 'Some KB',
     };
 
@@ -120,21 +130,15 @@ describe('InstagramReplyService', () => {
         });
 
         mockWhere.mockImplementation(() => {
-            // Calls: 1=findOrCreateMedia(storeComment), 2=storeComment check,
-            // 3=findOrCreateMedia(processComment), 4=check existing comment
             if (selectCallCount <= 1) {
-                // findOrCreateMedia in storeComment
                 return Promise.resolve(existingMedia ? [existingMedia] : []);
             }
             if (selectCallCount === 2) {
-                // storeComment existing check
                 return Promise.resolve(existingComment ? [existingComment] : []);
             }
             if (selectCallCount === 3) {
-                // findOrCreateMedia in processComment
                 return Promise.resolve([existingMedia || { id: 'media-uuid', autoReplyEnabled: mediaAutoReply, caption: 'test' }]);
             }
-            // check existing comment in processComment
             return Promise.resolve(existingComment ? [existingComment] : []);
         });
 
@@ -157,22 +161,12 @@ describe('InstagramReplyService', () => {
         const { existingMessage } = opts;
 
         const mockSet = vi.fn();
-
-        let selectCallCount = 0;
         const mockFrom = vi.fn().mockImplementation(() => {
-            selectCallCount++;
-            const currentCall = selectCallCount;
-
-            const whereResult = {
-                then: (resolve: any) => resolve(currentCall === 1
-                    ? (existingMessage ? [existingMessage] : [])
-                    : []),
-                orderBy: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue([]),
-                }),
+            return {
+                where: vi.fn().mockResolvedValue(
+                    existingMessage ? [existingMessage] : [],
+                ),
             };
-
-            return { where: vi.fn().mockReturnValue(whereResult) };
         });
 
         mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
@@ -217,6 +211,7 @@ describe('InstagramReplyService', () => {
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([{ id: 'msg-uuid', message: 'hello' }]);
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined);
     });
 
     describe('setLogger', () => {
@@ -321,7 +316,7 @@ describe('InstagramReplyService', () => {
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
             expect(result.success).toBe(false);
-            expect(result.error).toBe('Instagram auto-reply disabled for this page');
+            expect(result.error).toContain('Auto-reply disabled');
         });
 
         it('should return error when page has no userId', async () => {
@@ -405,8 +400,50 @@ describe('InstagramReplyService', () => {
             expect(result.error).toBe('No reply generated');
             expect(replyGenerator.generateForMessage).toHaveBeenCalledWith(
                 expect.objectContaining({ userId: 'user-uuid', text: 'hello' }),
-                false
+                false,
             );
+        });
+
+        it('should process message successfully through shared pipeline', async () => {
+            setupDbForMessage();
+
+            const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
+
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('AI generated reply');
+            expect(result.replyMethod).toBe('ai');
+            expect(messagesService.markAsReplied).toHaveBeenCalled();
+            expect(messagesService.storeOutgoingMessage).toHaveBeenCalled();
+        });
+
+        it('should skip when newer message is pending (debounce)', async () => {
+            vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(true);
+            setupDbForMessage();
+
+            const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
+
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('newer message pending');
+        });
+
+        it('should skip when handoff is active', async () => {
+            vi.mocked(messagesService.isPaused).mockResolvedValue(true);
+            setupDbForMessage();
+
+            const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Handoff active');
+        });
+
+        it('should skip when rate limited', async () => {
+            vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: false, count: 11 });
+            setupDbForMessage();
+
+            const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Rate limited');
         });
     });
 });

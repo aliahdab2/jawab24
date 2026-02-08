@@ -29,14 +29,8 @@ export interface ReplyResult {
     error?: string;
 }
 
-/** Standard result for message operations */
-export interface MessageResult {
-    success: boolean;
-    messageId: string;
-    replyText?: string;
-    replyMethod?: 'template' | 'ai' | 'manual';
-    error?: string;
-}
+/** Standard result for message operations (re-exported from interfaces) */
+export type { MessageResult } from '../interfaces';
 
 /** Result of cleanup operations */
 export interface CleanupResult {

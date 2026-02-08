@@ -1,0 +1,76 @@
+import { pagesService } from '../../pages';
+import { facebookService } from '../../facebook';
+import { messagesService } from '../../messages';
+import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
+
+/**
+ * Facebook Messenger Platform Adapter
+ *
+ * Implements platform-specific behavior for Facebook DMs.
+ */
+export class FacebookMessageAdapter implements MessagePlatformAdapter {
+    readonly platform = 'facebook' as const;
+
+    async getPage(facebookPageId: string): Promise<PlatformPage | null> {
+        const page = await pagesService.getPageByFacebookId(facebookPageId);
+        if (!page) return null;
+        return {
+            id: page.id,
+            userId: page.userId,
+            name: page.name,
+            accessToken: page.accessToken,
+            knowledgeBase: page.knowledgeBase,
+            autoReplyEnabled: page.autoReplyEnabled ?? true,
+        };
+    }
+
+    async fetchSenderName(senderId: string, accessToken: string): Promise<string | undefined> {
+        try {
+            const profile = await facebookService.getSenderProfile(senderId, accessToken);
+            return profile?.name;
+        } catch {
+            return undefined;
+        }
+    }
+
+    async storeIncomingMessage(
+        pageId: string,
+        messageId: string,
+        senderId: string,
+        text: string,
+        senderName?: string,
+    ): Promise<{ message: StoredMessage; isNew: boolean }> {
+        const { message, isNew } = await messagesService.findOrCreateFromWebhook(
+            pageId, messageId, senderId, text, senderName,
+        );
+        return {
+            message: { id: message.id, replied: message.replied },
+            isNew,
+        };
+    }
+
+    getInternalMessageId(messageId: string): string {
+        return messageId;
+    }
+
+    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
+        await facebookService.sendPrivateMessage(page.accessToken, senderId, text);
+    }
+
+    async sendAwayMessage(page: PlatformPage, senderId: string, text: string): Promise<void> {
+        await facebookService.sendPrivateMessage(page.accessToken, senderId, text);
+    }
+
+    async markAsReplied(
+        messageId: string,
+        replyText: string,
+        replyMethod: 'template' | 'ai' | 'manual',
+        needsAttention?: boolean,
+        flagReason?: string,
+        aiIntent?: string,
+    ): Promise<void> {
+        await messagesService.markAsReplied(messageId, replyText, replyMethod, needsAttention, flagReason, aiIntent);
+    }
+}
+
+export const facebookMessageAdapter = new FacebookMessageAdapter();

@@ -3,7 +3,6 @@ import { config } from '../config';
 import { ReplyJobData, ReplyJobResult, REPLY_QUEUE_NAME } from '@jawab24/shared';
 import { replyService } from '../services/reply';
 import { instagramReplyService } from '../services/instagramReply';
-import { pagesService } from '../services/pages';
 import { Logger, noopLogger } from '../types';
 
 // Connection configuration for BullMQ
@@ -173,30 +172,8 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
     });
 
     try {
-        // Pre-validation: Check if page exists and auto-reply is enabled
-        const page = await pagesService.getPageByFacebookId(job.data.pageId);
-        
-        if (!page) {
-            // Page not found - don't retry, this is a permanent failure
-            throw new UnrecoverableError(`Page not found: ${job.data.pageId}`);
-        }
-
-        // Check if auto-reply is enabled for this page (varies by job type)
-        if (jobType.includes('instagram') && !page.instagramAutoReplyEnabled) {
-            return {
-                success: false,
-                skipped: true,
-                reason: 'Instagram auto-reply disabled for this page',
-            };
-        } else if (jobType.includes('facebook') && !page.autoReplyEnabled) {
-            return {
-                success: false,
-                skipped: true,
-                reason: 'Facebook auto-reply disabled for this page',
-            };
-        }
-
         // Route to appropriate handler
+        // Page validation and auto-reply checks are handled by each service's adapter
         let result: ReplyJobResult;
 
         switch (jobType) {

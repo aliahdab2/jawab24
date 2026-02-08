@@ -5,20 +5,22 @@ import { messagesService } from './messages';
 import { replyGenerator } from './reply/generator';
 import { rateLimiter } from './protection/rate-limiter';
 import { notificationService } from './notifications';
+import { messageProcessor } from './reply/messageProcessor';
+import { instagramMessageAdapter } from './reply/adapters';
 import { detectLanguageCode } from '../utils/language';
 import { db } from '../db';
-import { instagramMedia, instagramComments, messages } from '../db/schema';
+import { instagramMedia, instagramComments } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { Logger, noopLogger, InstagramReplyResult, InstagramMessageResult } from '../types';
 
 export class InstagramReplyService {
     private logger: Logger = noopLogger;
 
-    /** Set logger for this service instance */
     setLogger(logger: Logger): void {
         this.logger = logger;
         replyGenerator.setLogger(logger);
         rateLimiter.setLogger(logger);
+        messageProcessor.setLogger(logger);
     }
 
     /**
@@ -190,195 +192,18 @@ export class InstagramReplyService {
     }
 
     /**
-     * Process an incoming Instagram DM
+     * Process an incoming Instagram DM.
+     * Delegates to the shared platform-agnostic pipeline via the Instagram adapter.
      */
     async processMessage(
         instagramAccountId: string,
         senderId: string,
         messageText: string,
-        messageId: string
+        messageId: string,
     ): Promise<InstagramMessageResult> {
-        try {
-            // 1. Get page by Instagram Account ID
-            const page = await pagesService.getPageByInstagramId(instagramAccountId);
-            if (!page) {
-                return { success: false, messageId, error: 'Page not found' };
-            }
-
-            if (!page.instagramAutoReplyEnabled) {
-                return { success: false, messageId, error: 'Instagram auto-reply disabled for this page' };
-            }
-
-            // Ensure page has an associated user
-            if (!page.userId) {
-                return { success: false, messageId, error: 'Page has no associated user' };
-            }
-            const msgPageUserId = page.userId;
-
-            // 2. Check user settings for messages auto-reply
-            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(msgPageUserId);
-
-            // 3. Store the incoming message
-            const storedMessage = await this.storeMessage(
-                page.id,
-                messageId,
-                senderId,
-                messageText
-            );
-
-            if (!isMessagesEnabled) {
-                // Send away message if configured
-                const awayMessage = await settingsService.getAwayMessage(msgPageUserId);
-                if (awayMessage) {
-                    try {
-                        await instagramService.sendDirectMessage(
-                            instagramAccountId,
-                            senderId,
-                            awayMessage,
-                            page.accessToken
-                        );
-                    } catch {
-                        this.logger.debug('[Instagram] Failed to send away message - may not be able to message this user');
-                    }
-                }
-                return { success: false, messageId, error: 'Messages auto-reply disabled' };
-            }
-
-            // 4. Skip if already replied
-            if (storedMessage.replied) {
-                return { success: false, messageId, error: 'Message already replied' };
-            }
-
-            // 4.5 Handoff pause
-            const isPaused = await messagesService.isPaused(page.id, senderId);
-            if (isPaused) {
-                this.logger.info('[Instagram] Skipping DM — handoff active', { senderId });
-                return { success: false, messageId, error: 'Handoff active' };
-            }
-
-            // 4.6 Rate limiting
-            const rateCheck = await rateLimiter.check(page.id, senderId, 'message');
-            if (!rateCheck.allowed) {
-                this.logger.info('[Instagram] Message rate limited', { senderId });
-                return { success: false, messageId, error: 'Rate limited' };
-            }
-
-            // 4.7 Debounce — skip if a newer unreplied message exists
-            const facebookMessageId = `ig_${messageId}`;
-            const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, facebookMessageId);
-            if (hasNewer) {
-                this.logger.info('[Instagram] Skipping — newer message pending', { messageId });
-                return { success: false, messageId, error: 'Skipped: newer message pending' };
-            }
-
-            // 5. Get reply delay
-            const replyDelay = await settingsService.getReplyDelay(msgPageUserId);
-            if (replyDelay > 0) {
-                await this.delay(replyDelay * 1000);
-            }
-
-            // 5.5 Consolidate all unreplied messages from this sender into one prompt
-            const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
-            const consolidatedText = unrepliedMessages.length > 1
-                ? unrepliedMessages.map(m => m.message).join('\n')
-                : messageText;
-
-            // 6. Generate reply via unified generator (template matching + AI + subscription limits)
-            const userSettings = await settingsService.getSettings(msgPageUserId);
-            const genResult = await replyGenerator.generateForMessage(
-                {
-                    userId: msgPageUserId,
-                    text: consolidatedText,
-                    pageName: page.name || undefined,
-                    knowledgeBase: page.knowledgeBase || undefined,
-                    pageId: page.id,
-                    senderId,
-                },
-                userSettings.aiEnabled ?? false
-            );
-            const replyText = genResult.replyText;
-            const replyMethod = genResult.replyMethod;
-            const needsAttention = genResult.needsAttention ?? false;
-            const flagReason = genResult.flagReason;
-            const aiIntent = genResult.aiIntent;
-
-            // 7. If still no reply, skip
-            if (!replyText) {
-                return { success: false, messageId, error: 'No reply generated' };
-            }
-
-            // 8. Send reply to Instagram
-            try {
-                await instagramService.sendDirectMessage(
-                    instagramAccountId,
-                    senderId,
-                    replyText,
-                    page.accessToken
-                );
-            } catch (error) {
-                this.logger.error('[Instagram] Failed to send DM reply', { error: String(error) });
-                return {
-                    success: false,
-                    messageId,
-                    error: 'Failed to send reply - user may need to message first'
-                };
-            }
-
-            // 9. Mark message as replied
-            await db
-                .update(messages)
-                .set({
-                    replied: true,
-                    replyText,
-                    replyMethod,
-                    needsAttention,
-                    flagReason: flagReason ?? null,
-                    aiIntent: aiIntent ?? null,
-                    repliedAt: new Date(),
-                    updatedAt: new Date(),
-                })
-                .where(eq(messages.id, storedMessage.id));
-
-            // 10. Store outgoing message for conversation history
-            await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
-
-            // 10.5 Mark older debounced messages as replied
-            if (unrepliedMessages.length > 1) {
-                const marked = await messagesService.markOlderMessagesAsReplied(
-                    page.id, senderId, storedMessage.id, replyText, replyMethod
-                );
-                if (marked > 0) {
-                    this.logger.info('[Instagram] Marked older debounced messages as replied', { count: marked, senderId });
-                }
-            }
-
-            // 11. Notify if flagged
-            if (needsAttention && page.userId) {
-                notificationService.sendTemplateNotification(
-                    page.userId, 'flagged_reply',
-                    { senderName: senderId, reason: flagReason || 'AI flagged' },
-                    { type: 'instagram_message', deepLink: '/dashboard?filter=flagged' }
-                ).catch(err => this.logger.error('Notification failed', { err }));
-            }
-
-            return {
-                success: true,
-                messageId,
-                replyText,
-                replyMethod,
-            };
-
-        } catch (error) {
-            this.logger.error('[Instagram] Error processing message', { 
-                messageId,
-                error: error instanceof Error ? error.message : String(error) 
-            });
-            return {
-                success: false,
-                messageId,
-                error: error instanceof Error ? error.message : 'Unknown error',
-            };
-        }
+        return messageProcessor.processMessage(
+            instagramMessageAdapter, instagramAccountId, senderId, messageText, messageId,
+        );
     }
 
     // ================== Helper Methods ==================
@@ -445,41 +270,6 @@ export class InstagramReplyService {
         return created;
     }
 
-    private async storeMessage(
-        pageId: string,
-        instagramMessageId: string,
-        senderId: string,
-        message: string
-    ) {
-        // Check if message exists
-        const existing = await db
-            .select()
-            .from(messages)
-            .where(eq(messages.instagramMessageId, instagramMessageId));
-
-        if (existing[0]) {
-            return existing[0];
-        }
-
-        // Generate a unique Facebook message ID placeholder for Instagram messages
-        const facebookMessageId = `ig_${instagramMessageId}`;
-
-        const [created] = await db
-            .insert(messages)
-            .values({
-                pageId,
-                facebookMessageId,
-                instagramMessageId,
-                platform: 'instagram',
-                senderId,
-                message,
-                direction: 'incoming',
-                createdTime: new Date(),
-            })
-            .returning();
-
-        return created;
-    }
 }
 
 export const instagramReplyService = new InstagramReplyService();

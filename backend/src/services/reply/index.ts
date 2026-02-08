@@ -1,187 +1,47 @@
 import { pagesService } from '../pages';
 import { postsService } from '../posts';
 import { commentsService } from '../comments';
-import { facebookService } from '../facebook';
 import { settingsService } from '../settings';
 import { messagesService } from '../messages';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator } from './generator';
 import { replySender, ReplyMode } from './sender';
+import { messageProcessor } from './messageProcessor';
+import { facebookMessageAdapter } from './adapters';
 import { detectLanguageCode } from '../../utils/language';
-import { Logger, noopLogger, ReplyResult, MessageResult } from '../../types';
+import { Logger, noopLogger, ReplyResult } from '../../types';
+import type { MessageResult } from '../../interfaces';
 
 /**
  * Reply Service
- * Main orchestration for processing incoming comments and messages
- * Delegates generation and sending to specialized modules
+ * Main orchestration for processing incoming comments and messages.
+ * DM processing is delegated to the shared messageProcessor via the Facebook adapter.
  */
 export class ReplyService {
     private logger: Logger = noopLogger;
 
     setLogger(logger: Logger): void {
         this.logger = logger;
-        // Propagate logger to sub-services
         rateLimiter.setLogger(logger);
         replyGenerator.setLogger(logger);
         replySender.setLogger(logger);
+        messageProcessor.setLogger(logger);
     }
 
     /**
-     * Process an incoming private message
+     * Process an incoming private message.
+     * Delegates to the shared platform-agnostic pipeline via the Facebook adapter.
      */
     async processMessage(
         pageId: string,
         senderId: string,
         messageText: string,
-        messageId: string
+        messageId: string,
     ): Promise<MessageResult> {
-        try {
-            // 1. Validate page
-            const page = await pagesService.getPageByFacebookId(pageId);
-            if (!page) {
-                return { success: false, messageId, error: 'Page not found' };
-            }
-            if (!page.autoReplyEnabled) {
-                return { success: false, messageId, error: 'Auto-reply disabled for this page' };
-            }
-            if (!page.userId) {
-                return { success: false, messageId, error: 'Page has no associated user' };
-            }
-
-            const userId = page.userId;
-
-            // 2. Check user settings
-            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(userId);
-
-            // 2.5 Fetch sender name from Facebook (best-effort, within 24h window)
-            let senderName: string | undefined;
-            try {
-                const profile = await facebookService.getSenderProfile(senderId, page.accessToken);
-                if (profile?.name) {
-                    senderName = profile.name;
-                }
-            } catch {
-                // Non-critical — continue without sender name
-            }
-
-            // 3. Store the incoming message (may already exist if stored at webhook time)
-            const { message: storedMessage, isNew } = await messagesService.findOrCreateFromWebhook(
-                page.id,
-                messageId,
-                senderId,
-                messageText,
-                senderName
-            );
-
-            // 3.5 Debounce: skip if a newer unreplied message exists from the same sender
-            // (the newer message's job will handle the reply with full conversation context)
-            const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, messageId);
-            if (hasNewer) {
-                this.logger.info('[Reply] Skipping — newer message from same sender exists', { messageId, senderId });
-                return { success: false, messageId, error: 'Skipped: newer message pending' };
-            }
-
-            // 3.6 Handoff pause: skip auto-reply if conversation is paused (explicit or manual)
-            const isPaused = await messagesService.isPaused(page.id, senderId);
-            if (isPaused) {
-                this.logger.info('[Reply] Skipping — handoff active', { senderId, pageId });
-                return { success: false, messageId, error: 'Handoff active' };
-            }
-
-            // 4. Rate limit check
-            const rateCheck = await rateLimiter.check(pageId, senderId, 'message');
-            if (!rateCheck.allowed) {
-                this.logger.info('[Reply] Message rate limited', { senderId, count: rateCheck.count });
-                return { success: false, messageId, error: 'Rate limited' };
-            }
-
-            // 5. Handle disabled auto-reply (send away message if configured)
-            if (!isMessagesEnabled) {
-                const awayMessage = await settingsService.getAwayMessage(userId);
-                if (awayMessage && isNew) {
-                    await facebookService.sendPrivateMessage(page.accessToken, senderId, awayMessage);
-                    await messagesService.storeOutgoingMessage(page.id, senderId, awayMessage, 'template');
-                }
-                return { success: false, messageId, error: 'Messages auto-reply disabled' };
-            }
-
-            // 6. Skip if already replied
-            if (!isNew && storedMessage.replied) {
-                return { success: false, messageId, error: 'Message already replied' };
-            }
-
-            // 7. Apply reply delay
-            const replyDelay = await settingsService.getReplyDelay(userId);
-            if (replyDelay > 0) {
-                await this.delay(replyDelay * 1000);
-            }
-
-            // 7.5 Consolidate all unreplied messages from this sender into one prompt
-            // so the AI addresses everything the customer said, not just the last message
-            const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
-            const consolidatedText = unrepliedMessages.length > 1
-                ? unrepliedMessages.map(m => m.message).join('\n')
-                : messageText;
-
-            // 8. Generate reply
-            const userSettings = await settingsService.getSettings(userId);
-            const { replyText, replyMethod, needsAttention, flagReason, aiIntent } = await replyGenerator.generateForMessage(
-                {
-                    userId,
-                    text: consolidatedText,
-                    pageName: page.name || undefined,
-                    knowledgeBase: page.knowledgeBase || undefined,
-                    pageId: page.id,
-                    senderId,
-                },
-                userSettings.aiEnabled ?? false
-            );
-
-            if (!replyText) {
-                return { success: false, messageId, error: 'No reply generated' };
-            }
-
-            // 9. Send reply
-            await facebookService.sendPrivateMessage(page.accessToken, senderId, replyText);
-
-            // 10. Update database
-            await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent);
-            await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
-
-            // 10.5 Mark older debounced messages as replied (they were addressed in the consolidated reply)
-            if (unrepliedMessages.length > 1) {
-                const marked = await messagesService.markOlderMessagesAsReplied(
-                    page.id, senderId, storedMessage.id, replyText, replyMethod
-                );
-                if (marked > 0) {
-                    this.logger.info('[Reply] Marked older debounced messages as replied', { count: marked, senderId });
-                }
-            }
-
-            // 11. Send notification if flagged
-            if (needsAttention && page.userId) {
-                notificationService.sendTemplateNotification(
-                    page.userId,
-                    'flagged_reply',
-                    { senderName: senderName || senderId, reason: flagReason || 'AI flagged this reply' },
-                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' }
-                ).catch(err => this.logger.error('Flagged notification failed', { err }));
-            }
-
-            return { success: true, messageId, replyText, replyMethod };
-
-        } catch (error) {
-            this.logger.error('Error processing message', {
-                messageId,
-                error: error instanceof Error ? error.message : String(error)
-            });
-            return {
-                success: false,
-                messageId,
-                error: error instanceof Error ? error.message : 'Unknown error',
-            };
-        }
+        return messageProcessor.processMessage(
+            facebookMessageAdapter, pageId, senderId, messageText, messageId,
+        );
     }
 
     /**
@@ -382,6 +242,8 @@ export class ReplyService {
 
 export const replyService = new ReplyService();
 
-// Re-export sub-modules for direct access if needed
+// Re-export sub-modules
 export { replyGenerator } from './generator';
 export { replySender } from './sender';
+export { messageProcessor } from './messageProcessor';
+export { facebookMessageAdapter, instagramMessageAdapter } from './adapters';
