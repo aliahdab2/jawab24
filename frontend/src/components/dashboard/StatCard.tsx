@@ -19,10 +19,10 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
   const { t } = useTranslation();
 
   const content = (
-    <div className="relative z-10 px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between pointer-events-none">
-      <div>
+    <div className="relative z-10 px-3 py-3 sm:px-5 sm:py-4 flex items-center justify-between gap-2 pointer-events-none">
+      <div className="min-w-0">
         <p className={clsx(
-          "text-[26px] sm:text-[32px] font-bold leading-none tracking-tight mb-1.5",
+          "text-[22px] sm:text-[32px] font-bold leading-none tracking-tight mb-1.5",
           isActive ? "text-surface-900" : "text-surface-900"
         )}>
           {value}
@@ -41,14 +41,14 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
       </div>
 
       <div className={clsx(
-        "w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
+        "w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex-shrink-0 flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
         color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
           color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
           color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/10' :
           color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/10' :
           'bg-red-50 text-red-600 shadow-red-500/10'
       )}>
-        <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
+        <Icon className="w-5 h-5 sm:w-7 sm:h-7" />
       </div>
     </div>
   );
