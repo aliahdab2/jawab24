@@ -410,15 +410,20 @@ export class MessagesService {
         pageId: string,
         senderId: string
     ): Promise<{ pausedUntil: Date } | null> {
-        const now = new Date();
-        const pause = await db.query.conversationPauses.findFirst({
-            where: and(
-                eq(conversationPauses.pageId, pageId),
-                eq(conversationPauses.senderId, senderId),
-                gt(conversationPauses.pausedUntil, now)
-            ),
-        });
-        return pause ? { pausedUntil: pause.pausedUntil } : null;
+        try {
+            const now = new Date();
+            const pause = await db.query.conversationPauses.findFirst({
+                where: and(
+                    eq(conversationPauses.pageId, pageId),
+                    eq(conversationPauses.senderId, senderId),
+                    gt(conversationPauses.pausedUntil, now)
+                ),
+            });
+            return pause ? { pausedUntil: pause.pausedUntil } : null;
+        } catch {
+            // Table may not exist yet if migration hasn't run — treat as not paused
+            return null;
+        }
     }
 
     /**

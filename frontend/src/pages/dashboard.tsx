@@ -359,7 +359,7 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
           </Link>
         </div>
-        <div className="grid grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1">
           {commentStats.map((stat, i) => (
             <StatCard
               key={stat.id}
@@ -385,7 +385,7 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
           </Link>
         </div>
-        <div className="grid grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1">
           {messageStats.map((stat, i) => (
             <StatCard
               key={stat.id}
@@ -409,7 +409,7 @@ const DashboardPage: NextPageWithLayout = () => {
               {t('dashboard.performance' as TranslationKey)}
             </h3>
           </div>
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1">
             <StatCard
               nameKey={'dashboard.replyRateValue' as TranslationKey}
               value={`${analytics.totals.replyRate}%`}
