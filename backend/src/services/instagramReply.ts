@@ -277,12 +277,18 @@ export class InstagramReplyService {
                 await this.delay(replyDelay * 1000);
             }
 
+            // 5.5 Consolidate all unreplied messages from this sender into one prompt
+            const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
+            const consolidatedText = unrepliedMessages.length > 1
+                ? unrepliedMessages.map(m => m.message).join('\n')
+                : messageText;
+
             // 6. Generate reply via unified generator (template matching + AI + subscription limits)
             const userSettings = await settingsService.getSettings(msgPageUserId);
             const genResult = await replyGenerator.generateForMessage(
                 {
                     userId: msgPageUserId,
-                    text: messageText,
+                    text: consolidatedText,
                     pageName: page.name || undefined,
                     knowledgeBase: page.knowledgeBase || undefined,
                     pageId: page.id,
@@ -335,6 +341,16 @@ export class InstagramReplyService {
 
             // 10. Store outgoing message for conversation history
             await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
+
+            // 10.5 Mark older debounced messages as replied
+            if (unrepliedMessages.length > 1) {
+                const marked = await messagesService.markOlderMessagesAsReplied(
+                    page.id, senderId, storedMessage.id, replyText, replyMethod
+                );
+                if (marked > 0) {
+                    this.logger.info('[Instagram] Marked older debounced messages as replied', { count: marked, senderId });
+                }
+            }
 
             // 11. Notify if flagged
             if (needsAttention && page.userId) {
