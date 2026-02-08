@@ -100,6 +100,7 @@ const DashboardPage: NextPageWithLayout = () => {
     // Message stats
     totalMessages: 0,
     messagesReplied: 0,
+    messagesPending: 0,
     messagesNeedsAttention: 0,
     messagesRepliedToday: 0
   });
@@ -204,6 +205,7 @@ const DashboardPage: NextPageWithLayout = () => {
         // Message stats
         totalMessages: msgStats.total,
         messagesReplied: msgStats.replied,
+        messagesPending: msgStats.pending,
         messagesNeedsAttention: messagesNeedsAttention,
         messagesRepliedToday: msgStats.replied // Using total as proxy
       });
@@ -298,6 +300,14 @@ const DashboardPage: NextPageWithLayout = () => {
       icon: MessageCircle,
       color: 'brand' as const,
       href: '/messages'
+    },
+    {
+      id: 'pending',
+      nameKey: 'comments.pending' as TranslationKey,
+      value: statsData.messagesPending.toLocaleString(),
+      icon: Clock,
+      color: 'amber' as const,
+      href: '/messages?filter=pending'
     },
     {
       id: 'replied_today',
@@ -396,7 +406,7 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('common.viewAll')} →
           </Link>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {messageStats.map((stat, i) => (
             <StatCard
               key={stat.id}
