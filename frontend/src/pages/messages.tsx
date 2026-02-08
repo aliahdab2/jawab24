@@ -6,7 +6,8 @@ import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/componen
 import { StatCard } from '@/components/dashboard/StatCard';
 import { MessageCard, type Conversation } from '@/components/messages';
 import { useAuthStore } from '@/lib/store';
-import { messagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
+import { messagesApi, pagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
+import type { Page } from '@jawab24/shared';
 import {
   MessageCircle,
   Search,
@@ -26,6 +27,7 @@ import {
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -103,6 +105,17 @@ const MessagesPage: NextPageWithLayout = () => {
     if (!targetId) return;
     sendReplyMutation.mutate({ messageId: targetId, text: replyText.trim() });
   };
+
+  // Fetch pages for CSV page name resolution
+  const { data: pagesData = [] } = useQuery({
+    queryKey: ['pages'],
+    queryFn: async () => {
+      const { data } = await pagesApi.getAll();
+      return data;
+    },
+    enabled: isAuthenticated,
+  });
+  const pages = pagesData as Page[];
 
   // Fetch Stats via useQuery (matches comments pattern)
   const { data: statsData } = useQuery({
@@ -258,22 +271,22 @@ const MessagesPage: NextPageWithLayout = () => {
   const exportToCSV = () => {
     setExporting(true);
     try {
-      const headers = ['ID', 'Sender ID', 'Sender Name', 'Message', 'Direction', 'Replied', 'Reply Text', 'Reply Method', 'Created At'];
-      const rows = allMessages.map(msg => [
-        msg.id, msg.senderId, msg.senderName || '', `"${(msg.message || '').replace(/"/g, '""')}"`,
-        msg.direction, msg.replied ? 'Yes' : 'No', `"${(msg.replyText || '').replace(/"/g, '""')}"`,
-        msg.replyMethod || '', msg.createdAt ? new Date(msg.createdAt).toISOString() : ''
-      ]);
-      const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `messages_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const headers = [
+        t('export.pageName'), t('export.contact'), t('export.message'),
+        t('export.direction'), t('export.replied'), t('export.reply'),
+        t('export.method'), t('export.date'), t('export.repliedAt'),
+      ];
+      const rows = allMessages.map(msg => {
+        const page = pages.find(p => p.id === msg.pageId);
+        return [
+          page?.name || '', msg.senderName || '', msg.message || '',
+          msg.direction, msg.replied ? t('common.yes') : t('common.no'),
+          msg.replyText || '', msg.replyMethod || '',
+          formatDateForExport(msg.createdAt, language),
+          formatDateForExport(msg.repliedAt, language),
+        ];
+      });
+      downloadCSV(`messages_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
     } catch (error) {
       console.error('Export failed:', error);
     } finally {

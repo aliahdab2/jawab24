@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { format, isToday } from 'date-fns';
+import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { Comment, Page } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -67,7 +68,7 @@ function useDebounce<T>(value: T, delay: number): T {
 const COMMENTS_PER_PAGE = 50;
 
 const CommentsPage: NextPageWithLayout = () => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -276,22 +277,21 @@ const CommentsPage: NextPageWithLayout = () => {
   const exportToCSV = () => {
     setExporting(true);
     try {
-      const headers = ['ID', 'Post ID', 'From ID', 'From Name', 'Message', 'Replied', 'Reply Text', 'Reply Method', 'Detected Language', 'Created At', 'Replied At'];
-      const rows = allComments.map(c => [
-        c.id, c.postId, c.fromId || '', c.fromName || '', `"${(c.message || '').replace(/"/g, '""')}"`,
-        c.replied ? 'Yes' : 'No', `"${(c.replyText || '').replace(/"/g, '""')}"`, c.replyMethod || '',
-        c.detectedLanguage || '', c.createdAt ? new Date(c.createdAt).toISOString() : '', c.repliedAt ? new Date(c.repliedAt).toISOString() : ''
-      ]);
-      const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `comments_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const headers = [
+        t('export.pageName'), t('export.commenter'), t('export.comment'),
+        t('export.replied'), t('export.reply'), t('export.method'),
+        t('export.language'), t('export.date'), t('export.repliedAt'),
+      ];
+      const rows = allComments.map(c => {
+        const page = pages.find(p => p.id === (c as any).pageId);
+        return [
+          page?.name || '', c.fromName || '', c.message || '',
+          c.replied ? t('common.yes') : t('common.no'), c.replyText || '', c.replyMethod || '',
+          c.detectedLanguage || '', formatDateForExport(c.createdAt, language),
+          formatDateForExport(c.repliedAt, language),
+        ];
+      });
+      downloadCSV(`comments_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
     } catch (error) {
       console.error('Export failed:', error);
     } finally {
