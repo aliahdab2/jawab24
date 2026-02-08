@@ -263,8 +263,7 @@ export class PagesService {
                 // Subscribe page to webhook events (idempotent — safe to re-subscribe)
                 await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
             } else {
-                // Create new page - save suggested knowledge base for user confirmation
-                // Best Practice: Don't auto-save to knowledgeBase, let user review first
+                // Create new page - auto-apply knowledge base from Facebook page data
                 logger.debug(`[Pages] Creating new page: ${fbPage.name}`);
                 const suggestedKnowledgeBase = generateKnowledgeBase(fbPage);
                 if (suggestedKnowledgeBase) {
@@ -287,7 +286,7 @@ export class PagesService {
                         instagramAccountId,
                         instagramUsername,
                         instagramAutoReplyEnabled: false,
-                        // Store as suggestion - user must confirm in onboarding
+                        knowledgeBase: suggestedKnowledgeBase || null,
                         suggestedKnowledgeBase: suggestedKnowledgeBase || null,
                     })
                     .returning();

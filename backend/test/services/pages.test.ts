@@ -170,8 +170,8 @@ describe('PagesService', () => {
             // Should contain address
             expect(insertedValues.suggestedKnowledgeBase).toContain('Riyadh');
             
-            // knowledgeBase should NOT be set (user must confirm)
-            expect(insertedValues.knowledgeBase).toBeUndefined();
+            // knowledgeBase should be auto-applied from Facebook data
+            expect(insertedValues.knowledgeBase).toBe(insertedValues.suggestedKnowledgeBase);
         });
 
         it('should not set suggestedKnowledgeBase when Facebook has no business info', async () => {
