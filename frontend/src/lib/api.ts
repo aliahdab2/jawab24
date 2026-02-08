@@ -220,6 +220,34 @@ export const statsApi = {
   get: () => api.get('/stats'),
 };
 
+// Analytics API
+export interface AnalyticsOverview {
+  period: { from: string; to: string; days: number };
+  totals: {
+    comments: number;
+    messages: number;
+    replied: number;
+    unreplied: number;
+    replyRate: string;
+    flagged: number;
+  };
+  byMethod: Record<string, number>;
+  byIntent: Record<string, number>;
+  byLanguage: Record<string, number>;
+  byPlatform: Record<string, number>;
+  flags: Record<string, number>;
+  responseTime: {
+    avgSeconds: number | null;
+    p50Seconds: number | null;
+    p95Seconds: number | null;
+  };
+}
+
+export const analyticsApi = {
+  getOverview: (days?: number) =>
+    api.get<AnalyticsOverview>('/analytics/overview', { params: days ? { days } : undefined }),
+};
+
 // Plans API (Public - uses publicApi to avoid auth redirect issues)
 export const plansApi = {
   getAll: (config?: AxiosRequestConfig) => publicApi.get('/plans', config),

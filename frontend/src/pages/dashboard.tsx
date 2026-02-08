@@ -5,7 +5,8 @@ import { Card, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, api } from '@/lib/api';
+import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, analyticsApi, api } from '@/lib/api';
+import type { AnalyticsOverview } from '@/lib/api';
 import {
   MessageSquare,
   MessageCircle,
@@ -21,7 +22,10 @@ import {
   TrendingDown,
   Bot,
   Minus,
-  CheckCircle
+  CheckCircle,
+  Gauge,
+  Flag,
+  Timer
 } from 'lucide-react';
 import { isToday } from 'date-fns';
 import clsx from 'clsx';
@@ -102,23 +106,30 @@ const DashboardPage: NextPageWithLayout = () => {
   });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       // Use API instances that handle auth via cookies (web) or Bearer token (mobile)
-      const [statsRes, messagesStatsRes, commentsListRes, pagesRes, usageRes, settingsRes] = await Promise.all([
+      const [statsRes, messagesStatsRes, commentsListRes, pagesRes, usageRes, settingsRes, analyticsRes] = await Promise.all([
         commentsApi.getStats().catch(() => null),
         messagesApi.getStats().catch(() => null),
         commentsApi.getAll({ limit: 5 }), // Only fetch recent 5 for the list
         pagesApi.getAll(),
         subscriptionApi.getUsage().catch(() => null),
         settingsApi.get().catch(() => null),
+        analyticsApi.getOverview(30).catch(() => null),
       ]);
 
       // Set usage data if available
       if (usageRes?.data?.data) {
         setUsage(usageRes.data.data);
+      }
+
+      // Set analytics data if available
+      if (analyticsRes?.data) {
+        setAnalytics(analyticsRes.data);
       }
 
       // Set user settings if available
@@ -409,6 +420,42 @@ const DashboardPage: NextPageWithLayout = () => {
           ))}
         </div>
       </div>
+
+      {/* Performance Section — from /analytics/overview */}
+      {analytics && (analytics.totals.comments + analytics.totals.messages) > 0 && (
+        <div className="mb-10">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
+              <Gauge className="w-4 h-4" />
+              {t('dashboard.performance' as TranslationKey)}
+            </h3>
+          </div>
+          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            <StatCard
+              nameKey={'dashboard.replyRateValue' as TranslationKey}
+              value={`${analytics.totals.replyRate}%`}
+              icon={Gauge}
+              color="brand"
+              index={8}
+            />
+            <StatCard
+              nameKey={'dashboard.flaggedItems' as TranslationKey}
+              value={analytics.totals.flagged.toLocaleString()}
+              icon={Flag}
+              color={analytics.totals.flagged > 0 ? 'amber' : 'emerald'}
+              index={9}
+              href="/comments?filter=flagged"
+            />
+            <StatCard
+              nameKey={'dashboard.avgSpeed' as TranslationKey}
+              value={analytics.responseTime.avgSeconds != null ? `${Math.round(analytics.responseTime.avgSeconds)}${t('dashboard.seconds' as TranslationKey)}` : '—'}
+              icon={Timer}
+              color="violet"
+              index={10}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Today's Activity Summary */}
       {(statsData.commentsToday > 0 || statsData.aiReplies > 0 || statsData.templateReplies > 0) && (
