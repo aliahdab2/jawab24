@@ -293,6 +293,272 @@ describe('OpenAI Service - Structured JSON Response', () => {
     });
 });
 
+describe('OpenAI Service - Token Budgeting & KB', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('should truncate knowledge base to 1500 chars', async () => {
+        let capturedMessages: any[] = [];
+        const longKB = 'A'.repeat(3000);
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'OK', intent: 'QUESTION', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 100 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'What is this?', context: { knowledgeBase: longKB } });
+
+        const systemPrompt = capturedMessages[0].content;
+        // Should contain truncated KB (1500 chars) plus the [...] marker
+        expect(systemPrompt).toContain('[...]');
+        // Should NOT contain the full 3000-char KB
+        expect(systemPrompt.length).toBeLessThan(systemPrompt.replace(longKB, '').length + 3000);
+    });
+
+    it('should not truncate knowledge base under 1500 chars', async () => {
+        let capturedMessages: any[] = [];
+        const shortKB = 'Product info: Great quality shoes.';
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'OK', intent: 'QUESTION', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 100 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Details?', context: { knowledgeBase: shortKB } });
+
+        const systemPrompt = capturedMessages[0].content;
+        expect(systemPrompt).toContain(shortKB);
+        expect(systemPrompt).not.toContain('[...]');
+    });
+
+    it('should trim oldest conversation history when over token budget', async () => {
+        let capturedMessages: any[] = [];
+        // Create long history that exceeds 2000 token budget
+        const longHistory = Array.from({ length: 20 }, (_, i) => ({
+            role: 'user' as const,
+            content: 'This is a very long message that contains lots of tokens. '.repeat(10) + ` Message #${i}`,
+        }));
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Hi', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 100 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({
+            comment: 'Hello',
+            context: { conversationHistory: longHistory },
+        });
+
+        // Should have fewer messages than the 20 we provided + system + user
+        expect(capturedMessages.length).toBeLessThan(22);
+        // Should still have at least system + user message
+        expect(capturedMessages.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should always keep system prompt first and user message last', async () => {
+        let capturedMessages: any[] = [];
+        const history = Array.from({ length: 20 }, (_, i) => ({
+            role: 'user' as const,
+            content: 'Long message content here. '.repeat(15) + ` #${i}`,
+        }));
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Hey', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 50 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Hi', context: { conversationHistory: history } });
+
+        expect(capturedMessages[0].role).toBe('system');
+        expect(capturedMessages[capturedMessages.length - 1].role).toBe('user');
+    });
+
+    it('should log tokenInfo with correct fields', async () => {
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: JSON.stringify({ reply: 'Hi', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                            usage: { total_tokens: 40 },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Hello' });
+
+        const logCall = logSpy.mock.calls.find(c => typeof c[0] === 'string' && c[0].includes('ai_call_token_usage'));
+        expect(logCall).toBeDefined();
+        const parsed = JSON.parse(logCall![0]);
+        expect(parsed.event).toBe('ai_call_token_usage');
+        expect(parsed.estimated_tokens_in).toBeDefined();
+        expect(parsed.max_input_tokens).toBe(2000);
+        expect(parsed.prompt_version).toBe('v3');
+
+        logSpy.mockRestore();
+    });
+
+    it('should use "Message:" label when conversationHistory is present', async () => {
+        let capturedMessages: any[] = [];
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Hi', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 40 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({
+            comment: 'Hi there',
+            context: { conversationHistory: [{ role: 'user' as const, content: 'Previous msg' }] },
+        });
+
+        const userMessage = capturedMessages[capturedMessages.length - 1].content;
+        expect(userMessage).toContain('Message:');
+        expect(userMessage).not.toContain('Comment:');
+    });
+
+    it('should use "Comment:" label when no conversationHistory', async () => {
+        let capturedMessages: any[] = [];
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Thanks', intent: 'COMPLIMENT', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 40 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Great product!' });
+
+        const userMessage = capturedMessages[capturedMessages.length - 1].content;
+        expect(userMessage).toContain('Comment:');
+    });
+});
+
+describe('OpenAI Service - Conversation Fallback', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('should return message-specific fallback when conversationHistory is present', async () => {
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: '', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'Hello',
+            context: { conversationHistory: [{ role: 'user' as const, content: 'Previous' }] },
+        });
+
+        // Message fallback contains "message", comment fallback contains "reaching out"
+        expect(result.reply).toContain('message');
+    });
+});
+
 describe('OpenAI Service (unconfigured)', () => {
     beforeEach(() => {
         vi.resetModules();
