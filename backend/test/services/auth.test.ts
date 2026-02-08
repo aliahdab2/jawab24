@@ -322,6 +322,113 @@ describe('Auth Service', () => {
         });
     });
 
+    describe('createSubscriptionForNewUser - retry logic', () => {
+        it('should retry once if first subscription creation fails', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            // Mock no existing user → new user path
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{
+                        id: 'user_retry',
+                        facebookId: 'fb_retry',
+                        name: 'Retry User',
+                        email: null,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    }]),
+                }),
+            } as any);
+
+            // First call fails, second succeeds
+            vi.mocked(subscriptionsService.createSubscription)
+                .mockRejectedValueOnce(new Error('DB connection lost'))
+                .mockResolvedValueOnce({ id: 'sub_retry' } as any);
+
+            await service.findOrCreateUser('fb_retry', 'Retry User');
+
+            // Should have been called twice (initial + retry)
+            expect(subscriptionsService.createSubscription).toHaveBeenCalledTimes(2);
+            expect(subscriptionsService.createSubscription).toHaveBeenNthCalledWith(1, 'user_retry');
+            expect(subscriptionsService.createSubscription).toHaveBeenNthCalledWith(2, 'user_retry');
+        });
+
+        it('should not throw if both subscription creation attempts fail', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{
+                        id: 'user_fail',
+                        facebookId: 'fb_fail',
+                        name: 'Fail User',
+                        email: null,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    }]),
+                }),
+            } as any);
+
+            // Both calls fail
+            vi.mocked(subscriptionsService.createSubscription)
+                .mockRejectedValueOnce(new Error('First fail'))
+                .mockRejectedValueOnce(new Error('Second fail'));
+
+            // Should NOT throw — user creation should still succeed
+            const user = await service.findOrCreateUser('fb_fail', 'Fail User');
+            expect(user).toBeDefined();
+            expect(user.id).toBe('user_fail');
+            expect(subscriptionsService.createSubscription).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('ensureSubscription - error handling', () => {
+        it('should silently catch errors in ensureSubscription', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            // Mock returning user
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{
+                        id: 'user_err',
+                        facebookId: 'fb_err',
+                        name: 'Error User',
+                        email: null,
+                        picture: null,
+                        facebookAccessToken: null,
+                        facebookTokenExpiresAt: null,
+                        isAdmin: false,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    }]),
+                }),
+            } as any);
+
+            // getUserSubscription throws
+            vi.mocked(subscriptionsService.getUserSubscription).mockRejectedValueOnce(
+                new Error('DB timeout')
+            );
+
+            // Should NOT throw — login should still succeed
+            const user = await service.findOrCreateUser('fb_err', 'Error User');
+            expect(user).toBeDefined();
+            expect(user.facebookId).toBe('fb_err');
+        });
+    });
+
     describe('Token round-trip', () => {
         it('should successfully encode and decode token', () => {
             const user = {

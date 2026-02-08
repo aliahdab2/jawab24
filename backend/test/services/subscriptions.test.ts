@@ -47,6 +47,9 @@ vi.mock('../../src/db', () => ({
             from: vi.fn().mockReturnValue({
                 innerJoin: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([]),
+                        }),
                         limit: vi.fn().mockResolvedValue([]),
                     }),
                 }),
@@ -102,9 +105,49 @@ vi.mock('drizzle-orm', () => ({
     sql: vi.fn(),
 }));
 
+// Helper: restore db.select default mock (cleared when tests override it)
+function restoreDefaultDbSelectMock(db: any) {
+    vi.mocked(db.select).mockReturnValue({
+        from: vi.fn().mockReturnValue({
+            innerJoin: vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnValue({
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([]),
+                    }),
+                    limit: vi.fn().mockResolvedValue([]),
+                }),
+            }),
+            where: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([]),
+            }),
+        }),
+    } as any);
+    vi.mocked(db.insert).mockReturnValue({
+        values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{
+                id: 'sub_123', userId: 'user_123', planId: 'plan_123',
+                status: 'active', trialEndsAt: null,
+                currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
+                createdAt: new Date(),
+            }]),
+        }),
+    } as any);
+    vi.mocked(db.update).mockReturnValue({
+        set: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue([{
+                    id: 'sub_123', userId: 'user_123', status: 'active',
+                }]),
+            }),
+        }),
+    } as any);
+}
+
 describe('Subscriptions Service', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
+        const { db } = await import('../../src/db');
+        restoreDefaultDbSelectMock(db);
     });
 
     describe('mapToSubscription', () => {
@@ -289,6 +332,811 @@ describe('Subscriptions Service', () => {
             const percentUsed = limit ? Math.min(100, (used / limit) * 100) : 0;
 
             expect(percentUsed).toBe(0);
+        });
+    });
+
+    describe('getUserSubscription', () => {
+        it('should return null when no subscription found', async () => {
+            const result = await subscriptionsService.getUserSubscription('user_no_sub');
+            expect(result).toBeNull();
+        });
+
+        it('should auto-expire trialing subscription past trial end', async () => {
+            const { db } = await import('../../src/db');
+
+            const expiredTrialDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2 days ago
+            const subRow = {
+                id: 'sub_trial_expired',
+                userId: 'user_123',
+                planId: 'plan_123',
+                status: 'trialing',
+                trialEndsAt: expiredTrialDate,
+                currentPeriodStart: new Date(),
+                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                canceledAt: null,
+                cancelReason: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            const planRow = {
+                id: 'plan_123',
+                name: 'Free',
+                slug: 'free',
+                price: 0,
+                maxPages: 1,
+                maxAiRepliesPerMonth: 60,
+                maxTemplates: 3,
+                maxRules: 2,
+                trialDays: 30,
+                facebookEnabled: true,
+                instagramEnabled: true,
+                whatsappEnabled: false,
+                showBranding: true,
+                prioritySupport: false,
+            };
+
+            // Mock the select chain for getUserSubscription
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{ subscription: subRow, plan: planRow }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.getUserSubscription('user_123');
+
+            // Should update status to past_due
+            expect(db.update).toHaveBeenCalled();
+            expect(result).not.toBeNull();
+            expect(result!.status).toBe('past_due');
+        });
+
+        it('should auto-expire active subscription past period end', async () => {
+            const { db } = await import('../../src/db');
+
+            const expiredPeriodEnd = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000); // 1 day ago
+            const subRow = {
+                id: 'sub_expired',
+                userId: 'user_123',
+                planId: 'plan_123',
+                status: 'active',
+                trialEndsAt: null,
+                currentPeriodStart: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
+                currentPeriodEnd: expiredPeriodEnd,
+                canceledAt: null,
+                cancelReason: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            const planRow = {
+                id: 'plan_123',
+                name: 'Business',
+                slug: 'business',
+                price: 2500,
+                maxPages: 3,
+                maxAiRepliesPerMonth: 1500,
+                maxTemplates: null,
+                maxRules: null,
+                trialDays: 0,
+                facebookEnabled: true,
+                instagramEnabled: true,
+                whatsappEnabled: false,
+                showBranding: false,
+                prioritySupport: false,
+            };
+
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{ subscription: subRow, plan: planRow }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.getUserSubscription('user_123');
+
+            expect(db.update).toHaveBeenCalled();
+            expect(result!.status).toBe('past_due');
+        });
+
+        it('should NOT auto-expire active subscription within period', async () => {
+            const { db } = await import('../../src/db');
+
+            const futurePeriodEnd = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000); // 15 days from now
+            const subRow = {
+                id: 'sub_active',
+                userId: 'user_123',
+                planId: 'plan_123',
+                status: 'active',
+                trialEndsAt: null,
+                currentPeriodStart: new Date(),
+                currentPeriodEnd: futurePeriodEnd,
+                canceledAt: null,
+                cancelReason: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            const planRow = {
+                id: 'plan_123',
+                name: 'Business',
+                slug: 'business',
+                price: 2500,
+                maxPages: 3,
+                maxAiRepliesPerMonth: 1500,
+                maxTemplates: null,
+                maxRules: null,
+                trialDays: 0,
+                facebookEnabled: true,
+                instagramEnabled: true,
+                whatsappEnabled: false,
+                showBranding: false,
+                prioritySupport: false,
+            };
+
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{ subscription: subRow, plan: planRow }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.getUserSubscription('user_123');
+
+            // Should NOT call update
+            expect(db.update).not.toHaveBeenCalled();
+            expect(result!.status).toBe('active');
+        });
+    });
+
+    describe('createSubscription', () => {
+        it('should use default plan when no planId provided', async () => {
+            const { plansService } = await import('../../src/services/plans');
+
+            await subscriptionsService.createSubscription('user_123');
+
+            expect(plansService.getDefaultPlan).toHaveBeenCalled();
+            expect(plansService.getPlanById).not.toHaveBeenCalled();
+        });
+
+        it('should use specified plan when planId provided', async () => {
+            const { plansService } = await import('../../src/services/plans');
+
+            await subscriptionsService.createSubscription('user_123', 'plan_123');
+
+            expect(plansService.getPlanById).toHaveBeenCalledWith('plan_123');
+            expect(plansService.getDefaultPlan).not.toHaveBeenCalled();
+        });
+
+        it('should throw when no valid plan found', async () => {
+            const { plansService } = await import('../../src/services/plans');
+            vi.mocked(plansService.getPlanById).mockResolvedValueOnce(null);
+
+            await expect(
+                subscriptionsService.createSubscription('user_123', 'bad_plan')
+            ).rejects.toThrow('No valid plan found');
+        });
+
+        it('should set trialing status when plan has trial days', async () => {
+            const { db } = await import('../../src/db');
+
+            // Default plan mock has trialDays: 30, so the insert should be called
+            await subscriptionsService.createSubscription('user_123');
+
+            expect(db.insert).toHaveBeenCalled();
+            // The returned subscription should have status from the insert mock
+        });
+    });
+
+    describe('canAddPage - integration', () => {
+        it('should reject when subscription is canceled', async () => {
+            const { db } = await import('../../src/db');
+
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    subscription: {
+                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                        status: 'canceled', trialEndsAt: null,
+                        currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
+                        canceledAt: new Date(), cancelReason: 'test',
+                        createdAt: new Date(), updatedAt: new Date(),
+                    },
+                    plan: {
+                        id: 'plan_1', name: 'Free', slug: 'free', price: 0,
+                        maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3, maxRules: 2,
+                        trialDays: 30, facebookEnabled: true, instagramEnabled: true,
+                        whatsappEnabled: false, showBranding: true, prioritySupport: false,
+                    },
+                }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                    where: vi.fn().mockResolvedValue([{ count: 0 }]),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.canAddPage('user_1');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('canceled');
+        });
+
+        it('should allow when under page limit with active subscription', async () => {
+            const { db } = await import('../../src/db');
+
+            let callCount = 0;
+            vi.mocked(db.select).mockImplementation(() => {
+                callCount++;
+                if (callCount === 1) {
+                    // First call: getUserSubscription
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnValue({
+                                    orderBy: vi.fn().mockReturnValue({
+                                        limit: vi.fn().mockResolvedValue([{
+                                            subscription: {
+                                                id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                                                status: 'active', trialEndsAt: null,
+                                                currentPeriodStart: new Date(),
+                                                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                                canceledAt: null, cancelReason: null,
+                                                createdAt: new Date(), updatedAt: new Date(),
+                                            },
+                                            plan: {
+                                                id: 'plan_1', name: 'Business', slug: 'business', price: 2500,
+                                                maxPages: 3, maxAiRepliesPerMonth: 1500, maxTemplates: null,
+                                                maxRules: null, trialDays: 0, facebookEnabled: true,
+                                                instagramEnabled: true, whatsappEnabled: false,
+                                                showBranding: false, prioritySupport: false,
+                                            },
+                                        }]),
+                                    }),
+                                }),
+                            }),
+                        }),
+                    } as any;
+                }
+                // Second call: count pages
+                return {
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([{ count: 1 }]),
+                    }),
+                } as any;
+            });
+
+            const result = await subscriptionsService.canAddPage('user_1');
+            expect(result.allowed).toBe(true);
+            expect(result.remaining).toBe(2); // 3 limit - 1 used
+        });
+
+        it('should reject when at page limit', async () => {
+            const { db } = await import('../../src/db');
+
+            let callCount = 0;
+            vi.mocked(db.select).mockImplementation(() => {
+                callCount++;
+                if (callCount === 1) {
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnValue({
+                                    orderBy: vi.fn().mockReturnValue({
+                                        limit: vi.fn().mockResolvedValue([{
+                                            subscription: {
+                                                id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                                                status: 'active', trialEndsAt: null,
+                                                currentPeriodStart: new Date(),
+                                                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                                canceledAt: null, cancelReason: null,
+                                                createdAt: new Date(), updatedAt: new Date(),
+                                            },
+                                            plan: {
+                                                id: 'plan_1', name: 'Free', slug: 'free', price: 0,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3,
+                                                maxRules: 2, trialDays: 30, facebookEnabled: true,
+                                                instagramEnabled: true, whatsappEnabled: false,
+                                                showBranding: true, prioritySupport: false,
+                                            },
+                                        }]),
+                                    }),
+                                }),
+                            }),
+                        }),
+                    } as any;
+                }
+                return {
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([{ count: 1 }]),
+                    }),
+                } as any;
+            });
+
+            const result = await subscriptionsService.canAddPage('user_1');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('Page limit reached');
+            expect(result.remaining).toBe(0);
+        });
+
+        it('should return no subscription when none exists', async () => {
+            const result = await subscriptionsService.canAddPage('user_no_sub');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('No active subscription');
+        });
+    });
+
+    describe('canAddTemplate - integration', () => {
+        it('should reject when subscription is paused', async () => {
+            const { db } = await import('../../src/db');
+
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    subscription: {
+                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                        status: 'paused', trialEndsAt: null,
+                        currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
+                        canceledAt: null, cancelReason: null,
+                        createdAt: new Date(), updatedAt: new Date(),
+                    },
+                    plan: {
+                        id: 'plan_1', name: 'Free', slug: 'free', price: 0,
+                        maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3, maxRules: 2,
+                        trialDays: 30, facebookEnabled: true, instagramEnabled: true,
+                        whatsappEnabled: false, showBranding: true, prioritySupport: false,
+                    },
+                }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                    where: vi.fn().mockResolvedValue([{ count: 0 }]),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.canAddTemplate('user_1');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('paused');
+        });
+
+        it('should allow unlimited templates (null limit)', async () => {
+            const { db } = await import('../../src/db');
+
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    subscription: {
+                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                        status: 'active', trialEndsAt: null,
+                        currentPeriodStart: new Date(),
+                        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                        canceledAt: null, cancelReason: null,
+                        createdAt: new Date(), updatedAt: new Date(),
+                    },
+                    plan: {
+                        id: 'plan_1', name: 'Business', slug: 'business', price: 2500,
+                        maxPages: 3, maxAiRepliesPerMonth: 1500, maxTemplates: null,
+                        maxRules: null, trialDays: 0, facebookEnabled: true,
+                        instagramEnabled: true, whatsappEnabled: false,
+                        showBranding: false, prioritySupport: false,
+                    },
+                }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.canAddTemplate('user_1');
+            expect(result.allowed).toBe(true);
+        });
+    });
+
+    describe('canAddRule - integration', () => {
+        it('should reject when trial is expired', async () => {
+            const { db } = await import('../../src/db');
+
+            const expiredTrial = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    subscription: {
+                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                        status: 'trialing', trialEndsAt: expiredTrial,
+                        currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
+                        canceledAt: null, cancelReason: null,
+                        createdAt: new Date(), updatedAt: new Date(),
+                    },
+                    plan: {
+                        id: 'plan_1', name: 'Free', slug: 'free', price: 0,
+                        maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3, maxRules: 2,
+                        trialDays: 30, facebookEnabled: true, instagramEnabled: true,
+                        whatsappEnabled: false, showBranding: true, prioritySupport: false,
+                    },
+                }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.canAddRule('user_1');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('Trial has expired');
+        });
+
+        it('should allow when under rule limit', async () => {
+            const { db } = await import('../../src/db');
+
+            let callCount = 0;
+            vi.mocked(db.select).mockImplementation(() => {
+                callCount++;
+                if (callCount === 1) {
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnValue({
+                                    orderBy: vi.fn().mockReturnValue({
+                                        limit: vi.fn().mockResolvedValue([{
+                                            subscription: {
+                                                id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                                                status: 'active', trialEndsAt: null,
+                                                currentPeriodStart: new Date(),
+                                                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                                canceledAt: null, cancelReason: null,
+                                                createdAt: new Date(), updatedAt: new Date(),
+                                            },
+                                            plan: {
+                                                id: 'plan_1', name: 'Free', slug: 'free', price: 0,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3,
+                                                maxRules: 2, trialDays: 30, facebookEnabled: true,
+                                                instagramEnabled: true, whatsappEnabled: false,
+                                                showBranding: true, prioritySupport: false,
+                                            },
+                                        }]),
+                                    }),
+                                }),
+                            }),
+                        }),
+                    } as any;
+                }
+                return {
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([{ count: 1 }]),
+                    }),
+                } as any;
+            });
+
+            const result = await subscriptionsService.canAddRule('user_1');
+            expect(result.allowed).toBe(true);
+            expect(result.remaining).toBe(1); // 2 limit - 1 used
+        });
+    });
+
+    describe('canUseAiReplies - integration', () => {
+        it('should reject when no subscription', async () => {
+            const result = await subscriptionsService.canUseAiReplies('user_no_sub');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('No active subscription');
+        });
+
+        it('should reject canceled subscription', async () => {
+            const { db } = await import('../../src/db');
+
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    subscription: {
+                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                        status: 'canceled', trialEndsAt: null,
+                        currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
+                        canceledAt: new Date(), cancelReason: null,
+                        createdAt: new Date(), updatedAt: new Date(),
+                    },
+                    plan: {
+                        id: 'plan_1', name: 'Free', slug: 'free', price: 0,
+                        maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3, maxRules: 2,
+                        trialDays: 30, facebookEnabled: true, instagramEnabled: true,
+                        whatsappEnabled: false, showBranding: true, prioritySupport: false,
+                    },
+                }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.canUseAiReplies('user_1');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('canceled');
+        });
+
+        it('should allow unlimited AI replies (null limit)', async () => {
+            const { db } = await import('../../src/db');
+
+            const mockOrderBy = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue([{
+                    subscription: {
+                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                        status: 'active', trialEndsAt: null,
+                        currentPeriodStart: new Date(),
+                        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                        canceledAt: null, cancelReason: null,
+                        createdAt: new Date(), updatedAt: new Date(),
+                    },
+                    plan: {
+                        id: 'plan_1', name: 'Enterprise', slug: 'enterprise', price: 10000,
+                        maxPages: null, maxAiRepliesPerMonth: null, maxTemplates: null,
+                        maxRules: null, trialDays: 0, facebookEnabled: true,
+                        instagramEnabled: true, whatsappEnabled: true,
+                        showBranding: false, prioritySupport: true,
+                    },
+                }]),
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: mockOrderBy,
+                        }),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.canUseAiReplies('user_1');
+            expect(result.allowed).toBe(true);
+        });
+
+        it('should reject when AI reply limit reached', async () => {
+            const { db } = await import('../../src/db');
+
+            let callCount = 0;
+            vi.mocked(db.select).mockImplementation(() => {
+                callCount++;
+                if (callCount === 1) {
+                    // getUserSubscription
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnValue({
+                                    orderBy: vi.fn().mockReturnValue({
+                                        limit: vi.fn().mockResolvedValue([{
+                                            subscription: {
+                                                id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                                                status: 'active', trialEndsAt: null,
+                                                currentPeriodStart: new Date(),
+                                                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                                canceledAt: null, cancelReason: null,
+                                                createdAt: new Date(), updatedAt: new Date(),
+                                            },
+                                            plan: {
+                                                id: 'plan_1', name: 'Free', slug: 'free', price: 0,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3,
+                                                maxRules: 2, trialDays: 30, facebookEnabled: true,
+                                                instagramEnabled: true, whatsappEnabled: false,
+                                                showBranding: true, prioritySupport: false,
+                                            },
+                                        }]),
+                                    }),
+                                }),
+                            }),
+                        }),
+                    } as any;
+                }
+                // getCurrentUsage
+                return {
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([{
+                                id: 'usage_1',
+                                userId: 'user_1',
+                                periodStart: new Date(),
+                                periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                aiRepliesCount: 60,
+                                templateRepliesCount: 0,
+                                totalCommentsProcessed: 0,
+                                totalMessagesProcessed: 0,
+                                dailyBreakdown: {},
+                                createdAt: new Date(),
+                                updatedAt: new Date(),
+                            }]),
+                        }),
+                    }),
+                } as any;
+            });
+
+            const result = await subscriptionsService.canUseAiReplies('user_1');
+            expect(result.allowed).toBe(false);
+            expect(result.reason).toContain('Monthly AI reply limit reached');
+            expect(result.used).toBe(60);
+            expect(result.remaining).toBe(0);
+        });
+
+        it('should allow when under AI reply limit', async () => {
+            const { db } = await import('../../src/db');
+
+            let callCount = 0;
+            vi.mocked(db.select).mockImplementation(() => {
+                callCount++;
+                if (callCount === 1) {
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnValue({
+                                    orderBy: vi.fn().mockReturnValue({
+                                        limit: vi.fn().mockResolvedValue([{
+                                            subscription: {
+                                                id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                                                status: 'active', trialEndsAt: null,
+                                                currentPeriodStart: new Date(),
+                                                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                                canceledAt: null, cancelReason: null,
+                                                createdAt: new Date(), updatedAt: new Date(),
+                                            },
+                                            plan: {
+                                                id: 'plan_1', name: 'Free', slug: 'free', price: 0,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3,
+                                                maxRules: 2, trialDays: 30, facebookEnabled: true,
+                                                instagramEnabled: true, whatsappEnabled: false,
+                                                showBranding: true, prioritySupport: false,
+                                            },
+                                        }]),
+                                    }),
+                                }),
+                            }),
+                        }),
+                    } as any;
+                }
+                return {
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([{
+                                id: 'usage_1',
+                                userId: 'user_1',
+                                periodStart: new Date(),
+                                periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                aiRepliesCount: 30,
+                                templateRepliesCount: 0,
+                                totalCommentsProcessed: 0,
+                                totalMessagesProcessed: 0,
+                                dailyBreakdown: {},
+                                createdAt: new Date(),
+                                updatedAt: new Date(),
+                            }]),
+                        }),
+                    }),
+                } as any;
+            });
+
+            const result = await subscriptionsService.canUseAiReplies('user_1');
+            expect(result.allowed).toBe(true);
+            expect(result.used).toBe(30);
+            expect(result.remaining).toBe(30);
+        });
+    });
+
+    describe('cancelSubscription', () => {
+        it('should set status to canceled and return updated subscription', async () => {
+            const { db } = await import('../../src/db');
+
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([{
+                            id: 'sub_1',
+                            userId: 'user_1',
+                            planId: 'plan_1',
+                            status: 'canceled',
+                            trialEndsAt: null,
+                            currentPeriodStart: new Date(),
+                            currentPeriodEnd: new Date(),
+                            canceledAt: new Date(),
+                            cancelReason: 'Too expensive',
+                            createdAt: new Date(),
+                            updatedAt: new Date(),
+                        }]),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.cancelSubscription('user_1', 'Too expensive');
+            expect(result).not.toBeNull();
+            expect(result!.status).toBe('canceled');
+            expect(result!.cancelReason).toBe('Too expensive');
+        });
+
+        it('should return null when no subscription found to cancel', async () => {
+            const { db } = await import('../../src/db');
+
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([]),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.cancelSubscription('user_none');
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('pauseSubscription / resumeSubscription', () => {
+        it('should set status to paused', async () => {
+            const { db } = await import('../../src/db');
+
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([{
+                            id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                            status: 'paused', trialEndsAt: null,
+                            currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
+                            canceledAt: null, cancelReason: null,
+                            createdAt: new Date(), updatedAt: new Date(),
+                        }]),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.pauseSubscription('user_1');
+            expect(result!.status).toBe('paused');
+        });
+
+        it('should set status to active on resume', async () => {
+            const { db } = await import('../../src/db');
+
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([{
+                            id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                            status: 'active', trialEndsAt: null,
+                            currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
+                            canceledAt: null, cancelReason: null,
+                            createdAt: new Date(), updatedAt: new Date(),
+                        }]),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.resumeSubscription('user_1');
+            expect(result!.status).toBe('active');
         });
     });
 });
