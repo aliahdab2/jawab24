@@ -228,9 +228,9 @@ describe('OpenAI Service - Structured JSON Response', () => {
         const result = await service.generateReply({ comment: 'Hello' });
 
         expect(result.reply).toBe('Just a plain text reply');
-        expect(result.intent).toBeUndefined();
-        expect(result.confidence).toBeUndefined();
-        expect(result.flags).toBeUndefined();
+        expect(result.intent).toBe('UNKNOWN');
+        expect(result.confidence).toBe('low');
+        expect(result.flags).toEqual(['invalid_json']);
     });
 
     it('should use fallback reply text when JSON reply field is empty', async () => {
@@ -320,6 +320,30 @@ describe('OpenAI Service (unconfigured)', () => {
 
         expect(result.reply).toContain('Thank you');
         expect(result.language).toBe('en');
+    });
+
+    it('should include pageName in fallback when provided', async () => {
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: {
+                    apiKey: '',
+                    model: 'gpt-4o-mini',
+                    maxTokens: 150,
+                    temperature: 0.7,
+                },
+            },
+        }));
+
+        const { OpenAIService: UnconfiguredService } = await import('../src/services/openai');
+        const unconfiguredService = new UnconfiguredService();
+
+        const result = await unconfiguredService.generateReply({
+            comment: 'Hello!',
+            context: { pageName: 'My Store' },
+        });
+
+        expect(result.reply).toContain('My Store');
+        expect(result.reply).toContain('Thank you');
     });
 });
 

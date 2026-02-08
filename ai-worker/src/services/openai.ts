@@ -96,8 +96,13 @@ export class OpenAIService {
             try {
                 parsed = JSON.parse(content);
             } catch {
-                // AI returned plain text instead of JSON — use as reply directly
-                parsed = { reply: content };
+                // AI returned plain text instead of JSON — flag for triage
+                parsed = {
+                    reply: content,
+                    intent: 'UNKNOWN',
+                    confidence: 'low',
+                    flags: ['invalid_json'],
+                };
             }
 
             return {
@@ -305,18 +310,31 @@ Output ONLY the JSON object, nothing else.`;
     private getFallbackReply(request: GenerateRequest): GenerateResponse {
         const language = request.language || this.detectLanguage(request.comment);
         const isConversation = request.context?.conversationHistory && request.context.conversationHistory.length > 0;
+        const pageName = request.context?.pageName;
 
-        const commentFallbacks: Record<string, string> = {
-            ar: 'شكراً لتواصلك معنا! سيقوم فريقنا بالرد عليك قريباً.',
-            sv: 'Tack för att du kontaktar oss! Vårt team återkommer snart.',
-            en: 'Thank you for reaching out! Our team will get back to you shortly.',
-        };
+        const commentFallbacks: Record<string, string> = pageName
+            ? {
+                ar: `شكراً لتواصلك مع ${pageName}! سيقوم فريقنا بالرد عليك قريباً.`,
+                sv: `Tack för att du kontaktar ${pageName}! Vårt team återkommer snart.`,
+                en: `Thank you for reaching out to ${pageName}! Our team will get back to you shortly.`,
+            }
+            : {
+                ar: 'شكراً لتواصلك معنا! سيقوم فريقنا بالرد عليك قريباً.',
+                sv: 'Tack för att du kontaktar oss! Vårt team återkommer snart.',
+                en: 'Thank you for reaching out! Our team will get back to you shortly.',
+            };
 
-        const messageFallbacks: Record<string, string> = {
-            ar: 'شكراً لرسالتك! سنرد عليك في أقرب وقت ممكن. إذا كان استفسارك عاجلاً، يمكنك التواصل معنا مباشرة.',
-            sv: 'Tack för ditt meddelande! Vi återkommer så snart som möjligt. Om ditt ärende är brådskande, kontakta oss direkt.',
-            en: 'Thank you for your message! We\'ll respond as soon as possible. If your inquiry is urgent, feel free to contact us directly.',
-        };
+        const messageFallbacks: Record<string, string> = pageName
+            ? {
+                ar: `شكراً لرسالتك إلى ${pageName}! سنرد عليك في أقرب وقت ممكن.`,
+                sv: `Tack för ditt meddelande till ${pageName}! Vi återkommer så snart som möjligt.`,
+                en: `Thank you for your message to ${pageName}! We'll respond as soon as possible.`,
+            }
+            : {
+                ar: 'شكراً لرسالتك! سنرد عليك في أقرب وقت ممكن. إذا كان استفسارك عاجلاً، يمكنك التواصل معنا مباشرة.',
+                sv: 'Tack för ditt meddelande! Vi återkommer så snart som möjligt. Om ditt ärende är brådskande, kontakta oss direkt.',
+                en: 'Thank you for your message! We\'ll respond as soon as possible. If your inquiry is urgent, feel free to contact us directly.',
+            };
 
         const fallbacks = isConversation ? messageFallbacks : commentFallbacks;
 
