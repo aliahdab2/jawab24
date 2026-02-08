@@ -243,6 +243,9 @@ let worker: Worker<ReplyJobData, ReplyJobResult> | null = null;
 export function startWorker(workerLogger?: Logger): Worker<ReplyJobData, ReplyJobResult> {
     if (workerLogger) {
         logger = workerLogger;
+        // Propagate logger to services so their internal logging (lap timing, etc.) works
+        replyService.setLogger(workerLogger);
+        instagramReplyService.setLogger(workerLogger);
     }
 
     worker = new Worker<ReplyJobData, ReplyJobResult>(

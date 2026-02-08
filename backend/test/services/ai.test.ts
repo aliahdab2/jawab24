@@ -214,16 +214,28 @@ describe('AI Service', () => {
             expect(result.flags).toEqual([]);
         });
 
-        it('should use old plain-text Redis entries as legacy cache hit', async () => {
+        it('should treat old plain-text Redis entries as cache miss', async () => {
             const { redis } = await import('../../src/lib/redis');
             vi.mocked(redis.get).mockResolvedValue('Plain text from old cache');
+
+            const mockResponse = {
+                data: {
+                    reply: 'Fresh AI reply',
+                    language: 'en',
+                    intent: 'GREETING',
+                    confidence: 'high',
+                    flags: [],
+                },
+            };
+            vi.mocked(axios.post).mockResolvedValue(mockResponse);
 
             const result = await service.generateReply({
                 comment: 'Hello',
             });
 
-            expect(result.cached).toBe(true);
-            expect(result.reply).toBe('Plain text from old cache');
+            expect(result.cached).toBe(false);
+            expect(result.reply).toBe('Fresh AI reply');
+            expect(result.intent).toBe('GREETING');
         });
 
         it('should return no flag data on fallback error response', async () => {

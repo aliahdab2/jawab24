@@ -53,9 +53,8 @@ export class AiService {
                         return parsed;
                     }
                 } catch {
-                    // Old format (plain text) — still use it
-                    this.logger.info('ai_cache_hit_legacy', { hash });
-                    return { reply: cachedData };
+                    // Old format (plain text) — discard; fresh AI call will save with metadata
+                    this.logger.info('ai_cache_miss_legacy_discarded', { hash });
                 }
             }
         } catch (error) {
@@ -71,10 +70,14 @@ export class AiService {
         if (cached.length > 0) {
             const meta = cached[0].metadata as { intent?: string; confidence?: string; flags?: string[] } | null;
 
+            // Skip entries without metadata — fresh AI call will save with full flagging data
+            if (!meta) {
+                this.logger.info('ai_cache_miss_postgres_no_metadata', { hash });
+                return null;
+            }
+
             const reply = cached[0].replyText;
-            const result = meta
-                ? { reply, intent: meta.intent, confidence: meta.confidence, flags: meta.flags }
-                : { reply };
+            const result = { reply, intent: meta.intent, confidence: meta.confidence, flags: meta.flags };
             this.logger.info('ai_cache_hit_postgres', { hash });
 
             // Populate Redis for next time (JSON format with metadata)
