@@ -1,4 +1,4 @@
-import { eq, desc, and, sql, gt } from 'drizzle-orm';
+import { eq, desc, asc, and, sql, gt, ne } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages, conversationPauses } from '../db/schema';
 import { ConversationMessage } from '../types';
@@ -287,6 +287,56 @@ export class MessagesService {
             ),
         });
         return !!newer;
+    }
+
+    /**
+     * Get all unreplied incoming messages from a sender (oldest first).
+     * Used to consolidate rapid-fire messages into a single AI prompt.
+     */
+    async getUnrepliedFromSender(
+        pageId: string,
+        senderId: string
+    ): Promise<{ id: string; message: string }[]> {
+        const result = await db.query.messages.findMany({
+            where: and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, false)
+            ),
+            orderBy: [asc(messages.createdAt)],
+        });
+        return result.map(r => ({ id: r.id, message: r.message }));
+    }
+
+    /**
+     * Mark older unreplied messages from the same sender as replied
+     * (they were addressed via the consolidated reply to the latest message).
+     */
+    async markOlderMessagesAsReplied(
+        pageId: string,
+        senderId: string,
+        excludeMessageId: string,
+        replyText: string,
+        replyMethod: 'template' | 'ai' | 'manual'
+    ): Promise<number> {
+        const result = await db.update(messages)
+            .set({
+                replied: true,
+                replyText,
+                replyMethod,
+                repliedAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, false),
+                ne(messages.id, excludeMessageId)
+            ))
+            .returning({ id: messages.id });
+        return result.length;
     }
 
     /**

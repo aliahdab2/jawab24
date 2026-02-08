@@ -117,12 +117,19 @@ export class ReplyService {
                 await this.delay(replyDelay * 1000);
             }
 
+            // 7.5 Consolidate all unreplied messages from this sender into one prompt
+            // so the AI addresses everything the customer said, not just the last message
+            const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
+            const consolidatedText = unrepliedMessages.length > 1
+                ? unrepliedMessages.map(m => m.message).join('\n')
+                : messageText;
+
             // 8. Generate reply
             const userSettings = await settingsService.getSettings(userId);
             const { replyText, replyMethod, needsAttention, flagReason, aiIntent } = await replyGenerator.generateForMessage(
                 {
                     userId,
-                    text: messageText,
+                    text: consolidatedText,
                     pageName: page.name || undefined,
                     knowledgeBase: page.knowledgeBase || undefined,
                     pageId: page.id,
@@ -141,6 +148,16 @@ export class ReplyService {
             // 10. Update database
             await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent);
             await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
+
+            // 10.5 Mark older debounced messages as replied (they were addressed in the consolidated reply)
+            if (unrepliedMessages.length > 1) {
+                const marked = await messagesService.markOlderMessagesAsReplied(
+                    page.id, senderId, storedMessage.id, replyText, replyMethod
+                );
+                if (marked > 0) {
+                    this.logger.info('[Reply] Marked older debounced messages as replied', { count: marked, senderId });
+                }
+            }
 
             // 11. Send notification if flagged
             if (needsAttention && page.userId) {
