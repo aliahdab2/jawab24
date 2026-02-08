@@ -220,7 +220,14 @@ jobs:
           JWT_SECRET: test_jwt_secret_for_ci
           FRONTEND_URL: http://localhost:3001
           NODE_ENV: test
-      
+
+      - name: Run integration tests
+        working-directory: backend
+        run: npm run test:integration
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/autoreply_test
+          NODE_ENV: test
+
       - name: Verify backend can start without crashes
         run: |
           echo "🧪 Verifying backend startup logic..."

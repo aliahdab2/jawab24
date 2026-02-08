@@ -135,6 +135,14 @@ else
     exit 1
 fi
 
+# Backend Integration Tests (requires Postgres)
+echo "   Testing Backend (Integration)..."
+if (cd backend && npm run test:integration) > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Backend integration tests pass${NC}"
+else
+    echo -e "${YELLOW}   ⚠️  Backend integration tests skipped (Postgres not available)${NC}"
+fi
+
 # Frontend Tests
 echo "   Testing Frontend (Unit)..."
 if npm test --workspace=jawab24-frontend -- --run > /dev/null 2>&1; then

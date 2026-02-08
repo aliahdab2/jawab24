@@ -20,6 +20,7 @@
     "admin:remove": "ts-node scripts/manage-admin.ts remove",
     "admin:list": "ts-node scripts/manage-admin.ts list",
     "test": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:coverage": "vitest run --coverage",
     "precommit": "npm run lint && npm run type-check"
   },
