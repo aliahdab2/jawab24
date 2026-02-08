@@ -1,0 +1,1 @@
+ALTER TABLE "ai_cache" ADD COLUMN "metadata" jsonb;

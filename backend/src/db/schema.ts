@@ -262,6 +262,7 @@ export const aiCache = pgTable('ai_cache', {
     commentHash: varchar('comment_hash', { length: 64 }).unique().notNull(),
     replyText: text('reply_text').notNull(),
     language: varchar('language', { length: 10 }),
+    metadata: jsonb('metadata'),
     hitCount: integer('hit_count').default(1),
     createdAt: timestamp('created_at').defaultNow(),
     lastUsedAt: timestamp('last_used_at').defaultNow(),

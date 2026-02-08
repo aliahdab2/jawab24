@@ -2,7 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import { db } from '../db';
 import { aiCache } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 import { redis } from '../lib/redis';
@@ -32,9 +32,9 @@ export class AiService {
     }
 
     /**
-     * Check cache for existing reply
+     * Check cache for existing reply (returns full AI metadata when available)
      */
-    async checkCache(comment: string, language?: string, pageId?: string): Promise<string | null> {
+    async checkCache(comment: string, language?: string, pageId?: string): Promise<{ reply: string; intent?: string; confidence?: string; flags?: string[] } | null> {
         if (!config.ai.cacheEnabled) {
             return null;
         }
@@ -43,17 +43,22 @@ export class AiService {
         const cacheKey = `cache:ai_reply:${hash}`;
 
         try {
-            // Try Redis first (fast path)
-            const cachedReply = await redis.get(cacheKey);
-            if (cachedReply) {
-                // Determine if we need to extend TTL
-                // Redis GET doesn't update TTL automatically, but for now we accept it.
-                // Optionally we could run redis.expire(cacheKey, 30 * 24 * 60 * 60);
-                return cachedReply;
+            // Try Redis first (fast path) — stores JSON with metadata
+            const cachedData = await redis.get(cacheKey);
+            if (cachedData) {
+                try {
+                    const parsed = JSON.parse(cachedData);
+                    if (parsed && typeof parsed === 'object' && parsed.reply) {
+                        this.logger.info('ai_cache_hit_with_metadata', { hash });
+                        return parsed;
+                    }
+                } catch {
+                    // Old format (plain text) — treat as cache miss
+                    this.logger.info('ai_cache_hit_legacy_miss', { hash });
+                }
             }
         } catch (error) {
             this.logger.error('Redis cache error', { error });
-            // Fallback to DB or return null is handled by continuing
         }
 
         // Fallback to Postgres (slow path / persistent)
@@ -63,11 +68,21 @@ export class AiService {
             .where(eq(aiCache.commentHash, hash));
 
         if (cached.length > 0) {
-            const reply = cached[0].replyText;
+            const meta = cached[0].metadata as { intent?: string; confidence?: string; flags?: string[] } | null;
 
-            // Populate Redis for next time
+            // Old entries without metadata — treat as cache miss
+            if (!meta) {
+                this.logger.info('ai_cache_legacy_no_metadata', { hash });
+                return null;
+            }
+
+            const reply = cached[0].replyText;
+            const result = { reply, intent: meta.intent, confidence: meta.confidence, flags: meta.flags };
+            this.logger.info('ai_cache_hit_postgres', { hash });
+
+            // Populate Redis for next time (JSON format with metadata)
             try {
-                await redis.set(cacheKey, reply, 'EX', 30 * 24 * 60 * 60); // 30 days
+                await redis.set(cacheKey, JSON.stringify(result), 'EX', 30 * 24 * 60 * 60);
             } catch {
                 // Ignore redis set error
             }
@@ -81,26 +96,34 @@ export class AiService {
                 })
                 .where(eq(aiCache.id, cached[0].id));
 
-            return reply;
+            return result;
         }
 
+        this.logger.info('ai_cache_miss', { hash });
         return null;
     }
 
     /**
-     * Save reply to cache
+     * Save reply to cache (includes AI metadata for correct flagging on cache hits)
      */
-    async saveToCache(comment: string, reply: string, language?: string, pageId?: string): Promise<void> {
+    async saveToCache(
+        comment: string,
+        reply: string,
+        language?: string,
+        pageId?: string,
+        metadata?: { intent?: string; confidence?: string; flags?: string[] }
+    ): Promise<void> {
         if (!config.ai.cacheEnabled) {
             return;
         }
 
         const hash = this.hashComment(comment, language, pageId);
         const cacheKey = `cache:ai_reply:${hash}`;
+        const cacheData = JSON.stringify({ reply, intent: metadata?.intent, confidence: metadata?.confidence, flags: metadata?.flags });
 
-        // Save to Redis (30 days TTL)
+        // Save to Redis (30 days TTL) — JSON with metadata
         try {
-            await redis.set(cacheKey, reply, 'EX', 30 * 24 * 60 * 60);
+            await redis.set(cacheKey, cacheData, 'EX', 30 * 24 * 60 * 60);
         } catch (error) {
             this.logger.error('Failed to save to Redis', { error });
         }
@@ -112,12 +135,14 @@ export class AiService {
                 commentHash: hash,
                 replyText: reply,
                 language: language || null,
+                metadata: metadata || null,
             })
             .onConflictDoUpdate({
                 target: aiCache.commentHash,
                 set: {
                     replyText: reply,
-                    hitCount: 1,
+                    metadata: metadata || null,
+                    hitCount: sql`COALESCE(${aiCache.hitCount}, 0) + 1`,
                     lastUsedAt: new Date(),
                 },
             });
@@ -130,12 +155,15 @@ export class AiService {
         const pageId = request.context?.pageId;
 
         // Check cache first (scoped per page to avoid cross-page collisions)
-        const cachedReply = await this.checkCache(request.comment, request.language, pageId);
-        if (cachedReply) {
+        const cachedData = await this.checkCache(request.comment, request.language, pageId);
+        if (cachedData) {
             return {
-                reply: cachedReply,
+                reply: cachedData.reply,
                 language: request.language || 'auto',
                 cached: true,
+                intent: cachedData.intent,
+                confidence: cachedData.confidence,
+                flags: cachedData.flags,
             };
         }
 
@@ -172,8 +200,12 @@ export class AiService {
             const aiReply = response.data.reply;
             const detectedLanguage = response.data.language || request.language || 'en';
 
-            // Save to cache (scoped per page)
-            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId);
+            // Save to cache (scoped per page, with AI metadata)
+            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, {
+                intent: response.data.intent,
+                confidence: response.data.confidence,
+                flags: response.data.flags,
+            });
 
             return {
                 reply: aiReply,

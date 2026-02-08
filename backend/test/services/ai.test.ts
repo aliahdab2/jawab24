@@ -35,6 +35,7 @@ vi.mock('../../src/db/schema', () => ({
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn(),
+    sql: vi.fn().mockReturnValue('sql-mock'),
 }));
 
 // Mock Redis
@@ -196,18 +197,46 @@ describe('AI Service', () => {
             expect(result.flags).toEqual([]);
         });
 
-        it('should return no flag data for cached replies', async () => {
+        it('should return metadata for cached replies', async () => {
             const { redis } = await import('../../src/lib/redis');
-            vi.mocked(redis.get).mockResolvedValue('Cached response');
+            vi.mocked(redis.get).mockResolvedValue(
+                JSON.stringify({ reply: 'Cached response', intent: 'GREETING', confidence: 'high', flags: [] })
+            );
 
             const result = await service.generateReply({
                 comment: 'Hello',
             });
 
             expect(result.cached).toBe(true);
-            expect(result.intent).toBeUndefined();
-            expect(result.confidence).toBeUndefined();
-            expect(result.flags).toBeUndefined();
+            expect(result.reply).toBe('Cached response');
+            expect(result.intent).toBe('GREETING');
+            expect(result.confidence).toBe('high');
+            expect(result.flags).toEqual([]);
+        });
+
+        it('should treat old plain-text Redis entries as cache miss', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue('Plain text from old cache');
+
+            // DB also returns no metadata (old entry)
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{ replyText: 'old', metadata: null, hitCount: 1, id: '1' }]),
+                }),
+            } as any);
+
+            vi.mocked(axios.post).mockResolvedValue({
+                data: { reply: 'Fresh AI reply', language: 'en', intent: 'GREETING', confidence: 'high', flags: [] },
+            });
+
+            const result = await service.generateReply({
+                comment: 'Hello',
+            });
+
+            expect(result.cached).toBe(false);
+            expect(result.reply).toBe('Fresh AI reply');
+            expect(result.intent).toBe('GREETING');
         });
 
         it('should return no flag data on fallback error response', async () => {
@@ -409,10 +438,11 @@ describe('AI Service', () => {
             const setCall = vi.mocked(redis.set).mock.calls[0];
             const storageKey = setCall[0];
 
-            // Ensure redis.get returns a hit so we don't fall back to DB
-            vi.mocked(redis.get).mockResolvedValue('Cached Response');
-
             vi.clearAllMocks(); // clear history
+
+            // Re-mock redis.get to return JSON format (new cache format)
+            const cachedJson = JSON.stringify({ reply: 'Cached Response', intent: 'QUESTION', confidence: 'high', flags: [] });
+            vi.mocked(redis.get).mockResolvedValue(cachedJson);
 
             // 2. Variations should all check against the storageKey
             const variations = [

@@ -62,7 +62,8 @@
       "Bash(IS_MOBILE_BUILD=true npx next build:*)",
       "Bash(npm run translation:validate:*)",
       "WebFetch(domain:jawab24.com)",
-      "Bash(./scripts/deploy-production.sh:*)"
+      "Bash(./scripts/deploy-production.sh:*)",
+      "Bash(npx drizzle-kit:*)"
     ]
   }
 }
