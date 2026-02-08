@@ -214,7 +214,7 @@ export class WebhookController {
                 );
             }
 
-            // Enqueue reply job with 3s delay to batch rapid-fire messages
+            // Enqueue reply job with 1s delay to batch rapid-fire messages
             const jobId = await enqueueMessage({
                 jobType: 'facebook_message',
                 pageId,
@@ -222,10 +222,10 @@ export class WebhookController {
                 senderId,
                 text: messageText,
                 requestId: this.requestId,
-                replyDelay: 3,
+                replyDelay: 1,
             });
 
-            this.log().info('Message enqueued successfully', { messageId, jobId, delayMs: 3000 });
+            this.log().info('Message enqueued successfully', { messageId, jobId, delayMs: 1000 });
         } catch (error) {
             this.log().error('Failed to enqueue message', {
                 messageId,
@@ -424,9 +424,10 @@ export class WebhookController {
                 senderId,
                 text: messageText,
                 requestId: this.requestId,
+                replyDelay: 1,
             });
 
-            this.log().info('[Instagram] Message enqueued successfully', { messageId, jobId });
+            this.log().info('[Instagram] Message enqueued successfully', { messageId, jobId, delayMs: 1000 });
         } catch (error) {
             this.log().error('[Instagram] Failed to enqueue message', { 
                 messageId, 
