@@ -3,6 +3,7 @@ import { messagesService } from '../services/messages';
 import { pagesService } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
+import { settingsService } from '../services/settings';
 
 /** Authenticated request with user info */
 interface AuthenticatedRequest extends FastifyRequest {
@@ -163,6 +164,115 @@ export class MessagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to send reply' });
+        }
+    }
+
+    /**
+     * Pause auto-reply for a specific conversation
+     * POST /messages/conversation/:senderId/pause
+     */
+    async pauseConversation(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Body: { pageId: string; durationMinutes?: number };
+        }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user.userId;
+            const { senderId } = request.params;
+            const { pageId, durationMinutes } = request.body;
+
+            if (!pageId) {
+                return reply.status(400).send({ error: 'pageId is required' });
+            }
+
+            // Verify user owns the page
+            const page = await pagesService.getPage(userId, pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+            }
+
+            // Use provided duration or user's default from settings
+            let duration = durationMinutes;
+            if (!duration) {
+                const userSettings = await settingsService.getSettings(userId);
+                duration = userSettings.handoffPauseDurationMinutes;
+            }
+
+            const result = await messagesService.pauseConversation(pageId, senderId, duration);
+            return reply.send({ success: true, pausedUntil: result.pausedUntil });
+        } catch (error) {
+            request.log.error({ error: String(error) }, 'Error pausing conversation');
+            return reply.status(500).send({ error: 'Failed to pause conversation' });
+        }
+    }
+
+    /**
+     * Resume auto-reply for a specific conversation
+     * POST /messages/conversation/:senderId/resume
+     */
+    async resumeConversation(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Body: { pageId: string };
+        }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user.userId;
+            const { senderId } = request.params;
+            const { pageId } = request.body;
+
+            if (!pageId) {
+                return reply.status(400).send({ error: 'pageId is required' });
+            }
+
+            // Verify user owns the page
+            const page = await pagesService.getPage(userId, pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+            }
+
+            await messagesService.resumeConversation(pageId, senderId);
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error({ error: String(error) }, 'Error resuming conversation');
+            return reply.status(500).send({ error: 'Failed to resume conversation' });
+        }
+    }
+
+    /**
+     * Get pause status for a specific conversation
+     * GET /messages/conversation/:senderId/pause-status
+     */
+    async getPauseStatus(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Querystring: { pageId?: string };
+        }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user.userId;
+            const { senderId } = request.params;
+            const { pageId } = request.query;
+
+            if (!pageId) {
+                return reply.status(400).send({ error: 'pageId is required' });
+            }
+
+            // Verify user owns the page
+            const page = await pagesService.getPage(userId, pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+            }
+
+            const status = await messagesService.getPauseStatus(pageId, senderId);
+            return reply.send(status);
+        } catch (error) {
+            request.log.error({ error: String(error) }, 'Error getting pause status');
+            return reply.status(500).send({ error: 'Failed to get pause status' });
         }
     }
 }

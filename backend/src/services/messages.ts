@@ -1,6 +1,6 @@
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, gt } from 'drizzle-orm';
 import { db } from '../db';
-import { messages, pages } from '../db/schema';
+import { messages, pages, conversationPauses } from '../db/schema';
 import { ConversationMessage } from '../types';
 import { Message } from '@jawab24/shared';
 
@@ -387,9 +387,107 @@ export class MessagesService {
 
     /**
      * Check if auto-reply should be paused for this sender.
-     * Returns true if a manual outgoing reply was sent within the given window.
+     * Checks explicit pause first, then falls back to recent manual reply detection.
      */
-    async isManuallyPaused(
+    async isPaused(
+        pageId: string,
+        senderId: string,
+        pauseMinutes: number = 30
+    ): Promise<boolean> {
+        // 1. Check explicit pause (from UI "pause" button)
+        const explicitPause = await this.getExplicitPause(pageId, senderId);
+        if (explicitPause) return true;
+
+        // 2. Fallback: check if a manual reply was sent recently
+        return this._hasRecentManualReply(pageId, senderId, pauseMinutes);
+    }
+
+    /**
+     * Check if there is an active explicit pause for this conversation.
+     */
+    private async getExplicitPause(
+        pageId: string,
+        senderId: string
+    ): Promise<{ id: string; pausedUntil: Date } | null> {
+        const now = new Date();
+        const pause = await db.query.conversationPauses.findFirst({
+            where: and(
+                eq(conversationPauses.pageId, pageId),
+                eq(conversationPauses.senderId, senderId),
+                gt(conversationPauses.pausedUntil, now)
+            ),
+        });
+        if (!pause) return null;
+        return { id: pause.id, pausedUntil: pause.pausedUntil };
+    }
+
+    /**
+     * Pause auto-reply for a specific conversation until the given time.
+     */
+    async pauseConversation(
+        pageId: string,
+        senderId: string,
+        durationMinutes: number = 30
+    ): Promise<{ pausedUntil: Date }> {
+        const pausedUntil = new Date(Date.now() + durationMinutes * 60 * 1000);
+
+        // Upsert: delete existing pause for this page+sender, then insert
+        await db.delete(conversationPauses)
+            .where(and(
+                eq(conversationPauses.pageId, pageId),
+                eq(conversationPauses.senderId, senderId)
+            ));
+
+        await db.insert(conversationPauses).values({
+            pageId,
+            senderId,
+            pausedUntil,
+        });
+
+        return { pausedUntil };
+    }
+
+    /**
+     * Resume auto-reply for a specific conversation (remove the pause).
+     */
+    async resumeConversation(
+        pageId: string,
+        senderId: string
+    ): Promise<void> {
+        await db.delete(conversationPauses)
+            .where(and(
+                eq(conversationPauses.pageId, pageId),
+                eq(conversationPauses.senderId, senderId)
+            ));
+    }
+
+    /**
+     * Get the pause status for a conversation.
+     */
+    async getPauseStatus(
+        pageId: string,
+        senderId: string
+    ): Promise<{ paused: boolean; pausedUntil: Date | null; reason: string | null }> {
+        // Check explicit pause
+        const explicitPause = await this.getExplicitPause(pageId, senderId);
+        if (explicitPause) {
+            return { paused: true, pausedUntil: explicitPause.pausedUntil, reason: 'explicit' };
+        }
+
+        // Check implicit (recent manual reply)
+        const hasManual = await this._hasRecentManualReply(pageId, senderId);
+        if (hasManual) {
+            return { paused: true, pausedUntil: null, reason: 'manual_reply' };
+        }
+
+        return { paused: false, pausedUntil: null, reason: null };
+    }
+
+    /**
+     * Check if a manual outgoing reply was sent within the given window.
+     * (Internal helper — renamed from isManuallyPaused)
+     */
+    private async _hasRecentManualReply(
         pageId: string,
         senderId: string,
         pauseMinutes: number = 30

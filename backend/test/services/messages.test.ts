@@ -8,9 +8,11 @@ vi.mock('../../src/db', () => ({
         query: {
             pages: { findMany: vi.fn() },
             messages: { findMany: vi.fn(), findFirst: vi.fn() },
+            conversationPauses: { findFirst: vi.fn() },
         },
         insert: vi.fn(),
         update: vi.fn(),
+        delete: vi.fn(),
     }
 }));
 
@@ -469,34 +471,114 @@ describe('MessagesService', () => {
     });
 
     // ───────────────────────────────────────────
-    // isManuallyPaused
+    // isPaused (replaces isManuallyPaused)
     // ───────────────────────────────────────────
-    describe('isManuallyPaused', () => {
-        it('should return true when recent manual outgoing reply exists', async () => {
+    describe('isPaused', () => {
+        it('should return true when explicit pause is active', async () => {
+            // Mock explicit pause found
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue({
+                id: 'pause-1',
+                pageId: 'page-1',
+                senderId: 'sender-1',
+                pausedUntil: new Date(Date.now() + 60000),
+                createdAt: new Date(),
+            } as any);
+
+            const result = await messagesService.isPaused('page-1', 'sender-1');
+            expect(result).toBe(true);
+        });
+
+        it('should return true when implicit manual reply pause is active (fallback)', async () => {
+            // No explicit pause
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
+            // But recent manual reply exists
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(
                 mockDbRow({ direction: 'outgoing', replyMethod: 'manual' }) as any
             );
 
-            const result = await messagesService.isManuallyPaused('page-1', 'sender-1');
-
+            const result = await messagesService.isPaused('page-1', 'sender-1');
             expect(result).toBe(true);
         });
 
-        it('should return false when no recent manual reply', async () => {
+        it('should return false when neither pause is active', async () => {
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
 
-            const result = await messagesService.isManuallyPaused('page-1', 'sender-1');
-
+            const result = await messagesService.isPaused('page-1', 'sender-1');
             expect(result).toBe(false);
         });
+    });
 
-        it('should accept custom pause duration', async () => {
+    // ───────────────────────────────────────────
+    // pauseConversation / resumeConversation / getPauseStatus
+    // ───────────────────────────────────────────
+    describe('pauseConversation', () => {
+        it('should delete existing pause and insert new one', async () => {
+            vi.mocked(db.delete).mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+            } as any);
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockResolvedValue(undefined),
+            } as any);
+
+            const result = await messagesService.pauseConversation('page-1', 'sender-1', 30);
+            expect(result).toBeDefined();
+            expect(result.pausedUntil).toBeDefined();
+            expect(result.pausedUntil.getTime()).toBeGreaterThan(Date.now());
+            expect(db.delete).toHaveBeenCalled();
+            expect(db.insert).toHaveBeenCalled();
+        });
+    });
+
+    describe('resumeConversation', () => {
+        it('should delete the pause record', async () => {
+            vi.mocked(db.delete).mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+            } as any);
+
+            await messagesService.resumeConversation('page-1', 'sender-1');
+            expect(db.delete).toHaveBeenCalled();
+        });
+    });
+
+    describe('getPauseStatus', () => {
+        it('should return paused status when explicit pause is active', async () => {
+            const futureDate = new Date(Date.now() + 15 * 60000);
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue({
+                id: 'pause-1',
+                pageId: 'page-1',
+                senderId: 'sender-1',
+                pausedUntil: futureDate,
+                createdAt: new Date(),
+            } as any);
+
+            const result = await messagesService.getPauseStatus('page-1', 'sender-1');
+            expect(result.paused).toBe(true);
+            expect(result.pausedUntil).toEqual(futureDate);
+            expect(result.reason).toBe('explicit');
+        });
+
+        it('should return paused via manual reply when no explicit pause exists', async () => {
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
+            // Recent manual reply exists
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(
+                mockDbRow({ direction: 'outgoing', replyMethod: 'manual' }) as any
+            );
+
+            const result = await messagesService.getPauseStatus('page-1', 'sender-1');
+            expect(result.paused).toBe(true);
+            expect(result.pausedUntil).toBeNull();
+            expect(result.reason).toBe('manual_reply');
+        });
+
+        it('should return not paused when no active pause exists', async () => {
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
 
-            const result = await messagesService.isManuallyPaused('page-1', 'sender-1', 60);
-
-            expect(result).toBe(false);
-            expect(db.query.messages.findFirst).toHaveBeenCalled();
+            const result = await messagesService.getPauseStatus('page-1', 'sender-1');
+            expect(result.paused).toBe(false);
+            expect(result.pausedUntil).toBeNull();
+            expect(result.reason).toBeNull();
         });
     });
 });

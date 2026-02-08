@@ -38,5 +38,29 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, messagesController.reply);
+
+        protectedRoutes.post('/messages/conversation/:senderId/pause', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Pause auto-reply for a conversation',
+                security: auth,
+            },
+        }, messagesController.pauseConversation);
+
+        protectedRoutes.post('/messages/conversation/:senderId/resume', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Resume auto-reply for a conversation',
+                security: auth,
+            },
+        }, messagesController.resumeConversation);
+
+        protectedRoutes.get('/messages/conversation/:senderId/pause-status', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Get pause status for a conversation',
+                security: auth,
+            },
+        }, messagesController.getPauseStatus);
     });
 }

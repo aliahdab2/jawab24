@@ -147,6 +147,7 @@ export class SettingsService {
             replyDelay: record.replyDelay ?? 0,
             commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,
+            handoffPauseDurationMinutes: record.handoffPauseDurationMinutes ?? 30,
         };
     }
 }

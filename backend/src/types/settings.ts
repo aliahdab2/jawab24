@@ -26,6 +26,7 @@ export interface UserSettings {
     replyDelay: number;
     commentEscalationMinutes: number;
     messageEscalationMinutes: number;
+    handoffPauseDurationMinutes: number;
 }
 
 export interface UpdateSettingsDTO {
@@ -47,4 +48,5 @@ export interface UpdateSettingsDTO {
     replyDelay?: number;
     commentEscalationMinutes?: number;
     messageEscalationMinutes?: number;
+    handoffPauseDurationMinutes?: number;
 }

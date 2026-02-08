@@ -74,13 +74,13 @@ export class InstagramReplyService {
                 return { success: false, commentId: instagramCommentId, error: 'Comment already replied' };
             }
 
-            // 4.5 Manual handoff pause
+            // 4.5 Handoff pause
             if (fromId) {
-                const isPaused = await messagesService.isManuallyPaused(page.id, fromId);
+                const isPaused = await messagesService.isPaused(page.id, fromId);
                 if (isPaused) {
-                    this.logger.info('[Instagram] Comment skipped — manual handoff active', { fromId });
+                    this.logger.info('[Instagram] Comment skipped — handoff active', { fromId });
                     await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
-                    return { success: false, commentId: instagramCommentId, error: 'Manual handoff active' };
+                    return { success: false, commentId: instagramCommentId, error: 'Handoff active' };
                 }
             }
 
@@ -249,11 +249,11 @@ export class InstagramReplyService {
                 return { success: false, messageId, error: 'Message already replied' };
             }
 
-            // 4.5 Manual handoff pause
-            const isPaused = await messagesService.isManuallyPaused(page.id, senderId);
+            // 4.5 Handoff pause
+            const isPaused = await messagesService.isPaused(page.id, senderId);
             if (isPaused) {
-                this.logger.info('[Instagram] Skipping DM — manual handoff active', { senderId });
-                return { success: false, messageId, error: 'Manual handoff active' };
+                this.logger.info('[Instagram] Skipping DM — handoff active', { senderId });
+                return { success: false, messageId, error: 'Handoff active' };
             }
 
             // 4.6 Rate limiting
