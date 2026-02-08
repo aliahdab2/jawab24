@@ -31,6 +31,7 @@ import paymentRoutes from "./routes/payment";
 import geoRoutes from "./routes/geo";
 import notificationRoutes from "./routes/notifications";
 import adminRoutes from "./routes/admin";
+import analyticsRoutes from "./routes/analytics";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
 import { validateEnv } from "./utils/env";
@@ -197,6 +198,7 @@ const start = async () => {
     await server.register(geoRoutes, { prefix: "/geo" });
     await server.register(notificationRoutes, { prefix: "/notifications" });
     await server.register(adminRoutes, { prefix: "/admin" });
+    await server.register(analyticsRoutes, { prefix: "/analytics" });
 
     const port = parseInt(process.env.PORT || "3000", 10);
     const host = "0.0.0.0";
