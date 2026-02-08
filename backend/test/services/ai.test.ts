@@ -214,34 +214,29 @@ describe('AI Service', () => {
             expect(result.flags).toEqual([]);
         });
 
-        it('should treat old plain-text Redis entries as cache miss', async () => {
+        it('should use old plain-text Redis entries as legacy cache hit', async () => {
             const { redis } = await import('../../src/lib/redis');
             vi.mocked(redis.get).mockResolvedValue('Plain text from old cache');
-
-            // DB also returns no metadata (old entry)
-            const { db } = await import('../../src/db');
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ replyText: 'old', metadata: null, hitCount: 1, id: '1' }]),
-                }),
-            } as any);
-
-            vi.mocked(axios.post).mockResolvedValue({
-                data: { reply: 'Fresh AI reply', language: 'en', intent: 'GREETING', confidence: 'high', flags: [] },
-            });
 
             const result = await service.generateReply({
                 comment: 'Hello',
             });
 
-            expect(result.cached).toBe(false);
-            expect(result.reply).toBe('Fresh AI reply');
-            expect(result.intent).toBe('GREETING');
+            expect(result.cached).toBe(true);
+            expect(result.reply).toBe('Plain text from old cache');
         });
 
         it('should return no flag data on fallback error response', async () => {
             const { redis } = await import('../../src/lib/redis');
             vi.mocked(redis.get).mockResolvedValue(null);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+
             vi.mocked(axios.post).mockRejectedValue(new Error('timeout'));
 
             const result = await service.generateReply({
@@ -257,6 +252,13 @@ describe('AI Service', () => {
         it('should handle AI worker response without flag fields (backward compat)', async () => {
             const { redis } = await import('../../src/lib/redis');
             vi.mocked(redis.get).mockResolvedValue(null);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
 
             const mockResponse = {
                 data: {
