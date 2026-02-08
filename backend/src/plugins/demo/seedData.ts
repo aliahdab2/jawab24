@@ -380,7 +380,18 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
     const hasExistingDemoPages = existingPages.some(p => demoPageIds.includes(p.facebookPageId));
 
     if (hasExistingDemoPages) {
-        logger.info('[DemoData] Demo data already exists, refreshing notifications only');
+        logger.info('[DemoData] Demo data already exists, refreshing pages and notifications');
+        // Refresh page names/data in case seed data was updated
+        for (const pageData of DEMO_PAGES) {
+            await db.update(pages)
+                .set({
+                    name: pageData.name,
+                    knowledgeBase: pageData.suggestedKnowledgeBase,
+                    autoReplyEnabled: pageData.autoReplyEnabled,
+                    instagramUsername: pageData.instagramUsername,
+                })
+                .where(eq(pages.facebookPageId, pageData.facebookPageId));
+        }
         await refreshDemoNotifications(userId, logger);
         return;
     }

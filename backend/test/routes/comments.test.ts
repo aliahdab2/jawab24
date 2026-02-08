@@ -35,6 +35,25 @@ describe('Comments Routes', () => {
             expect(JSON.parse(response.payload)).toEqual(commentsList);
         });
 
+        it('should include pageId in comment response', async () => {
+            const commentsList = [{
+                id: 'comment_1',
+                message: 'Great!',
+                pageId: 'page-uuid-123',
+                pageName: 'My Shop',
+            }];
+            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue(commentsList as any);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/comments'
+            });
+
+            const payload = JSON.parse(response.payload);
+            expect(payload[0].pageId).toBe('page-uuid-123');
+            expect(payload[0].pageName).toBe('My Shop');
+        });
+
         it('should filter by replied status', async () => {
             const commentsList = [{ id: 'comment_1', replied: false }];
             vi.mocked(commentsService.getCommentsByUser).mockResolvedValue(commentsList as any);
