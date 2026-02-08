@@ -527,7 +527,7 @@ const SettingsPage: NextPageWithLayout = () => {
               </Link>
             </div>
 
-            {/* Business Hours */}
+            {/* Business Hours + Away Message (connected) */}
             <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 overflow-hidden">
               <div className="flex items-center justify-between mb-6 landscape:mb-3">
                 <div className="flex items-center gap-4">
@@ -539,40 +539,69 @@ const SettingsPage: NextPageWithLayout = () => {
                     <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.businessHoursDesc')}</p>
                   </div>
                 </div>
-                <Toggle enabled={settings.businessHoursOnly} onChange={(enabled) => setSettings({ ...settings, businessHoursOnly: enabled })} />
+                <Toggle enabled={settings.businessHoursOnly} onChange={(enabled) => {
+                  const updates: Record<string, unknown> = { businessHoursOnly: enabled };
+                  // Auto-fill default away message when enabling business hours for the first time
+                  if (enabled && !settings.awayMessage) {
+                    updates.awayMessage = t('settings.awayMessageDefault' as TranslationKey);
+                  }
+                  setSettings({ ...settings, ...updates });
+                }} />
               </div>
 
               {settings.businessHoursOnly && (
-                <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100 animate-slide-up">
-                  <div>
-                    <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
-                    <div className="relative">
-                      <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-400" />
-                      <Input
-                        type="time"
-                        value={settings.businessHoursStart}
-                        onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
-                        className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
-                      />
+                <div className="space-y-4 animate-slide-up">
+                  {/* Time pickers */}
+                  <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
+                    <div>
+                      <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
+                      <div className="relative">
+                        <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-400" />
+                        <Input
+                          type="time"
+                          value={settings.businessHoursStart}
+                          onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
+                          className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
-                    <div className="relative">
-                      <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-400" />
-                      <Input
-                        type="time"
-                        value={settings.businessHoursEnd}
-                        onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
-                        className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
-                      />
+                    <div>
+                      <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
+                      <div className="relative">
+                        <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-400" />
+                        <Input
+                          type="time"
+                          value={settings.businessHoursEnd}
+                          onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
+                          className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
+                        />
+                      </div>
                     </div>
+                    {settings.businessHoursEnd <= settings.businessHoursStart && (
+                      <p className="col-span-2 text-xs text-red-500 font-medium mt-1">
+                        {t('settings.businessHoursError' as TranslationKey)}
+                      </p>
+                    )}
                   </div>
-                  {settings.businessHoursEnd <= settings.businessHoursStart && (
-                    <p className="col-span-2 text-xs text-red-500 font-medium mt-1">
-                      {t('settings.businessHoursError' as TranslationKey)}
-                    </p>
-                  )}
+
+                  {/* Away Message — nested inside business hours */}
+                  <div className="p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-8 h-8 rounded-lg bg-surface-200 text-surface-500 flex items-center justify-center">
+                        <MessageCircle className="w-4 h-4" />
+                      </div>
+                      <div className="text-start">
+                        <h5 className="font-bold text-surface-800 text-sm">{t('settings.awayMessage')}</h5>
+                        <p className="text-[11px] text-surface-400 font-medium">{t('settings.awayMessageConnectedDesc' as TranslationKey)}</p>
+                      </div>
+                    </div>
+                    <textarea
+                      className="input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl italic italic-arabic text-sm"
+                      placeholder={t('settings.awayMessagePlaceholder')}
+                      value={settings.awayMessage}
+                      onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
+                    />
+                  </div>
                 </div>
               )}
             </Card>
@@ -655,44 +684,24 @@ const SettingsPage: NextPageWithLayout = () => {
               </Card>
             </div>
 
-            {/* Messaging */}
-            <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-6 landscape:gap-4">
-              <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
-                <div className="flex items-center gap-4 mb-4 landscape:mb-2">
-                  <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
-                    <MessageCircle className="w-4 h-4 opacity-50" />
-                  </div>
-                  <div className="text-start">
-                    <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.greetingMessage')}</h4>
-                    <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.greetingMessageDesc')}</p>
-                  </div>
+            {/* Greeting Message (standalone — separate concept from away message) */}
+            <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
+              <div className="flex items-center gap-4 mb-4 landscape:mb-2">
+                <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
+                  <MessageCircle className="w-4 h-4 opacity-50" />
                 </div>
-                <textarea
-                  className="input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
-                  placeholder={t('settings.greetingMessagePlaceholder')}
-                  value={settings.greetingMessage}
-                  onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
-                />
-              </Card>
-
-              <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
-                <div className="flex items-center gap-4 mb-4 landscape:mb-2">
-                  <div className="w-12 h-12 rounded-xl bg-surface-100 text-surface-600 flex items-center justify-center landscape:w-10 landscape:h-10">
-                    <Clock className="w-4 h-4 opacity-50" />
-                  </div>
-                  <div className="text-start">
-                    <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.awayMessage')}</h4>
-                    <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.awayMessageDesc')}</p>
-                  </div>
+                <div className="text-start">
+                  <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.greetingMessage')}</h4>
+                  <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.greetingMessageDesc')}</p>
                 </div>
-                <textarea
-                  className="input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
-                  placeholder={t('settings.awayMessagePlaceholder')}
-                  value={settings.awayMessage}
-                  onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
-                />
-              </Card>
-            </div>
+              </div>
+              <textarea
+                className="input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
+                placeholder={t('settings.greetingMessagePlaceholder')}
+                value={settings.greetingMessage}
+                onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
+              />
+            </Card>
 
           </div>
         )

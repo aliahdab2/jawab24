@@ -152,6 +152,22 @@ This check must happen:
 - Run `npm run translation:validate` before committing translation changes
 - See `frontend/docs/TRANSLATION_GUIDE.md` for full rules (key naming, RTL, interpolation, brand terms)
 
+### 6. Product Terminology
+
+Use these terms consistently in UI text, code comments, and translations:
+
+| Term | Meaning |
+|------|---------|
+| **Auto Reply** | Umbrella term for all automatic replies (= template replies + smart replies) |
+| **Smart Reply** | AI-powered reply (OpenAI-generated) — a type of auto reply |
+| **Template Reply** | Rule/keyword-matched reply from user-created templates — a type of auto reply |
+| **Away Message** | Sent when auto-reply is inactive (outside business hours or when auto-reply is off) |
+| **Greeting Message** | First message to a new customer (separate concept from away message) |
+
+- Auto Reply = Template Reply + Smart Reply
+- Never say "AI reply" in user-facing text — use "Smart Reply"
+- Business Hours controls when auto-reply is active; Away Message is what's sent during the off period
+
 ### 4. Linting
 
 **Always check for lint errors after editing files.**
