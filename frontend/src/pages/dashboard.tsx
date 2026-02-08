@@ -51,13 +51,13 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
         <div
           className={clsx(
             "h-full rounded-full transition-all duration-1000 relative shadow-sm",
-            percent > 90 ? 'bg-gradient-to-r from-red-500 to-red-600' :
+            percent > 100 ? 'bg-gradient-to-r from-red-500 to-red-600' :
               percent > 75 ? 'bg-gradient-to-r from-amber-500 to-amber-600' :
                 'bg-gradient-to-r from-brand-500 to-brand-600'
           )}
-          style={{ 
+          style={{
             width: `${Math.min(percent, 100)}%`,
-            boxShadow: percent > 10 ? `0 0 10px ${percent > 90 ? 'rgba(239, 68, 68, 0.3)' : percent > 75 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(20, 184, 166, 0.3)'}` : 'none'
+            boxShadow: percent > 10 ? `0 0 10px ${percent > 100 ? 'rgba(239, 68, 68, 0.3)' : percent > 75 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(20, 184, 166, 0.3)'}` : 'none'
           }}
         >
           {percent > 20 && (
@@ -356,7 +356,7 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('comments.title')}
           </h3>
           <Link href="/comments" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-            {t('common.viewAll')} →
+            {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
           </Link>
         </div>
         <div className="grid grid-cols-3 gap-3 sm:gap-4">
@@ -382,7 +382,7 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('messages.title')}
           </h3>
           <Link href="/messages" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-            {t('common.viewAll')} →
+            {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
           </Link>
         </div>
         <div className="grid grid-cols-3 gap-3 sm:gap-4">
