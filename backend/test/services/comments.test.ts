@@ -89,7 +89,7 @@ describe('CommentsService', () => {
             expect(stats).toEqual({
                 total: 100,
                 replied: 60,
-                unreplied: 40,
+                unreplied: 38,
                 needsAttention: 2,
                 repliedToday: 5,
                 replyRate: '60.0',

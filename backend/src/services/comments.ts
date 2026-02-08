@@ -336,7 +336,7 @@ export class CommentsService {
             .from(comments)
             .innerJoin(posts, eq(comments.postId, posts.id))
             .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(and(eq(pages.userId, userId), eq(comments.needsAttention, true)));
+            .where(and(eq(pages.userId, userId), eq(comments.needsAttention, true), eq(comments.replied, false)));
 
         const needsAttention = Number(needsAttentionResult[0]?.count || 0);
 
@@ -360,7 +360,7 @@ export class CommentsService {
         return {
             total,
             replied,
-            unreplied: total - replied,
+            unreplied: total - replied - needsAttention,
             needsAttention,
             repliedToday,
             replyRate: (replied / total * 100).toFixed(1),

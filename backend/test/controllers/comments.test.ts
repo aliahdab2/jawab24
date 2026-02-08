@@ -219,7 +219,7 @@ describe('CommentsController', () => {
 
     describe('getStats', () => {
         it('should return comment statistics', async () => {
-            const mockStats = { total: 100, replied: 80, unreplied: 20, needsAttention: 3, repliedToday: 5, replyRate: '80.0', byMethod: { template: 30, ai: 40, manual: 10 } };
+            const mockStats = { total: 100, replied: 80, unreplied: 17, needsAttention: 3, repliedToday: 5, replyRate: '80.0', byMethod: { template: 30, ai: 40, manual: 10 } };
             vi.mocked(commentsService.getStats).mockResolvedValue(mockStats);
 
             await commentsController.getStats(mockRequest as FastifyRequest, mockReply as FastifyReply);

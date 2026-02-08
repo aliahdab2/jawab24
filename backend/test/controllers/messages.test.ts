@@ -125,7 +125,7 @@ describe('MessagesController', () => {
             const stats = {
                 total: 100,
                 replied: 80,
-                pending: 20,
+                pending: 15,
                 needsAttention: 5,
                 byMethod: { template: 40, ai: 30, manual: 10 },
             };

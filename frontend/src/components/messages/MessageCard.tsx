@@ -9,6 +9,7 @@ import {
   CheckCircle,
   User,
   MessageCircle,
+  Send,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -156,8 +157,8 @@ export function MessageCard({
           </div>
         </div>
 
-        {/* Reply Bubble (End/Right) or View Button */}
-        {lastOutgoing ? (
+        {/* Reply Bubble (End/Right) or Action Button */}
+        {lastOutgoing && !conv.needsHumanAttention ? (
           <div className="flex items-end justify-end gap-3 ms-8 sm:ms-12">
             <div className="flex flex-col items-end gap-1 min-w-0">
               <div className="relative">
@@ -173,6 +174,13 @@ export function MessageCard({
             {/* Source Indicator */}
             <div className="flex-shrink-0 mb-1">
               <ReplySourceIndicator />
+            </div>
+          </div>
+        ) : conv.needsHumanAttention ? (
+          <div className="flex justify-end mt-1 animate-fade-in">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-100 text-xs font-bold uppercase tracking-wider group-hover:bg-red-100 transition-colors">
+              <Send className="w-3.5 h-3.5" />
+              <span>{t('comments.reply')}</span>
             </div>
           </div>
         ) : (
