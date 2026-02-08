@@ -1,11 +1,14 @@
 import { pagesService } from './pages';
-import { aiService } from './ai';
 import { settingsService } from './settings';
 import { instagramService } from './instagram';
 import { messagesService } from './messages';
+import { replyGenerator } from './reply/generator';
+import { rateLimiter } from './protection/rate-limiter';
+import { notificationService } from './notifications';
+import { detectLanguageCode } from '../utils/language';
 import { db } from '../db';
 import { instagramMedia, instagramComments, messages } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { Logger, noopLogger, InstagramReplyResult, InstagramMessageResult } from '../types';
 
 export class InstagramReplyService {
@@ -14,6 +17,8 @@ export class InstagramReplyService {
     /** Set logger for this service instance */
     setLogger(logger: Logger): void {
         this.logger = logger;
+        replyGenerator.setLogger(logger);
+        rateLimiter.setLogger(logger);
     }
 
     /**
@@ -79,6 +84,16 @@ export class InstagramReplyService {
                 }
             }
 
+            // 4.6 Rate limiting
+            if (fromId) {
+                const rateCheck = await rateLimiter.check(page.id, fromId, 'comment');
+                if (!rateCheck.allowed) {
+                    this.logger.info('[Instagram] Comment rate limited', { fromId });
+                    await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
+                    return { success: false, commentId: instagramCommentId, error: 'Rate limited' };
+                }
+            }
+
             // 5. Store the comment
             const comment = await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
 
@@ -88,44 +103,28 @@ export class InstagramReplyService {
                 await this.delay(replyDelay * 1000);
             }
 
-            // 7. Generate AI reply
+            // 7. Generate reply via unified generator (template matching + AI + subscription limits)
             const userSettings = await settingsService.getSettings(pageUserId);
-            let replyText: string | null = null;
-            let replyMethod: 'ai' | 'template' = 'ai';
+            const genResult = await replyGenerator.generateForComment(
+                {
+                    userId: pageUserId,
+                    text: commentMessage,
+                    pageName: page.name || undefined,
+                    knowledgeBase: page.knowledgeBase || undefined,
+                    postMessage: media.caption || undefined,
+                    pageId: page.id,
+                },
+                userSettings.aiEnabled ?? false
+            );
+            let replyText = genResult.replyText;
+            const replyMethod = genResult.replyMethod;
+            const needsAttention = genResult.needsAttention ?? false;
+            const flagReason = genResult.flagReason;
+            const aiIntent = genResult.aiIntent;
 
-            let needsAttention = false;
-            let flagReason: string | undefined;
-            let aiIntent: string | undefined;
-
-            if (userSettings.aiEnabled) {
-                const aiResponse = await aiService.generateReply({
-                    comment: commentMessage,
-                    context: {
-                        pageId: page.id,
-                        pageName: page.name || undefined,
-                        postMessage: media.caption || undefined,
-                        knowledgeBase: page.knowledgeBase || undefined,
-                    }
-                });
-                replyText = aiResponse.reply;
-
-                // Determine flagging from AI metadata
-                const flags = aiResponse.flags || [];
-                needsAttention = flags.length > 0 ||
-                    aiResponse.confidence === 'low' ||
-                    aiResponse.intent === 'COMPLAINT' ||
-                    aiResponse.intent === 'OFFENSIVE';
-                flagReason = flags.join(',') ||
-                    (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
-                    (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
-                    undefined;
-                aiIntent = aiResponse.intent;
-            }
-
-            // 8. Fallback if no AI reply
+            // 8. Fallback if no reply
             if (!replyText) {
                 replyText = 'Thank you for your comment! 🙏';
-                replyMethod = 'template';
             }
 
             // 9. Post reply to Instagram
@@ -145,6 +144,7 @@ export class InstagramReplyService {
             }
 
             // 10. Mark comment as replied
+            const detectedLanguage = detectLanguageCode(commentMessage);
             await db
                 .update(instagramComments)
                 .set({
@@ -154,10 +154,20 @@ export class InstagramReplyService {
                     needsAttention,
                     flagReason: flagReason ?? null,
                     aiIntent: aiIntent ?? null,
+                    detectedLanguage,
                     repliedAt: new Date(),
                     updatedAt: new Date(),
                 })
                 .where(eq(instagramComments.id, comment.id));
+
+            // 11. Notify if flagged
+            if (needsAttention && page.userId) {
+                notificationService.sendTemplateNotification(
+                    page.userId, 'flagged_reply',
+                    { senderName: fromUsername || 'Unknown', reason: flagReason || 'AI flagged' },
+                    { type: 'instagram_comment', deepLink: '/dashboard?filter=flagged' }
+                ).catch(err => this.logger.error('Notification failed', { err }));
+            }
 
             return {
                 success: true,
@@ -246,52 +256,45 @@ export class InstagramReplyService {
                 return { success: false, messageId, error: 'Manual handoff active' };
             }
 
+            // 4.6 Rate limiting
+            const rateCheck = await rateLimiter.check(page.id, senderId, 'message');
+            if (!rateCheck.allowed) {
+                this.logger.info('[Instagram] Message rate limited', { senderId });
+                return { success: false, messageId, error: 'Rate limited' };
+            }
+
+            // 4.7 Debounce — skip if a newer unreplied message exists
+            const facebookMessageId = `ig_${messageId}`;
+            const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, facebookMessageId);
+            if (hasNewer) {
+                this.logger.info('[Instagram] Skipping — newer message pending', { messageId });
+                return { success: false, messageId, error: 'Skipped: newer message pending' };
+            }
+
             // 5. Get reply delay
             const replyDelay = await settingsService.getReplyDelay(msgPageUserId);
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }
 
-            // 6. Generate AI reply
+            // 6. Generate reply via unified generator (template matching + AI + subscription limits)
             const userSettings = await settingsService.getSettings(msgPageUserId);
-            let replyText: string | null = null;
-            const replyMethod: 'ai' | 'template' = 'ai';
-
-            let needsAttention = false;
-            let flagReason: string | undefined;
-            let aiIntent: string | undefined;
-
-            if (userSettings.aiEnabled) {
-                // Get conversation history for context
-                const conversationHistory = await this.getInstagramConversationHistory(
-                    page.id,
+            const genResult = await replyGenerator.generateForMessage(
+                {
+                    userId: msgPageUserId,
+                    text: messageText,
+                    pageName: page.name || undefined,
+                    knowledgeBase: page.knowledgeBase || undefined,
+                    pageId: page.id,
                     senderId,
-                    6
-                );
-
-                const aiResponse = await aiService.generateReply({
-                    comment: messageText,
-                    context: {
-                        pageId: page.id,
-                        pageName: page.name || undefined,
-                        knowledgeBase: page.knowledgeBase || undefined,
-                        conversationHistory,
-                    }
-                });
-                replyText = aiResponse.reply;
-
-                // Determine flagging from AI metadata
-                const flags = aiResponse.flags || [];
-                needsAttention = flags.length > 0 ||
-                    aiResponse.confidence === 'low' ||
-                    aiResponse.intent === 'COMPLAINT' ||
-                    aiResponse.intent === 'OFFENSIVE';
-                flagReason = flags.join(',') ||
-                    (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
-                    (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
-                    undefined;
-                aiIntent = aiResponse.intent;
-            }
+                },
+                userSettings.aiEnabled ?? false
+            );
+            const replyText = genResult.replyText;
+            const replyMethod = genResult.replyMethod;
+            const needsAttention = genResult.needsAttention ?? false;
+            const flagReason = genResult.flagReason;
+            const aiIntent = genResult.aiIntent;
 
             // 7. If still no reply, skip
             if (!replyText) {
@@ -329,6 +332,18 @@ export class InstagramReplyService {
                     updatedAt: new Date(),
                 })
                 .where(eq(messages.id, storedMessage.id));
+
+            // 10. Store outgoing message for conversation history
+            await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
+
+            // 11. Notify if flagged
+            if (needsAttention && page.userId) {
+                notificationService.sendTemplateNotification(
+                    page.userId, 'flagged_reply',
+                    { senderName: senderId, reason: flagReason || 'AI flagged' },
+                    { type: 'instagram_message', deepLink: '/dashboard?filter=flagged' }
+                ).catch(err => this.logger.error('Notification failed', { err }));
+            }
 
             return {
                 success: true,
@@ -448,31 +463,6 @@ export class InstagramReplyService {
             .returning();
 
         return created;
-    }
-
-    private async getInstagramConversationHistory(
-        pageId: string,
-        senderId: string,
-        limit: number
-    ): Promise<{ role: 'user' | 'assistant'; content: string }[]> {
-        const recentMessages = await db
-            .select()
-            .from(messages)
-            .where(
-                and(
-                    eq(messages.pageId, pageId),
-                    eq(messages.senderId, senderId),
-                    eq(messages.platform, 'instagram')
-                )
-            )
-            .orderBy(desc(messages.createdTime))
-            .limit(limit);
-
-        // Reverse to get chronological order and format for AI
-        return recentMessages.reverse().map(msg => ({
-            role: msg.direction === 'incoming' ? 'user' as const : 'assistant' as const,
-            content: msg.message,
-        }));
     }
 }
 

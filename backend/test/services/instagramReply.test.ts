@@ -20,10 +20,29 @@ vi.mock('../../src/services/pages', () => ({
     },
 }));
 
-vi.mock('../../src/services/ai', () => ({
-    aiService: {
-        generateReply: vi.fn(),
+vi.mock('../../src/services/reply/generator', () => ({
+    replyGenerator: {
+        generateForComment: vi.fn(),
+        generateForMessage: vi.fn(),
+        setLogger: vi.fn(),
     },
+}));
+
+vi.mock('../../src/services/protection/rate-limiter', () => ({
+    rateLimiter: {
+        check: vi.fn(),
+        setLogger: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: {
+        sendTemplateNotification: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/utils/language', () => ({
+    detectLanguageCode: vi.fn().mockReturnValue('en'),
 }));
 
 vi.mock('../../src/services/settings', () => ({
@@ -46,6 +65,8 @@ vi.mock('../../src/services/instagram', () => ({
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
         isManuallyPaused: vi.fn(),
+        hasNewerUnrepliedMessage: vi.fn(),
+        storeOutgoingMessage: vi.fn(),
     },
 }));
 
@@ -53,11 +74,13 @@ vi.mock('drizzle-orm', () => ({
     eq: vi.fn((...args: unknown[]) => args),
     and: vi.fn((...args: unknown[]) => args),
     desc: vi.fn((col: unknown) => col),
+    sql: vi.fn().mockReturnValue('sql-mock'),
 }));
 
 import { InstagramReplyService } from '../../src/services/instagramReply';
 import { pagesService } from '../../src/services/pages';
-import { aiService } from '../../src/services/ai';
+import { replyGenerator } from '../../src/services/reply/generator';
+import { rateLimiter } from '../../src/services/protection/rate-limiter';
 import { settingsService } from '../../src/services/settings';
 import { instagramService } from '../../src/services/instagram';
 import { messagesService } from '../../src/services/messages';
@@ -173,11 +196,23 @@ describe('InstagramReplyService', () => {
         vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
         vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
         vi.mocked(settingsService.getSettings).mockResolvedValue({ aiEnabled: true } as any);
-        vi.mocked(aiService.generateReply).mockResolvedValue({ reply: 'AI generated reply' } as any);
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'AI generated reply',
+            replyMethod: 'ai' as const,
+            needsAttention: false,
+        });
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'AI generated reply',
+            replyMethod: 'ai' as const,
+            needsAttention: false,
+        });
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 });
         vi.mocked(instagramService.replyToComment).mockResolvedValue('reply-id');
         vi.mocked(instagramService.sendDirectMessage).mockResolvedValue('msg-id');
         vi.mocked(settingsService.getAwayMessage).mockResolvedValue(null);
         vi.mocked(messagesService.isManuallyPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
     });
 
     describe('setLogger', () => {
@@ -351,15 +386,23 @@ describe('InstagramReplyService', () => {
             expect(result.error).toBe('timeout');
         });
 
-        it('should skip reply when AI is disabled', async () => {
+        it('should skip reply when AI is disabled and no template matches', async () => {
             vi.mocked(settingsService.getSettings).mockResolvedValue({ aiEnabled: false } as any);
+            vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+                replyText: null,
+                replyMethod: 'ai' as const,
+                needsAttention: false,
+            });
             setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('No reply generated');
-            expect(aiService.generateReply).not.toHaveBeenCalled();
+            expect(replyGenerator.generateForMessage).toHaveBeenCalledWith(
+                expect.objectContaining({ userId: 'user-uuid', text: 'hello' }),
+                false
+            );
         });
     });
 });
