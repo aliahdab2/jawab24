@@ -403,37 +403,9 @@ export const subscriptionsService = {
             return { allowed: false, reason: 'No active subscription' };
         }
 
-        // Check subscription status
-        if (subscription.status === 'canceled' || subscription.status === 'paused') {
-            return { allowed: false, reason: `Subscription is ${subscription.status}` };
-        }
-
-        // Check past_due status with grace period (7 days)
-        if (subscription.status === 'past_due') {
-            const GRACE_PERIOD_DAYS = 7;
-            const periodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
-            
-            if (periodEnd) {
-                const gracePeriodEnd = new Date(periodEnd);
-                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + GRACE_PERIOD_DAYS);
-                
-                if (new Date() > gracePeriodEnd) {
-                    return { 
-                        allowed: false, 
-                        reason: 'Subscription expired. Please renew to continue using AI replies.' 
-                    };
-                }
-                // Within grace period - still allow but warn
-            }
-        }
-
-        // Check trial expiration (already handled by getUserSubscription, but double-check)
-        if (subscription.status === 'trialing' && subscription.trialEndsAt) {
-            const trialEnd = new Date(subscription.trialEndsAt);
-            if (trialEnd < new Date()) {
-                return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.' };
-            }
-        }
+        // Check subscription status (canceled/paused/expired)
+        const statusCheck = this.checkSubscriptionStatus(subscription);
+        if (!statusCheck.allowed) return statusCheck;
 
         const plan = subscription.plan;
 
@@ -474,6 +446,10 @@ export const subscriptionsService = {
         if (!subscription) {
             return { allowed: false, reason: 'No active subscription' };
         }
+
+        // Check subscription status (canceled/paused/expired)
+        const statusCheck = this.checkSubscriptionStatus(subscription);
+        if (!statusCheck.allowed) return statusCheck;
 
         const plan = subscription.plan;
 
@@ -519,6 +495,10 @@ export const subscriptionsService = {
             return { allowed: false, reason: 'No active subscription' };
         }
 
+        // Check subscription status (canceled/paused/expired)
+        const statusCheck = this.checkSubscriptionStatus(subscription);
+        if (!statusCheck.allowed) return statusCheck;
+
         const plan = subscription.plan;
 
         // Check if templates limit is unlimited (null)
@@ -562,6 +542,10 @@ export const subscriptionsService = {
         if (!subscription) {
             return { allowed: false, reason: 'No active subscription' };
         }
+
+        // Check subscription status (canceled/paused/expired)
+        const statusCheck = this.checkSubscriptionStatus(subscription);
+        if (!statusCheck.allowed) return statusCheck;
 
         const plan = subscription.plan;
 
@@ -614,6 +598,42 @@ export const subscriptionsService = {
             platform,
             metadata: metadata || {},
         });
+    },
+
+    /**
+     * Check subscription status (canceled/paused/expired trial/past_due beyond grace)
+     * Reusable across all limit-check methods.
+     */
+    checkSubscriptionStatus(subscription: Subscription & { plan: Plan }): LimitCheckResult {
+        if (subscription.status === 'canceled' || subscription.status === 'paused') {
+            return { allowed: false, reason: `Subscription is ${subscription.status}` };
+        }
+
+        if (subscription.status === 'past_due') {
+            const GRACE_PERIOD_DAYS = 7;
+            const periodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
+
+            if (periodEnd) {
+                const gracePeriodEnd = new Date(periodEnd);
+                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + GRACE_PERIOD_DAYS);
+
+                if (new Date() > gracePeriodEnd) {
+                    return {
+                        allowed: false,
+                        reason: 'Subscription expired. Please renew to continue.',
+                    };
+                }
+            }
+        }
+
+        if (subscription.status === 'trialing' && subscription.trialEndsAt) {
+            const trialEnd = new Date(subscription.trialEndsAt);
+            if (trialEnd < new Date()) {
+                return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.' };
+            }
+        }
+
+        return { allowed: true };
     },
 
     /**

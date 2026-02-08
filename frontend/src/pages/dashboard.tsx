@@ -422,7 +422,7 @@ const DashboardPage: NextPageWithLayout = () => {
       </div>
 
       {/* Performance Section — from /analytics/overview */}
-      {analytics && (analytics.totals.comments + analytics.totals.messages) > 0 && (
+      {analytics?.totals && (analytics.totals.comments + analytics.totals.messages) > 0 && (
         <div className="mb-10">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">

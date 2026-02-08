@@ -304,11 +304,102 @@ describe('Subscription Status Logic', () => {
 
     it('should identify active subscriptions', () => {
         const activeStatuses = ['trialing', 'active'];
-        const inactiveStatuses = ['canceled', 'paused', 'past_due'];
 
         expect(activeStatuses.includes('trialing')).toBe(true);
         expect(activeStatuses.includes('active')).toBe(true);
         expect(activeStatuses.includes('canceled')).toBe(false);
+    });
+});
+
+describe('checkSubscriptionStatus', () => {
+    const makeSub = (overrides: Record<string, unknown>) => ({
+        id: 'sub_1',
+        userId: 'user_1',
+        planId: 'plan_1',
+        status: 'active' as const,
+        trialEndsAt: null,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        canceledAt: null,
+        cancelReason: null,
+        createdAt: new Date(),
+        plan: {
+            id: 'plan_1',
+            name: 'Free Trial',
+            slug: 'free',
+            price: 0,
+            maxPages: 1,
+            maxAiRepliesPerMonth: 60,
+            maxTemplates: 3,
+            maxRules: 2,
+            trialDays: 30,
+            facebookEnabled: true,
+            instagramEnabled: true,
+            whatsappEnabled: false,
+            showBranding: true,
+            prioritySupport: false,
+        },
+        ...overrides,
+    });
+
+    it('should allow active subscriptions', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(makeSub({ status: 'active' }) as any);
+        expect(result.allowed).toBe(true);
+    });
+
+    it('should allow trialing subscriptions with future trial end', () => {
+        const futureDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+        const result = subscriptionsService.checkSubscriptionStatus(
+            makeSub({ status: 'trialing', trialEndsAt: futureDate }) as any
+        );
+        expect(result.allowed).toBe(true);
+    });
+
+    it('should reject canceled subscriptions', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(makeSub({ status: 'canceled' }) as any);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain('canceled');
+    });
+
+    it('should reject paused subscriptions', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(makeSub({ status: 'paused' }) as any);
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain('paused');
+    });
+
+    it('should reject expired trial', () => {
+        const pastDate = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
+        const result = subscriptionsService.checkSubscriptionStatus(
+            makeSub({ status: 'trialing', trialEndsAt: pastDate }) as any
+        );
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain('Trial has expired');
+    });
+
+    it('should allow past_due within grace period', () => {
+        // Period ended 3 days ago (within 7-day grace)
+        const periodEnd = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+        const result = subscriptionsService.checkSubscriptionStatus(
+            makeSub({ status: 'past_due', currentPeriodEnd: periodEnd }) as any
+        );
+        expect(result.allowed).toBe(true);
+    });
+
+    it('should reject past_due beyond grace period', () => {
+        // Period ended 10 days ago (beyond 7-day grace)
+        const periodEnd = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+        const result = subscriptionsService.checkSubscriptionStatus(
+            makeSub({ status: 'past_due', currentPeriodEnd: periodEnd }) as any
+        );
+        expect(result.allowed).toBe(false);
+        expect(result.reason).toContain('expired');
+    });
+
+    it('should allow past_due with no period end (fallback)', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(
+            makeSub({ status: 'past_due', currentPeriodEnd: null }) as any
+        );
+        expect(result.allowed).toBe(true);
     });
 });
 

@@ -34,6 +34,13 @@ vi.mock('../../src/db/schema', () => ({
     subscriptions: {},
 }));
 
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        createSubscription: vi.fn().mockResolvedValue({ id: 'sub_1', status: 'trialing' }),
+        getUserSubscription: vi.fn().mockResolvedValue(null),
+    },
+}));
+
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn(),
     sql: vi.fn(),
@@ -219,6 +226,99 @@ describe('Auth Service', () => {
             const response = service.createAuthResponse(user, token, fbToken);
 
             expect(response.user.picture).toBeUndefined();
+        });
+    });
+
+    describe('findOrCreateUser', () => {
+        it('should call ensureSubscription for returning users', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            // Mock existing user found
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{
+                        id: 'user_existing',
+                        facebookId: 'fb_123',
+                        name: 'Existing User',
+                        email: 'existing@example.com',
+                        picture: null,
+                        facebookAccessToken: 'old_token',
+                        facebookTokenExpiresAt: null,
+                        isAdmin: false,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    }]),
+                }),
+            } as any);
+
+            await service.findOrCreateUser('fb_123', 'Updated Name', 'existing@example.com', 'new_token');
+
+            // Should check for subscription and create if missing
+            expect(subscriptionsService.getUserSubscription).toHaveBeenCalledWith('user_existing');
+            expect(subscriptionsService.createSubscription).toHaveBeenCalledWith('user_existing');
+        });
+
+        it('should not create subscription if returning user already has one', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            // Mock existing user found
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{
+                        id: 'user_existing',
+                        facebookId: 'fb_123',
+                        name: 'Existing User',
+                        email: 'existing@example.com',
+                        picture: null,
+                        facebookAccessToken: 'old_token',
+                        facebookTokenExpiresAt: null,
+                        isAdmin: false,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    }]),
+                }),
+            } as any);
+
+            // User already has subscription
+            vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValueOnce({ id: 'sub_existing' } as any);
+
+            await service.findOrCreateUser('fb_123', 'Updated Name', 'existing@example.com', 'new_token');
+
+            expect(subscriptionsService.getUserSubscription).toHaveBeenCalledWith('user_existing');
+            // Should NOT create a new one since it already exists
+            expect(subscriptionsService.createSubscription).not.toHaveBeenCalled();
+        });
+
+        it('should create subscription for new users', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            // Mock no existing user
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+
+            // Mock insert returning new user
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{
+                        id: 'user_new',
+                        facebookId: 'fb_new',
+                        name: 'New User',
+                        email: 'new@example.com',
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    }]),
+                }),
+            } as any);
+
+            await service.findOrCreateUser('fb_new', 'New User', 'new@example.com');
+
+            expect(subscriptionsService.createSubscription).toHaveBeenCalledWith('user_new');
         });
     });
 

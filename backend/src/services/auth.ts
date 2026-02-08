@@ -44,6 +44,10 @@ export class AuthService {
                 })
                 .where(eq(users.id, user.id));
 
+            // Ensure returning users have a subscription (fixes edge case where
+            // initial subscription creation failed silently during signup)
+            await this.ensureSubscription(user.id);
+
             return {
                 ...user,
                 name,
