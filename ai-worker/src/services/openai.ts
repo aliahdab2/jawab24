@@ -1,6 +1,16 @@
 import OpenAI from 'openai';
 import { config } from '../config';
 
+// Token budget constants
+const KB_MAX_CHARS = 1500;       // ~400 tokens — prevents catalog-sized KB from nuking costs
+const MAX_INPUT_TOKENS = 2000;   // Hard cap on total input tokens (system + history + user message)
+const PROMPT_VERSION = 'v2';     // Bump when prompt structure changes (useful for cache diagnostics)
+
+/** Conservative token estimate: ~3.5 chars per token (safe across Latin + Arabic) */
+function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 3.5);
+}
+
 export interface ConversationMessage {
     role: 'user' | 'assistant';
     content: string;
@@ -26,6 +36,15 @@ export interface GenerateResponse {
     intent?: string;
     confidence?: string;
     flags?: string[];
+}
+
+interface TokenInfo {
+    estimated_tokens_in: number;
+    max_input_tokens: number;
+    history_count: number;
+    kb_truncated: boolean;
+    kb_original_chars: number;
+    prompt_version: string;
 }
 
 export class OpenAIService {
@@ -56,7 +75,11 @@ export class OpenAIService {
 
         try {
             const systemPrompt = this.buildSystemPrompt(request);
-            const messages = this.buildMessages(request, systemPrompt);
+            const { messages, tokenInfo } = this.buildMessages(request, systemPrompt);
+
+            // Log token usage for observability
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify({ event: 'ai_call_token_usage', ...tokenInfo }));
 
             const completion = await this.client.chat.completions.create({
                 model: config.openai.model,
@@ -96,28 +119,54 @@ export class OpenAIService {
     }
 
     /**
-     * Build messages array including conversation history
+     * Build messages array including conversation history, trimmed to token budget
      */
-    private buildMessages(request: GenerateRequest, systemPrompt: string): OpenAI.ChatCompletionMessageParam[] {
+    private buildMessages(request: GenerateRequest, systemPrompt: string): { messages: OpenAI.ChatCompletionMessageParam[]; tokenInfo: TokenInfo } {
         const messages: OpenAI.ChatCompletionMessageParam[] = [
             { role: 'system', content: systemPrompt },
         ];
 
-        // Add conversation history if available (for DMs)
+        // Collect history messages separately so we can trim them
+        const historyMessages: OpenAI.ChatCompletionMessageParam[] = [];
         if (request.context?.conversationHistory && request.context.conversationHistory.length > 0) {
             for (const msg of request.context.conversationHistory) {
-                messages.push({
+                historyMessages.push({
                     role: msg.role === 'user' ? 'user' : 'assistant',
                     content: msg.content,
                 });
             }
         }
 
-        // Add the current message/comment
         const userPrompt = this.buildUserPrompt(request);
-        messages.push({ role: 'user', content: userPrompt });
+        const userMessage: OpenAI.ChatCompletionMessageParam = { role: 'user', content: userPrompt };
 
-        return messages;
+        // Calculate token usage and trim history if over budget
+        const systemTokens = estimateTokens(systemPrompt);
+        const userTokens = estimateTokens(userPrompt);
+        let historyTokens = historyMessages.reduce((sum, m) => sum + estimateTokens(m.content as string), 0);
+        let totalTokens = systemTokens + historyTokens + userTokens;
+
+        // Trim oldest history messages first until under budget
+        while (totalTokens > MAX_INPUT_TOKENS && historyMessages.length > 0) {
+            const removed = historyMessages.shift()!;
+            const removedTokens = estimateTokens(removed.content as string);
+            historyTokens -= removedTokens;
+            totalTokens -= removedTokens;
+        }
+
+        messages.push(...historyMessages, userMessage);
+
+        const knowledgeBase = request.context?.knowledgeBase || '';
+        const tokenInfo: TokenInfo = {
+            estimated_tokens_in: totalTokens,
+            max_input_tokens: MAX_INPUT_TOKENS,
+            history_count: historyMessages.length,
+            kb_truncated: knowledgeBase.length > KB_MAX_CHARS,
+            kb_original_chars: knowledgeBase.length,
+            prompt_version: PROMPT_VERSION,
+        };
+
+        return { messages, tokenInfo };
     }
 
     /**
@@ -186,12 +235,17 @@ Before sending your reply, verify:
 - Are you guessing anything? If yes, replace with "Please contact us for details."
 - Could your reply be misleading? If yes, simplify it.`;
 
-        // Add knowledge base if available
+        // Add knowledge base if available (capped to prevent runaway costs)
         if (knowledgeBase && knowledgeBase.trim().length > 0) {
+            const kbTruncated = knowledgeBase.length > KB_MAX_CHARS;
+            const effectiveKB = kbTruncated
+                ? knowledgeBase.slice(0, KB_MAX_CHARS) + '\n[...]'
+                : knowledgeBase;
+
             prompt += `
 
 === BUSINESS INFORMATION ===
-${knowledgeBase}
+${effectiveKB}
 === END BUSINESS INFORMATION ===
 
 Use the above business information to answer customer questions accurately. If a question is not covered, politely say you'll check and get back to them.`;

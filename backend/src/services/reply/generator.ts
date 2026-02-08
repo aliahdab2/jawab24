@@ -170,7 +170,7 @@ export class ReplyGenerator {
                 const conversationHistory = await messagesService.getConversationHistory(
                     pageId,
                     senderId,
-                    10
+                    6
                 );
 
                 const aiResponse = await aiService.generateReply({

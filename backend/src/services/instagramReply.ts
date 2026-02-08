@@ -266,7 +266,7 @@ export class InstagramReplyService {
                 const conversationHistory = await this.getInstagramConversationHistory(
                     page.id,
                     senderId,
-                    10
+                    6
                 );
 
                 const aiResponse = await aiService.generateReply({
