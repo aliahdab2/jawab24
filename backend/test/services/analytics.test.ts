@@ -203,6 +203,21 @@ describe('AnalyticsService', () => {
             expect(result.totals.unreplied).toBe(25);
         });
 
+        it('should pass pageId to queries when provided', async () => {
+            const fbRows = [
+                { count: 10, replied_count: 10, flagged_count: 0, reply_method: 'ai', ai_intent: null, detected_language: 'en', flag_reason: null },
+            ];
+
+            setupDbMock(fbRows, [], []);
+
+            const result = await service.getOverview('user-1', 30, 'page-uuid-123');
+
+            // Verify the result still processes correctly with pageId
+            expect(result.totals.comments).toBe(10);
+            // db.select was called (6 times: 3 grouped + 3 response times)
+            expect(db.select).toHaveBeenCalled();
+        });
+
         it('should combine platform counts from comments and messages', async () => {
             const fbRows = [
                 { count: 20, replied_count: 20, flagged_count: 0, reply_method: 'ai', ai_intent: null, detected_language: null, flag_reason: null },

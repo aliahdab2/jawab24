@@ -171,11 +171,148 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.replyMethod).toBe('template');
         });
 
+        it('should use Arabic translation when English is missing', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1',
+                templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1',
+                name: 'Welcome AR',
+                translations: { ar: 'مرحباً بك!' },
+            } as any);
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            expect(result.replyText).toBe('مرحباً بك!');
+            expect(result.replyMethod).toBe('template');
+        });
+
+        it('should use first available translation when en and ar are missing', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1',
+                templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1',
+                name: 'Welcome SV',
+                translations: { sv: 'Välkommen!' },
+            } as any);
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            expect(result.replyText).toBe('Välkommen!');
+        });
+
+        it('should return fallback when AI limit is reached', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+                allowed: false, limit: 100, used: 100, remaining: 0, reason: 'limit_reached',
+            } as any);
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            expect(result.replyText).toBe('Thank you for your comment!');
+            expect(result.replyMethod).toBe('template');
+        });
+
+        it('should fetch post content lazily when postMessage is missing', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { postsService } = await import('../../src/services/posts');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue({
+                message: 'Check out our new product!',
+            } as any);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Thanks for your interest!',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            const contextWithPost = {
+                ...baseContext,
+                postId: 'post-1',
+                pageId: 'page-1',
+                accessToken: 'token-123',
+                // postMessage deliberately omitted
+            };
+
+            await generator.generateForComment(contextWithPost, true);
+
+            expect(postsService.findOrCreateFromWebhook).toHaveBeenCalledWith('page-1', 'post-1', undefined, 'token-123');
+        });
+
+        it('should increment AI reply counter after successful AI reply', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Hello there!',
+                language: 'en',
+                cached: false,
+                intent: 'GREETING',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment(baseContext, true);
+
+            expect(subscriptionsService.incrementAiReplies).toHaveBeenCalledWith('user-123');
+        });
+
+        it('should flag when AI returns OFFENSIVE intent', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'We do not tolerate that language.',
+                language: 'en',
+                cached: false,
+                intent: 'OFFENSIVE',
+                confidence: 'high',
+                flags: [],
+            });
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toBe('offensive');
+            expect(result.aiIntent).toBe('OFFENSIVE');
+        });
+
         it('should flag when angry_customer flag is present', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
 
             vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
             vi.mocked(aiService.generateReply).mockResolvedValue({
                 reply: 'We understand your frustration.',
                 language: 'en',
@@ -204,8 +341,11 @@ describe('ReplyGenerator - Flagging System', () => {
         it('should flag message with COMPLAINT intent', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
 
             vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
             vi.mocked(aiService.generateReply).mockResolvedValue({
                 reply: 'We are sorry to hear that.',
                 language: 'en',
@@ -225,8 +365,11 @@ describe('ReplyGenerator - Flagging System', () => {
         it('should NOT flag clean message reply', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
 
             vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
             vi.mocked(aiService.generateReply).mockResolvedValue({
                 reply: 'Hello! How can I help you?',
                 language: 'en',
@@ -250,6 +393,90 @@ describe('ReplyGenerator - Flagging System', () => {
             const result = await generator.generateForMessage(baseContext, false);
 
             expect(result.needsAttention).toBe(false);
+        });
+
+        it('should return fallback when AI limit is reached for messages', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+                allowed: false, limit: 100, used: 100, remaining: 0, reason: 'limit_reached',
+            } as any);
+
+            const result = await generator.generateForMessage(baseContext, true);
+
+            expect(result.replyText).toBe('Thank you for your message! We will get back to you soon.');
+            expect(result.replyMethod).toBe('template');
+        });
+
+        it('should fetch conversation history for AI context', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { messagesService } = await import('../../src/services/messages');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+                { role: 'user', content: 'Hello' },
+                { role: 'assistant', content: 'Hi there!' },
+            ] as any);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'How can I help?',
+                language: 'en',
+                cached: false,
+                intent: 'GREETING',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForMessage(baseContext, true);
+
+            expect(messagesService.getConversationHistory).toHaveBeenCalledWith('page-123', 'sender-456', 6);
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.objectContaining({
+                        conversationHistory: expect.any(Array),
+                    }),
+                }),
+            );
+        });
+
+        it('should not call AI when pageId or senderId is missing', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+
+            const contextWithoutIds = { userId: 'user-123', text: 'Hello' };
+            const result = await generator.generateForMessage(contextWithoutIds, true);
+
+            expect(aiService.generateReply).not.toHaveBeenCalled();
+            expect(result.replyText).toBeNull();
+        });
+
+        it('should use template for messages when rule matches', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1',
+                templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1',
+                name: 'Price Info',
+                translations: { en: 'Our prices start at $10.' },
+            } as any);
+
+            const result = await generator.generateForMessage(baseContext, true);
+
+            expect(result.replyText).toBe('Our prices start at $10.');
+            expect(result.replyMethod).toBe('template');
         });
     });
 });
