@@ -204,6 +204,34 @@ describe('OpenAI Service - Structured JSON Response', () => {
         expect(result.flags).toContain('redirect_to_human');
     });
 
+    it('should pass response_format json_object to enforce structured output', async () => {
+        const mockCreate = vi.fn().mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ reply: 'Hi!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+            usage: { total_tokens: 40 },
+        });
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: { completions: { create: mockCreate } },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Hello' });
+
+        expect(mockCreate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                response_format: { type: 'json_object' },
+            }),
+        );
+    });
+
     it('should fall back to plain text when AI returns non-JSON', async () => {
         vi.doMock('openai', () => ({
             default: vi.fn().mockImplementation(() => ({

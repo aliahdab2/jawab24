@@ -24,7 +24,14 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
         };
     }
 
-    async fetchSenderName(senderId: string, accessToken: string): Promise<string | undefined> {
+    async fetchSenderName(senderId: string, accessToken: string, pageId?: string): Promise<string | undefined> {
+        // Check DB first: reuse name from a previous message with this sender
+        if (pageId) {
+            const cached = await messagesService.getSenderNameBySenderId(pageId, senderId);
+            if (cached) return cached;
+        }
+
+        // Cache miss — call Facebook API
         try {
             const profile = await facebookService.getSenderProfile(senderId, accessToken);
             return profile?.name;

@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, sql, gt, ne } from 'drizzle-orm';
+import { eq, desc, asc, and, sql, gt, ne, isNotNull } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages, conversationPauses } from '../db/schema';
 import { ConversationMessage } from '../types';
@@ -140,6 +140,13 @@ export class MessagesService {
         });
 
         if (existing) {
+            // Update senderName if we have one and the record doesn't
+            if (senderName && !existing.senderName) {
+                await db.update(messages)
+                    .set({ senderName })
+                    .where(eq(messages.facebookMessageId, facebookMessageId));
+                existing.senderName = senderName;
+            }
             return { message: this.mapToMessage(existing), isNew: false };
         }
 
@@ -154,6 +161,23 @@ export class MessagesService {
         });
 
         return { message: newMessage, isNew: true };
+    }
+
+    /**
+     * Look up a cached sender name from previous messages.
+     * Returns the most recent non-null senderName for this sender, or null.
+     */
+    async getSenderNameBySenderId(pageId: string, senderId: string): Promise<string | null> {
+        const row = await db.query.messages.findFirst({
+            where: and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                isNotNull(messages.senderName),
+            ),
+            columns: { senderName: true },
+            orderBy: [desc(messages.createdAt)],
+        });
+        return row?.senderName ?? null;
     }
 
     /**

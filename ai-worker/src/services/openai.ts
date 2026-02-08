@@ -86,6 +86,7 @@ export class OpenAIService {
                 messages,
                 max_tokens: config.openai.maxTokens,
                 temperature: config.openai.temperature,
+                response_format: { type: 'json_object' },
             });
 
             const content = completion.choices[0]?.message?.content?.trim() || '';

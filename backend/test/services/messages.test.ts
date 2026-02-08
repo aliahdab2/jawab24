@@ -183,6 +183,34 @@ describe('MessagesService', () => {
             expect(db.insert).not.toHaveBeenCalled();
         });
 
+        it('should update senderName when existing record has null name', async () => {
+            const existingNoName = mockDbRow({ senderName: null });
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(existingNoName as any);
+            const mockSet = vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+            });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            const result = await messagesService.findOrCreateFromWebhook(
+                'page-1', 'fb-msg-1', 'sender-1', 'Hello', 'Jane'
+            );
+
+            expect(result.isNew).toBe(false);
+            expect(db.update).toHaveBeenCalled();
+            expect(mockSet).toHaveBeenCalledWith({ senderName: 'Jane' });
+        });
+
+        it('should NOT update senderName when existing record already has a name', async () => {
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(mockDbRow({ senderName: 'John' }) as any);
+
+            const result = await messagesService.findOrCreateFromWebhook(
+                'page-1', 'fb-msg-1', 'sender-1', 'Hello', 'Jane'
+            );
+
+            expect(result.isNew).toBe(false);
+            expect(db.update).not.toHaveBeenCalled();
+        });
+
         it('should create new message when not found', async () => {
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
             const inserted = mockDbRow({ id: 'new-msg', facebookMessageId: 'fb-new' });
@@ -198,6 +226,29 @@ describe('MessagesService', () => {
 
             expect(result.isNew).toBe(true);
             expect(result.message.id).toBe('new-msg');
+        });
+    });
+
+    // ───────────────────────────────────────────
+    // getSenderNameBySenderId
+    // ───────────────────────────────────────────
+    describe('getSenderNameBySenderId', () => {
+        it('should return sender name when found in previous messages', async () => {
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(
+                { senderName: 'Alice' } as any
+            );
+
+            const result = await messagesService.getSenderNameBySenderId('page-1', 'sender-1');
+
+            expect(result).toBe('Alice');
+        });
+
+        it('should return null when no message has a sender name', async () => {
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
+
+            const result = await messagesService.getSenderNameBySenderId('page-1', 'sender-1');
+
+            expect(result).toBeNull();
         });
     });
 
