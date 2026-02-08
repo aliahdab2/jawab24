@@ -93,6 +93,10 @@ export class InstagramReplyService {
             let replyText: string | null = null;
             let replyMethod: 'ai' | 'template' = 'ai';
 
+            let needsAttention = false;
+            let flagReason: string | undefined;
+            let aiIntent: string | undefined;
+
             if (userSettings.aiEnabled) {
                 const aiResponse = await aiService.generateReply({
                     comment: commentMessage,
@@ -104,6 +108,18 @@ export class InstagramReplyService {
                     }
                 });
                 replyText = aiResponse.reply;
+
+                // Determine flagging from AI metadata
+                const flags = aiResponse.flags || [];
+                needsAttention = flags.length > 0 ||
+                    aiResponse.confidence === 'low' ||
+                    aiResponse.intent === 'COMPLAINT' ||
+                    aiResponse.intent === 'OFFENSIVE';
+                flagReason = flags.join(',') ||
+                    (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
+                    (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
+                    undefined;
+                aiIntent = aiResponse.intent;
             }
 
             // 8. Fallback if no AI reply
@@ -121,10 +137,10 @@ export class InstagramReplyService {
                 );
             } catch (error) {
                 this.logger.error('[Instagram] Failed to post reply', { error: String(error) });
-                return { 
-                    success: false, 
-                    commentId: comment.id, 
-                    error: 'Failed to post reply to Instagram' 
+                return {
+                    success: false,
+                    commentId: comment.id,
+                    error: 'Failed to post reply to Instagram'
                 };
             }
 
@@ -135,6 +151,9 @@ export class InstagramReplyService {
                     replied: true,
                     replyText,
                     replyMethod,
+                    needsAttention,
+                    flagReason: flagReason ?? null,
+                    aiIntent: aiIntent ?? null,
                     repliedAt: new Date(),
                     updatedAt: new Date(),
                 })
@@ -238,6 +257,10 @@ export class InstagramReplyService {
             let replyText: string | null = null;
             const replyMethod: 'ai' | 'template' = 'ai';
 
+            let needsAttention = false;
+            let flagReason: string | undefined;
+            let aiIntent: string | undefined;
+
             if (userSettings.aiEnabled) {
                 // Get conversation history for context
                 const conversationHistory = await this.getInstagramConversationHistory(
@@ -256,6 +279,18 @@ export class InstagramReplyService {
                     }
                 });
                 replyText = aiResponse.reply;
+
+                // Determine flagging from AI metadata
+                const flags = aiResponse.flags || [];
+                needsAttention = flags.length > 0 ||
+                    aiResponse.confidence === 'low' ||
+                    aiResponse.intent === 'COMPLAINT' ||
+                    aiResponse.intent === 'OFFENSIVE';
+                flagReason = flags.join(',') ||
+                    (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
+                    (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
+                    undefined;
+                aiIntent = aiResponse.intent;
             }
 
             // 7. If still no reply, skip
@@ -273,10 +308,10 @@ export class InstagramReplyService {
                 );
             } catch (error) {
                 this.logger.error('[Instagram] Failed to send DM reply', { error: String(error) });
-                return { 
-                    success: false, 
-                    messageId, 
-                    error: 'Failed to send reply - user may need to message first' 
+                return {
+                    success: false,
+                    messageId,
+                    error: 'Failed to send reply - user may need to message first'
                 };
             }
 
@@ -287,6 +322,9 @@ export class InstagramReplyService {
                     replied: true,
                     replyText,
                     replyMethod,
+                    needsAttention,
+                    flagReason: flagReason ?? null,
+                    aiIntent: aiIntent ?? null,
                     repliedAt: new Date(),
                     updatedAt: new Date(),
                 })

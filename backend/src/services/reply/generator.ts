@@ -107,8 +107,12 @@ export class ReplyGenerator {
                 const flags = aiResponse.flags || [];
                 const needsAttention = flags.length > 0 ||
                     aiResponse.confidence === 'low' ||
-                    aiResponse.intent === 'COMPLAINT';
-                const flagReason = flags.join(',') || (aiResponse.intent === 'COMPLAINT' ? 'complaint' : undefined);
+                    aiResponse.intent === 'COMPLAINT' ||
+                    aiResponse.intent === 'OFFENSIVE';
+                const flagReason = flags.join(',') ||
+                    (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
+                    (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
+                    undefined;
                 const aiIntent = aiResponse.intent;
 
                 await subscriptionsService.incrementAiReplies(userId);
@@ -185,8 +189,12 @@ export class ReplyGenerator {
                 const flags = aiResponse.flags || [];
                 const needsAttention = flags.length > 0 ||
                     aiResponse.confidence === 'low' ||
-                    aiResponse.intent === 'COMPLAINT';
-                const flagReason = flags.join(',') || (aiResponse.intent === 'COMPLAINT' ? 'complaint' : undefined);
+                    aiResponse.intent === 'COMPLAINT' ||
+                    aiResponse.intent === 'OFFENSIVE';
+                const flagReason = flags.join(',') ||
+                    (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
+                    (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
+                    undefined;
                 const aiIntent = aiResponse.intent;
 
                 await subscriptionsService.incrementAiReplies(userId);
