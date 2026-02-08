@@ -23,6 +23,14 @@ vi.mock('../../src/utils/cleanup', () => ({
     getAiCacheStats: vi.fn(),
 }));
 
+vi.mock('../../src/lib/pipelineMetrics', () => ({
+    pipelineMetrics: {
+        getMetrics: vi.fn(),
+        record: vi.fn(),
+        reset: vi.fn(),
+    },
+}));
+
 vi.mock('../../src/types', () => ({
     createRequestLogger: vi.fn().mockReturnValue({
         info: vi.fn(),
@@ -35,6 +43,7 @@ import healthRoutes from '../../src/routes/health';
 import { db } from '../../src/db';
 import { config } from '../../src/config';
 import { runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
+import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 
 describe('Health Routes', () => {
     let app: FastifyInstance;
@@ -208,6 +217,46 @@ describe('Health Routes', () => {
 
             expect(response.statusCode).toBe(401);
             expect(response.json()).toEqual({ error: 'Unauthorized' });
+
+            delete process.env.CLEANUP_SECRET_TOKEN;
+        });
+    });
+
+    // -------------------------------------------------------
+    // GET /health/pipeline-metrics
+    // -------------------------------------------------------
+    describe('GET /health/pipeline-metrics', () => {
+        it('returns 401 without valid token', async () => {
+            process.env.CLEANUP_SECRET_TOKEN = 'test-token';
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/health/pipeline-metrics',
+            });
+
+            expect(response.statusCode).toBe(401);
+            expect(response.json()).toEqual({ error: 'Unauthorized' });
+
+            delete process.env.CLEANUP_SECRET_TOKEN;
+        });
+
+        it('returns metrics with valid token', async () => {
+            process.env.CLEANUP_SECRET_TOKEN = 'test-token';
+
+            const mockMetrics = {
+                since: '2026-02-08T00:00:00.000Z',
+                counters: { 'facebook_message.success': 5 },
+            };
+            vi.mocked(pipelineMetrics.getMetrics).mockReturnValue(mockMetrics);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/health/pipeline-metrics',
+                headers: { 'x-cleanup-token': 'test-token' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(response.json()).toEqual(mockMetrics);
 
             delete process.env.CLEANUP_SECRET_TOKEN;
         });

@@ -3,6 +3,7 @@ import { messagesService } from '../messages';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator } from './generator';
+import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../../types';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 
@@ -48,19 +49,23 @@ export class MessageProcessor {
         platformMessageId: string,
     ): Promise<MessageResult> {
         const platform = adapter.platform;
+        const pipeline = `${platform}_message` as Pipeline;
 
         try {
             // 1. Validate page
             const page = await adapter.getPage(platformPageId);
             if (!page) {
+                pipelineMetrics.record(pipeline, 'page_not_found');
                 return { success: false, messageId: platformMessageId, error: 'Page not found' };
             }
             if (!page.userId) {
+                pipelineMetrics.record(pipeline, 'no_user');
                 return { success: false, messageId: platformMessageId, error: 'Page has no associated user' };
             }
 
             // 2. Check auto-reply enabled for this platform
             if (!page.autoReplyEnabled) {
+                pipelineMetrics.record(pipeline, 'auto_reply_disabled');
                 return { success: false, messageId: platformMessageId, error: `Auto-reply disabled for ${platform}` };
             }
 
@@ -87,6 +92,7 @@ export class MessageProcessor {
             const internalMessageId = adapter.getInternalMessageId(platformMessageId);
             const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, internalMessageId);
             if (hasNewer) {
+                pipelineMetrics.record(pipeline, 'debounce_skipped');
                 this.logger.info(`[${platform}] Skipping — newer message pending`, { messageId: platformMessageId, senderId });
                 return { success: false, messageId: platformMessageId, error: 'Skipped: newer message pending' };
             }
@@ -94,6 +100,7 @@ export class MessageProcessor {
             // 6. Handoff pause check
             const isPaused = await messagesService.isPaused(page.id, senderId);
             if (isPaused) {
+                pipelineMetrics.record(pipeline, 'handoff_active');
                 this.logger.info(`[${platform}] Skipping — handoff active`, { senderId, pageId: page.id });
                 return { success: false, messageId: platformMessageId, error: 'Handoff active' };
             }
@@ -101,6 +108,7 @@ export class MessageProcessor {
             // 7. Rate limit check
             const rateCheck = await rateLimiter.check(page.id, senderId, 'message');
             if (!rateCheck.allowed) {
+                pipelineMetrics.record(pipeline, 'rate_limited');
                 this.logger.info(`[${platform}] Message rate limited`, { senderId, count: rateCheck.count });
                 return { success: false, messageId: platformMessageId, error: 'Rate limited' };
             }
@@ -117,11 +125,13 @@ export class MessageProcessor {
                         this.logger.debug(`[${platform}] Failed to send away message`);
                     }
                 }
+                pipelineMetrics.record(pipeline, 'settings_disabled');
                 return { success: false, messageId: platformMessageId, error: 'Messages auto-reply disabled' };
             }
 
             // 9. Skip if already replied
             if (!isNew && storedMessage.replied) {
+                pipelineMetrics.record(pipeline, 'already_replied');
                 return { success: false, messageId: platformMessageId, error: 'Message already replied' };
             }
 
@@ -153,6 +163,7 @@ export class MessageProcessor {
                 );
 
             if (!replyText) {
+                pipelineMetrics.record(pipeline, 'no_reply_generated');
                 return { success: false, messageId: platformMessageId, error: 'No reply generated' };
             }
 
@@ -160,6 +171,7 @@ export class MessageProcessor {
             try {
                 await adapter.sendReply(page, senderId, replyText);
             } catch (error) {
+                pipelineMetrics.record(pipeline, 'send_failed');
                 this.logger.error(`[${platform}] Failed to send reply`, { error: String(error) });
                 return { success: false, messageId: platformMessageId, error: 'Failed to send reply' };
             }
@@ -190,9 +202,11 @@ export class MessageProcessor {
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 
+            pipelineMetrics.record(pipeline, 'success');
             return { success: true, messageId: platformMessageId, replyText, replyMethod };
 
         } catch (error) {
+            pipelineMetrics.record(pipeline, 'error');
             this.logger.error(`[${platform}] Error processing message`, {
                 messageId: platformMessageId,
                 error: error instanceof Error ? error.message : String(error),

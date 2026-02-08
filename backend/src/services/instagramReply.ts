@@ -8,6 +8,7 @@ import { notificationService } from './notifications';
 import { messageProcessor } from './reply/messageProcessor';
 import { instagramMessageAdapter } from './reply/adapters';
 import { detectLanguageCode } from '../utils/language';
+import { pipelineMetrics } from '../lib/pipelineMetrics';
 import { db } from '../db';
 import { instagramMedia, instagramComments } from '../db/schema';
 import { eq } from 'drizzle-orm';
@@ -38,15 +39,18 @@ export class InstagramReplyService {
             // 1. Get page by Instagram Account ID
             const page = await pagesService.getPageByInstagramId(instagramAccountId);
             if (!page) {
+                pipelineMetrics.record('instagram_comment', 'page_not_found');
                 return { success: false, commentId: instagramCommentId, error: 'Page not found' };
             }
 
             if (!page.instagramAutoReplyEnabled) {
+                pipelineMetrics.record('instagram_comment', 'auto_reply_disabled');
                 return { success: false, commentId: instagramCommentId, error: 'Instagram auto-reply disabled for this page' };
             }
 
             // Ensure page has an associated user
             if (!page.userId) {
+                pipelineMetrics.record('instagram_comment', 'no_user');
                 return { success: false, commentId: instagramCommentId, error: 'Page has no associated user' };
             }
             const pageUserId = page.userId;
@@ -55,6 +59,7 @@ export class InstagramReplyService {
             const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(pageUserId);
             if (!isCommentsEnabled) {
                 // Store the comment but don't reply
+                pipelineMetrics.record('instagram_comment', 'settings_disabled');
                 await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
                 return { success: false, commentId: instagramCommentId, error: 'Comments auto-reply disabled' };
             }
@@ -62,6 +67,7 @@ export class InstagramReplyService {
             // 3. Find or create the media record
             const media = await this.findOrCreateMedia(page.id, mediaId);
             if (!media.autoReplyEnabled) {
+                pipelineMetrics.record('instagram_comment', 'media_disabled');
                 await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
                 return { success: false, commentId: instagramCommentId, error: 'Auto-reply disabled for this media' };
             }
@@ -73,6 +79,7 @@ export class InstagramReplyService {
                 .where(eq(instagramComments.instagramCommentId, instagramCommentId));
 
             if (existingComment[0]?.replied) {
+                pipelineMetrics.record('instagram_comment', 'already_replied');
                 return { success: false, commentId: instagramCommentId, error: 'Comment already replied' };
             }
 
@@ -80,6 +87,7 @@ export class InstagramReplyService {
             if (fromId) {
                 const isPaused = await messagesService.isPaused(page.id, fromId);
                 if (isPaused) {
+                    pipelineMetrics.record('instagram_comment', 'handoff_active');
                     this.logger.info('[Instagram] Comment skipped — handoff active', { fromId });
                     await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
                     return { success: false, commentId: instagramCommentId, error: 'Handoff active' };
@@ -90,6 +98,7 @@ export class InstagramReplyService {
             if (fromId) {
                 const rateCheck = await rateLimiter.check(page.id, fromId, 'comment');
                 if (!rateCheck.allowed) {
+                    pipelineMetrics.record('instagram_comment', 'rate_limited');
                     this.logger.info('[Instagram] Comment rate limited', { fromId });
                     await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
                     return { success: false, commentId: instagramCommentId, error: 'Rate limited' };
@@ -137,6 +146,7 @@ export class InstagramReplyService {
                     page.accessToken
                 );
             } catch (error) {
+                pipelineMetrics.record('instagram_comment', 'send_failed');
                 this.logger.error('[Instagram] Failed to post reply', { error: String(error) });
                 return {
                     success: false,
@@ -171,6 +181,7 @@ export class InstagramReplyService {
                 ).catch(err => this.logger.error('Notification failed', { err }));
             }
 
+            pipelineMetrics.record('instagram_comment', 'success');
             return {
                 success: true,
                 commentId: comment.id,
@@ -179,9 +190,10 @@ export class InstagramReplyService {
             };
 
         } catch (error) {
-            this.logger.error('[Instagram] Error processing comment', { 
+            pipelineMetrics.record('instagram_comment', 'error');
+            this.logger.error('[Instagram] Error processing comment', {
                 instagramCommentId,
-                error: error instanceof Error ? error.message : String(error) 
+                error: error instanceof Error ? error.message : String(error)
             });
             return {
                 success: false,

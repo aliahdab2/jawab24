@@ -8,6 +8,7 @@ import { templatesService } from '../../src/services/templates';
 import { aiService } from '../../src/services/ai';
 import { settingsService } from '../../src/services/settings';
 import { redis } from '../../src/lib/redis';
+import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 
 // Mock all services
 vi.mock('../../src/services/pages');
@@ -60,6 +61,7 @@ vi.mock('../../src/config', () => ({
 describe('Reply Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        pipelineMetrics.reset();
 
         // Default mock implementations for settingsService
         vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
@@ -136,6 +138,7 @@ describe('Reply Service', () => {
             expect(result.success).toBe(true);
             expect(result.replyMethod).toBe('template');
             expect(result.replyText).toBe('Thank you for your feedback!');
+            expect(pipelineMetrics.getMetrics().counters['facebook_comment.success']).toBe(1);
         });
 
         it('should process comment and reply using AI when no template', async () => {
@@ -179,6 +182,7 @@ describe('Reply Service', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Page not found');
+            expect(pipelineMetrics.getMetrics().counters['facebook_comment.page_not_found']).toBe(1);
         });
 
         it('should skip if auto-reply is disabled for page', async () => {
@@ -196,6 +200,7 @@ describe('Reply Service', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Auto-reply disabled for this page');
+            expect(pipelineMetrics.getMetrics().counters['facebook_comment.auto_reply_disabled']).toBe(1);
         });
 
         it('should skip if auto-reply is disabled for post', async () => {

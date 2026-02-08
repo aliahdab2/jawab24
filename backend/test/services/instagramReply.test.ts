@@ -95,6 +95,7 @@ import { settingsService } from '../../src/services/settings';
 import { instagramService } from '../../src/services/instagram';
 import { messagesService } from '../../src/services/messages';
 import { db } from '../../src/db';
+import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 
 describe('InstagramReplyService', () => {
     let service: InstagramReplyService;
@@ -183,6 +184,7 @@ describe('InstagramReplyService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        pipelineMetrics.reset();
         service = new InstagramReplyService();
 
         // Default happy-path mocks
@@ -231,6 +233,7 @@ describe('InstagramReplyService', () => {
                 commentId: 'comment-1',
                 error: 'Page not found',
             });
+            expect(pipelineMetrics.getMetrics().counters['instagram_comment.page_not_found']).toBe(1);
         });
 
         it('should return error when Instagram auto-reply is disabled', async () => {
@@ -246,6 +249,7 @@ describe('InstagramReplyService', () => {
                 commentId: 'comment-1',
                 error: 'Instagram auto-reply disabled for this page',
             });
+            expect(pipelineMetrics.getMetrics().counters['instagram_comment.auto_reply_disabled']).toBe(1);
         });
 
         it('should return error when page has no userId', async () => {
@@ -271,6 +275,7 @@ describe('InstagramReplyService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Comments auto-reply disabled');
+            expect(pipelineMetrics.getMetrics().counters['instagram_comment.settings_disabled']).toBe(1);
         });
 
         it('should return error when Instagram reply posting fails', async () => {

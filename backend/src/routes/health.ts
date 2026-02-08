@@ -3,6 +3,7 @@ import { db } from '../db';
 import { sql } from 'drizzle-orm';
 import { config } from '../config';
 import { runAllCleanupTasks, getAiCacheStats } from '../utils/cleanup';
+import { pipelineMetrics } from '../lib/pipelineMetrics';
 import { createRequestLogger } from '../types';
 
 const startTime = Date.now();
@@ -176,6 +177,24 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to get cache stats' });
         }
+    });
+
+    /**
+     * Pipeline processing metrics
+     * GET /health/pipeline-metrics
+     * Protected by the same cleanup token to prevent info disclosure
+     */
+    fastify.get<{ Headers: { 'x-cleanup-token'?: string } }>('/health/pipeline-metrics', {
+        schema: { tags: ['Health'], summary: 'Get pipeline processing metrics (token-protected)' },
+    }, async (request, reply) => {
+        const cleanupToken = process.env.CLEANUP_SECRET_TOKEN;
+        const providedToken = request.headers['x-cleanup-token'];
+
+        if (!cleanupToken || providedToken !== cleanupToken) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        return reply.send(pipelineMetrics.getMetrics());
     });
 
     /**

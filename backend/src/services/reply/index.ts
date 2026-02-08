@@ -10,6 +10,7 @@ import { replySender, ReplyMode } from './sender';
 import { messageProcessor } from './messageProcessor';
 import { facebookMessageAdapter } from './adapters';
 import { detectLanguageCode } from '../../utils/language';
+import { pipelineMetrics } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger, ReplyResult } from '../../types';
 import type { MessageResult } from '../../interfaces';
 
@@ -59,12 +60,15 @@ export class ReplyService {
             // 1. Validate page
             const page = await pagesService.getPageByFacebookId(pageId);
             if (!page) {
+                pipelineMetrics.record('facebook_comment', 'page_not_found');
                 return { success: false, commentId: facebookCommentId, error: 'Page not found' };
             }
             if (!page.autoReplyEnabled) {
+                pipelineMetrics.record('facebook_comment', 'auto_reply_disabled');
                 return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this page' };
             }
             if (!page.userId) {
+                pipelineMetrics.record('facebook_comment', 'no_user');
                 return { success: false, commentId: facebookCommentId, error: 'Page has no associated user' };
             }
 
@@ -76,6 +80,7 @@ export class ReplyService {
             // 3. Find or create the post
             const post = await postsService.findOrCreateFromWebhook(page.id, postId, undefined);
             if (!post.autoReplyEnabled) {
+                pipelineMetrics.record('facebook_comment', 'post_disabled');
                 return { success: false, commentId: facebookCommentId, error: 'Auto-reply disabled for this post' };
             }
 
@@ -92,6 +97,7 @@ export class ReplyService {
             if (fromId) {
                 const rateCheck = await rateLimiter.check(pageId, fromId, 'comment');
                 if (!rateCheck.allowed) {
+                    pipelineMetrics.record('facebook_comment', 'rate_limited');
                     this.logger.info('[Reply] Comment rate limited', { fromId, count: rateCheck.count });
                     return { success: false, commentId: comment.id, error: 'Rate limited' };
                 }
@@ -101,6 +107,7 @@ export class ReplyService {
             if (fromId) {
                 const isCommentPaused = await messagesService.isPaused(page.id, fromId);
                 if (isCommentPaused) {
+                    pipelineMetrics.record('facebook_comment', 'handoff_active');
                     this.logger.info('[Reply] Comment skipped — handoff active', { fromId, pageId });
                     return { success: false, commentId: comment.id, error: 'Handoff active' };
                 }
@@ -108,9 +115,11 @@ export class ReplyService {
 
             // 6. Skip if auto-reply disabled or already replied
             if (!isCommentsEnabled) {
+                pipelineMetrics.record('facebook_comment', 'settings_disabled');
                 return { success: false, commentId: comment.id, error: 'Comments auto-reply disabled' };
             }
             if (!isNew && comment.replied) {
+                pipelineMetrics.record('facebook_comment', 'already_replied');
                 return { success: false, commentId: comment.id, error: 'Comment already replied' };
             }
 
@@ -146,6 +155,7 @@ export class ReplyService {
                         { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' }
                     ).catch(err => this.logger.error('New comment notification failed', { err }));
                 }
+                pipelineMetrics.record('facebook_comment', 'no_reply_generated');
                 return { success: false, commentId: comment.id, error: 'No reply generated' };
             }
 
@@ -165,6 +175,7 @@ export class ReplyService {
             });
 
             if (!sendResult.success) {
+                pipelineMetrics.record('facebook_comment', 'send_failed');
                 return { success: false, commentId: comment.id, error: sendResult.error };
             }
 
@@ -191,9 +202,11 @@ export class ReplyService {
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 
+            pipelineMetrics.record('facebook_comment', 'success');
             return { success: true, commentId: comment.id, replyText, replyMethod };
 
         } catch (error) {
+            pipelineMetrics.record('facebook_comment', 'error');
             this.logger.error('Error processing comment', {
                 facebookCommentId,
                 error: error instanceof Error ? error.message : String(error)
