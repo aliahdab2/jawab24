@@ -106,7 +106,6 @@ describe('InstagramReplyService', () => {
         accessToken: 'page-token',
         instagramAutoReplyEnabled: true,
         instagramAccountId: 'ig-1',
-        instagramAccountId: 'ig-1',
         knowledgeBase: 'Some KB',
     };
 

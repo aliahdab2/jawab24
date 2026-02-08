@@ -37,6 +37,7 @@ interface MessagingEvent {
     message?: {
         mid: string;
         text?: string;
+        is_echo?: boolean;
     };
 }
 
@@ -175,6 +176,8 @@ export class WebhookController {
             // Handle messaging events
             if (entry.messaging) {
                 for (const messageEvent of entry.messaging) {
+                    // Skip echo events (bot's own messages reflected back)
+                    if (messageEvent.message?.is_echo) continue;
                     // Only handle text messages
                     if (messageEvent.message && messageEvent.message.text) {
                         await this.processMessage(pageId, messageEvent);
@@ -326,6 +329,8 @@ export class WebhookController {
             // Handle Instagram messaging events (DMs)
             if (entry.messaging) {
                 for (const messageEvent of entry.messaging) {
+                    // Skip echo events (bot's own messages reflected back)
+                    if (messageEvent.message?.is_echo) continue;
                     if (messageEvent.message && messageEvent.message.text) {
                         await this.processInstagramMessage(instagramAccountId, messageEvent);
                     }

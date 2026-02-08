@@ -353,6 +353,125 @@ describe('MessagesService', () => {
 
             expect(result).toBe(false);
         });
+
+        it('should exclude the current message by ID to prevent microsecond precision self-matching', async () => {
+            // BUG REGRESSION: PostgreSQL stores timestamps with μs precision
+            // (e.g., 20:45:48.484573) but JS Date truncates to ms (20:45:48.484000).
+            // Without excluding the current message by ID, the comparison
+            // `created_at > '20:45:48.484'` would match the row itself
+            // (484573μs > 484000μs), making every message skip itself as "newer pending".
+            const currentMsg = mockDbRow({
+                id: 'msg-current',
+                facebookMessageId: 'fb-msg-1',
+                createdAt: new Date('2026-02-01T12:00:00.500Z'),
+            });
+
+            vi.mocked(db.query.messages.findFirst)
+                .mockResolvedValueOnce(currentMsg as any)  // lookup current message
+                .mockResolvedValueOnce(null as any);        // no truly newer message (self excluded by ne())
+
+            const result = await messagesService.hasNewerUnrepliedMessage('page-1', 'sender-1', 'fb-msg-1');
+
+            // Must return false: the only potential "newer" candidate was itself,
+            // which is excluded via ne(messages.id, currentMsg.id)
+            expect(result).toBe(false);
+            expect(db.query.messages.findFirst).toHaveBeenCalledTimes(2);
+        });
+
+        it('should detect a genuinely newer message even with same-second timestamps', async () => {
+            // Two messages arrive within the same second. The second call returns
+            // a different message ID, proving the query doesn't accidentally
+            // exclude legitimate newer messages.
+            const currentMsg = mockDbRow({
+                id: 'msg-1',
+                facebookMessageId: 'fb-msg-1',
+                createdAt: new Date('2026-02-01T12:00:00.500Z'),
+            });
+            const newerMsg = mockDbRow({
+                id: 'msg-2',
+                facebookMessageId: 'fb-msg-2',
+                createdAt: new Date('2026-02-01T12:00:00.800Z'),
+            });
+
+            vi.mocked(db.query.messages.findFirst)
+                .mockResolvedValueOnce(currentMsg as any)
+                .mockResolvedValueOnce(newerMsg as any);  // genuinely newer message
+
+            const result = await messagesService.hasNewerUnrepliedMessage('page-1', 'sender-1', 'fb-msg-1');
+
+            expect(result).toBe(true);
+        });
+    });
+
+    // ───────────────────────────────────────────
+    // getUnrepliedFromSender
+    // ───────────────────────────────────────────
+    describe('getUnrepliedFromSender', () => {
+        it('should return unreplied messages from sender in chronological order', async () => {
+            const rows = [
+                mockDbRow({ id: 'msg-1', message: 'Hello' }),
+                mockDbRow({ id: 'msg-2', message: 'Are you there?' }),
+            ];
+            vi.mocked(db.query.messages.findMany).mockResolvedValue(rows as any);
+
+            const result = await messagesService.getUnrepliedFromSender('page-1', 'sender-1');
+
+            expect(result).toHaveLength(2);
+            expect(result[0]).toEqual({ id: 'msg-1', message: 'Hello' });
+            expect(result[1]).toEqual({ id: 'msg-2', message: 'Are you there?' });
+        });
+
+        it('should return empty array when no unreplied messages', async () => {
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([]);
+
+            const result = await messagesService.getUnrepliedFromSender('page-1', 'sender-1');
+
+            expect(result).toEqual([]);
+        });
+    });
+
+    // ───────────────────────────────────────────
+    // markOlderMessagesAsReplied
+    // ───────────────────────────────────────────
+    describe('markOlderMessagesAsReplied', () => {
+        it('should mark older unreplied messages and exclude the current message', async () => {
+            const mockSet = vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([
+                        { id: 'msg-1' },
+                        { id: 'msg-2' },
+                    ]),
+                }),
+            });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            const count = await messagesService.markOlderMessagesAsReplied(
+                'page-1', 'sender-1', 'msg-3', 'Consolidated reply', 'ai'
+            );
+
+            expect(count).toBe(2);
+            expect(db.update).toHaveBeenCalled();
+            expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+                replied: true,
+                replyText: 'Consolidated reply',
+                replyMethod: 'ai',
+            }));
+        });
+
+        it('should return 0 when no older messages to mark', async () => {
+            const mockSet = vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([]),
+                }),
+            });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            const count = await messagesService.markOlderMessagesAsReplied(
+                'page-1', 'sender-1', 'msg-1', 'Reply', 'template'
+            );
+
+            expect(count).toBe(0);
+        });
     });
 
     // ───────────────────────────────────────────

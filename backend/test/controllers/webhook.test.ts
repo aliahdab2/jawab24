@@ -485,6 +485,89 @@ describe('Webhook Controller', () => {
             expect(mockEnqueueComment).not.toHaveBeenCalled();
         });
 
+        it('should NOT enqueue Facebook echo messages (bot own messages reflected back)', async () => {
+            // Facebook reflects the bot's own outgoing messages back as webhook events
+            // with is_echo=true. Without filtering, these would create infinite reply loops.
+            const webhookPayload = {
+                object: 'page',
+                entry: [
+                    {
+                        id: 'page_123',
+                        time: Date.now(),
+                        messaging: [
+                            {
+                                sender: { id: 'page_123' },
+                                recipient: { id: 'user_123' },
+                                message: {
+                                    mid: 'echo_msg_123',
+                                    text: 'This is the bot reply',
+                                    is_echo: true,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+
+            // Give async processing time to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Echo messages must NOT be enqueued — they are our own outgoing messages
+            expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        });
+
+        it('should enqueue non-echo Facebook messages normally', async () => {
+            // Normal user message (is_echo is absent/false) should be enqueued
+            const webhookPayload = {
+                object: 'page',
+                entry: [
+                    {
+                        id: 'page_123',
+                        time: Date.now(),
+                        messaging: [
+                            {
+                                sender: { id: 'user_123' },
+                                recipient: { id: 'page_123' },
+                                message: {
+                                    mid: 'msg_normal',
+                                    text: 'Hello!',
+                                    // no is_echo field — this is a real user message
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            expect(mockEnqueueMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    jobType: 'facebook_message',
+                    messageId: 'msg_normal',
+                    text: 'Hello!',
+                })
+            );
+        });
+
         it('should NOT enqueue for comment edits', async () => {
             const webhookPayload = {
                 object: 'page',
@@ -613,6 +696,42 @@ describe('Webhook Controller', () => {
                     senderName: 'johndoe',
                 })
             );
+        });
+
+        it('should NOT enqueue Instagram echo messages (bot own DMs reflected back)', async () => {
+            const webhookPayload = {
+                object: 'instagram',
+                entry: [
+                    {
+                        id: 'ig_account_123',
+                        time: Date.now(),
+                        messaging: [
+                            {
+                                sender: { id: 'ig_account_123' },
+                                message: {
+                                    mid: 'ig_echo_msg',
+                                    text: 'Bot auto-reply',
+                                    is_echo: true,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Echo messages must NOT be enqueued
+            expect(mockEnqueueMessage).not.toHaveBeenCalled();
         });
 
         it('should enqueue Instagram message jobs', async () => {

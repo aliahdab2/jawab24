@@ -283,6 +283,7 @@ export class MessagesService {
                 eq(messages.senderId, senderId),
                 eq(messages.direction, 'incoming'),
                 eq(messages.replied, false),
+                ne(messages.id, currentMsg.id),
                 sql`${messages.createdAt} > ${currentMsg.createdAt}`
             ),
         });
