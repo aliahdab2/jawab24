@@ -54,9 +54,9 @@ describe('Config', () => {
         expect(config.openai.maxTokens).toBe(300);
     });
 
-    it('should parse OPENAI_TEMPERATURE as float with default 0.8', async () => {
+    it('should parse OPENAI_TEMPERATURE as float with default 0.7', async () => {
         delete process.env.OPENAI_TEMPERATURE;
         const { config } = await import('../src/config');
-        expect(config.openai.temperature).toBe(0.8);
+        expect(config.openai.temperature).toBe(0.7);
     });
 });
