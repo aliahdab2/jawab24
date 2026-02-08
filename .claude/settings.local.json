@@ -63,9 +63,7 @@
       "Bash(npm run translation:validate:*)",
       "WebFetch(domain:jawab24.com)",
       "Bash(./scripts/deploy-production.sh:*)",
-      "Bash(npx drizzle-kit:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: add Shopify App integration for product-aware AI replies\n\nShopify store owners can connect their store to Jawab24, sync products,\nand link to a Facebook/Instagram page. The AI auto-replies then include\nreal product data \\(prices, sizes, availability\\) from Shopify.\n\n- Add shopify_stores and shopify_products DB tables with migration\n- Add Shopify OAuth flow, product sync, and webhook handlers\n- Add BullMQ sync worker for background product synchronization\n- Build product summary generator for AI context injection \\(~800 chars\\)\n- Enrich knowledge base with Shopify data in reply pipeline\n- Add token cost tracking \\(logAiUsage\\) for per-store cost visibility\n- Refactor reply generator to share template matching and AI processing\n- Add AI safety rules to prevent product hallucination\n- Add Shopify settings UI with store connection, sync, and page linking\n- Add i18n translations \\(EN/AR\\) for Shopify section\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "WebFetch(domain:help.tidio.com)"
+      "Bash(npx drizzle-kit:*)"
     ]
   }
 }

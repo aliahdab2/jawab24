@@ -11,6 +11,7 @@ import {
   MessageSquare,
   MessageCircle,
   Zap,
+  Clock,
   FileText,
   Sparkles,
   Crown,
@@ -51,13 +52,13 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
         <div
           className={clsx(
             "h-full rounded-full transition-all duration-1000 relative shadow-sm",
-            percent > 100 ? 'bg-gradient-to-r from-red-500 to-red-600' :
+            percent > 90 ? 'bg-gradient-to-r from-red-500 to-red-600' :
               percent > 75 ? 'bg-gradient-to-r from-amber-500 to-amber-600' :
                 'bg-gradient-to-r from-brand-500 to-brand-600'
           )}
-          style={{
+          style={{ 
             width: `${Math.min(percent, 100)}%`,
-            boxShadow: percent > 10 ? `0 0 10px ${percent > 100 ? 'rgba(239, 68, 68, 0.3)' : percent > 75 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(20, 184, 166, 0.3)'}` : 'none'
+            boxShadow: percent > 10 ? `0 0 10px ${percent > 90 ? 'rgba(239, 68, 68, 0.3)' : percent > 75 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(20, 184, 166, 0.3)'}` : 'none'
           }}
         >
           {percent > 20 && (
@@ -89,6 +90,7 @@ const DashboardPage: NextPageWithLayout = () => {
     // Comment stats
     totalComments: 0,
     repliedToday: 0,
+    pendingReplies: 0,
     needsAttention: 0,
     activePages: 0,
     commentsToday: 0,
@@ -98,6 +100,7 @@ const DashboardPage: NextPageWithLayout = () => {
     // Message stats
     totalMessages: 0,
     messagesReplied: 0,
+    messagesPending: 0,
     messagesNeedsAttention: 0,
     messagesRepliedToday: 0
   });
@@ -192,6 +195,7 @@ const DashboardPage: NextPageWithLayout = () => {
       setStatsData({
         totalComments: stats.total,
         repliedToday: stats.repliedToday,
+        pendingReplies: stats.unreplied,
         needsAttention: stats.needsAttention,
         activePages,
         commentsToday,
@@ -201,6 +205,7 @@ const DashboardPage: NextPageWithLayout = () => {
         // Message stats
         totalMessages: msgStats.total,
         messagesReplied: msgStats.replied,
+        messagesPending: msgStats.pending,
         messagesNeedsAttention: messagesNeedsAttention,
         messagesRepliedToday: msgStats.replied // Using total as proxy
       });
@@ -261,6 +266,14 @@ const DashboardPage: NextPageWithLayout = () => {
       href: '/comments'
     },
     {
+      id: 'pending',
+      nameKey: 'comments.pending' as TranslationKey,
+      value: statsData.pendingReplies.toLocaleString(),
+      icon: Clock,
+      color: 'amber' as const,
+      href: '/comments?filter=pending'
+    },
+    {
       id: 'replied_today',
       nameKey: 'comments.repliedToday' as TranslationKey,
       value: statsData.repliedToday.toLocaleString(),
@@ -287,6 +300,14 @@ const DashboardPage: NextPageWithLayout = () => {
       icon: MessageCircle,
       color: 'brand' as const,
       href: '/messages'
+    },
+    {
+      id: 'pending',
+      nameKey: 'comments.pending' as TranslationKey,
+      value: statsData.messagesPending.toLocaleString(),
+      icon: Clock,
+      color: 'amber' as const,
+      href: '/messages?filter=pending'
     },
     {
       id: 'replied_today',
@@ -356,10 +377,10 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('comments.title')}
           </h3>
           <Link href="/comments" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-            {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
+            {t('common.viewAll')} →
           </Link>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {commentStats.map((stat, i) => (
             <StatCard
               key={stat.id}
@@ -382,10 +403,10 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('messages.title')}
           </h3>
           <Link href="/messages" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-            {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
+            {t('common.viewAll')} →
           </Link>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {messageStats.map((stat, i) => (
             <StatCard
               key={stat.id}
@@ -409,7 +430,7 @@ const DashboardPage: NextPageWithLayout = () => {
               {t('dashboard.performance' as TranslationKey)}
             </h3>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 [&>:last-child]:col-span-2 sm:[&>:last-child]:col-span-1">
+          <div className="grid grid-cols-3 gap-3 sm:gap-4">
             <StatCard
               nameKey={'dashboard.replyRateValue' as TranslationKey}
               value={`${analytics.totals.replyRate}%`}

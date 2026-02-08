@@ -85,13 +85,6 @@
       "when": 1770531955002,
       "tag": "0011_legal_jocasta",
       "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "5",
-      "when": 1770547585136,
-      "tag": "0012_lying_kabuki",
-      "breakpoints": true
     }
   ]
 }

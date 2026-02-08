@@ -216,8 +216,6 @@ export const settings = pgTable('settings', {
     // SLA escalation thresholds (minutes) - auto-flag unreplied items as needsAttention
     commentEscalationMinutes: integer('comment_escalation_minutes').default(60),
     messageEscalationMinutes: integer('message_escalation_minutes').default(30),
-    // Human handoff: default pause duration when user takes over a conversation
-    handoffPauseDurationMinutes: integer('handoff_pause_duration_minutes').default(30),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
@@ -255,19 +253,6 @@ export const messages = pgTable('messages', {
         directionIdx: index('idx_messages_direction').on(table.direction),
         platformIdx: index('idx_messages_platform').on(table.platform),
         needsAttentionIdx: index('idx_messages_needs_attention').on(table.needsAttention),
-    };
-});
-
-// 11. Conversation Pauses Table (for explicit human handoff / smart-reply pause)
-export const conversationPauses = pgTable('conversation_pauses', {
-    id: uuid('id').defaultRandom().primaryKey(),
-    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
-    senderId: varchar('sender_id', { length: 255 }).notNull(),
-    pausedUntil: timestamp('paused_until').notNull(),
-    createdAt: timestamp('created_at').defaultNow(),
-}, (table) => {
-    return {
-        pageSenderIdx: index('idx_conversation_pauses_page_sender').on(table.pageId, table.senderId),
     };
 });
 

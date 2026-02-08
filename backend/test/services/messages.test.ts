@@ -8,11 +8,9 @@ vi.mock('../../src/db', () => ({
         query: {
             pages: { findMany: vi.fn() },
             messages: { findMany: vi.fn(), findFirst: vi.fn() },
-            conversationPauses: { findFirst: vi.fn() },
         },
         insert: vi.fn(),
         update: vi.fn(),
-        delete: vi.fn(),
     }
 }));
 
@@ -471,131 +469,34 @@ describe('MessagesService', () => {
     });
 
     // ───────────────────────────────────────────
-    // isPaused (replaces isManuallyPaused)
+    // isManuallyPaused
     // ───────────────────────────────────────────
-    describe('isPaused', () => {
-        it('should return true when explicit pause is active', async () => {
-            const futureDate = new Date(Date.now() + 30 * 60 * 1000);
-            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(
-                { id: 'pause-1', pageId: 'page-1', senderId: 'sender-1', pausedUntil: futureDate, createdAt: new Date() } as any
-            );
-
-            const result = await messagesService.isPaused('page-1', 'sender-1');
-
-            expect(result).toBe(true);
-        });
-
-        it('should return true when implicit pause is active (recent manual reply)', async () => {
-            // No explicit pause
-            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
-            // But there is a recent manual reply
+    describe('isManuallyPaused', () => {
+        it('should return true when recent manual outgoing reply exists', async () => {
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(
                 mockDbRow({ direction: 'outgoing', replyMethod: 'manual' }) as any
             );
 
-            const result = await messagesService.isPaused('page-1', 'sender-1');
+            const result = await messagesService.isManuallyPaused('page-1', 'sender-1');
 
             expect(result).toBe(true);
         });
 
-        it('should return false when neither pause is active', async () => {
-            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
+        it('should return false when no recent manual reply', async () => {
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
 
-            const result = await messagesService.isPaused('page-1', 'sender-1');
+            const result = await messagesService.isManuallyPaused('page-1', 'sender-1');
 
             expect(result).toBe(false);
         });
 
-        it('should accept custom implicit pause duration', async () => {
-            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
+        it('should accept custom pause duration', async () => {
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
 
-            const result = await messagesService.isPaused('page-1', 'sender-1', 60);
+            const result = await messagesService.isManuallyPaused('page-1', 'sender-1', 60);
 
             expect(result).toBe(false);
-            expect(db.query.conversationPauses.findFirst).toHaveBeenCalled();
             expect(db.query.messages.findFirst).toHaveBeenCalled();
-        });
-    });
-
-    // ───────────────────────────────────────────
-    // Conversation Pause (explicit pause/resume)
-    // ───────────────────────────────────────────
-    describe('pauseConversation', () => {
-        it('should insert a pause with correct pausedUntil', async () => {
-            const mockWhere = vi.fn().mockResolvedValue(undefined);
-            vi.mocked(db.delete).mockReturnValue({
-                where: mockWhere,
-            } as any);
-            vi.mocked(db.insert).mockReturnValue({
-                values: vi.fn().mockResolvedValue(undefined),
-            } as any);
-
-            const result = await messagesService.pauseConversation('page-1', 'sender-1', 45);
-
-            expect(db.delete).toHaveBeenCalled();
-            expect(db.insert).toHaveBeenCalled();
-            expect(result.pausedUntil).toBeInstanceOf(Date);
-            // Should be ~45 minutes in the future
-            const diffMinutes = (result.pausedUntil.getTime() - Date.now()) / 60000;
-            expect(diffMinutes).toBeGreaterThan(44);
-            expect(diffMinutes).toBeLessThan(46);
-        });
-
-        it('should default to 30 minutes when no duration specified', async () => {
-            vi.mocked(db.delete).mockReturnValue({
-                where: vi.fn().mockResolvedValue(undefined),
-            } as any);
-            vi.mocked(db.insert).mockReturnValue({
-                values: vi.fn().mockResolvedValue(undefined),
-            } as any);
-
-            const result = await messagesService.pauseConversation('page-1', 'sender-1');
-
-            const diffMinutes = (result.pausedUntil.getTime() - Date.now()) / 60000;
-            expect(diffMinutes).toBeGreaterThan(29);
-            expect(diffMinutes).toBeLessThan(31);
-        });
-    });
-
-    describe('resumeConversation', () => {
-        it('should delete the pause record', async () => {
-            const mockWhere = vi.fn().mockResolvedValue(undefined);
-            vi.mocked(db.delete).mockReturnValue({
-                where: mockWhere,
-            } as any);
-
-            await messagesService.resumeConversation('page-1', 'sender-1');
-
-            expect(db.delete).toHaveBeenCalled();
-            expect(mockWhere).toHaveBeenCalled();
-        });
-    });
-
-    describe('getPauseStatus', () => {
-        it('should return paused=true with remaining minutes when explicit pause is active', async () => {
-            const futureDate = new Date(Date.now() + 20 * 60 * 1000); // 20 min from now
-            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(
-                { id: 'pause-1', pageId: 'page-1', senderId: 'sender-1', pausedUntil: futureDate, createdAt: new Date() } as any
-            );
-
-            const result = await messagesService.getPauseStatus('page-1', 'sender-1');
-
-            expect(result.paused).toBe(true);
-            expect(result.pausedUntil).toEqual(futureDate);
-            expect(result.remainingMinutes).toBeGreaterThan(18);
-            expect(result.remainingMinutes).toBeLessThanOrEqual(20);
-        });
-
-        it('should return paused=false when no active pause', async () => {
-            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
-
-            const result = await messagesService.getPauseStatus('page-1', 'sender-1');
-
-            expect(result.paused).toBe(false);
-            expect(result.pausedUntil).toBeNull();
-            expect(result.remainingMinutes).toBeNull();
         });
     });
 });

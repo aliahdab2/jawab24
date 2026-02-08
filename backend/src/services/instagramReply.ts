@@ -74,13 +74,13 @@ export class InstagramReplyService {
                 return { success: false, commentId: instagramCommentId, error: 'Comment already replied' };
             }
 
-            // 4.5 Handoff pause: skip auto-reply if conversation is paused
+            // 4.5 Manual handoff pause
             if (fromId) {
-                const paused = await messagesService.isPaused(page.id, fromId);
-                if (paused) {
-                    this.logger.info('[Instagram] Comment skipped — handoff active', { fromId });
+                const isPaused = await messagesService.isManuallyPaused(page.id, fromId);
+                if (isPaused) {
+                    this.logger.info('[Instagram] Comment skipped — manual handoff active', { fromId });
                     await this.storeComment(page.id, mediaId, instagramCommentId, commentMessage, fromId, fromUsername);
-                    return { success: false, commentId: instagramCommentId, error: 'Handoff active' };
+                    return { success: false, commentId: instagramCommentId, error: 'Manual handoff active' };
                 }
             }
 
@@ -249,11 +249,11 @@ export class InstagramReplyService {
                 return { success: false, messageId, error: 'Message already replied' };
             }
 
-            // 4.5 Handoff pause: skip auto-reply if conversation is paused
-            const paused = await messagesService.isPaused(page.id, senderId);
-            if (paused) {
-                this.logger.info('[Instagram] Skipping DM — handoff active', { senderId });
-                return { success: false, messageId, error: 'Handoff active' };
+            // 4.5 Manual handoff pause
+            const isPaused = await messagesService.isManuallyPaused(page.id, senderId);
+            if (isPaused) {
+                this.logger.info('[Instagram] Skipping DM — manual handoff active', { senderId });
+                return { success: false, messageId, error: 'Manual handoff active' };
             }
 
             // 4.6 Rate limiting

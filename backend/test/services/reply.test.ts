@@ -533,68 +533,6 @@ describe('Reply Service', () => {
             // Should set expire on first increment
             expect(redis.expire).toHaveBeenCalledWith('rate:comment:fb_page_123:user_123', 60);
         });
-
-        it('should skip reply when conversation is explicitly paused (handoff active)', async () => {
-            const { messagesService } = await import('../../src/services/messages');
-
-            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
-            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
-            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
-                comment: mockComment as any,
-                isNew: true,
-            });
-            // Mock isPaused to return true (conversation is paused)
-            vi.mocked(messagesService.isPaused).mockResolvedValue(true);
-
-            const result = await replyService.processComment(
-                'fb_page_123',
-                'fb_post_123',
-                'fb_comment_123',
-                'Great product!',
-                'user_123',
-                'John Doe'
-            );
-
-            expect(result.success).toBe(false);
-            expect(result.error).toBe('Handoff active');
-        });
-
-        it('should proceed with reply when conversation is not paused', async () => {
-            const { messagesService } = await import('../../src/services/messages');
-
-            const mockRule = { id: 'rule_1', templateId: 'template_1' };
-            const mockTemplate = {
-                id: 'template_1',
-                translations: { en: 'Thank you!' },
-            };
-
-            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
-            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
-            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
-                comment: mockComment as any,
-                isNew: true,
-            });
-            vi.mocked(messagesService.isPaused).mockResolvedValue(false);
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
-            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
-            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
-
-            const axios = await import('axios');
-            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
-
-            const result = await replyService.processComment(
-                'fb_page_123',
-                'fb_post_123',
-                'fb_comment_123',
-                'Great product!',
-                'user_123',
-                'John Doe'
-            );
-
-            expect(result.success).toBe(true);
-        });
     });
 });
 

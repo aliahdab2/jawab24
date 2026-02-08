@@ -22,9 +22,7 @@ import {
   Sparkles,
   Zap,
   Loader2,
-  Send,
-  PauseCircle,
-  PlayCircle
+  Send
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
@@ -108,39 +106,6 @@ const MessagesPage: NextPageWithLayout = () => {
     sendReplyMutation.mutate({ messageId: targetId, text: replyText.trim() });
   };
 
-  // Pause/Resume conversation mutations
-  const pauseMutation = useMutation({
-    mutationFn: async ({ senderId, pageId }: { senderId: string; pageId: string }) => {
-      const res = await messagesApi.pauseConversation(senderId, pageId);
-      return res.data;
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['pause-status', variables.senderId] });
-      if (selectedConversation) {
-        setSelectedConversation({
-          ...selectedConversation,
-          pauseStatus: { paused: true, pausedUntil: _data.pausedUntil, remainingMinutes: null },
-        });
-      }
-    },
-  });
-
-  const resumeMutation = useMutation({
-    mutationFn: async ({ senderId, pageId }: { senderId: string; pageId: string }) => {
-      const res = await messagesApi.resumeConversation(senderId, pageId);
-      return res.data;
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['pause-status', variables.senderId] });
-      if (selectedConversation) {
-        setSelectedConversation({
-          ...selectedConversation,
-          pauseStatus: { paused: false, pausedUntil: null, remainingMinutes: null },
-        });
-      }
-    },
-  });
-
   // Fetch pages for CSV page name resolution
   const { data: pagesData = [] } = useQuery({
     queryKey: ['pages'],
@@ -195,7 +160,7 @@ const MessagesPage: NextPageWithLayout = () => {
   // Check if a conversation needs human attention
   const checkConversationNeedsAttention = useCallback((msgs: Message[]): boolean => {
     // Check backend flags first
-    if (msgs.some(m => m.needsAttention && !m.replied)) return true;
+    if (msgs.some(m => m.needsAttention)) return true;
 
     // Fallback: client-side keyword check for messages predating the flagging system
     const lastIncoming = [...msgs].filter(m => m.direction === 'incoming').sort((a, b) =>
@@ -284,19 +249,6 @@ const MessagesPage: NextPageWithLayout = () => {
     });
 
   }, [allMessages, debouncedSearch, filter, checkConversationNeedsAttention]);
-
-  // Fetch pause status when a conversation is selected
-  useEffect(() => {
-    if (!selectedConversation) return;
-    const pageId = selectedConversation.lastMessage.pageId;
-    if (!pageId) return;
-    messagesApi.getPauseStatus(selectedConversation.senderId, pageId)
-      .then(res => {
-        setSelectedConversation(prev => prev ? { ...prev, pauseStatus: res.data } : null);
-      })
-      .catch(() => { /* ignore — pause status is optional */ });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConversation?.senderId]);
 
   // Intersection Observer
   useEffect(() => {
@@ -718,47 +670,11 @@ const MessagesPage: NextPageWithLayout = () => {
                 </Button>
               </div>
               <div className="flex items-center justify-between mt-2">
-                <div className="flex items-center gap-2">
-                  {/* Pause/Resume Smart Reply Button */}
-                  {(() => {
-                    const pageId = selectedConversation.lastMessage.pageId;
-                    const isPaused = selectedConversation.pauseStatus?.paused;
-                    return (
-                      <button
-                        onClick={() => {
-                          if (isPaused) {
-                            resumeMutation.mutate({ senderId: selectedConversation.senderId, pageId });
-                          } else {
-                            pauseMutation.mutate({ senderId: selectedConversation.senderId, pageId });
-                          }
-                        }}
-                        disabled={pauseMutation.isPending || resumeMutation.isPending}
-                        className={clsx(
-                          'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border',
-                          isPaused
-                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                            : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'
-                        )}
-                      >
-                        {isPaused ? (
-                          <>
-                            <PlayCircle className="w-3.5 h-3.5" />
-                            {t('messages.resumeSmartReply' as TranslationKey)}
-                          </>
-                        ) : (
-                          <>
-                            <PauseCircle className="w-3.5 h-3.5" />
-                            {t('messages.pauseSmartReply' as TranslationKey)}
-                          </>
-                        )}
-                      </button>
-                    );
-                  })()}
-                  {selectedConversation.pauseStatus?.paused && selectedConversation.pauseStatus.remainingMinutes != null && (
-                    <span className="text-[10px] font-medium text-violet-500">
-                      {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: selectedConversation.pauseStatus.remainingMinutes })}
-                    </span>
-                  )}
+                <div className="flex items-center gap-1.5 text-surface-400">
+                  <Bot className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">
+                    {t('messages.autoReplyWillPause' as TranslationKey)}
+                  </span>
                 </div>
                 <button
                   onClick={() => { setSelectedConversation(null); setReplyText(''); setSendError(null); }}

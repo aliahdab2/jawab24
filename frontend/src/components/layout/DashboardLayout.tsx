@@ -195,8 +195,8 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                     paddingBottom: '16px',
                   }
                 : {
-                    // Mobile app: padding = bottom nav (64px) + FAB height (48px) + gaps + breathing room
-                    paddingBottom: '140px',
+                    // Mobile app: padding = bottom nav (64px) + safe area + extra breathing room
+                    paddingBottom: '80px', // nav height (64px) + breathing room
                   }),
             }}
           >
