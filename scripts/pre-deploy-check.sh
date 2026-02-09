@@ -75,6 +75,22 @@ else
 fi
 
 # =============================================
+# 0.6. Lock file sync check
+# =============================================
+echo ""
+echo "🔒 Checking package-lock.json is in sync..."
+if npm ls --workspace=jawab24-backend > /dev/null 2>&1 && \
+   npm ls --workspace=jawab24-frontend > /dev/null 2>&1 && \
+   npm ls --workspace=jawab24-ai-worker > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ package-lock.json in sync with package.json${NC}"
+else
+    echo -e "${RED}   ❌ package-lock.json is out of sync!${NC}"
+    echo -e "${RED}   Run 'npm install' to regenerate the lock file.${NC}"
+    echo -e "${RED}   This prevents Docker builds from using stale dependency versions.${NC}"
+    exit 1
+fi
+
+# =============================================
 # 0.7. Dependency security audit
 # =============================================
 echo ""
