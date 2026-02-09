@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useRouter } from 'next/router';
-import LoginPage from '@/pages/login';
+import _LoginPage from '@/pages/login';
 
 // Mock Next.js router
 vi.mock('next/router', () => ({

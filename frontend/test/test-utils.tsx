@@ -72,9 +72,7 @@ const createTestQueryClient = () => new QueryClient({
   },
 });
 
-interface CustomRenderOptions extends RenderOptions {
-  // Add any specific options here if needed later
-}
+type CustomRenderOptions = RenderOptions;
 
 const customRender = (
   ui: ReactElement,

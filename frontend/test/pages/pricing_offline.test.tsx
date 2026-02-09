@@ -1,8 +1,8 @@
 
 import { render, screen, waitFor } from '@testing-library/react';
 import PricingPage from '@/pages/pricing';
-import { plansApi, subscriptionApi } from '@/lib/api';
-import { isUserSanctionedNonBlocking, isUserSanctioned } from '@/utils/geoCheck';
+import { plansApi } from '@/lib/api';
+import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock dependencies

@@ -83,35 +83,35 @@ echo "🔒 Running dependency security audit..."
 AUDIT_FAILED=false
 
 # Backend audit
-if npm audit --workspace=jawab24-backend --audit-level=critical --omit=dev > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ Backend: no critical vulnerabilities${NC}"
+if npm audit --workspace=jawab24-backend --audit-level=high --omit=dev > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Backend: no high/critical vulnerabilities${NC}"
 else
-    echo -e "${RED}   ❌ Backend: critical vulnerabilities found!${NC}"
-    npm audit --workspace=jawab24-backend --audit-level=critical --omit=dev 2>&1 | tail -20
+    echo -e "${RED}   ❌ Backend: high/critical vulnerabilities found!${NC}"
+    npm audit --workspace=jawab24-backend --audit-level=high --omit=dev 2>&1 | tail -20
     AUDIT_FAILED=true
 fi
 
 # Frontend audit
-if npm audit --workspace=jawab24-frontend --audit-level=critical --omit=dev > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ Frontend: no critical vulnerabilities${NC}"
+if npm audit --workspace=jawab24-frontend --audit-level=high --omit=dev > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Frontend: no high/critical vulnerabilities${NC}"
 else
-    echo -e "${RED}   ❌ Frontend: critical vulnerabilities found!${NC}"
-    npm audit --workspace=jawab24-frontend --audit-level=critical --omit=dev 2>&1 | tail -20
+    echo -e "${RED}   ❌ Frontend: high/critical vulnerabilities found!${NC}"
+    npm audit --workspace=jawab24-frontend --audit-level=high --omit=dev 2>&1 | tail -20
     AUDIT_FAILED=true
 fi
 
 # AI Worker audit
-if npm audit --workspace=jawab24-ai-worker --audit-level=critical --omit=dev > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ AI Worker: no critical vulnerabilities${NC}"
+if npm audit --workspace=jawab24-ai-worker --audit-level=high --omit=dev > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ AI Worker: no high/critical vulnerabilities${NC}"
 else
-    echo -e "${RED}   ❌ AI Worker: critical vulnerabilities found!${NC}"
-    npm audit --workspace=jawab24-ai-worker --audit-level=critical --omit=dev 2>&1 | tail -20
+    echo -e "${RED}   ❌ AI Worker: high/critical vulnerabilities found!${NC}"
+    npm audit --workspace=jawab24-ai-worker --audit-level=high --omit=dev 2>&1 | tail -20
     AUDIT_FAILED=true
 fi
 
 if [ "$AUDIT_FAILED" = true ]; then
     echo ""
-    echo -e "${RED}   CRITICAL vulnerabilities detected in production dependencies!${NC}"
+    echo -e "${RED}   High/critical vulnerabilities detected in production dependencies!${NC}"
     echo -e "${RED}   Run 'npm audit' for details and 'npm audit fix' to attempt auto-fix.${NC}"
     exit 1
 fi

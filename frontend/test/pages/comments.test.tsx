@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '../test-utils';
+import { render, screen } from '../test-utils';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import CommentsPage from '../../src/pages/comments';
 import { commentsApi, pagesApi } from '../../src/lib/api';

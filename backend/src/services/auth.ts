@@ -5,8 +5,7 @@ import { config } from '../config';
 import crypto from 'crypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
 import { subscriptionsService } from './subscriptions';
-// Simple but secure JWT-like implementation using HMAC
-// For production, consider using @fastify/jwt plugin
+// Secure JWT-like implementation using HMAC
 const ALGORITHM = 'sha256';
 const LEGACY_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (Keep for backward compatibility)
 
