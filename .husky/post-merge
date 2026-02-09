@@ -1,0 +1,7 @@
+# Auto-run npm install when package-lock.json changed during merge
+CHANGED_FILES="$(git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD)"
+
+if echo "$CHANGED_FILES" | grep -q "package-lock.json\|package\.json"; then
+  echo "📦 package.json or lock file changed — running npm install..."
+  npm install
+fi
