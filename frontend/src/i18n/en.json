@@ -955,5 +955,23 @@
   "shopify.linkPageDesc": "Select which page should use Shopify product data for AI replies",
   "shopify.noPages": "No pages available",
   "shopify.connected": "Connected",
-  "shopify.never": "Never"
+  "shopify.never": "Never",
+
+  "shopify.installDetected": "Shopify store detected!",
+  "shopify.loginToConnect": "Log in with Facebook to connect your store and start auto-replying with product data.",
+  "shopify.errorAlreadyConnected": "This Shopify store is already connected to another account.",
+  "shopify.onboarding.title": "Connect Your Shopify Store",
+  "shopify.onboarding.storeConnected": "Store Connected",
+  "shopify.onboarding.storeNotFound": "No store found. Please try installing again from Shopify.",
+  "shopify.onboarding.syncingProducts": "Syncing products...",
+  "shopify.onboarding.productsSynced": "{{count}} products synced",
+  "shopify.onboarding.syncError": "Sync failed — you can retry later from Settings",
+  "shopify.onboarding.connectPage": "Connect Facebook Page",
+  "shopify.onboarding.connectPageDesc": "Select a Facebook page so Jawab can reply using your product data.",
+  "shopify.onboarding.noPages": "No Facebook pages found. Make sure your pages are connected.",
+  "shopify.onboarding.linkPage": "Link Page",
+  "shopify.onboarding.skipForNow": "Skip for now",
+  "shopify.onboarding.done": "You're all set!",
+  "shopify.onboarding.doneDesc": "Jawab will now reply to your customers with accurate product info from your Shopify store.",
+  "shopify.onboarding.goToDashboard": "Go to Dashboard"
 }

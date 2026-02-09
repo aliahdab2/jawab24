@@ -45,5 +45,8 @@ export interface AuthResponse {
     settings?: {
         dashboardLanguage: string;
     };
+    // Shopify-first onboarding context (set when pending install is claimed)
+    shopifyOnboarding?: boolean;
+    shopifyStoreId?: string;
 }
 

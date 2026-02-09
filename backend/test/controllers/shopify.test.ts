@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import crypto from 'crypto';
 
 // --- Mocked shopify service functions ---
 const mockBuildAuthUrl = vi.fn().mockReturnValue('https://test-store.myshopify.com/admin/oauth/authorize?...');
@@ -15,6 +14,7 @@ const mockFullSync = vi.fn().mockResolvedValue({ synced: 10 });
 const mockGetProducts = vi.fn().mockResolvedValue([]);
 const mockLinkStoreToPage = vi.fn().mockResolvedValue(undefined);
 const mockMapToShopifyStore = vi.fn((store) => ({ id: store.id, shopDomain: store.shopDomain }));
+const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-uuid-123');
 
 vi.mock('../../src/services/shopify', () => ({
     buildAuthUrl: (...args: any[]) => mockBuildAuthUrl(...args),
@@ -30,6 +30,42 @@ vi.mock('../../src/services/shopify', () => ({
     getProducts: (...args: any[]) => mockGetProducts(...args),
     linkStoreToPage: (...args: any[]) => mockLinkStoreToPage(...args),
     mapToShopifyStore: (...args: any[]) => mockMapToShopifyStore(...args),
+    createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
+}));
+
+const mockVerifyToken = vi.fn();
+vi.mock('../../src/services/auth', () => ({
+    authService: {
+        verifyToken: (...args: any[]) => mockVerifyToken(...args),
+    },
+}));
+
+vi.mock('../../src/config', () => ({
+    config: {
+        frontendUrl: 'https://jawab24.com',
+        shopify: {
+            scopes: 'read_products,read_content',
+        },
+    },
+}));
+
+vi.mock('../../src/services/cookies', () => ({
+    PENDING_SHOPIFY_COOKIE_OPTIONS: {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        path: '/',
+        signed: true,
+        maxAge: 1800,
+    },
+    SHOPIFY_NONCE_COOKIE_OPTIONS: {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        path: '/',
+        signed: true,
+        maxAge: 600,
+    },
 }));
 
 vi.mock('@jawab24/shared', () => ({
@@ -59,6 +95,7 @@ import {
     gdprCustomerRedact,
     gdprShopRedact,
     getStore,
+    connectStore,
     disconnectStoreHandler,
     syncStore,
     getStoreProducts,
@@ -72,6 +109,7 @@ function mockRequest(overrides: Partial<any> = {}): any {
         headers: {},
         cookies: {},
         userId: 'user-123',
+        unsignCookie: vi.fn().mockReturnValue({ valid: false, value: null }),
         log: {
             error: vi.fn(),
             info: vi.fn(),
@@ -87,6 +125,7 @@ function mockReply(): any {
         send: vi.fn().mockReturnThis(),
         redirect: vi.fn().mockReturnThis(),
         setCookie: vi.fn().mockReturnThis(),
+        clearCookie: vi.fn().mockReturnThis(),
     };
     return reply;
 }
@@ -118,27 +157,67 @@ describe('Shopify Controller', () => {
             expect(rep.status).toHaveBeenCalledWith(400);
         });
 
-        it('should redirect to Shopify OAuth URL for valid shop', async () => {
+        it('should set signed nonce cookie and redirect to Shopify OAuth', async () => {
             const req = mockRequest({ query: { shop: 'test-store.myshopify.com' } });
             const rep = mockReply();
 
             await authRedirect(req, rep);
 
-            expect(rep.setCookie).toHaveBeenCalledWith('shopify_state', expect.any(String), expect.objectContaining({
-                httpOnly: true,
-                secure: true,
-            }));
+            // Should set shopifyNonce cookie with SHOPIFY_NONCE_COOKIE_OPTIONS
+            expect(rep.setCookie).toHaveBeenCalledWith(
+                'shopifyNonce',
+                expect.any(String),
+                expect.objectContaining({
+                    httpOnly: true,
+                    signed: true,
+                    sameSite: 'lax',
+                })
+            );
+            // Should call buildAuthUrl with shop and nonce
+            expect(mockBuildAuthUrl).toHaveBeenCalledWith(
+                'test-store.myshopify.com',
+                expect.any(String)
+            );
             expect(rep.redirect).toHaveBeenCalled();
+        });
+
+        it('should generate unique nonce per request', async () => {
+            const req1 = mockRequest({ query: { shop: 'store1.myshopify.com' } });
+            const req2 = mockRequest({ query: { shop: 'store2.myshopify.com' } });
+            const rep1 = mockReply();
+            const rep2 = mockReply();
+
+            await authRedirect(req1, rep1);
+            await authRedirect(req2, rep2);
+
+            // Get the nonce values passed to setCookie
+            const nonce1 = rep1.setCookie.mock.calls[0][1];
+            const nonce2 = rep2.setCookie.mock.calls[0][1];
+            expect(nonce1).not.toBe(nonce2);
         });
     });
 
     // --- authCallback ---
 
     describe('authCallback', () => {
-        it('should reject when state does not match', async () => {
+        it('should reject when nonce does not match (signed cookie validation)', async () => {
             const req = mockRequest({
-                query: { shop: 'test.myshopify.com', code: 'code123', state: 'state1' },
-                cookies: { shopify_state: 'state2' },
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce_from_url' },
+                cookies: { shopifyNonce: 'signed_cookie_value' },
+                unsignCookie: vi.fn().mockReturnValue({ valid: true, value: 'different_nonce' }),
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(400);
+            expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: state mismatch' });
+        });
+
+        it('should reject when nonce cookie is missing', async () => {
+            const req = mockRequest({
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: {},
             });
             const rep = mockReply();
 
@@ -147,23 +226,33 @@ describe('Shopify Controller', () => {
             expect(rep.status).toHaveBeenCalledWith(400);
         });
 
-        it('should reject when user is not authenticated', async () => {
+        it('should reject when signed cookie is invalid', async () => {
             const req = mockRequest({
-                query: { shop: 'test.myshopify.com', code: 'code123', state: 'state1' },
-                cookies: { shopify_state: 'state1' },
-                userId: undefined,
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'tampered_cookie' },
+                unsignCookie: vi.fn().mockReturnValue({ valid: false, value: null }),
             });
             const rep = mockReply();
 
             await authCallback(req, rep);
 
-            expect(rep.status).toHaveBeenCalledWith(401);
+            expect(rep.status).toHaveBeenCalledWith(400);
         });
 
-        it('should create store and redirect on success', async () => {
+        it('should create store directly when user is logged in (JWT cookie)', async () => {
+            const unsignCookie = vi.fn()
+                .mockImplementation((cookie: string) => {
+                    if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
+                    if (cookie === 'signed_jwt') return { valid: true, value: 'jwt_token' };
+                    return { valid: false, value: null };
+                });
+
+            mockVerifyToken.mockReturnValue({ userId: 'user-123' });
+
             const req = mockRequest({
-                query: { shop: 'test.myshopify.com', code: 'code123', state: 'state1' },
-                cookies: { shopify_state: 'state1' },
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce', token: 'signed_jwt' },
+                unsignCookie,
             });
             const rep = mockReply();
 
@@ -172,20 +261,174 @@ describe('Shopify Controller', () => {
             expect(mockExchangeCodeForToken).toHaveBeenCalledWith('test.myshopify.com', 'code123');
             expect(mockCreateStore).toHaveBeenCalledWith('user-123', 'test.myshopify.com', 'shpat_test_token');
             expect(mockRegisterWebhooks).toHaveBeenCalledWith('test.myshopify.com', 'shpat_test_token');
-            expect(rep.redirect).toHaveBeenCalledWith(expect.stringContaining('shopify=connected'));
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/shopify/onboarding');
         });
 
-        it('should redirect with error on exception', async () => {
-            mockExchangeCodeForToken.mockRejectedValueOnce(new Error('Token exchange failed'));
+        it('should create pending install when user is NOT logged in', async () => {
+            const unsignCookie = vi.fn()
+                .mockImplementation((cookie: string) => {
+                    if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
+                    return { valid: false, value: null };
+                });
+
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockCreatePendingInstall.mockResolvedValue('pending-uuid-456');
+
             const req = mockRequest({
-                query: { shop: 'test.myshopify.com', code: 'badcode', state: 'state1' },
-                cookies: { shopify_state: 'state1' },
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce' },
+                unsignCookie,
             });
             const rep = mockReply();
 
             await authCallback(req, rep);
 
-            expect(rep.redirect).toHaveBeenCalledWith(expect.stringContaining('shopify=error'));
+            expect(mockExchangeCodeForToken).toHaveBeenCalledWith('test.myshopify.com', 'code123');
+            expect(mockCreatePendingInstall).toHaveBeenCalledWith({
+                shopDomain: 'test.myshopify.com',
+                accessToken: 'shpat_test_token',
+                scopes: 'read_products,read_content',
+                nonce: 'nonce123',
+            });
+            expect(rep.setCookie).toHaveBeenCalledWith(
+                'pendingShopifyId',
+                'pending-uuid-456',
+                expect.objectContaining({ signed: true, sameSite: 'lax' })
+            );
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?shopify_pending=true');
+        });
+
+        it('should redirect with error when shop is already connected (not logged in)', async () => {
+            const unsignCookie = vi.fn()
+                .mockImplementation((cookie: string) => {
+                    if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
+                    return { valid: false, value: null };
+                });
+
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', isActive: true });
+
+            const req = mockRequest({
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce' },
+                unsignCookie,
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?shopify_error=already_connected');
+            expect(mockCreatePendingInstall).not.toHaveBeenCalled();
+        });
+
+        it('should create pending install when shop exists but is inactive', async () => {
+            const unsignCookie = vi.fn()
+                .mockImplementation((cookie: string) => {
+                    if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
+                    return { valid: false, value: null };
+                });
+
+            // Shop exists but is inactive (uninstalled before)
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', isActive: false });
+            mockCreatePendingInstall.mockResolvedValue('pending-uuid-789');
+
+            const req = mockRequest({
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce' },
+                unsignCookie,
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(mockCreatePendingInstall).toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?shopify_pending=true');
+        });
+
+        it('should redirect with error on token exchange failure', async () => {
+            mockExchangeCodeForToken.mockRejectedValueOnce(new Error('Token exchange failed'));
+            const unsignCookie = vi.fn()
+                .mockReturnValue({ valid: true, value: 'nonce123' });
+
+            const req = mockRequest({
+                query: { shop: 'test.myshopify.com', code: 'badcode', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce' },
+                unsignCookie,
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?shopify_error=auth_failed');
+        });
+
+        it('should clear nonce cookie after successful validation', async () => {
+            const unsignCookie = vi.fn()
+                .mockImplementation((cookie: string) => {
+                    if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
+                    return { valid: false, value: null };
+                });
+
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockCreatePendingInstall.mockResolvedValue('pending-id');
+
+            const req = mockRequest({
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce' },
+                unsignCookie,
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.clearCookie).toHaveBeenCalledWith('shopifyNonce', { path: '/' });
+        });
+
+        it('should detect logged-in user via Bearer header', async () => {
+            const unsignCookie = vi.fn()
+                .mockReturnValue({ valid: true, value: 'nonce123' });
+
+            mockVerifyToken.mockReturnValue({ userId: 'user-456' });
+
+            const req = mockRequest({
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce' },
+                headers: { authorization: 'Bearer jwt_token_from_header' },
+                unsignCookie,
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(mockVerifyToken).toHaveBeenCalledWith('jwt_token_from_header');
+            expect(mockCreateStore).toHaveBeenCalledWith('user-456', 'test.myshopify.com', 'shpat_test_token');
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/shopify/onboarding');
+        });
+
+        it('should enqueue sync after creating store for logged-in user', async () => {
+            const unsignCookie = vi.fn()
+                .mockImplementation((cookie: string) => {
+                    if (cookie === 'signed_nonce') return { valid: true, value: 'nonce123' };
+                    if (cookie === 'signed_jwt') return { valid: true, value: 'jwt_token' };
+                    return { valid: false, value: null };
+                });
+
+            mockVerifyToken.mockReturnValue({ userId: 'user-123' });
+
+            const req = mockRequest({
+                query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce', token: 'signed_jwt' },
+                unsignCookie,
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            // enqueueSync is fire-and-forget — wait a tick for it to settle
+            await new Promise(r => setTimeout(r, 10));
+
+            expect(mockQueueAdd).toHaveBeenCalledWith('full_sync', expect.objectContaining({
+                shopifyStoreId: 'store-1',
+            }));
         });
     });
 
@@ -223,7 +466,7 @@ describe('Shopify Controller', () => {
     // --- webhookProductsUpdate ---
 
     describe('webhookProductsUpdate', () => {
-        it('should enqueue product sync on valid webhook', async () => {
+        it('should enqueue sync on valid webhook', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
             const req = mockRequest({
@@ -237,10 +480,26 @@ describe('Shopify Controller', () => {
 
             await webhookProductsUpdate(req, rep);
 
-            expect(mockQueueAdd).toHaveBeenCalledWith('product_update', expect.objectContaining({
+            // enqueueSync is fire-and-forget — wait a tick for it to settle
+            await new Promise(r => setTimeout(r, 10));
+
+            expect(mockQueueAdd).toHaveBeenCalledWith('full_sync', expect.objectContaining({
                 shopifyStoreId: 'store-1',
             }));
             expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should reject invalid HMAC for product webhook', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(false);
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'invalid' },
+                body: {},
+            });
+            const rep = mockReply();
+
+            await webhookProductsUpdate(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(401);
         });
     });
 
@@ -289,6 +548,31 @@ describe('Shopify Controller', () => {
 
             expect(mockMapToShopifyStore).toHaveBeenCalled();
             expect(rep.send).toHaveBeenCalled();
+        });
+    });
+
+    describe('connectStore', () => {
+        it('should reject invalid shop domain', async () => {
+            const req = mockRequest({ body: { shopDomain: 'not-a-shopify-domain' } });
+            const rep = mockReply();
+
+            await connectStore(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(400);
+        });
+
+        it('should set nonce cookie and return auth URL', async () => {
+            const req = mockRequest({ body: { shopDomain: 'mystore.myshopify.com' } });
+            const rep = mockReply();
+
+            await connectStore(req, rep);
+
+            expect(rep.setCookie).toHaveBeenCalledWith(
+                'shopifyNonce',
+                expect.any(String),
+                expect.objectContaining({ signed: true })
+            );
+            expect(rep.send).toHaveBeenCalledWith({ authUrl: expect.any(String) });
         });
     });
 

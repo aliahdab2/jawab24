@@ -951,5 +951,23 @@
   "shopify.linkPageDesc": "اختر الصفحة التي تستخدم بيانات منتجات Shopify للردود الذكية",
   "shopify.noPages": "لا توجد صفحات متاحة",
   "shopify.connected": "مربوط",
-  "shopify.never": "لم يتم بعد"
+  "shopify.never": "لم يتم بعد",
+
+  "shopify.installDetected": "تم اكتشاف متجر شوبيفاي!",
+  "shopify.loginToConnect": "سجّل دخولك بفيسبوك لربط متجرك والبدء بالرد التلقائي على الزبائن.",
+  "shopify.errorAlreadyConnected": "هذا المتجر مربوط بحساب جواب آخر.",
+  "shopify.onboarding.title": "ربط متجر شوبيفاي",
+  "shopify.onboarding.storeConnected": "تم ربط المتجر",
+  "shopify.onboarding.storeNotFound": "لم يتم العثور على المتجر. حاول التثبيت مرة أخرى من شوبيفاي.",
+  "shopify.onboarding.syncingProducts": "جاري مزامنة المنتجات...",
+  "shopify.onboarding.productsSynced": "تمت مزامنة {{count}} منتج",
+  "shopify.onboarding.syncError": "فشلت المزامنة — يمكنك إعادة المحاولة من الإعدادات",
+  "shopify.onboarding.connectPage": "ربط صفحة فيسبوك",
+  "shopify.onboarding.connectPageDesc": "اختر صفحة فيسبوك ليستخدم جواب بيانات منتجاتك بالردود.",
+  "shopify.onboarding.noPages": "لا توجد صفحات فيسبوك. تأكد من ربط صفحاتك.",
+  "shopify.onboarding.linkPage": "ربط الصفحة",
+  "shopify.onboarding.skipForNow": "تخطي الآن",
+  "shopify.onboarding.done": "تم الإعداد!",
+  "shopify.onboarding.doneDesc": "جواب رح يرد على زبائنك بمعلومات المنتجات الصحيحة من متجرك.",
+  "shopify.onboarding.goToDashboard": "الذهاب للوحة التحكم"
 }

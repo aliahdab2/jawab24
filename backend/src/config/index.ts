@@ -51,6 +51,7 @@ export const config = {
         apiSecret: process.env.SHOPIFY_API_SECRET || '',
         scopes: 'read_products,read_content',
         hostName: process.env.SHOPIFY_HOST_NAME || '',
+        tokenEncryptionKey: process.env.SHOPIFY_TOKEN_ENCRYPTION_KEY || '',
     },
 
     // Stripe Payment

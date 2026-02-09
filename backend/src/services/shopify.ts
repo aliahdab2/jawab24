@@ -1,8 +1,9 @@
 import crypto from 'crypto';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, lt } from 'drizzle-orm';
 import { db } from '../db';
-import { shopifyStores, shopifyProducts, pages } from '../db/schema';
+import { shopifyStores, shopifyProducts, pages, pendingShopifyInstalls } from '../db/schema';
 import { config } from '../config';
+import { encrypt, decrypt } from './shopifyCrypto';
 import type { ShopifyStore, ShopifyProduct } from '@jawab24/shared';
 
 const KB_MAX_CHARS = 1500; // Must match ai-worker's KB_MAX_CHARS
@@ -538,6 +539,100 @@ export async function getProducts(storeId: string): Promise<ShopifyProduct[]> {
         variantSummary: r.variantSummary,
         tags: r.tags,
     }));
+}
+
+// --- Pending Install Flow (Shopify-first onboarding) ---
+
+/**
+ * Create a pending Shopify install for unauthenticated users.
+ * Encrypts the access token and stores it with a 30-minute TTL.
+ * Deletes any older pending records for the same shop domain.
+ */
+export async function createPendingInstall(data: {
+    shopDomain: string;
+    accessToken: string;
+    scopes: string;
+    nonce: string;
+}): Promise<string> {
+    // Delete older pending records for same shop
+    await db.delete(pendingShopifyInstalls).where(
+        and(
+            eq(pendingShopifyInstalls.shopDomain, data.shopDomain),
+            eq(pendingShopifyInstalls.status, 'pending')
+        )
+    );
+
+    // Encrypt the access token
+    const { ciphertext, iv } = encrypt(data.accessToken);
+
+    const result = await db.insert(pendingShopifyInstalls).values({
+        shopDomain: data.shopDomain,
+        accessToken: ciphertext,
+        accessTokenIv: iv,
+        scopes: data.scopes,
+        nonce: data.nonce,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
+    }).returning();
+
+    return result[0].id;
+}
+
+/**
+ * Claim a pending install: decrypt token, create shopify_stores row, mark as claimed.
+ * Returns the new store or null if pending record is invalid/expired.
+ */
+export async function claimPendingInstall(pendingId: string, userId: string) {
+    const result = await db.select().from(pendingShopifyInstalls)
+        .where(eq(pendingShopifyInstalls.id, pendingId))
+        .limit(1);
+
+    const pending = result[0];
+    if (!pending) return null;
+
+    // Validate status and expiry
+    if (pending.status !== 'pending' || pending.expiresAt < new Date()) {
+        return null;
+    }
+
+    // Check if shop is already linked to another user
+    const existingStore = await getStoreByDomain(pending.shopDomain);
+    if (existingStore && existingStore.userId !== userId && existingStore.isActive) {
+        throw new Error('This Shopify store is already connected to another account');
+    }
+
+    // Decrypt access token
+    const accessToken = decrypt(pending.accessToken, pending.accessTokenIv);
+
+    // Create/update store
+    const store = await createStore(userId, pending.shopDomain, accessToken);
+
+    // Mark pending as claimed
+    await db.update(pendingShopifyInstalls).set({
+        status: 'claimed',
+        claimedByUserId: userId,
+    }).where(eq(pendingShopifyInstalls.id, pendingId));
+
+    // Register webhooks (non-blocking)
+    registerWebhooks(pending.shopDomain, accessToken).catch(err => {
+        console.error('[Shopify] Failed to register webhooks after claim:', err);
+    });
+
+    return store;
+}
+
+/**
+ * Clean up expired pending installs
+ */
+export async function cleanupExpiredInstalls(): Promise<number> {
+    const result = await db.delete(pendingShopifyInstalls).where(
+        and(
+            eq(pendingShopifyInstalls.status, 'pending'),
+            lt(pendingShopifyInstalls.expiresAt, new Date())
+        )
+    ).returning();
+
+    return result.length;
 }
 
 // --- Map to shared type ---

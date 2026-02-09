@@ -493,6 +493,26 @@ export const notifications = pgTable('notifications', {
 // SHOPIFY TABLES
 // ============================================
 
+// 17a. Pending Shopify Installs - Temporary storage for Shopify-first install flow
+export const pendingShopifyInstalls = pgTable('pending_shopify_installs', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    shopDomain: varchar('shop_domain', { length: 255 }).notNull(),
+    accessToken: text('access_token').notNull(),       // AES-256-GCM encrypted
+    accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
+    scopes: text('scopes'),
+    nonce: varchar('nonce', { length: 64 }).notNull(),  // CSRF nonce for OAuth
+    status: varchar('status', { length: 20 }).default('pending'), // pending|claimed|expired
+    claimedByUserId: uuid('claimed_by_user_id').references(() => users.id),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        shopDomainIdx: index('idx_pending_shopify_shop_domain').on(table.shopDomain),
+        statusIdx: index('idx_pending_shopify_status').on(table.status),
+        expiresAtIdx: index('idx_pending_shopify_expires_at').on(table.expiresAt),
+    };
+});
+
 // 17. Shopify Stores Table - Connected Shopify stores
 export const shopifyStores = pgTable('shopify_stores', {
     id: uuid('id').defaultRandom().primaryKey(),
