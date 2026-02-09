@@ -7,7 +7,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { CommentDetailModal, CommentCard, checkNeedsAttention } from '@/components/comments';
+import { CommentDetailModal, CommentCard } from '@/components/comments';
 import { useAuthStore } from '@/lib/store';
 import { commentsApi, pagesApi, type CommentsQueryParams } from '@/lib/api';
 import {

@@ -3,11 +3,11 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { NotificationBell } from '../../src/components/ui/NotificationBell';
 
 // Mock useAuthStore
-let mockToken: string | null = 'test-token';
+let mockIsAuthenticated = true;
 
 vi.mock('../../src/lib/store', () => ({
     useAuthStore: () => ({
-        token: mockToken,
+        isAuthenticated: mockIsAuthenticated,
     }),
 }));
 
@@ -41,10 +41,20 @@ vi.mock('../../src/lib/notifications', () => ({
     initializePushNotifications: vi.fn(),
 }));
 
+const sampleNotification = {
+    id: 'notif-1',
+    type: 'payment_failed',
+    title: 'Payment Failed',
+    body: 'Your payment could not be processed.',
+    read: false,
+    createdAt: new Date().toISOString(),
+    data: null,
+};
+
 describe('NotificationBell', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        mockToken = 'test-token';
+        mockIsAuthenticated = true;
         mockGetUnreadCount.mockResolvedValue(0);
         mockGetNotifications.mockResolvedValue({ notifications: [], unreadCount: 0 });
     });
@@ -55,7 +65,7 @@ describe('NotificationBell', () => {
 
     it('should render the bell icon', async () => {
         render(<NotificationBell />);
-        
+
         const button = screen.getByRole('button');
         expect(button).toBeInTheDocument();
     });
@@ -93,30 +103,29 @@ describe('NotificationBell', () => {
         expect(screen.queryByText('0')).not.toBeInTheDocument();
     });
 
-    it('should not fetch if no token', async () => {
-        mockToken = null;
-        
+    it('should not fetch if not authenticated', async () => {
+        mockIsAuthenticated = false;
+
         render(<NotificationBell />);
 
         // Wait a tick
         await new Promise(r => setTimeout(r, 50));
-        
+
         expect(mockGetUnreadCount).not.toHaveBeenCalled();
     });
 
-    it('should call getUnreadCount with correct token', async () => {
+    it('should call getUnreadCount on mount', async () => {
         mockGetUnreadCount.mockResolvedValue(3);
 
         render(<NotificationBell />);
 
         await waitFor(() => {
-            expect(mockGetUnreadCount).toHaveBeenCalledWith('test-token');
+            expect(mockGetUnreadCount).toHaveBeenCalled();
         });
     });
 
     it('should handle API errors gracefully (returns 0)', async () => {
         // Real getUnreadCount catches errors and returns 0
-        // The mock should reflect this behavior
         mockGetUnreadCount.mockResolvedValue(0);
 
         render(<NotificationBell />);
@@ -132,9 +141,9 @@ describe('NotificationBell', () => {
     });
 
     it('should open dropdown on click', async () => {
-        mockGetNotifications.mockResolvedValue({ 
-            notifications: [], 
-            unreadCount: 0 
+        mockGetNotifications.mockResolvedValue({
+            notifications: [],
+            unreadCount: 0
         });
 
         render(<NotificationBell />);
@@ -148,19 +157,9 @@ describe('NotificationBell', () => {
     });
 
     it('should fetch notifications when dropdown opens', async () => {
-        mockGetNotifications.mockResolvedValue({ 
-            notifications: [{
-                id: 'notif-1',
-                type: 'payment_failed',
-                titleEn: 'Payment Failed',
-                titleAr: 'فشل الدفع',
-                bodyEn: 'Your payment could not be processed.',
-                bodyAr: 'لم نتمكن من معالجة الدفع.',
-                read: false,
-                createdAt: new Date().toISOString(),
-                data: null,
-            }], 
-            unreadCount: 1 
+        mockGetNotifications.mockResolvedValue({
+            notifications: [sampleNotification],
+            unreadCount: 1
         });
 
         render(<NotificationBell />);
@@ -170,7 +169,7 @@ describe('NotificationBell', () => {
         fireEvent.click(button);
 
         await waitFor(() => {
-            expect(mockGetNotifications).toHaveBeenCalledWith('test-token');
+            expect(mockGetNotifications).toHaveBeenCalled();
         });
 
         // Notification should be visible
@@ -180,9 +179,9 @@ describe('NotificationBell', () => {
     });
 
     it('should show empty state when no notifications', async () => {
-        mockGetNotifications.mockResolvedValue({ 
-            notifications: [], 
-            unreadCount: 0 
+        mockGetNotifications.mockResolvedValue({
+            notifications: [],
+            unreadCount: 0
         });
 
         render(<NotificationBell />);
@@ -197,19 +196,9 @@ describe('NotificationBell', () => {
 
     it('should mark notification as read when clicked', async () => {
         mockMarkNotificationAsRead.mockResolvedValue(undefined);
-        mockGetNotifications.mockResolvedValue({ 
-            notifications: [{
-                id: 'notif-1',
-                type: 'payment_failed',
-                titleEn: 'Payment Failed',
-                titleAr: 'فشل الدفع',
-                bodyEn: 'Your payment could not be processed.',
-                bodyAr: 'لم نتمكن من معالجة الدفع.',
-                read: false,
-                createdAt: new Date().toISOString(),
-                data: null,
-            }], 
-            unreadCount: 1 
+        mockGetNotifications.mockResolvedValue({
+            notifications: [sampleNotification],
+            unreadCount: 1
         });
 
         render(<NotificationBell />);
@@ -230,28 +219,16 @@ describe('NotificationBell', () => {
         }
 
         await waitFor(() => {
-            expect(mockMarkNotificationAsRead).toHaveBeenCalledWith('test-token', 'notif-1');
+            expect(mockMarkNotificationAsRead).toHaveBeenCalledWith('notif-1');
         });
     });
 
     it('should mark all as read when clicking mark all button', async () => {
         mockMarkAllNotificationsAsRead.mockResolvedValue(undefined);
         mockGetUnreadCount.mockResolvedValue(2);
-        mockGetNotifications.mockResolvedValue({ 
-            notifications: [
-                {
-                    id: 'notif-1',
-                    type: 'payment_failed',
-                    titleEn: 'Payment Failed',
-                    titleAr: 'فشل الدفع',
-                    bodyEn: 'Body',
-                    bodyAr: 'نص',
-                    read: false,
-                    createdAt: new Date().toISOString(),
-                    data: null,
-                },
-            ], 
-            unreadCount: 2 
+        mockGetNotifications.mockResolvedValue({
+            notifications: [{ ...sampleNotification, read: false }],
+            unreadCount: 2
         });
 
         render(<NotificationBell />);
@@ -269,13 +246,13 @@ describe('NotificationBell', () => {
         fireEvent.click(screen.getByText('notifications.markAllRead'));
 
         await waitFor(() => {
-            expect(mockMarkAllNotificationsAsRead).toHaveBeenCalledWith('test-token');
+            expect(mockMarkAllNotificationsAsRead).toHaveBeenCalled();
         });
     });
 
     it('should refresh count periodically', async () => {
         vi.useFakeTimers();
-        
+
         mockGetUnreadCount.mockResolvedValue(1);
 
         render(<NotificationBell />);
