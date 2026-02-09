@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslation } from '@/i18n';
@@ -42,20 +42,6 @@ export function PublicLayout({
 }: PublicLayoutProps) {
   const { t, language, setLanguage } = useTranslation();
   const { isAuthenticated } = useAuthStore();
-  const isRTL = language === 'ar';
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Update document direction
-  useEffect(() => {
-    if (mounted) {
-      document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
-      document.documentElement.lang = isRTL ? 'ar' : 'en';
-    }
-  }, [isRTL, mounted]);
 
   const toggleLanguage = () => {
     setLanguage(language === 'ar' ? 'en' : 'ar');

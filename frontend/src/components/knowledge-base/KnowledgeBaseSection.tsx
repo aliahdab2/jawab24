@@ -18,7 +18,7 @@ export function KnowledgeBaseSection({
   onToggle,
   onChange,
 }: KnowledgeBaseSectionProps) {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasContent = section.content.trim().length > 0;
 
@@ -102,7 +102,7 @@ export function KnowledgeBaseSection({
             value={section.content}
             onChange={(e) => onChange(e.target.value)}
             onInput={autoResize}
-            dir={language === 'ar' ? 'rtl' : 'ltr'}
+            dir="auto"
             rows={3}
           />
         </div>

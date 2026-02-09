@@ -185,7 +185,6 @@ function ReviewInfoStep({
   onEditToggle,
   isLandscape,
   t,
-  language
 }: {
   selectedPage: Page | null;
   knowledgeBase: string;
@@ -194,10 +193,7 @@ function ReviewInfoStep({
   onEditToggle: () => void;
   isLandscape: boolean;
   t: TFunction;
-  language: string;
 }) {
-  const isRTL = language === 'ar';
-
   if (!selectedPage) {
     return (
       <div className="text-center py-8">
@@ -238,7 +234,7 @@ function ReviewInfoStep({
                 isLandscape ? 'h-[20vh]' : 'h-[30vh]'
               }`}
               placeholder={t('pages.writeBusinessInfo')}
-              dir={isRTL ? 'rtl' : 'ltr'}
+              dir="auto"
               autoFocus
             />
             <div className="flex justify-end mt-2">
@@ -250,7 +246,7 @@ function ReviewInfoStep({
         ) : (
           <div 
             className="text-start bg-surface-50 rounded-2xl p-4 border border-surface-200"
-            dir={isRTL ? 'rtl' : 'ltr'}
+            dir="auto"
           >
             {knowledgeBase ? (
               <div className="space-y-3">
@@ -500,7 +496,6 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               onEditToggle={() => setIsEditingInfo(!isEditingInfo)}
               isLandscape={isLandscape}
               t={t}
-              language={language}
             />
           )}
         </div>

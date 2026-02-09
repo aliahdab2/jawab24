@@ -1,6 +1,4 @@
 import React from 'react';
-import { useTranslation } from '@/i18n';
-
 interface KnowledgeBaseRawEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -8,7 +6,6 @@ interface KnowledgeBaseRawEditorProps {
 }
 
 export function KnowledgeBaseRawEditor({ value, onChange, maxLength }: KnowledgeBaseRawEditorProps) {
-  const { language } = useTranslation();
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -17,7 +14,7 @@ export function KnowledgeBaseRawEditor({ value, onChange, maxLength }: Knowledge
         value={value}
         onChange={(e) => onChange(e.target.value.slice(0, maxLength))}
         maxLength={maxLength}
-        dir={language === 'ar' ? 'rtl' : 'ltr'}
+        dir="auto"
       />
       <div className="flex items-center justify-end mt-2 px-1">
         <span

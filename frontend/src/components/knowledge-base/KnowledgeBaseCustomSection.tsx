@@ -21,7 +21,7 @@ export function KnowledgeBaseCustomSection({
   onTitleChange,
   onDelete,
 }: KnowledgeBaseCustomSectionProps) {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const hasContent = section.content.trim().length > 0;
@@ -95,7 +95,7 @@ export function KnowledgeBaseCustomSection({
               onClick={(e) => e.stopPropagation()}
               placeholder={t('kb.customSection.titlePlaceholder' as TranslationKey)}
               maxLength={40}
-              dir={language === 'ar' ? 'rtl' : 'ltr'}
+              dir="auto"
             />
           ) : (
             <p className={`text-sm font-bold ${hasContent ? 'text-surface-900' : 'text-surface-600'}`}>
@@ -146,7 +146,7 @@ export function KnowledgeBaseCustomSection({
             value={section.content}
             onChange={(e) => onChange(e.target.value)}
             onInput={autoResize}
-            dir={language === 'ar' ? 'rtl' : 'ltr'}
+            dir="auto"
             rows={3}
           />
         </div>
