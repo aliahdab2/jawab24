@@ -215,6 +215,7 @@ export const plansService = {
             facebookEnabled: row.facebookEnabled ?? true,
             instagramEnabled: row.instagramEnabled ?? true,
             whatsappEnabled: row.whatsappEnabled ?? false,
+            shopifyEnabled: row.shopifyEnabled ?? false,
             showBranding: row.showBranding ?? true,
             prioritySupport: row.prioritySupport ?? false,
             trialDays: row.trialDays ?? 0,

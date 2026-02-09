@@ -144,6 +144,7 @@ export interface Plan {
   facebookEnabled: boolean;
   instagramEnabled: boolean;
   whatsappEnabled: boolean;
+  shopifyEnabled: boolean;
   showBranding: boolean;
   prioritySupport: boolean;
   // Trial

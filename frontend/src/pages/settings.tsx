@@ -28,8 +28,7 @@ import {
   UserCheck,
   ShoppingBag,
   RefreshCw,
-  Unlink,
-  Link2
+  Unlink
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTranslation, useLanguage, type TranslationKey } from '@/i18n';
@@ -67,14 +66,14 @@ function SimpleToggle({
   );
 }
 
-// Shopify Integration Section
+// Shopify Integration Section — only visible when user has a connected Shopify store
 function ShopifySection() {
   const { t } = useTranslation();
   const [store, setStore] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [shopDomain, setShopDomain] = useState('');
   const [pages, setPages] = useState<any[]>([]);
+  /* shopDomain + handleConnect removed — connection happens from Shopify App Store */
 
   const fetchStore = useCallback(async () => {
     try {
@@ -97,16 +96,6 @@ function ShopifySection() {
   }, []);
 
   useEffect(() => { fetchStore(); fetchPages(); }, [fetchStore, fetchPages]);
-
-  const handleConnect = async () => {
-    if (!shopDomain) return;
-    try {
-      const { authUrl } = await shopifyApi.connectStore(shopDomain);
-      window.location.href = authUrl;
-    } catch {
-      toast.error(t('shopify.syncError' as TranslationKey));
-    }
-  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -141,7 +130,8 @@ function ShopifySection() {
     }
   };
 
-  if (loading) return null;
+  // Only show section when user has a connected Shopify store
+  if (loading || !store) return null;
 
   return (
     <div className="mt-10 animate-slide-up" style={{ animationDelay: '0.15s' }}>
@@ -156,67 +146,52 @@ function ShopifySection() {
           </div>
         </div>
 
-        {!store ? (
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Input
-              value={shopDomain}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setShopDomain(e.target.value)}
-              placeholder={t('shopify.storeDomainPlaceholder' as TranslationKey)}
-              className="flex-1"
-            />
-            <Button onClick={handleConnect} disabled={!shopDomain}>
-              <Link2 className="w-4 h-4 mr-2" />
-              {t('shopify.connect' as TranslationKey)}
-            </Button>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
+            <div>
+              <p className="font-semibold text-green-800">{store.shopName || store.shopDomain}</p>
+              <p className="text-xs text-green-600">
+                {t('shopify.products' as TranslationKey)}: {store.productCount} &middot;{' '}
+                {t('shopify.lastSync' as TranslationKey)}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleDateString() : t('shopify.never' as TranslationKey)}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
+                <RefreshCw className={`w-4 h-4 mr-1 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? t('shopify.syncing' as TranslationKey) : t('shopify.syncNow' as TranslationKey)}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleDisconnect}>
+                <Unlink className="w-4 h-4 mr-1" />
+                {t('shopify.disconnect' as TranslationKey)}
+              </Button>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl">
-              <div>
-                <p className="font-semibold text-green-800">{store.shopName || store.shopDomain}</p>
-                <p className="text-xs text-green-600">
-                  {t('shopify.products' as TranslationKey)}: {store.productCount} &middot;{' '}
-                  {t('shopify.lastSync' as TranslationKey)}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleDateString() : t('shopify.never' as TranslationKey)}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
-                  <RefreshCw className={`w-4 h-4 mr-1 ${syncing ? 'animate-spin' : ''}`} />
-                  {syncing ? t('shopify.syncing' as TranslationKey) : t('shopify.syncNow' as TranslationKey)}
-                </Button>
-                <Button variant="secondary" size="sm" onClick={handleDisconnect}>
-                  <Unlink className="w-4 h-4 mr-1" />
-                  {t('shopify.disconnect' as TranslationKey)}
-                </Button>
+
+          {/* Link to page */}
+          {pages.length > 0 && (
+            <div>
+              <p className="text-sm font-medium mb-2">{t('shopify.linkPage' as TranslationKey)}</p>
+              <p className="text-xs text-surface-500 mb-2">{t('shopify.linkPageDesc' as TranslationKey)}</p>
+              <div className="flex flex-wrap gap-2">
+                {pages.map((page: any) => (
+                  <button
+                    key={page.id}
+                    onClick={() => handleLinkPage(page.id)}
+                    className={clsx(
+                      'px-3 py-1.5 rounded-lg text-sm border transition-colors',
+                      page.shopifyStoreId === store.id
+                        ? 'bg-green-100 border-green-300 text-green-800'
+                        : 'bg-white border-surface-200 text-surface-600 hover:border-green-300'
+                    )}
+                  >
+                    {page.name}
+                    {page.shopifyStoreId === store.id && <CheckCircle2 className="w-3 h-3 inline ml-1" />}
+                  </button>
+                ))}
               </div>
             </div>
-
-            {/* Link to page */}
-            {pages.length > 0 && (
-              <div>
-                <p className="text-sm font-medium mb-2">{t('shopify.linkPage' as TranslationKey)}</p>
-                <p className="text-xs text-surface-500 mb-2">{t('shopify.linkPageDesc' as TranslationKey)}</p>
-                <div className="flex flex-wrap gap-2">
-                  {pages.map((page: any) => (
-                    <button
-                      key={page.id}
-                      onClick={() => handleLinkPage(page.id)}
-                      className={clsx(
-                        'px-3 py-1.5 rounded-lg text-sm border transition-colors',
-                        page.shopifyStoreId === store.id
-                          ? 'bg-green-100 border-green-300 text-green-800'
-                          : 'bg-white border-surface-200 text-surface-600 hover:border-green-300'
-                      )}
-                    >
-                      {page.name}
-                      {page.shopifyStoreId === store.id && <CheckCircle2 className="w-3 h-3 inline ml-1" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </Card>
     </div>
   );
