@@ -7,6 +7,7 @@ import { useTranslation } from '@/i18n';
 import { commentsApi, aiApi, subscriptionApi, messagesApi } from '@/lib/api';
 import type { Comment } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { translateFlagReason } from './CommentCard';
 import {
   MessageSquare,
   Bot,
@@ -234,6 +235,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <Badge variant="warning">
                 <AlertTriangle className="w-3 h-3 mr-1" />
                 {t('comments.needsAttention')}
+                {comment.flagReason && (
+                  <span className="ml-1 font-normal opacity-80">
+                    — {translateFlagReason(comment.flagReason, t, language)}
+                  </span>
+                )}
               </Badge>
             )}
             <button

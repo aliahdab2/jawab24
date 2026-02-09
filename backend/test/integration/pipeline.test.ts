@@ -58,12 +58,16 @@ vi.mock('../../src/services/protection', () => ({
 }));
 
 // Reply generator (AI/template) — return a canned reply
-vi.mock('../../src/services/reply/generator', () => ({
-    replyGenerator: {
-        generateForMessage: mockGenerateForMessage,
-        setLogger: vi.fn(),
-    },
-}));
+vi.mock('../../src/services/reply/generator', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../src/services/reply/generator')>();
+    return {
+        ...actual,
+        replyGenerator: {
+            generateForMessage: mockGenerateForMessage,
+            setLogger: vi.fn(),
+        },
+    };
+});
 
 // Notification service — no-op
 vi.mock('../../src/services/notifications', () => ({
@@ -302,7 +306,91 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
     });
 
     // =========================================================
-    // 6. Auto-reply disabled → away message sent
+    // 6. Offensive message → skip reply, flag, notify
+    // =========================================================
+    it('skips reply for offensive message: stores, flags, but does NOT send reply', async () => {
+        mockGenerateForMessage.mockResolvedValueOnce({
+            replyText: 'Some generated reply',
+            replyMethod: 'ai' as const,
+            needsAttention: true,
+            flagReason: 'offensive_or_abusive',
+            aiIntent: 'OFFENSIVE',
+        });
+
+        const adapter = createMockAdapter(platformPage);
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'Go away!', 'fb-offensive-001',
+        );
+
+        expect(result.success).toBe(true);
+        // Reply should NOT be sent
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+
+        // Message should be stored but NOT replied
+        const [row] = await testDb
+            .select()
+            .from(messages)
+            .where(eq(messages.facebookMessageId, 'fb-offensive-001'));
+        expect(row).toBeDefined();
+        expect(row.replied).toBe(false);
+        expect(row.needsAttention).toBe(true);
+        expect(row.flagReason).toBe('offensive_or_abusive');
+        expect(row.aiIntent).toBe('OFFENSIVE');
+
+        // No outgoing message should exist
+        const outgoing = await testDb
+            .select()
+            .from(messages)
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.direction, 'outgoing'),
+                eq(messages.senderId, senderId),
+            ));
+        expect(outgoing.length).toBe(0);
+
+        // Pipeline metric recorded
+        const metrics = pipelineMetrics.getMetrics();
+        expect(metrics.counters['facebook_message.skipped_risky']).toBe(1);
+    });
+
+    // =========================================================
+    // 7. Price fallback → safe reply replaces AI text
+    // =========================================================
+    it('replaces hallucinated price with safe fallback text', async () => {
+        mockGenerateForMessage.mockResolvedValueOnce({
+            replyText: 'The price is $999!',
+            replyMethod: 'ai' as const,
+            needsAttention: true,
+            flagReason: 'price_not_in_kb',
+            aiIntent: 'PURCHASE_INTENT',
+        });
+
+        const adapter = createMockAdapter(platformPage);
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'How much does it cost?', 'fb-price-001',
+        );
+
+        expect(result.success).toBe(true);
+        // Reply IS sent, but NOT with the hallucinated price
+        expect(adapter.sendReply).toHaveBeenCalledOnce();
+        expect(result.replyText).not.toContain('$999');
+        expect(result.replyText).toContain('Thank you for your interest');
+
+        // Message should be marked as replied with fallback text
+        const [row] = await testDb
+            .select()
+            .from(messages)
+            .where(eq(messages.facebookMessageId, 'fb-price-001'));
+        expect(row.replied).toBe(true);
+        expect(row.replyText).toContain('Thank you for your interest');
+        expect(row.needsAttention).toBe(true);
+        expect(row.flagReason).toBe('price_not_in_kb');
+    });
+
+    // =========================================================
+    // 8. Auto-reply disabled → away message sent
     // =========================================================
     it('sends away message when messages auto-reply is disabled', async () => {
         await settingsService.updateSettings(userId, {

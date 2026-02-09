@@ -48,7 +48,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
 
         if (existingRows[0]) {
             return {
-                message: { id: existingRows[0].id, replied: existingRows[0].replied ?? false },
+                message: { id: existingRows[0].id, replied: existingRows[0].replied ?? false, needsAttention: existingRows[0].needsAttention ?? false },
                 isNew: false,
             };
         }

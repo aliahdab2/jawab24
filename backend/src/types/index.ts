@@ -186,4 +186,7 @@ export interface UpdateCommentDTO {
     detectedLanguage?: string;
     replyLanguage?: string;
     repliedAt?: Date;
+    needsAttention?: boolean;
+    flagReason?: string | null;
+    aiIntent?: string | null;
 }

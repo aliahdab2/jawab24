@@ -2,7 +2,7 @@ import { settingsService } from '../settings';
 import { messagesService } from '../messages';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
-import { replyGenerator } from './generator';
+import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger, CommentResult } from '../../types';
@@ -18,11 +18,13 @@ import type { CommentPlatformAdapter } from '../../interfaces';
  *  1. Validate page
  *  2. Check user settings (comments auto-reply)
  *  3. Find or create content (post/media)
- *  4. Store comment + check already replied
+ *  4. Store comment + check already replied/flagged
  *  5. Handoff pause check
  *  6. Rate limit check
  *  7. Reply delay
  *  8. Generate reply
+ *  8b. Replace with safe fallback for price_not_in_kb
+ *  8c. Skip reply entirely for offensive content
  *  9. Handle no-reply (fallback or notify+return)
  * 10. Send reply
  * 11. Mark as replied
@@ -89,8 +91,8 @@ export class CommentProcessor {
                 return { success: false, commentId: comment.id, error: 'Comments auto-reply disabled' };
             }
 
-            // Early exit: already replied
-            if (!isNew && comment.replied) {
+            // Early exit: already replied or already flagged
+            if (!isNew && (comment.replied || comment.needsAttention)) {
                 pipelineMetrics.record(pipeline, 'already_replied');
                 return { success: false, commentId: comment.id, error: 'Comment already replied' };
             }
@@ -127,8 +129,31 @@ export class CommentProcessor {
             const userSettings = await settingsService.getSettings(userId);
             const generatorContext = adapter.buildGeneratorContext(page, content, contentId);
             generatorContext.text = commentMessage;
-            const { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent } =
+            let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false);
+
+            // 8b. Replace with safe fallback if AI hallucinated a price
+            if (shouldUseFallback(flagReason)) {
+                const detectedLang = detectLanguageCode(commentMessage);
+                const lang = detectedLang === 'unknown' ? 'en' : detectedLang;
+                generatedText = PRICE_FALLBACK[lang] || PRICE_FALLBACK['en'];
+            }
+
+            // 8c. Skip reply entirely for offensive content
+            if (shouldSkipReply(flagReason, aiIntent)) {
+                await adapter.flagComment(comment.id, flagReason, aiIntent);
+
+                if (page.userId) {
+                    notificationService.sendTemplateNotification(
+                        page.userId,
+                        'skipped_reply',
+                        { senderName: fromName || 'Unknown', reason: flagReason || 'offensive' },
+                        { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                    ).catch(err => this.logger.error('Offensive comment notification failed', { err }));
+                }
+                pipelineMetrics.record(pipeline, 'skipped_risky');
+                return { success: true, commentId: comment.id };
+            }
 
             // 9. Handle no-reply
             let replyText = generatedText;

@@ -51,7 +51,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
             pageId, messageId, senderId, text, senderName,
         );
         return {
-            message: { id: message.id, replied: message.replied },
+            message: { id: message.id, replied: message.replied, needsAttention: message.needsAttention ?? false },
             isNew,
         };
     }

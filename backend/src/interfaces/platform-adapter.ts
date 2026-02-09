@@ -22,6 +22,7 @@ export interface PlatformPage {
 export interface StoredMessage {
     id: string;
     replied: boolean;
+    needsAttention?: boolean;
 }
 
 export type Platform = 'facebook' | 'instagram' | 'shopify' | 'whatsapp';

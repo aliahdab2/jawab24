@@ -210,6 +210,24 @@ export class MessagesService {
     }
 
     /**
+     * Flag a message as needing attention without marking it as replied
+     */
+    async flagMessage(
+        messageId: string,
+        flagReason?: string,
+        aiIntent?: string,
+    ): Promise<void> {
+        await db.update(messages)
+            .set({
+                needsAttention: true,
+                flagReason: flagReason ?? null,
+                aiIntent: aiIntent ?? null,
+                updatedAt: new Date(),
+            })
+            .where(eq(messages.id, messageId));
+    }
+
+    /**
      * Store outgoing reply as a message
      */
     async storeOutgoingMessage(

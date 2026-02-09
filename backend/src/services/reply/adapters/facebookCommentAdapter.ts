@@ -52,7 +52,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             postId, facebookCommentId, message, fromId, fromName,
         );
         return {
-            comment: { id: comment.id, replied: comment.replied ?? false },
+            comment: { id: comment.id, replied: comment.replied ?? false, needsAttention: comment.needsAttention ?? false },
             isNew,
         };
     }
@@ -95,6 +95,14 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             commentId, replyText, replyMethod, templateId,
             detectedLanguage, needsAttention, flagReason, aiIntent,
         );
+    }
+
+    async flagComment(commentId: string, flagReason?: string, aiIntent?: string): Promise<void> {
+        await commentsService.updateComment(commentId, {
+            needsAttention: true,
+            flagReason: flagReason ?? null,
+            aiIntent: aiIntent ?? null,
+        });
     }
 
     buildGeneratorContext(

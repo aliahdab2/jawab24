@@ -10,6 +10,7 @@ export type NotificationType =
     | 'subscription_renewed'
     | 'trial_ending'
     | 'flagged_reply'
+    | 'skipped_reply'
     | 'new_comment'
     | 'stale_comment';
 
@@ -60,6 +61,12 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationP
         bodyEn: 'An AI reply to "{senderName}" was flagged: {reason}. Please review it.',
         bodyAr: 'تم وضع علامة على رد لـ "{senderName}": {reason}. يرجى مراجعته.',
     },
+    skipped_reply: {
+        titleEn: 'Auto-Reply Skipped',
+        titleAr: 'تم تخطي الرد التلقائي',
+        bodyEn: 'A reply to "{senderName}" was skipped: {reason}. Please review and reply manually.',
+        bodyAr: 'تم تخطي الرد التلقائي لـ "{senderName}": {reason}. يرجى مراجعته والرد يدوياً.',
+    },
     new_comment: {
         titleEn: 'New Comment',
         titleAr: 'تعليق جديد',
@@ -73,6 +80,25 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationP
         bodyAr: '{count} تعليقات بانتظار ردك منذ أكثر من {minutes} دقيقة.',
     },
 };
+
+/** Arabic translations for flag reason strings used in notifications */
+const FLAG_REASON_AR: Record<string, string> = {
+    'offensive_or_abusive': 'محتوى مسيء',
+    'angry_customer': 'عميل غاضب',
+    'low_confidence': 'ثقة منخفضة في الرد',
+    'price_not_in_kb': 'سعر غير موجود في قاعدة المعرفة',
+    'redirect_to_human': 'تحويل إلى موظف',
+    'complaint': 'شكوى',
+    'offensive': 'محتوى مسيء',
+    'invalid_json': 'خطأ في معالجة الرد',
+    'fallback_reply': 'رد احتياطي',
+};
+
+function translateFlagReason(reason: string): string {
+    return reason.split(',')
+        .map(f => FLAG_REASON_AR[f.trim()] || f.trim())
+        .join('، ');
+}
 
 class NotificationService {
     /**
@@ -189,9 +215,15 @@ class NotificationService {
         for (const [key, value] of Object.entries(variables)) {
             const placeholder = `{${key}}`;
             titleEn = titleEn.replace(placeholder, value);
-            titleAr = titleAr.replace(placeholder, value);
             bodyEn = bodyEn.replace(placeholder, value);
-            bodyAr = bodyAr.replace(placeholder, value);
+            if (key === 'reason') {
+                const arValue = translateFlagReason(value);
+                titleAr = titleAr.replace(placeholder, arValue);
+                bodyAr = bodyAr.replace(placeholder, arValue);
+            } else {
+                titleAr = titleAr.replace(placeholder, value);
+                bodyAr = bodyAr.replace(placeholder, value);
+            }
         }
 
         return this.sendNotification(userId, {

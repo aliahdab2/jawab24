@@ -1,6 +1,6 @@
 # Skip Reply for Offensive Comments + Translate Flag Reasons
 
-> **Status:** In Progress
+> **Status:** Completed
 > **Created:** 2026-02-09
 > **Last updated:** 2026-02-09
 

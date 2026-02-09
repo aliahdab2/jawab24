@@ -39,8 +39,19 @@ describe('NotificationService', () => {
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('subscription_renewed');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('trial_ending');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('flagged_reply');
+            expect(NOTIFICATION_TEMPLATES).toHaveProperty('skipped_reply');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('new_comment');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('stale_comment');
+        });
+
+        it('should have skipped_reply template with correct placeholders', () => {
+            const template = NOTIFICATION_TEMPLATES.skipped_reply;
+            expect(template.titleEn).toBe('Auto-Reply Skipped');
+            expect(template.titleAr).toBe('تم تخطي الرد التلقائي');
+            expect(template.bodyEn).toContain('{senderName}');
+            expect(template.bodyEn).toContain('{reason}');
+            expect(template.bodyAr).toContain('{senderName}');
+            expect(template.bodyAr).toContain('{reason}');
         });
 
         it('should have flagged_reply template with correct placeholders', () => {
@@ -210,13 +221,94 @@ describe('NotificationService', () => {
 
             expect(sendNotificationSpy).toHaveBeenCalledWith('user-123', expect.objectContaining({
                 type: 'flagged_reply',
-                bodyEn: expect.stringContaining('Ahmed'),
                 bodyEn: expect.stringContaining('angry_customer'),
                 data: expect.objectContaining({
                     commentId: 'c-123',
                     type: 'comment',
                 }),
             }));
+        });
+
+        it('should translate flag reason to Arabic in Arabic notification body', async () => {
+            (db.select as any).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-ar' }]),
+                }),
+            });
+
+            const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
+
+            await notificationService.sendTemplateNotification(
+                'user-123',
+                'flagged_reply',
+                { senderName: 'Ahmed', reason: 'angry_customer' },
+            );
+
+            const payload = sendNotificationSpy.mock.calls[0][1];
+            // Arabic body should have Arabic translation, not English
+            expect(payload.bodyAr).toContain('عميل غاضب');
+            expect(payload.bodyAr).not.toContain('angry_customer');
+            // English body should keep the raw reason
+            expect(payload.bodyEn).toContain('angry_customer');
+        });
+
+        it('should translate comma-separated flag reasons to Arabic', async () => {
+            (db.select as any).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-multi' }]),
+                }),
+            });
+
+            const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
+
+            await notificationService.sendTemplateNotification(
+                'user-123',
+                'flagged_reply',
+                { senderName: 'Test', reason: 'offensive_or_abusive,low_confidence' },
+            );
+
+            const payload = sendNotificationSpy.mock.calls[0][1];
+            expect(payload.bodyAr).toContain('محتوى مسيء');
+            expect(payload.bodyAr).toContain('ثقة منخفضة في الرد');
+            expect(payload.bodyAr).toContain('، '); // Arabic comma separator
+        });
+
+        it('should fall back to raw reason when no translation exists', async () => {
+            (db.select as any).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-raw' }]),
+                }),
+            });
+
+            const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
+
+            await notificationService.sendTemplateNotification(
+                'user-123',
+                'flagged_reply',
+                { senderName: 'Test', reason: 'some_unknown_flag' },
+            );
+
+            const payload = sendNotificationSpy.mock.calls[0][1];
+            // Should fall back to the raw string
+            expect(payload.bodyAr).toContain('some_unknown_flag');
         });
     });
 

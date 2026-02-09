@@ -11,6 +11,7 @@ import type { Platform, PlatformPage } from './platform-adapter';
 export interface StoredComment {
     id: string;
     replied: boolean;
+    needsAttention?: boolean;
 }
 
 /** Normalized content entity (post / media) that a comment belongs to */
@@ -91,4 +92,7 @@ export interface CommentPlatformAdapter {
 
     /** Get fallback reply text when generator returns nothing (null = no fallback, return error) */
     getFallbackReply(): string | null;
+
+    /** Flag a comment as needing attention without sending a reply */
+    flagComment(commentId: string, flagReason?: string, aiIntent?: string): Promise<void>;
 }

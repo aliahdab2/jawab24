@@ -45,6 +45,26 @@ export function checkNeedsAttention(comment: Comment): boolean {
   return ATTENTION_KEYWORDS.some(kw => messageText.includes(kw));
 }
 
+/**
+ * Translate a comma-separated flagReason string using i18n keys.
+ * Falls back to the raw reason if no translation exists.
+ */
+export function translateFlagReason(
+  flagReason: string | null | undefined,
+  t: (key: any) => string,   
+  locale: string,
+): string {
+  if (!flagReason) return '';
+  const separator = locale === 'ar' ? '، ' : ', ';
+  return flagReason.split(',')
+    .map(f => {
+      const key = `flagReason.${f.trim()}`;
+      const translated = t(key);
+      return translated === key ? f.trim() : translated;
+    })
+    .join(separator);
+}
+
 export function CommentCard({
   comment,
   onClick,
@@ -118,9 +138,16 @@ export function CommentCard({
       {/* Needs Attention Badge */}
       {needsAttention ? (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
-           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100">
-              <AlertTriangle className="w-3 h-3" />
-              {t('comments.needsAttention')}
+           <div className="flex flex-col items-end gap-0.5">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100">
+                <AlertTriangle className="w-3 h-3" />
+                {t('comments.needsAttention')}
+              </div>
+              {comment.flagReason && (
+                <span className="text-[9px] text-red-400 px-2">
+                  {translateFlagReason(comment.flagReason, t, language)}
+                </span>
+              )}
            </div>
         </div>
       ) : !comment.replied && (

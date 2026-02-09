@@ -641,6 +641,46 @@ describe('MessagesService', () => {
     });
 
     // ───────────────────────────────────────────
+    // flagMessage
+    // ───────────────────────────────────────────
+    describe('flagMessage', () => {
+        it('should set needsAttention=true without setting replied=true', async () => {
+            const mockSet = vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+            });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            await messagesService.flagMessage('msg-1', 'offensive_or_abusive', 'OFFENSIVE');
+
+            expect(db.update).toHaveBeenCalled();
+            expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+                needsAttention: true,
+                flagReason: 'offensive_or_abusive',
+                aiIntent: 'OFFENSIVE',
+            }));
+            // Verify replied is NOT set
+            expect(mockSet).not.toHaveBeenCalledWith(expect.objectContaining({
+                replied: true,
+            }));
+        });
+
+        it('should default flagReason and aiIntent to null when not provided', async () => {
+            const mockSet = vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+            });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            await messagesService.flagMessage('msg-1');
+
+            expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+                needsAttention: true,
+                flagReason: null,
+                aiIntent: null,
+            }));
+        });
+    });
+
+    // ───────────────────────────────────────────
     // isPaused (replaces isManuallyPaused)
     // ───────────────────────────────────────────
     describe('isPaused', () => {

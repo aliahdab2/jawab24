@@ -28,6 +28,7 @@ export type Outcome =
     | 'send_failed'
     | 'post_disabled'
     | 'media_disabled'
+    | 'skipped_risky'
     | 'error';
 
 class PipelineMetrics {

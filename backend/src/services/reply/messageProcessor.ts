@@ -2,7 +2,8 @@ import { settingsService } from '../settings';
 import { messagesService } from '../messages';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
-import { replyGenerator } from './generator';
+import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
+import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
@@ -23,10 +24,12 @@ import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
  *  6. Handoff pause check
  *  7. Rate limit check
  *  8. User settings check + away message
- *  9. Skip if already replied
+ *  9. Skip if already replied/flagged
  * 10. Reply delay
  * 11. Consolidate unreplied messages
  * 12. Generate reply
+ * 12b. Replace with safe fallback for price_not_in_kb
+ * 12c. Skip reply entirely for offensive content
  * 13. Send reply
  * 14. Mark as replied
  * 15. Store outgoing message
@@ -141,8 +144,8 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Messages auto-reply disabled' };
             }
 
-            // 9. Skip if already replied
-            if (!isNew && storedMessage.replied) {
+            // 9. Skip if already replied or already flagged
+            if (!isNew && (storedMessage.replied || storedMessage.needsAttention)) {
                 pipelineMetrics.record(pipeline, 'already_replied');
                 return { success: false, messageId: platformMessageId, error: 'Message already replied' };
             }
@@ -163,7 +166,7 @@ export class MessageProcessor {
 
             // 12. Generate reply
             const userSettings = await settingsService.getSettings(userId);
-            const { replyText, replyMethod, needsAttention, flagReason, aiIntent } =
+            let { replyText, replyMethod, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForMessage(
                     {
                         userId,
@@ -176,6 +179,31 @@ export class MessageProcessor {
                     userSettings.aiEnabled ?? false,
                 );
             lap('12-generateReply');
+
+            // 12b. Replace with safe fallback if AI hallucinated a price
+            if (shouldUseFallback(flagReason)) {
+                const detectedLang = detectLanguageCode(messageText);
+                const lang = detectedLang === 'unknown' ? 'en' : detectedLang;
+                replyText = PRICE_FALLBACK[lang] || PRICE_FALLBACK['en'];
+            }
+
+            // 12c. Skip reply entirely for offensive content
+            if (shouldSkipReply(flagReason, aiIntent)) {
+                await messagesService.flagMessage(
+                    storedMessage.id, flagReason, aiIntent,
+                );
+
+                if (page.userId) {
+                    notificationService.sendTemplateNotification(
+                        page.userId,
+                        'skipped_reply',
+                        { senderName: senderName || senderId, reason: flagReason || 'offensive' },
+                        { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                    ).catch(err => this.logger.error('Offensive message notification failed', { err }));
+                }
+                pipelineMetrics.record(pipeline, 'skipped_risky');
+                return { success: true, messageId: platformMessageId };
+            }
 
             if (!replyText) {
                 pipelineMetrics.record(pipeline, 'no_reply_generated');

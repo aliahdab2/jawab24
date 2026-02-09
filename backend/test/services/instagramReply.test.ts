@@ -40,6 +40,12 @@ vi.mock('../../src/services/reply/generator', () => ({
         generateForMessage: vi.fn(),
         setLogger: vi.fn(),
     },
+    shouldSkipReply: vi.fn().mockReturnValue(false),
+    shouldUseFallback: vi.fn().mockReturnValue(false),
+    SKIP_REPLY_FLAGS: ['offensive_or_abusive', 'offensive'],
+    SAFE_FALLBACK_FLAGS: ['price_not_in_kb'],
+    SKIP_REPLY_INTENTS: ['OFFENSIVE'],
+    PRICE_FALLBACK: { ar: 'شكراً لاهتمامك!', en: 'Thank you for your interest!' },
 }));
 
 vi.mock('../../src/services/protection/rate-limiter', () => ({
@@ -58,7 +64,7 @@ vi.mock('../../src/services/protection', () => ({
 
 vi.mock('../../src/services/notifications', () => ({
     notificationService: {
-        sendTemplateNotification: vi.fn(),
+        sendTemplateNotification: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -91,6 +97,7 @@ vi.mock('../../src/services/messages', () => ({
         getUnrepliedFromSender: vi.fn(),
         markOlderMessagesAsReplied: vi.fn(),
         markAsReplied: vi.fn(),
+        flagMessage: vi.fn(),
     },
 }));
 
@@ -103,11 +110,12 @@ vi.mock('drizzle-orm', () => ({
 
 import { InstagramReplyService } from '../../src/services/instagramReply';
 import { pagesService } from '../../src/services/pages';
-import { replyGenerator } from '../../src/services/reply/generator';
+import { replyGenerator, shouldSkipReply, shouldUseFallback } from '../../src/services/reply/generator';
 import { rateLimiter } from '../../src/services/protection';
 import { settingsService } from '../../src/services/settings';
 import { instagramService } from '../../src/services/instagram';
 import { messagesService } from '../../src/services/messages';
+import { notificationService } from '../../src/services/notifications';
 import { db } from '../../src/db';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 
@@ -227,6 +235,7 @@ describe('InstagramReplyService', () => {
         vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([{ id: 'msg-uuid', message: 'hello' }]);
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined);
+        vi.mocked(messagesService.flagMessage).mockResolvedValue(undefined);
     });
 
     describe('setLogger', () => {
@@ -462,6 +471,79 @@ describe('InstagramReplyService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Rate limited');
+        });
+
+        it('should skip reply for offensive message and flag without replying', async () => {
+            vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+                replyText: 'Some reply',
+                replyMethod: 'ai',
+                needsAttention: true,
+                flagReason: 'offensive_or_abusive',
+                aiIntent: 'OFFENSIVE',
+            });
+            vi.mocked(shouldSkipReply).mockReturnValue(true);
+            setupDbForMessage();
+
+            const result = await service.processMessage('ig-1', 'sender-1', 'offensive text', 'msg-1');
+
+            expect(result.success).toBe(true);
+            // Reply should NOT be sent
+            expect(instagramService.sendDirectMessage).not.toHaveBeenCalled();
+            // Message should be flagged (not marked as replied)
+            expect(messagesService.flagMessage).toHaveBeenCalledWith(
+                'msg-uuid', 'offensive_or_abusive', 'OFFENSIVE',
+            );
+            expect(messagesService.markAsReplied).not.toHaveBeenCalled();
+            // Notification should be skipped_reply
+            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+                'user-uuid',
+                'skipped_reply',
+                expect.objectContaining({ reason: 'offensive_or_abusive' }),
+                expect.objectContaining({ type: 'message' }),
+            );
+            expect(pipelineMetrics.getMetrics().counters['instagram_message.skipped_risky']).toBe(1);
+
+            // Reset mock
+            vi.mocked(shouldSkipReply).mockReturnValue(false);
+        });
+
+        it('should replace AI text with safe fallback for price_not_in_kb in messages', async () => {
+            vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+                replyText: 'The price is $99!',
+                replyMethod: 'ai',
+                needsAttention: true,
+                flagReason: 'price_not_in_kb',
+                aiIntent: 'PURCHASE_INTENT',
+            });
+            vi.mocked(shouldUseFallback).mockReturnValue(true);
+            setupDbForMessage();
+
+            const result = await service.processMessage('ig-1', 'sender-1', 'How much?', 'msg-1');
+
+            expect(result.success).toBe(true);
+            // Reply IS sent but with fallback text
+            expect(instagramService.sendDirectMessage).toHaveBeenCalledWith(
+                'ig-1', 'sender-1',
+                expect.stringContaining('Thank you for your interest'),
+                mockPage.accessToken,
+            );
+            expect(messagesService.flagMessage).not.toHaveBeenCalled();
+            expect(messagesService.markAsReplied).toHaveBeenCalled();
+
+            // Reset mock
+            vi.mocked(shouldUseFallback).mockReturnValue(false);
+        });
+
+        it('should skip already-flagged messages on duplicate webhook', async () => {
+            setupDbForMessage({
+                existingMessage: { id: 'msg-uuid', replied: false, needsAttention: true },
+            });
+
+            const result = await service.processMessage('ig-1', 'sender-1', 'offensive', 'msg-1');
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Message already replied');
+            expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
         });
     });
 });

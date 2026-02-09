@@ -77,7 +77,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
 
         if (existing[0]) {
             return {
-                comment: { id: existing[0].id, replied: existing[0].replied ?? false },
+                comment: { id: existing[0].id, replied: existing[0].replied ?? false, needsAttention: existing[0].needsAttention ?? false },
                 isNew: false,
             };
         }
@@ -146,6 +146,18 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
                 aiIntent: aiIntent ?? null,
                 detectedLanguage,
                 repliedAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .where(eq(instagramComments.id, commentId));
+    }
+
+    async flagComment(commentId: string, flagReason?: string, aiIntent?: string): Promise<void> {
+        await db
+            .update(instagramComments)
+            .set({
+                needsAttention: true,
+                flagReason: flagReason ?? null,
+                aiIntent: aiIntent ?? null,
                 updatedAt: new Date(),
             })
             .where(eq(instagramComments.id, commentId));
