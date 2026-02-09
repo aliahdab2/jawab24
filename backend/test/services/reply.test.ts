@@ -210,6 +210,10 @@ describe('Reply Service', () => {
                 ...mockPost,
                 autoReplyEnabled: false,
             } as any);
+            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
+                comment: mockComment as any,
+                isNew: true,
+            });
 
             const result = await replyService.processComment(
                 'fb_page_123',
@@ -219,7 +223,7 @@ describe('Reply Service', () => {
             );
 
             expect(result.success).toBe(false);
-            expect(result.error).toBe('Auto-reply disabled for this post');
+            expect(result.error).toBe('Auto-reply disabled for this content');
         });
 
         it('should skip if comment already replied', async () => {
@@ -266,7 +270,7 @@ describe('Reply Service', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Rate limited');
-            expect(redis.incr).toHaveBeenCalledWith('rate:comment:fb_page_123:user_123');
+            expect(redis.incr).toHaveBeenCalledWith('rate:comment:page_uuid:user_123');
         });
 
         it('should allow comment when within rate limit', async () => {
@@ -536,7 +540,7 @@ describe('Reply Service', () => {
             );
 
             // Should set expire on first increment
-            expect(redis.expire).toHaveBeenCalledWith('rate:comment:fb_page_123:user_123', 60);
+            expect(redis.expire).toHaveBeenCalledWith('rate:comment:page_uuid:user_123', 60);
         });
     });
 });

@@ -261,7 +261,7 @@ describe('InstagramReplyService', () => {
             expect(result).toEqual({
                 success: false,
                 commentId: 'comment-1',
-                error: 'Instagram auto-reply disabled for this page',
+                error: 'Auto-reply disabled for this page',
             });
             expect(pipelineMetrics.getMetrics().counters['instagram_comment.auto_reply_disabled']).toBe(1);
         });
