@@ -38,6 +38,7 @@ import { requestIdMiddleware } from "./middleware/requestId";
 import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
+import { startShopifySyncWorker, stopShopifySyncWorker, setSyncWorkerLogger } from "./workers/shopifySyncWorker";
 import { startEscalationCron, stopEscalationCron } from "./services/escalation";
 import { createRequestLogger } from "./types";
 import { config } from "./config";
@@ -219,6 +220,13 @@ const start = async () => {
     startWorker(workerLogger);
     console.log(`⚙️  Reply processing worker started`);
 
+    // Start Shopify sync worker (product sync, full sync)
+    if (config.shopify?.apiKey) {
+      setSyncWorkerLogger(workerLogger);
+      startShopifySyncWorker();
+      console.log(`🛍️  Shopify sync worker started`);
+    }
+
     // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
     startEscalationCron();
 
@@ -247,10 +255,10 @@ const gracefulShutdown = async (signal: string) => {
     // Stop the escalation cron
     stopEscalationCron();
 
-    // Stop the reply worker first (wait for in-progress jobs)
-    console.log("⏳ Stopping reply worker...");
-    await stopWorker();
-    console.log("✅ Reply worker stopped");
+    // Stop workers (wait for in-progress jobs)
+    console.log("⏳ Stopping workers...");
+    await Promise.all([stopWorker(), stopShopifySyncWorker()]);
+    console.log("✅ Workers stopped");
 
     await server.close();
     await redis.quit();

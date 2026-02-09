@@ -36,6 +36,7 @@ vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canUseAiReplies: vi.fn().mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 }),
         incrementAiReplies: vi.fn().mockResolvedValue(undefined),
+        logAiUsage: vi.fn().mockResolvedValue(undefined),
     },
 }));
 

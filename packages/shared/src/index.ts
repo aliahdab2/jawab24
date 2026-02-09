@@ -50,6 +50,8 @@ export interface Page {
   instagramAccountId?: string | null;
   instagramUsername?: string | null;
   instagramAutoReplyEnabled?: boolean | null;
+  // Shopify fields
+  shopifyStoreId?: string | null;
   // Other fields
   knowledgeBase?: string | null;
   suggestedKnowledgeBase?: string | null;
@@ -143,8 +145,8 @@ export interface Plan {
   // Features
   facebookEnabled: boolean;
   instagramEnabled: boolean;
-  whatsappEnabled: boolean;
   shopifyEnabled: boolean;
+  whatsappEnabled: boolean;
   showBranding: boolean;
   prioritySupport: boolean;
   // Trial

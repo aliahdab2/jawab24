@@ -71,9 +71,12 @@ describe('shopifyCrypto', () => {
             expect(decrypted).toBe(unicodeText);
         });
 
-        it('should throw on tampered ciphertext', () => {
+        it('should throw on tampered auth tag', () => {
             const { ciphertext, iv } = encrypt('test');
-            const tampered = 'X' + ciphertext.slice(1);
+            // Replace the auth tag with a different value to guarantee GCM verification failure
+            const [encData] = ciphertext.split('.');
+            const fakeTag = Buffer.from('0'.repeat(16)).toString('base64');
+            const tampered = encData + '.' + fakeTag;
             expect(() => decrypt(tampered, iv)).toThrow();
         });
 

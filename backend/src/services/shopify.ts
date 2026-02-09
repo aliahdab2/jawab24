@@ -6,6 +6,7 @@ import { config } from '../config';
 import { encrypt, decrypt } from './shopifyCrypto';
 import type { ShopifyStore, ShopifyProduct } from '@jawab24/shared';
 
+const SHOPIFY_API_VERSION = '2024-10';
 const KB_MAX_CHARS = 1500; // Must match ai-worker's KB_MAX_CHARS
 const MAX_PRODUCTS_PER_PAGE = 50;
 const MAX_PAGES_TO_FETCH = 5; // 250 products max
@@ -70,7 +71,7 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
 
     for (const { topic, address } of topics) {
         try {
-            const response = await fetch(`https://${shop}/admin/api/2024-10/webhooks.json`, {
+            const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -184,7 +185,7 @@ export async function linkStoreToPage(storeId: string, pageId: string, userId: s
 // --- Shopify Admin API helpers ---
 
 async function shopifyGraphQL<T = any>(shop: string, accessToken: string, query: string): Promise<T> {
-    const response = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
+    const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

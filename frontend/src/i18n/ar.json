@@ -952,6 +952,11 @@
   "shopify.noPages": "لا توجد صفحات متاحة",
   "shopify.connected": "مربوط",
   "shopify.never": "لم يتم بعد",
+  "shopify.disconnected": "تم فصل متجر شوبيفاي",
+  "shopify.disconnectError": "فشل فصل المتجر",
+  "shopify.pageLinked": "تم ربط الصفحة بمتجر شوبيفاي",
+  "shopify.pageLinkError": "فشل ربط الصفحة",
+  "shopify.integration": "تكامل شوبيفاي",
 
   "shopify.installDetected": "تم اكتشاف متجر شوبيفاي!",
   "shopify.loginToConnect": "سجّل دخولك بفيسبوك لربط متجرك والبدء بالرد التلقائي على الزبائن.",

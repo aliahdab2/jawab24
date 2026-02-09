@@ -16,8 +16,10 @@ import { eq } from 'drizzle-orm';
  * Read pending Shopify install ID from signed cookie.
  */
 function getPendingShopifyId(request: FastifyRequest): string | null {
+    if (!request.cookies) return null;
     const cookie = request.cookies.pendingShopifyId;
     if (!cookie) return null;
+    if (!request.unsignCookie) return null;
     const result = request.unsignCookie(cookie);
     return result.valid ? (result.value || null) : null;
 }

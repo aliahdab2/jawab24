@@ -115,18 +115,18 @@ function ShopifySection() {
     try {
       await shopifyApi.disconnectStore();
       setStore(null);
-      toast.success('Disconnected');
+      toast.success(t('shopify.disconnected' as TranslationKey));
     } catch {
-      toast.error('Failed to disconnect');
+      toast.error(t('shopify.disconnectError' as TranslationKey));
     }
   };
 
   const handleLinkPage = async (pageId: string) => {
     try {
       await shopifyApi.linkPage(pageId);
-      toast.success('Page linked');
+      toast.success(t('shopify.pageLinked' as TranslationKey));
     } catch {
-      toast.error('Failed to link page');
+      toast.error(t('shopify.pageLinkError' as TranslationKey));
     }
   };
 

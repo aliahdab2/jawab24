@@ -13,7 +13,7 @@ import { Button } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { shopifyApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import type { Page } from '@jawab24/shared';
+import type { Page, ShopifyStore } from '@jawab24/shared';
 
 type TFunc = (key: TranslationKey | string, params?: Record<string, string | number>) => string;
 
@@ -24,7 +24,7 @@ export default function ShopifyOnboarding() {
   const isRTL = language === 'ar';
 
   const [step, setStep] = useState(0);
-  const [store, setStore] = useState<any>(null);
+  const [store, setStore] = useState<ShopifyStore | null>(null);
   const [storeLoading, setStoreLoading] = useState(true);
   const [storeError, setStoreError] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
@@ -247,7 +247,7 @@ export default function ShopifyOnboarding() {
                   <div className="flex gap-3">
                     <Button
                       onClick={() => setStep(0)}
-                      variant="outline"
+                      variant="ghost"
                       className="flex-1 rounded-2xl"
                     >
                       {(t as TFunc)('common.back')}
