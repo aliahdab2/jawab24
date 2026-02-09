@@ -42,6 +42,11 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
         // Create/update store
         const store = await shopifyService.createStore(userId, shop, accessToken);
 
+        // Register webhooks (non-critical, best-effort)
+        shopifyService.registerWebhooks(shop, accessToken).catch(err => {
+            request.log.error({ err }, 'Failed to register Shopify webhooks');
+        });
+
         // Enqueue full sync
         try {
             const { Queue } = await import('bullmq');
@@ -196,6 +201,13 @@ export async function linkPage(request: FastifyRequest, reply: FastifyReply) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
     }
 
-    await shopifyService.linkStoreToPage(store.id, pageId);
-    return reply.send({ ok: true });
+    try {
+        await shopifyService.linkStoreToPage(store.id, pageId, userId);
+        return reply.send({ ok: true });
+    } catch (error: any) {
+        if (error.message?.includes('does not belong to user')) {
+            return reply.status(403).send({ error: 'Page does not belong to user' });
+        }
+        throw error;
+    }
 }

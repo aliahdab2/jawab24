@@ -6,6 +6,8 @@ import { config } from '../config';
 import type { ShopifyStore, ShopifyProduct } from '@jawab24/shared';
 
 const KB_MAX_CHARS = 1500; // Must match ai-worker's KB_MAX_CHARS
+const MAX_PRODUCTS_PER_PAGE = 50;
+const MAX_PAGES_TO_FETCH = 5; // 250 products max
 
 // --- OAuth ---
 
@@ -48,7 +50,46 @@ export function verifyWebhookHmac(body: string, hmacHeader: string): boolean {
         .createHmac('sha256', config.shopify.apiSecret)
         .update(body, 'utf8')
         .digest('base64');
-    return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(hmacHeader));
+    // Ensure both buffers have the same length before comparing
+    const hashBuf = Buffer.from(hash);
+    const hmacBuf = Buffer.from(hmacHeader);
+    if (hashBuf.length !== hmacBuf.length) return false;
+    return crypto.timingSafeEqual(hashBuf, hmacBuf);
+}
+
+/**
+ * Register mandatory webhooks after OAuth install
+ */
+export async function registerWebhooks(shop: string, accessToken: string): Promise<void> {
+    const webhookUrl = `https://${config.shopify.hostName}/shopify/webhooks`;
+    const topics = [
+        { topic: 'app/uninstalled', address: `${webhookUrl}/uninstall` },
+        { topic: 'products/update', address: `${webhookUrl}/products-update` },
+    ];
+
+    for (const { topic, address } of topics) {
+        try {
+            const response = await fetch(`https://${shop}/admin/api/2024-10/webhooks.json`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Shopify-Access-Token': accessToken,
+                },
+                body: JSON.stringify({
+                    webhook: { topic, address, format: 'json' },
+                }),
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                // 422 = webhook already exists, which is fine
+                if (response.status !== 422) {
+                    console.error(`[Shopify] Failed to register webhook ${topic}: ${response.status} ${text}`);
+                }
+            }
+        } catch (err) {
+            console.error(`[Shopify] Error registering webhook ${topic}:`, err);
+        }
+    }
 }
 
 // --- Store CRUD ---
@@ -123,16 +164,25 @@ export async function disconnectStore(storeId: string) {
 }
 
 /**
- * Link a Shopify store to a Facebook/Instagram page
+ * Link a Shopify store to a Facebook/Instagram page (with ownership validation)
  */
-export async function linkStoreToPage(storeId: string, pageId: string) {
+export async function linkStoreToPage(storeId: string, pageId: string, userId: string) {
+    // Validate page belongs to user
+    const page = await db.select().from(pages)
+        .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
+        .limit(1);
+
+    if (!page[0]) {
+        throw new Error('Page not found or does not belong to user');
+    }
+
     await db.update(pages).set({ shopifyStoreId: storeId, updatedAt: new Date() })
         .where(eq(pages.id, pageId));
 }
 
 // --- Shopify Admin API helpers ---
 
-async function shopifyGraphQL(shop: string, accessToken: string, query: string) {
+async function shopifyGraphQL<T = any>(shop: string, accessToken: string, query: string): Promise<T> {
     const response = await fetch(`https://${shop}/admin/api/2024-10/graphql.json`, {
         method: 'POST',
         headers: {
@@ -143,14 +193,23 @@ async function shopifyGraphQL(shop: string, accessToken: string, query: string) 
     });
 
     if (!response.ok) {
-        throw new Error(`Shopify GraphQL error: ${response.status}`);
+        throw new Error(`Shopify GraphQL HTTP error: ${response.status}`);
     }
 
-    return response.json();
+    const result = await response.json() as T & { errors?: Array<{ message: string }> };
+
+    // Shopify GraphQL returns 200 even on query errors
+    if (result.errors && result.errors.length > 0) {
+        throw new Error(`Shopify GraphQL error: ${result.errors.map(e => e.message).join(', ')}`);
+    }
+
+    return result;
 }
 
 async function fetchShopInfo(shop: string, accessToken: string) {
-    const data = await shopifyGraphQL(shop, accessToken, `{
+    const data = await shopifyGraphQL<{
+        data: { shop: { name: string; email: string; currencyCode: string; timezoneAbbreviation: string; plan: { displayName: string } } }
+    }>(shop, accessToken, `{
         shop {
             name
             email
@@ -158,7 +217,7 @@ async function fetchShopInfo(shop: string, accessToken: string) {
             timezoneAbbreviation
             plan { displayName }
         }
-    }`) as { data: { shop: { name: string; email: string; currencyCode: string; timezoneAbbreviation: string; plan: { displayName: string } } } };
+    }`);
 
     const s = data.data.shop;
     return {
@@ -195,72 +254,117 @@ interface ShopifyGQLProduct {
     };
 }
 
+interface ProductsPageInfo {
+    hasNextPage: boolean;
+    endCursor: string | null;
+}
+
 /**
- * Sync all active products from Shopify store
+ * Fetch all active products with cursor-based pagination (up to 250)
+ */
+interface ProductsQueryResult {
+    data: {
+        products: {
+            edges: Array<{ node: ShopifyGQLProduct; cursor: string }>;
+            pageInfo: ProductsPageInfo;
+        }
+    }
+}
+
+async function fetchAllProducts(shop: string, accessToken: string): Promise<ShopifyGQLProduct[]> {
+    const allProducts: ShopifyGQLProduct[] = [];
+    let cursor: string | null = null;
+    let pagesCount = 0;
+
+    while (pagesCount < MAX_PAGES_TO_FETCH) {
+        const afterArg: string = cursor ? `, after: "${cursor}"` : '';
+        const query = `{
+            products(first: ${MAX_PRODUCTS_PER_PAGE}${afterArg}, query: "status:active") {
+                edges {
+                    node {
+                        id
+                        title
+                        productType
+                        vendor
+                        status
+                        tags
+                        totalInventory
+                        hasOnlyDefaultVariant
+                        priceRangeV2 {
+                            minVariantPrice { amount currencyCode }
+                            maxVariantPrice { amount currencyCode }
+                        }
+                        variants(first: 20) {
+                            edges {
+                                node {
+                                    title
+                                    selectedOptions { name value }
+                                }
+                            }
+                        }
+                    }
+                    cursor
+                }
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+            }
+        }`;
+        const data: ProductsQueryResult = await shopifyGraphQL<ProductsQueryResult>(shop, accessToken, query);
+
+        const edges = data.data.products.edges;
+        allProducts.push(...edges.map((e: { node: ShopifyGQLProduct }) => e.node));
+
+        if (!data.data.products.pageInfo.hasNextPage) break;
+        cursor = data.data.products.pageInfo.endCursor;
+        pagesCount++;
+    }
+
+    return allProducts;
+}
+
+/**
+ * Sync all active products from Shopify store (with pagination and atomic replace)
  */
 export async function syncProducts(storeId: string) {
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
 
-    const data = await shopifyGraphQL(store.shopDomain, store.accessToken, `{
-        products(first: 50, query: "status:active") {
-            edges {
-                node {
-                    id
-                    title
-                    productType
-                    vendor
-                    status
-                    tags
-                    totalInventory
-                    hasOnlyDefaultVariant
-                    priceRangeV2 {
-                        minVariantPrice { amount currencyCode }
-                        maxVariantPrice { amount currencyCode }
-                    }
-                    variants(first: 20) {
-                        edges {
-                            node {
-                                title
-                                selectedOptions { name value }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }`) as { data: { products: { edges: Array<{ node: ShopifyGQLProduct }> } } };
+    const products = await fetchAllProducts(store.shopDomain, store.accessToken);
 
-    const products = data.data.products.edges.map(e => e.node);
-
-    // Clear old products for this store, then insert fresh
+    // Atomic replacement: delete old + insert new in sequence
+    // Delete first, then batch insert
     await db.delete(shopifyProducts).where(eq(shopifyProducts.shopifyStoreId, storeId));
 
-    for (const p of products) {
-        const minPrice = parseFloat(p.priceRangeV2.minVariantPrice.amount);
-        const maxPrice = parseFloat(p.priceRangeV2.maxVariantPrice.amount);
-        const currency = p.priceRangeV2.minVariantPrice.currencyCode;
-        const priceRange = minPrice === maxPrice
-            ? `${minPrice} ${currency}`
-            : `${minPrice} - ${maxPrice} ${currency}`;
+    if (products.length > 0) {
+        const rows = products.map(p => {
+            const minPrice = parseFloat(p.priceRangeV2.minVariantPrice.amount);
+            const maxPrice = parseFloat(p.priceRangeV2.maxVariantPrice.amount);
+            const currency = p.priceRangeV2.minVariantPrice.currencyCode;
+            const priceRange = minPrice === maxPrice
+                ? `${minPrice} ${currency}`
+                : `${minPrice} - ${maxPrice} ${currency}`;
+            const variantSummary = buildVariantSummary(p.variants.edges.map(e => e.node));
 
-        // Build variant summary: "S, M, L in Black, White"
-        const variantSummary = buildVariantSummary(p.variants.edges.map(e => e.node));
-
-        await db.insert(shopifyProducts).values({
-            shopifyStoreId: storeId,
-            shopifyProductId: p.id.replace('gid://shopify/Product/', ''),
-            title: p.title,
-            productType: p.productType || null,
-            vendor: p.vendor || null,
-            status: p.status.toLowerCase(),
-            priceRange,
-            currency,
-            totalInventory: p.totalInventory,
-            hasVariants: !p.hasOnlyDefaultVariant,
-            variantSummary: variantSummary || null,
-            tags: p.tags.join(', ') || null,
+            return {
+                shopifyStoreId: storeId,
+                shopifyProductId: p.id.replace('gid://shopify/Product/', ''),
+                title: p.title,
+                productType: p.productType || null,
+                vendor: p.vendor || null,
+                status: p.status.toLowerCase(),
+                priceRange,
+                currency,
+                totalInventory: p.totalInventory,
+                hasVariants: !p.hasOnlyDefaultVariant,
+                variantSummary: variantSummary || null,
+                tags: p.tags.join(', ') || null,
+            };
         });
+
+        // Batch insert all products at once (much faster than one-by-one)
+        await db.insert(shopifyProducts).values(rows);
     }
 
     // Build and store the product summary
@@ -283,12 +387,14 @@ export async function syncPolicies(storeId: string) {
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
 
-    const data = await shopifyGraphQL(store.shopDomain, store.accessToken, `{
+    const data = await shopifyGraphQL<{
+        data: { shop: { shippingPolicy: { body: string } | null; refundPolicy: { body: string } | null } }
+    }>(store.shopDomain, store.accessToken, `{
         shop {
             shippingPolicy { body }
             refundPolicy { body }
         }
-    }`) as { data: { shop: { shippingPolicy: { body: string } | null; refundPolicy: { body: string } | null } } };
+    }`);
 
     const policies: string[] = [];
     if (data.data.shop.shippingPolicy?.body) {
@@ -334,9 +440,9 @@ export async function fullSync(storeId: string) {
     return { ...productResult, ...policyResult };
 }
 
-// --- Product Summary Generator (Step 7) ---
+// --- Product Summary Generator ---
 
-function buildVariantSummary(variants: Array<{ title: string; selectedOptions: Array<{ name: string; value: string }> }>): string {
+export function buildVariantSummary(variants: Array<{ title: string; selectedOptions: Array<{ name: string; value: string }> }>): string {
     // Group options by name: { "Size": ["S","M","L"], "Color": ["Black","White"] }
     const optionGroups: Record<string, Set<string>> = {};
 
@@ -358,7 +464,7 @@ function buildVariantSummary(variants: Array<{ title: string; selectedOptions: A
 /**
  * Build a structured product summary for AI consumption (~800 chars max)
  */
-async function buildProductSummary(storeId: string): Promise<string> {
+export async function buildProductSummary(storeId: string): Promise<string> {
     const products = await db.select().from(shopifyProducts)
         .where(and(eq(shopifyProducts.shopifyStoreId, storeId), eq(shopifyProducts.status, 'active')))
         .limit(15); // Top 15 active products
@@ -380,16 +486,18 @@ async function buildProductSummary(storeId: string): Promise<string> {
         lines.push(parts.join(' — '));
     }
 
-    // Keep under ~800 chars
+    // Keep under ~800 chars — truncate at last complete line
     let summary = lines.join('\n');
     if (summary.length > 800) {
-        summary = summary.slice(0, 797) + '...';
+        const truncated = summary.slice(0, 800);
+        const lastNewline = truncated.lastIndexOf('\n');
+        summary = lastNewline > 0 ? truncated.slice(0, lastNewline) + '\n...' : truncated.slice(0, 797) + '...';
     }
 
     return summary;
 }
 
-// --- KB Enrichment (Step 8) ---
+// --- KB Enrichment ---
 
 /**
  * Get enriched knowledge base: Shopify products + policies + page KB

@@ -154,6 +154,11 @@ function PlanCard({
           included={!plan.showBranding}
           text={t('pricing.brandingHidden' as TranslationKey)}
         />
+
+        <FeatureRow
+          included={plan.shopifyEnabled}
+          text={t('pricing.featureShopify' as TranslationKey)}
+        />
       </div>
 
       {/* CTA */}

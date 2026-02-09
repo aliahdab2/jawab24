@@ -556,6 +556,7 @@
   "pricing.featureAiReplies": "{count} رد ذكي",
   "pricing.featureTemplates": "{count} قوالب رد",
   "pricing.featureRules": "{count} قواعد رد",
+  "pricing.featureShopify": "ربط متجر شوبيفاي",
   "pricing.usageReplies": "الردود: {used}/{limit}",
   "pricing.daysLeftCount": "متبقي {count} يوم",
   "pricing.fallbackTitle": "عرض الأسعار المخزنة مؤقتاً",

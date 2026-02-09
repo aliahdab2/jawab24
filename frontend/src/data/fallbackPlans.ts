@@ -27,7 +27,7 @@ export const FALLBACK_PLANS: Plan[] = [
         facebookEnabled: true,
         instagramEnabled: true,
         whatsappEnabled: false,
-        shopifyEnabled: true,
+        shopifyEnabled: false,
         showBranding: true,
         prioritySupport: false,
         trialDays: 30,

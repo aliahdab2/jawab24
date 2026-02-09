@@ -560,6 +560,7 @@
   "pricing.featureAiReplies": "{count} AI Replies",
   "pricing.featureTemplates": "{count} Templates",
   "pricing.featureRules": "{count} Rules",
+  "pricing.featureShopify": "Shopify Integration",
   "pricing.usageReplies": "Replies: {used}/{limit}",
   "pricing.daysLeftCount": "{count} days left",
   "pricing.fallbackTitle": "Displaying Cached Pricing",
