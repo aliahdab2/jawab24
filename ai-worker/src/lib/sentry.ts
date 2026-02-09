@@ -20,9 +20,8 @@ export function initSentry() {
         // Performance monitoring
         tracesSampleRate: isProduction ? 0.1 : 1.0,
 
-        // Filter out noisy errors
+        // Filter out transient network errors (rate limits are NOT filtered — we need visibility)
         ignoreErrors: [
-            'Rate limit exceeded',
             'ECONNREFUSED',
             'ETIMEDOUT',
         ],

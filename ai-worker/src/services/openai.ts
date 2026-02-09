@@ -81,13 +81,21 @@ export class OpenAIService {
             // eslint-disable-next-line no-console
             console.log(JSON.stringify({ event: 'ai_call_token_usage', ...tokenInfo }));
 
-            const completion = await this.client.chat.completions.create({
-                model: config.openai.model,
-                messages,
-                max_tokens: config.openai.maxTokens,
-                temperature: config.openai.temperature,
-                response_format: { type: 'json_object' },
-            });
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
+
+            let completion: OpenAI.ChatCompletion;
+            try {
+                completion = await this.client.chat.completions.create({
+                    model: config.openai.model,
+                    messages,
+                    max_tokens: config.openai.maxTokens,
+                    temperature: config.openai.temperature,
+                    response_format: { type: 'json_object' },
+                }, { signal: controller.signal });
+            } finally {
+                clearTimeout(timeout);
+            }
 
             const content = completion.choices[0]?.message?.content?.trim() || '';
             const detectedLanguage = this.detectLanguage(request.comment);
@@ -179,7 +187,9 @@ export class OpenAIService {
      * Build system prompt for the AI
      */
     private buildSystemPrompt(request: GenerateRequest): string {
-        const pageName = request.context?.pageName || 'our page';
+        const rawPageName = request.context?.pageName || 'our page';
+        // Sanitize to prevent prompt injection via page name
+        const pageName = rawPageName.replace(/["\n\r\t\\]/g, '').slice(0, 100);
         const language = request.language || 'the same language as the message';
         const knowledgeBase = request.context?.knowledgeBase;
         const isConversation = request.context?.conversationHistory && request.context.conversationHistory.length > 0;

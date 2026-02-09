@@ -93,7 +93,7 @@ describe('Sentry', () => {
         const { initSentry } = await import('../src/lib/sentry');
         initSentry();
         const initCall = mockInit.mock.calls[0][0];
-        expect(initCall.ignoreErrors).toContain('Rate limit exceeded');
+        expect(initCall.ignoreErrors).not.toContain('Rate limit exceeded');
         expect(initCall.ignoreErrors).toContain('ECONNREFUSED');
         expect(initCall.ignoreErrors).toContain('ETIMEDOUT');
         logSpy.mockRestore();

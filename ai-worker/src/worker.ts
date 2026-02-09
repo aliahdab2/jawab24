@@ -6,8 +6,16 @@ import { Sentry } from './lib/sentry';
 
 let worker: Worker | null = null;
 
-export function startWorker(logger?: { info: Function; error: Function }) {
-    const log = logger || console;
+interface WorkerLogger {
+    info(obj: Record<string, unknown>, msg?: string): void;
+    error(obj: Record<string, unknown>, msg?: string): void;
+}
+
+export function startWorker(logger?: WorkerLogger) {
+    const log: WorkerLogger = logger || {
+        info: (obj, msg) => console.log(msg, obj),
+        error: (obj, msg) => console.error(msg, obj),
+    };
 
     const connection = {
         host: config.redis.host,
@@ -29,6 +37,9 @@ export function startWorker(logger?: { info: Function; error: Function }) {
     }, {
         connection,
         concurrency: config.queue.concurrency,
+        autorun: true,
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 500 },
     });
 
     worker.on('completed', (job) => {
@@ -36,7 +47,7 @@ export function startWorker(logger?: { info: Function; error: Function }) {
     });
 
     worker.on('failed', (job, err) => {
-        log.error({ jobId: job?.id, err }, 'Job failed');
+        log.error({ jobId: job?.id, err: String(err) }, 'Job failed');
     });
 
     return worker;

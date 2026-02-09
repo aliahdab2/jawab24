@@ -256,14 +256,44 @@ describe('Routes', () => {
             expect(res.statusCode).toBe(200);
             const body = res.json();
             expect(body.results).toHaveLength(3);
+            expect(body.results[0].success).toBe(true);
             expect(body.results[0].reply).toBe('Reply 1');
             expect(body.results[2].reply).toBe('Reply 3');
         });
 
-        it('should return 500 when any request in batch fails', async () => {
-            mockGenerateReply.mockRejectedValue(new Error('API error'));
+        it('should return partial results when some requests fail', async () => {
+            mockGenerateReply
+                .mockResolvedValueOnce({ reply: 'Reply 1', language: 'en' })
+                .mockRejectedValueOnce(new Error('API error'))
+                .mockResolvedValueOnce({ reply: 'Reply 3', language: 'en' });
 
             const res = await app.inject({
+                method: 'POST',
+                url: '/generate/batch',
+                payload: {
+                    requests: [
+                        { comment: 'Comment 1' },
+                        { comment: 'Comment 2' },
+                        { comment: 'Comment 3' },
+                    ],
+                },
+            });
+
+            expect(res.statusCode).toBe(200);
+            const body = res.json();
+            expect(body.results).toHaveLength(3);
+            expect(body.results[0].success).toBe(true);
+            expect(body.results[0].reply).toBe('Reply 1');
+            expect(body.results[1].success).toBe(false);
+            expect(body.results[1].error).toBe('Failed to generate reply');
+            expect(body.results[2].success).toBe(true);
+            expect(body.results[2].reply).toBe('Reply 3');
+        });
+
+        it('should report failures to Sentry', async () => {
+            mockGenerateReply.mockRejectedValue(new Error('API error'));
+
+            await app.inject({
                 method: 'POST',
                 url: '/generate/batch',
                 payload: {
@@ -271,8 +301,7 @@ describe('Routes', () => {
                 },
             });
 
-            expect(res.statusCode).toBe(500);
-            expect(res.json().error).toBe('Failed to generate replies');
+            expect(mockCaptureException).toHaveBeenCalled();
         });
     });
 });

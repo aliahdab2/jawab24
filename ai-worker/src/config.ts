@@ -21,6 +21,7 @@ export const config = {
         model: 'gpt-4o-mini',
         maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '300', 10),
         temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
+        timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10),
     },
 
     // Queue settings

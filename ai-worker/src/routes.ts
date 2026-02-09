@@ -60,16 +60,25 @@ async function routes(server: FastifyInstance) {
             return reply.status(400).send({ error: 'Maximum 10 requests per batch' });
         }
 
-        try {
-            const results = await Promise.all(
-                requests.map(req => openaiService.generateReply(req))
-            );
-            return reply.send({ results });
-        } catch (error) {
-            request.log.error(error, 'Failed to generate batch replies');
-            Sentry.captureException(error);
-            return reply.status(500).send({ error: 'Failed to generate replies' });
+        const settled = await Promise.allSettled(
+            requests.map(req => openaiService.generateReply(req))
+        );
+        const results = settled.map((result, i) =>
+            result.status === 'fulfilled'
+                ? { success: true, ...result.value }
+                : { success: false, error: 'Failed to generate reply', index: i }
+        );
+
+        // Report any failures to Sentry
+        const failures = settled.filter(r => r.status === 'rejected');
+        if (failures.length > 0) {
+            request.log.error({ failCount: failures.length, total: requests.length }, 'Partial batch failure');
+            for (const f of failures) {
+                Sentry.captureException((f as PromiseRejectedResult).reason);
+            }
         }
+
+        return reply.send({ results });
     });
 }
 
