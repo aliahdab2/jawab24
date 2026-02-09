@@ -3,13 +3,7 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { AuthenticatedRequest } from './auth';
-
-/**
- * Admin role type stored in user metadata
- * For now we use a simple approach: admin emails are configured via env var
- * In production, you'd want a proper role column in the users table
- */
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').filter(Boolean);
+import { config } from '../config';
 
 export interface AdminUser {
     userId: string;
@@ -32,7 +26,7 @@ export async function isUserAdmin(userId: string): Promise<boolean> {
             return false;
         }
         
-        return ADMIN_EMAILS.includes(user.email);
+        return config.adminEmails.includes(user.email);
     } catch {
         return false;
     }

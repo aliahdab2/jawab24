@@ -6,6 +6,12 @@ vi.mock('@sentry/node', () => ({
     captureException: vi.fn(),
 }));
 
+vi.mock('../../src/config', () => ({
+    config: {
+        nodeEnv: 'test',
+    },
+}));
+
 vi.mock('../../src/utils/errors', async () => {
     // Use real implementations for the error classes
     class AppError extends Error {
@@ -37,6 +43,7 @@ vi.mock('../../src/utils/errors', async () => {
 import { errorHandler } from '../../src/middleware/errorHandler';
 import * as Sentry from '@sentry/node';
 import { AppError, ValidationError } from '../../src/utils/errors';
+import { config } from '../../src/config';
 
 describe('errorHandler middleware', () => {
     let mockRequest: Partial<FastifyRequest>;
@@ -177,8 +184,8 @@ describe('errorHandler middleware', () => {
     // ─── Unknown errors ──────────────────────────────────
 
     it('should return 500 with message in non-production', () => {
-        const origEnv = process.env.NODE_ENV;
-        process.env.NODE_ENV = 'test';
+        const origEnv = config.nodeEnv;
+        (config as any).nodeEnv = 'test';
 
         const error = new Error('raw crash');
         errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -192,12 +199,12 @@ describe('errorHandler middleware', () => {
             }),
         );
 
-        process.env.NODE_ENV = origEnv;
+        (config as any).nodeEnv = origEnv;
     });
 
     it('should hide error message in production', () => {
-        const origEnv = process.env.NODE_ENV;
-        process.env.NODE_ENV = 'production';
+        const origEnv = config.nodeEnv;
+        (config as any).nodeEnv = 'production';
 
         const error = new Error('secret DB password leaked');
         errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -211,12 +218,12 @@ describe('errorHandler middleware', () => {
             }),
         );
 
-        process.env.NODE_ENV = origEnv;
+        (config as any).nodeEnv = origEnv;
     });
 
     it('should include stack trace in non-production', () => {
-        const origEnv = process.env.NODE_ENV;
-        process.env.NODE_ENV = 'development';
+        const origEnv = config.nodeEnv;
+        (config as any).nodeEnv = 'development';
 
         const error = new Error('debug me');
         errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -224,12 +231,12 @@ describe('errorHandler middleware', () => {
         const sendCall = (mockReply.send as any).mock.calls[0][0];
         expect(sendCall.stack).toBeDefined();
 
-        process.env.NODE_ENV = origEnv;
+        (config as any).nodeEnv = origEnv;
     });
 
     it('should NOT include stack trace in production', () => {
-        const origEnv = process.env.NODE_ENV;
-        process.env.NODE_ENV = 'production';
+        const origEnv = config.nodeEnv;
+        (config as any).nodeEnv = 'production';
 
         const error = new Error('no stack for you');
         errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -237,6 +244,6 @@ describe('errorHandler middleware', () => {
         const sendCall = (mockReply.send as any).mock.calls[0][0];
         expect(sendCall.stack).toBeUndefined();
 
-        process.env.NODE_ENV = origEnv;
+        (config as any).nodeEnv = origEnv;
     });
 });

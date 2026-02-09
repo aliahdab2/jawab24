@@ -57,7 +57,7 @@ try {
 
 const server = fastify({
   logger: {
-    level: process.env.LOG_LEVEL || "info",
+    level: config.logLevel,
     serializers: {
       req(request) {
         return {
@@ -77,13 +77,14 @@ const server = fastify({
   trustProxy: true, // Critical: Trust Nginx proxy headers to get real client IP
 });
 
-// Add rawBody support for Stripe webhooks
+// Add rawBody support for webhook signature verification (Stripe, Shopify, Facebook)
+// The rawBody property is declared in types/fastify.d.ts via module augmentation
 server.addContentTypeParser(
   "application/json",
   { parseAs: "buffer" },
   (req, body, done) => {
     try {
-      (req as any).rawBody = body;
+      req.rawBody = Buffer.isBuffer(body) ? body : Buffer.from(body, "utf8");
       const json = JSON.parse(body.toString("utf8"));
       done(null, json);
     } catch (err: any) {
@@ -109,7 +110,7 @@ const start = async () => {
     // CORS: Environment-based origin configuration
     // - Production: Allow FRONTEND_URL and mobile app origins
     // - Development: Allow localhost ports
-    const isProduction = process.env.NODE_ENV === "production";
+    const isProduction = config.nodeEnv === "production";
     const mobileOrigins = [
       "capacitor://localhost",
       "http://localhost",
@@ -118,7 +119,7 @@ const start = async () => {
     ];
 
     const allowedOrigins = isProduction
-      ? [process.env.FRONTEND_URL || "https://jawab24.com", ...mobileOrigins]
+      ? [config.frontendUrl, ...mobileOrigins]
       : ["http://localhost:3000", "http://localhost:3001", ...mobileOrigins];
 
     await server.register(cors, {
@@ -148,7 +149,7 @@ const start = async () => {
     // Register cookie plugin
     // COOKIE_SECRET is validated at startup via validateEnv() - no fallback needed
     await server.register(cookie, {
-        secret: process.env.COOKIE_SECRET!,
+        secret: config.cookieSecret,
         hook: 'onRequest',
         parseOptions: {}
     });
@@ -156,9 +157,9 @@ const start = async () => {
     // Register rate limiting
     // Use Redis for rate limiting to ensure consistency across blue/green deployments
     const redisClient = new Redis({
-      host: process.env.REDIS_HOST || "localhost",
-      port: Number(process.env.REDIS_PORT) || 6379,
-      password: process.env.REDIS_PASSWORD,
+      host: config.redis.host,
+      port: config.redis.port,
+      password: config.redis.password,
     });
 
     await server.register(rateLimit, {
@@ -206,13 +207,12 @@ const start = async () => {
       await integration.registerRoutes(server);
     }
 
-    const port = parseInt(process.env.PORT || "3000", 10);
     const host = "0.0.0.0";
 
-    await server.listen({ port, host });
-    console.log(`🚀 Server listening on http://${host}:${port}`);
-    console.log(`📊 Health check: http://${host}:${port}/health`);
-    console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+    await server.listen({ port: config.port, host });
+    console.log(`🚀 Server listening on http://${host}:${config.port}`);
+    console.log(`📊 Health check: http://${host}:${config.port}/health`);
+    console.log(`🌍 Environment: ${config.nodeEnv}`);
 
     // Ensure admin users are set up from environment variables
     await ensureAdminUsers();
@@ -234,14 +234,16 @@ const start = async () => {
 
     // Verify app-level webhook subscription with Facebook on startup
     // This ensures the callback URL is verified after every deploy
-    const webhookCallbackUrl = process.env.WEBHOOK_CALLBACK_URL || 'https://jawab24.com/webhook';
     facebookService.setLogger(createRequestLogger(server.log));
-    facebookService.ensureAppWebhookSubscription(webhookCallbackUrl).then(ok => {
+    facebookService.ensureAppWebhookSubscription(config.webhookCallbackUrl).then(ok => {
       if (ok) {
-        console.log(`✅ Facebook webhook subscription verified (${webhookCallbackUrl})`);
+        console.log(`✅ Facebook webhook subscription verified (${config.webhookCallbackUrl})`);
       } else {
         console.warn(`⚠️  Facebook webhook subscription verification failed — webhooks may not be delivered`);
       }
+    }).catch(err => {
+      server.log.error(err, 'Facebook webhook subscription check failed');
+      Sentry.captureException(err);
     });
   } catch (err) {
     server.log.error(err);

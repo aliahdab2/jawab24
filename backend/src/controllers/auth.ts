@@ -6,7 +6,7 @@ import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
 import { settingsService } from '../services/settings';
 import { integrationRegistry } from '../integrations';
-import { AuthRequest } from '../types';
+import { AuthRequest, AuthResponse } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users } from '../db/schema';
@@ -60,7 +60,7 @@ export class AuthController {
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
             // 9. Build response
-            const response: Record<string, any> = authService.createAuthResponse(user, token, accessToken, {
+            const response: AuthResponse = authService.createAuthResponse(user, token, accessToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
 
@@ -145,7 +145,7 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, token);
 
             // 10. Build response
-            const response: Record<string, any> = authService.createAuthResponse(user, token, longLivedToken, {
+            const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
 
@@ -270,9 +270,10 @@ export class AuthController {
         try {
             await authService.deleteUser(userId);
             return reply.send({ success: true, message: 'Account deleted successfully' });
-        } catch (error: any) {
-            request.log.error({ err: error, userId, errorCode: error?.code, errorDetail: error?.detail }, 'Delete account failed');
-            if (error?.message?.includes('not found')) {
+        } catch (error: unknown) {
+            const err = error as { message?: string; code?: string; detail?: string };
+            request.log.error({ err: error, userId, errorCode: err.code, errorDetail: err.detail }, 'Delete account failed');
+            if (err.message?.includes('not found')) {
                 return reply.status(404).send({ error: 'User not found' });
             }
             return reply.status(500).send({ error: 'Internal Server Error' });

@@ -10,10 +10,6 @@ import {
     SHOPIFY_NONCE_COOKIE_OPTIONS,
 } from '../services/cookies';
 
-interface RawBodyRequest extends FastifyRequest {
-    rawBody?: Buffer;
-}
-
 // --- Helpers ---
 
 /**
@@ -145,7 +141,7 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
 
 export async function webhookUninstall(request: FastifyRequest, reply: FastifyReply) {
     const hmac = request.headers['x-shopify-hmac-sha256'] as string;
-    const rawBody = (request as RawBodyRequest).rawBody;
+    const rawBody = request.rawBody;
     if (!rawBody) {
         return reply.status(401).send({ error: 'Missing raw body for HMAC verification' });
     }
@@ -165,7 +161,7 @@ export async function webhookUninstall(request: FastifyRequest, reply: FastifyRe
 
 export async function webhookProductsUpdate(request: FastifyRequest, reply: FastifyReply) {
     const hmac = request.headers['x-shopify-hmac-sha256'] as string;
-    const rawBody = (request as RawBodyRequest).rawBody;
+    const rawBody = request.rawBody;
     if (!rawBody) {
         return reply.status(401).send({ error: 'Missing raw body for HMAC verification' });
     }
@@ -195,7 +191,7 @@ export async function webhookProductsUpdate(request: FastifyRequest, reply: Fast
 
 function verifyShopifyWebhookHmac(request: FastifyRequest, reply: FastifyReply): boolean {
     const hmac = request.headers['x-shopify-hmac-sha256'] as string;
-    const rawBody = (request as RawBodyRequest).rawBody;
+    const rawBody = request.rawBody;
     if (!rawBody) {
         reply.status(401).send({ error: 'Missing raw body for HMAC verification' });
         return false;
@@ -233,7 +229,8 @@ export async function gdprShopRedact(request: FastifyRequest, reply: FastifyRepl
 // --- Protected API (Jawab24 JWT required) ---
 
 export async function getStore(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user!.userId;
+    const userId = (request as AuthenticatedRequest).user?.userId;
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
     const store = await shopifyService.getStoreByUserId(userId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
@@ -255,7 +252,8 @@ export async function connectStore(request: FastifyRequest, reply: FastifyReply)
 }
 
 export async function disconnectStoreHandler(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user!.userId;
+    const userId = (request as AuthenticatedRequest).user?.userId;
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
     const store = await shopifyService.getStoreByUserId(userId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
@@ -265,7 +263,8 @@ export async function disconnectStoreHandler(request: FastifyRequest, reply: Fas
 }
 
 export async function syncStore(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user!.userId;
+    const userId = (request as AuthenticatedRequest).user?.userId;
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
     const store = await shopifyService.getStoreByUserId(userId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
@@ -276,7 +275,8 @@ export async function syncStore(request: FastifyRequest, reply: FastifyReply) {
 }
 
 export async function getStoreProducts(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user!.userId;
+    const userId = (request as AuthenticatedRequest).user?.userId;
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
     const store = await shopifyService.getStoreByUserId(userId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
@@ -287,7 +287,8 @@ export async function getStoreProducts(request: FastifyRequest, reply: FastifyRe
 }
 
 export async function linkPage(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user!.userId;
+    const userId = (request as AuthenticatedRequest).user?.userId;
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
     const { pageId } = request.body as { pageId?: string };
 
     if (!pageId) {

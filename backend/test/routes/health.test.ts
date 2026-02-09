@@ -15,6 +15,7 @@ vi.mock('../../src/config', () => ({
         nodeEnv: 'test',
         stripe: { secretKey: 'sk_test_xxx' },
         ai: { enabled: true },
+        cleanupSecretToken: '',
     },
 }));
 
@@ -149,7 +150,7 @@ describe('Health Routes', () => {
     // -------------------------------------------------------
     describe('POST /health/cleanup', () => {
         it('returns 401 without valid token', async () => {
-            process.env.CLEANUP_SECRET_TOKEN = 'test-token';
+            (config as any).cleanupSecretToken = 'test-token';
 
             const response = await app.inject({
                 method: 'POST',
@@ -160,11 +161,11 @@ describe('Health Routes', () => {
             expect(response.statusCode).toBe(401);
             expect(response.json()).toEqual({ error: 'Unauthorized' });
 
-            delete process.env.CLEANUP_SECRET_TOKEN;
+            (config as any).cleanupSecretToken = '';
         });
 
         it('returns 503 when CLEANUP_SECRET_TOKEN is not set', async () => {
-            delete process.env.CLEANUP_SECRET_TOKEN;
+            (config as any).cleanupSecretToken = '';
 
             const response = await app.inject({
                 method: 'POST',
@@ -178,7 +179,7 @@ describe('Health Routes', () => {
         });
 
         it('succeeds with valid token', async () => {
-            process.env.CLEANUP_SECRET_TOKEN = 'test-token';
+            (config as any).cleanupSecretToken = 'test-token';
 
             const mockResults = { deletedSessions: 5, cleanedCache: 10 };
             const mockCacheStats = { totalEntries: 100, sizeBytes: 2048 };
@@ -199,7 +200,7 @@ describe('Health Routes', () => {
             expect(body.cacheStats).toEqual(mockCacheStats);
             expect(body.timestamp).toBeDefined();
 
-            delete process.env.CLEANUP_SECRET_TOKEN;
+            (config as any).cleanupSecretToken = '';
         });
     });
 
@@ -208,7 +209,7 @@ describe('Health Routes', () => {
     // -------------------------------------------------------
     describe('GET /health/cache-stats', () => {
         it('returns 401 without valid token', async () => {
-            process.env.CLEANUP_SECRET_TOKEN = 'test-token';
+            (config as any).cleanupSecretToken = 'test-token';
 
             const response = await app.inject({
                 method: 'GET',
@@ -218,7 +219,7 @@ describe('Health Routes', () => {
             expect(response.statusCode).toBe(401);
             expect(response.json()).toEqual({ error: 'Unauthorized' });
 
-            delete process.env.CLEANUP_SECRET_TOKEN;
+            (config as any).cleanupSecretToken = '';
         });
     });
 
@@ -227,7 +228,7 @@ describe('Health Routes', () => {
     // -------------------------------------------------------
     describe('GET /health/pipeline-metrics', () => {
         it('returns 401 without valid token', async () => {
-            process.env.CLEANUP_SECRET_TOKEN = 'test-token';
+            (config as any).cleanupSecretToken = 'test-token';
 
             const response = await app.inject({
                 method: 'GET',
@@ -237,11 +238,11 @@ describe('Health Routes', () => {
             expect(response.statusCode).toBe(401);
             expect(response.json()).toEqual({ error: 'Unauthorized' });
 
-            delete process.env.CLEANUP_SECRET_TOKEN;
+            (config as any).cleanupSecretToken = '';
         });
 
         it('returns metrics with valid token', async () => {
-            process.env.CLEANUP_SECRET_TOKEN = 'test-token';
+            (config as any).cleanupSecretToken = 'test-token';
 
             const mockMetrics = {
                 since: '2026-02-08T00:00:00.000Z',
@@ -258,7 +259,7 @@ describe('Health Routes', () => {
             expect(response.statusCode).toBe(200);
             expect(response.json()).toEqual(mockMetrics);
 
-            delete process.env.CLEANUP_SECRET_TOKEN;
+            (config as any).cleanupSecretToken = '';
         });
     });
 

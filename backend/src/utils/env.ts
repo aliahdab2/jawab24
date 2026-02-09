@@ -8,6 +8,7 @@ const EnvSchema = z.object({
     // Server
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.string().default('3000').transform(Number),
+    LOG_LEVEL: z.string().default('info'),
 
     // Database
     DATABASE_URL: z.string().url('DATABASE_URL must be a valid PostgreSQL connection string'),
@@ -51,6 +52,15 @@ const EnvSchema = z.object({
 
     // Firebase (optional - push notifications require this)
     FIREBASE_SERVICE_ACCOUNT_KEY: z.string().optional(),
+
+    // Webhook callback URL for Facebook subscription verification
+    WEBHOOK_CALLBACK_URL: z.string().default('https://jawab24.com/webhook'),
+
+    // Admin emails (comma-separated list)
+    ADMIN_EMAILS: z.string().optional(),
+
+    // Cleanup endpoint secret token
+    CLEANUP_SECRET_TOKEN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

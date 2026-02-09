@@ -31,3 +31,31 @@ export const config = {
     },
 };
 
+/**
+ * Validate config values at startup.
+ * Catches misconfigured env vars (e.g. PORT=abc) before they cause runtime failures.
+ */
+export function validateConfig(): void {
+    const errors: string[] = [];
+
+    if (isNaN(config.port) || config.port < 1 || config.port > 65535) {
+        errors.push(`PORT must be 1-65535, got: ${process.env.PORT}`);
+    }
+    if (isNaN(config.openai.maxTokens) || config.openai.maxTokens < 1) {
+        errors.push(`OPENAI_MAX_TOKENS must be a positive integer, got: ${process.env.OPENAI_MAX_TOKENS}`);
+    }
+    if (isNaN(config.openai.temperature) || config.openai.temperature < 0 || config.openai.temperature > 2) {
+        errors.push(`OPENAI_TEMPERATURE must be 0-2, got: ${process.env.OPENAI_TEMPERATURE}`);
+    }
+    if (isNaN(config.openai.timeoutMs) || config.openai.timeoutMs < 1000) {
+        errors.push(`OPENAI_TIMEOUT_MS must be >= 1000, got: ${process.env.OPENAI_TIMEOUT_MS}`);
+    }
+    if (isNaN(config.queue.concurrency) || config.queue.concurrency < 1) {
+        errors.push(`QUEUE_CONCURRENCY must be a positive integer, got: ${process.env.QUEUE_CONCURRENCY}`);
+    }
+
+    if (errors.length > 0) {
+        throw new Error(`AI Worker config validation failed:\n  - ${errors.join('\n  - ')}`);
+    }
+}
+

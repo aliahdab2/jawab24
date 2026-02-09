@@ -9,11 +9,6 @@ import { notificationService } from '../services/notifications';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
 import type Stripe from 'stripe';
 
-// Extend FastifyRequest to include rawBody for Stripe webhooks
-interface WebhookRequest extends FastifyRequest {
-    rawBody?: Buffer;
-}
-
 // Type for authenticated requests
 interface AuthenticatedRequest extends FastifyRequest {
     user?: { userId: string; facebookId: string };
@@ -325,7 +320,7 @@ export class PaymentController {
             }
 
             // Get raw body - Fastify stores it in rawBody when configured
-            const rawBody = (request as WebhookRequest).rawBody;
+            const rawBody = request.rawBody;
             if (!rawBody) {
                 return reply.status(400).send({ error: 'Missing raw body' });
             }

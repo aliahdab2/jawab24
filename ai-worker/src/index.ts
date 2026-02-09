@@ -5,11 +5,17 @@ dotenv.config();
 import { initSentry } from './lib/sentry';
 initSentry();
 
-import { config } from './config';
+import { config, validateConfig } from './config';
 import { buildServer } from './server';
 import { startWorker, stopWorker } from './worker';
 
-// Fail fast if critical env vars are missing
+// Fail fast if config is invalid or critical env vars are missing
+try {
+    validateConfig();
+} catch (err) {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+}
 if (!config.openai.apiKey) {
     console.error('FATAL: OPENAI_API_KEY environment variable is required. AI worker cannot function without it.');
     process.exit(1);

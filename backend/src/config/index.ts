@@ -10,6 +10,7 @@ export const config = {
     // Server
     port: parseInt(process.env.PORT || '3000', 10),
     nodeEnv: process.env.NODE_ENV || 'development',
+    logLevel: process.env.LOG_LEVEL || 'info',
 
     // Database
     databaseUrl: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5433/autoreply',
@@ -63,6 +64,18 @@ export const config = {
 
     // Frontend URL
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
+
+    // Cookie secret (validated by validateEnv — no insecure fallback)
+    cookieSecret: process.env.COOKIE_SECRET || '',
+
+    // Webhook callback URL for Facebook subscription verification
+    webhookCallbackUrl: process.env.WEBHOOK_CALLBACK_URL || 'https://jawab24.com/webhook',
+
+    // Admin emails (comma-separated)
+    adminEmails: (process.env.ADMIN_EMAILS || '').split(',').filter(Boolean),
+
+    // Cleanup endpoint secret token
+    cleanupSecretToken: process.env.CLEANUP_SECRET_TOKEN || '',
 
     // Demo Mode - allows testing without Facebook API approval
     demo: {

@@ -1,12 +1,15 @@
 import { FastifyReply } from 'fastify';
 import crypto from 'crypto';
+import { config } from '../config';
 
 const TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const isProduction = config.nodeEnv === 'production';
 
 // Cookie configuration
 export const COOKIE_OPTIONS = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
     sameSite: 'strict' as const,
     path: '/',
     signed: true,
@@ -28,7 +31,7 @@ export const REFRESH_COOKIE_OPTIONS = {
 // Shopify pending install cookie (lax sameSite for cross-site redirect from Shopify)
 export const PENDING_SHOPIFY_COOKIE_OPTIONS = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
     sameSite: 'lax' as const,  // MUST be 'lax' — Shopify redirects cross-site
     path: '/',
     signed: true,
@@ -38,7 +41,7 @@ export const PENDING_SHOPIFY_COOKIE_OPTIONS = {
 // Shopify OAuth nonce cookie (CSRF protection during OAuth round-trip)
 export const SHOPIFY_NONCE_COOKIE_OPTIONS = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProduction,
     sameSite: 'lax' as const,
     path: '/',
     signed: true,

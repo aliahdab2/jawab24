@@ -1,6 +1,7 @@
 import { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
 import * as Sentry from '@sentry/node';
 import { AppError, ValidationError } from '../utils/errors';
+import { config } from '../config';
 
 /**
  * Global Error Handler for Fastify
@@ -67,7 +68,7 @@ export function errorHandler(
 
     // Default to 500 for unknown errors
     // Don't expose internal error details in production
-    const isProduction = process.env.NODE_ENV === 'production';
+    const isProduction = config.nodeEnv === 'production';
     
     return reply.status(500).send({
         error: true,

@@ -122,7 +122,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
         schema: { tags: ['Health'], summary: 'Run database cleanup tasks (token-protected)' },
     }, async (request, reply) => {
         // Simple token-based auth for cleanup endpoint
-        const cleanupToken = process.env.CLEANUP_SECRET_TOKEN;
+        const cleanupToken = config.cleanupSecretToken;
         const providedToken = request.headers['x-cleanup-token'];
 
         if (!cleanupToken) {
@@ -163,7 +163,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
     fastify.get<{ Headers: { 'x-cleanup-token'?: string } }>('/health/cache-stats', {
         schema: { tags: ['Health'], summary: 'Get AI cache statistics (token-protected)' },
     }, async (request, reply) => {
-        const cleanupToken = process.env.CLEANUP_SECRET_TOKEN;
+        const cleanupToken = config.cleanupSecretToken;
         const providedToken = request.headers['x-cleanup-token'];
 
         if (!cleanupToken || providedToken !== cleanupToken) {
@@ -187,7 +187,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
     fastify.get<{ Headers: { 'x-cleanup-token'?: string } }>('/health/pipeline-metrics', {
         schema: { tags: ['Health'], summary: 'Get pipeline processing metrics (token-protected)' },
     }, async (request, reply) => {
-        const cleanupToken = process.env.CLEANUP_SECRET_TOKEN;
+        const cleanupToken = config.cleanupSecretToken;
         const providedToken = request.headers['x-cleanup-token'];
 
         if (!cleanupToken || providedToken !== cleanupToken) {
