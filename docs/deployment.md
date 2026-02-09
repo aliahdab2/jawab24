@@ -232,6 +232,8 @@ echo "blue" > .active-env
 
 Backups run daily via cron and upload to Backblaze B2 (offsite).
 
+**Backblaze B2 account:** `aliahdab@gmail.com` — Bucket: `jawab24-backups` (private).
+
 **What gets backed up:** Full PostgreSQL dump (`jawab24` database), compressed with gzip.
 
 **Retention:**
