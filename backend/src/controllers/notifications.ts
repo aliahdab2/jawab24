@@ -74,12 +74,13 @@ export async function getNotifications(
     }
     const userId = request.user.userId;
 
-    const query = request.query as { limit?: string; offset?: string };
+    const query = request.query as { limit?: string; offset?: string; lang?: string };
     const limit = Math.min(parseInt(query.limit || '20', 10), 100);
     const offset = parseInt(query.offset || '0', 10);
+    const lang = (query.lang === 'en' ? 'en' : 'ar') as 'ar' | 'en';
 
     try {
-        const result = await notificationService.getNotifications(userId, limit, offset);
+        const result = await notificationService.getNotifications(userId, limit, offset, lang);
         return reply.send(result);
     } catch (error) {
         console.error('Failed to get notifications:', error);

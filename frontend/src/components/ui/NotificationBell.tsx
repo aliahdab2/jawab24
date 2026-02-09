@@ -9,10 +9,8 @@ import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, g
 interface Notification {
     id: string;
     type: string;
-    titleEn: string;
-    titleAr: string;
-    bodyEn: string;
-    bodyAr: string;
+    title: string;
+    body: string;
     data: unknown;
     read: boolean;
     createdAt: string;
@@ -70,7 +68,7 @@ interface NotificationBellProps {
 
 export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const isDark = variant === 'dark';
-    const { token } = useAuthStore();
+    const { isAuthenticated } = useAuthStore();
     const { t, language } = useTranslation();
     const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
@@ -84,10 +82,10 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
 
     // Fetch unread count on mount and periodically
     useEffect(() => {
-        if (!token) return;
+        if (!isAuthenticated) return;
 
         const fetchUnreadCount = async () => {
-            const count = await getUnreadCount(token);
+            const count = await getUnreadCount();
             setUnreadCount(count);
         };
 
@@ -96,22 +94,22 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         // Poll every 60 seconds
         const interval = setInterval(fetchUnreadCount, 60000);
         return () => clearInterval(interval);
-    }, [token]);
+    }, [isAuthenticated]);
 
     // Fetch notifications when dropdown opens
     useEffect(() => {
-        if (!isOpen || !token) return;
+        if (!isOpen || !isAuthenticated) return;
 
         const fetchNotifications = async () => {
             setLoading(true);
-            const result = await getNotifications(token);
+            const result = await getNotifications();
             setNotifications(result.notifications);
             setUnreadCount(result.unreadCount);
             setLoading(false);
         };
 
         fetchNotifications();
-    }, [isOpen, token]);
+    }, [isOpen, isAuthenticated]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -128,8 +126,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     }, [isOpen]);
 
     const handleMarkAsRead = async (notificationId: string) => {
-        if (!token) return;
-        await markNotificationAsRead(token, notificationId);
+        await markNotificationAsRead(notificationId);
         setNotifications(prev =>
             prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
         );
@@ -149,19 +146,11 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     };
 
     const handleMarkAllAsRead = async () => {
-        if (!token) return;
-        await markAllNotificationsAsRead(token);
+        await markAllNotificationsAsRead();
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         setUnreadCount(0);
     };
 
-    const getNotificationTitle = (notification: Notification) => {
-        return language === 'ar' ? notification.titleAr : notification.titleEn;
-    };
-
-    const getNotificationBody = (notification: Notification) => {
-        return language === 'ar' ? notification.bodyAr : notification.bodyEn;
-    };
 
     const getRelativeTime = (dateString: string) => {
         const date = new Date(dateString);
@@ -302,7 +291,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                                             ? 'font-semibold text-surface-900'
                                                             : 'font-normal text-surface-500'
                                                     }`}>
-                                                        {getNotificationTitle(notification)}
+                                                        {notification.title}
                                                     </p>
                                                     {isUnread && (
                                                         <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
@@ -313,7 +302,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                                 <p className={`text-xs leading-relaxed mt-0.5 line-clamp-2 ${
                                                     isUnread ? 'text-surface-600' : 'text-surface-400'
                                                 }`}>
-                                                    {getNotificationBody(notification)}
+                                                    {notification.body}
                                                 </p>
 
                                                 {/* Timestamp */}

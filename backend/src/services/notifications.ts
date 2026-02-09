@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { deviceTokens, notifications, settings } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, count } from 'drizzle-orm';
 
 // Notification types
 export type NotificationType =
@@ -92,7 +92,11 @@ const FLAG_REASON_AR: Record<string, string> = {
     'offensive': 'محتوى مسيء',
     'invalid_json': 'خطأ في معالجة الرد',
     'fallback_reply': 'رد احتياطي',
+    'AI flagged this reply': 'تم تمييز هذا الرد بواسطة الذكاء الاصطناعي',
 };
+
+/** Arabic fallback for 'Unknown' sender name */
+const UNKNOWN_SENDER_AR = 'مجهول';
 
 function translateFlagReason(reason: string): string {
     return reason.split(',')
@@ -220,6 +224,9 @@ class NotificationService {
                 const arValue = translateFlagReason(value);
                 titleAr = titleAr.replace(placeholder, arValue);
                 bodyAr = bodyAr.replace(placeholder, arValue);
+            } else if (key === 'senderName' && value === 'Unknown') {
+                titleAr = titleAr.replace(placeholder, UNKNOWN_SENDER_AR);
+                bodyAr = bodyAr.replace(placeholder, UNKNOWN_SENDER_AR);
             } else {
                 titleAr = titleAr.replace(placeholder, value);
                 bodyAr = bodyAr.replace(placeholder, value);
@@ -332,38 +339,49 @@ class NotificationService {
     }
 
     /**
-     * Get notifications for a user
+     * Get notifications for a user.
+     * Accepts a lang parameter to return only the relevant title/body,
+     * avoiding sending unused language data over the wire.
      */
     async getNotifications(
         userId: string,
         limit: number = 20,
-        offset: number = 0
+        offset: number = 0,
+        lang: 'ar' | 'en' = 'ar'
     ): Promise<{
         notifications: Array<{
             id: string;
             type: string;
-            titleEn: string;
-            titleAr: string;
-            bodyEn: string;
-            bodyAr: string;
+            title: string;
+            body: string;
             data: unknown;
             read: boolean;
             createdAt: Date | null;
         }>;
         unreadCount: number;
     }> {
-        // Get notifications
+        // Select only needed columns
         const notificationsList = await db
-            .select()
+            .select({
+                id: notifications.id,
+                type: notifications.type,
+                titleEn: notifications.titleEn,
+                titleAr: notifications.titleAr,
+                bodyEn: notifications.bodyEn,
+                bodyAr: notifications.bodyAr,
+                data: notifications.data,
+                read: notifications.read,
+                createdAt: notifications.createdAt,
+            })
             .from(notifications)
             .where(eq(notifications.userId, userId))
             .orderBy(desc(notifications.createdAt))
             .limit(limit)
             .offset(offset);
 
-        // Get unread count
-        const unreadResult = await db
-            .select()
+        // Get unread count efficiently
+        const [{ value: unreadCount }] = await db
+            .select({ value: count() })
             .from(notifications)
             .where(and(
                 eq(notifications.userId, userId),
@@ -374,15 +392,13 @@ class NotificationService {
             notifications: notificationsList.map(n => ({
                 id: n.id,
                 type: n.type,
-                titleEn: n.titleEn,
-                titleAr: n.titleAr,
-                bodyEn: n.bodyEn,
-                bodyAr: n.bodyAr,
+                title: lang === 'ar' ? n.titleAr : n.titleEn,
+                body: lang === 'ar' ? n.bodyAr : n.bodyEn,
                 data: n.data,
                 read: n.read ?? false,
                 createdAt: n.createdAt,
             })),
-            unreadCount: unreadResult.length,
+            unreadCount,
         };
     }
 
@@ -390,15 +406,15 @@ class NotificationService {
      * Get unread notification count
      */
     async getUnreadCount(userId: string): Promise<number> {
-        const result = await db
-            .select()
+        const [{ value }] = await db
+            .select({ value: count() })
             .from(notifications)
             .where(and(
                 eq(notifications.userId, userId),
                 eq(notifications.read, false)
             ));
 
-        return result.length;
+        return value;
     }
 
     /**

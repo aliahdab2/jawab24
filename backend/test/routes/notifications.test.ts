@@ -144,10 +144,8 @@ describe('Notification Routes', () => {
                     {
                         id: 'notif-1',
                         type: 'payment_failed',
-                        titleEn: 'Payment Failed',
-                        titleAr: 'فشل الدفع',
-                        bodyEn: 'Body',
-                        bodyAr: 'نص',
+                        title: 'فشل الدفع',
+                        body: 'نص',
                         read: false,
                         createdAt: new Date().toISOString(),
                     },
@@ -184,7 +182,8 @@ describe('Notification Routes', () => {
             expect(notificationService.getNotifications).toHaveBeenCalledWith(
                 'user-123',
                 10,
-                5
+                5,
+                'ar'
             );
         });
 
@@ -203,7 +202,28 @@ describe('Notification Routes', () => {
             expect(notificationService.getNotifications).toHaveBeenCalledWith(
                 'user-123',
                 100,
-                0
+                0,
+                'ar'
+            );
+        });
+
+        it('should pass lang=en when query param is en', async () => {
+            (notificationService.getNotifications as any).mockResolvedValue({
+                notifications: [],
+                unreadCount: 0,
+            });
+
+            await app.inject({
+                method: 'GET',
+                url: '/notifications?lang=en',
+                headers: { authorization: 'Bearer test-token' },
+            });
+
+            expect(notificationService.getNotifications).toHaveBeenCalledWith(
+                'user-123',
+                20,
+                0,
+                'en'
             );
         });
     });

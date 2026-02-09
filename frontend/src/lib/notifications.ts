@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Token, ActionPerformed, PushNotificationSchema } from '@capacitor/push-notifications';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { api } from './api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -208,14 +209,12 @@ function handleNotificationTap(action: ActionPerformed): void {
 }
 
 /**
- * Get unread notification count from backend
+ * Get unread notification count from backend.
+ * Uses the authenticated api instance for consistent auth handling and retry logic.
  */
-export async function getUnreadCount(authToken: string): Promise<number> {
+export async function getUnreadCount(): Promise<number> {
     try {
-        const response = await axios.get(
-            `${API_URL}/notifications/unread-count`,
-            { headers: { Authorization: `Bearer ${authToken}` } }
-        );
+        const response = await api.get('/notifications/unread-count');
         return response.data.count || 0;
     } catch (error) {
         console.error('[Notifications] Failed to get unread count:', error);
@@ -224,20 +223,18 @@ export async function getUnreadCount(authToken: string): Promise<number> {
 }
 
 /**
- * Get notifications from backend
+ * Get notifications from backend.
+ * Passes the user's language so the API returns only the relevant title/body.
  */
 export async function getNotifications(
-    authToken: string,
     limit: number = 20,
     offset: number = 0
 ): Promise<{
     notifications: Array<{
         id: string;
         type: string;
-        titleEn: string;
-        titleAr: string;
-        bodyEn: string;
-        bodyAr: string;
+        title: string;
+        body: string;
         data: unknown;
         read: boolean;
         createdAt: string;
@@ -245,13 +242,8 @@ export async function getNotifications(
     unreadCount: number;
 }> {
     try {
-        const response = await axios.get(
-            `${API_URL}/notifications`,
-            { 
-                headers: { Authorization: `Bearer ${authToken}` },
-                params: { limit, offset }
-            }
-        );
+        const lang = localStorage.getItem('dashboard_language') || 'ar';
+        const response = await api.get('/notifications', { params: { limit, offset, lang } });
         return response.data;
     } catch (error) {
         console.error('[Notifications] Failed to get notifications:', error);
@@ -262,13 +254,9 @@ export async function getNotifications(
 /**
  * Mark a notification as read
  */
-export async function markNotificationAsRead(authToken: string, notificationId: string): Promise<void> {
+export async function markNotificationAsRead(notificationId: string): Promise<void> {
     try {
-        await axios.patch(
-            `${API_URL}/notifications/${notificationId}/read`,
-            {},
-            { headers: { Authorization: `Bearer ${authToken}` } }
-        );
+        await api.patch(`/notifications/${notificationId}/read`);
     } catch (error) {
         console.error('[Notifications] Failed to mark as read:', error);
     }
@@ -277,13 +265,9 @@ export async function markNotificationAsRead(authToken: string, notificationId: 
 /**
  * Mark all notifications as read
  */
-export async function markAllNotificationsAsRead(authToken: string): Promise<void> {
+export async function markAllNotificationsAsRead(): Promise<void> {
     try {
-        await axios.post(
-            `${API_URL}/notifications/mark-all-read`,
-            {},
-            { headers: { Authorization: `Bearer ${authToken}` } }
-        );
+        await api.post('/notifications/mark-all-read');
     } catch (error) {
         console.error('[Notifications] Failed to mark all as read:', error);
     }

@@ -313,46 +313,76 @@ describe('NotificationService', () => {
     });
 
     describe('getNotifications', () => {
-        it('should return notifications and unread count', async () => {
-            const mockNotifications = [
-                {
-                    id: 'notif-1',
-                    type: 'payment_failed',
-                    titleEn: 'Payment Failed',
-                    titleAr: 'فشل الدفع',
-                    bodyEn: 'Body en',
-                    bodyAr: 'Body ar',
-                    data: {},
-                    read: false,
-                    createdAt: new Date(),
-                },
-            ];
+        const mockNotification = {
+            id: 'notif-1',
+            type: 'payment_failed',
+            titleEn: 'Payment Failed',
+            titleAr: 'فشل الدفع',
+            bodyEn: 'Body en',
+            bodyAr: 'Body ar',
+            data: {},
+            read: false,
+            createdAt: new Date(),
+        };
 
-            // Mock for notifications list
+        function setupGetNotificationsMocks(notifs = [mockNotification], unreadCount = 1) {
+            // Mock for notifications list (select specific columns)
             (db.select as any).mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
                         orderBy: vi.fn().mockReturnValue({
                             limit: vi.fn().mockReturnValue({
-                                offset: vi.fn().mockResolvedValue(mockNotifications),
+                                offset: vi.fn().mockResolvedValue(notifs),
                             }),
                         }),
                     }),
                 }),
             });
 
-            // Mock for unread count
+            // Mock for unread count (uses SQL count())
             (db.select as any).mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ id: 'notif-1' }]),
+                    where: vi.fn().mockResolvedValue([{ value: unreadCount }]),
                 }),
             });
+        }
+
+        it('should return notifications and unread count', async () => {
+            setupGetNotificationsMocks();
 
             const result = await notificationService.getNotifications('user-123', 20, 0);
 
             expect(result.notifications).toHaveLength(1);
             expect(result.notifications[0].type).toBe('payment_failed');
             expect(result.unreadCount).toBe(1);
+        });
+
+        it('should return Arabic title/body when lang=ar', async () => {
+            setupGetNotificationsMocks();
+
+            const result = await notificationService.getNotifications('user-123', 20, 0, 'ar');
+
+            expect(result.notifications[0].title).toBe('فشل الدفع');
+            expect(result.notifications[0].body).toBe('Body ar');
+            expect(result.notifications[0]).not.toHaveProperty('titleEn');
+            expect(result.notifications[0]).not.toHaveProperty('titleAr');
+        });
+
+        it('should return English title/body when lang=en', async () => {
+            setupGetNotificationsMocks();
+
+            const result = await notificationService.getNotifications('user-123', 20, 0, 'en');
+
+            expect(result.notifications[0].title).toBe('Payment Failed');
+            expect(result.notifications[0].body).toBe('Body en');
+        });
+
+        it('should default to Arabic when lang not specified', async () => {
+            setupGetNotificationsMocks();
+
+            const result = await notificationService.getNotifications('user-123', 20, 0);
+
+            expect(result.notifications[0].title).toBe('فشل الدفع');
         });
     });
 
@@ -388,7 +418,7 @@ describe('NotificationService', () => {
         it('should return count of unread notifications', async () => {
             (db.select as any).mockReturnValue({
                 from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ id: '1' }, { id: '2' }, { id: '3' }]),
+                    where: vi.fn().mockResolvedValue([{ value: 3 }]),
                 }),
             });
 
@@ -400,13 +430,87 @@ describe('NotificationService', () => {
         it('should return 0 when no unread notifications', async () => {
             (db.select as any).mockReturnValue({
                 from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([]),
+                    where: vi.fn().mockResolvedValue([{ value: 0 }]),
                 }),
             });
 
             const count = await notificationService.getUnreadCount('user-123');
 
             expect(count).toBe(0);
+        });
+    });
+
+    describe('Arabic translations in templates', () => {
+        function setupSendNotificationMocks() {
+            // Mock for device tokens (no tokens, skip push)
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+            // Mock for user language
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{ dashboardLanguage: 'ar' }]),
+                    }),
+                }),
+            });
+            // Mock for insert notification
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-test' }]),
+                }),
+            });
+        }
+
+        it('should translate "AI flagged this reply" reason to Arabic', async () => {
+            setupSendNotificationMocks();
+            const spy = vi.spyOn(notificationService, 'sendNotification');
+
+            await notificationService.sendTemplateNotification('user-1', 'flagged_reply', {
+                senderName: 'Ahmed', reason: 'AI flagged this reply',
+            });
+
+            const payload = spy.mock.calls[0][1];
+            expect(payload.bodyAr).toContain('تم تمييز هذا الرد بواسطة الذكاء الاصطناعي');
+            expect(payload.bodyAr).not.toContain('AI flagged');
+        });
+
+        it('should translate "Unknown" sender to Arabic', async () => {
+            setupSendNotificationMocks();
+            const spy = vi.spyOn(notificationService, 'sendNotification');
+
+            await notificationService.sendTemplateNotification('user-1', 'flagged_reply', {
+                senderName: 'Unknown', reason: 'offensive',
+            });
+
+            const payload = spy.mock.calls[0][1];
+            expect(payload.bodyAr).toContain('مجهول');
+            expect(payload.bodyAr).not.toContain('Unknown');
+        });
+
+        it('should not contain English words in Arabic body for known reasons', async () => {
+            const spy = vi.spyOn(notificationService, 'sendNotification');
+            const knownReasons = [
+                'offensive_or_abusive', 'angry_customer', 'low_confidence',
+                'price_not_in_kb', 'redirect_to_human', 'complaint', 'offensive',
+                'invalid_json', 'fallback_reply', 'AI flagged this reply',
+            ];
+
+            for (const reason of knownReasons) {
+                spy.mockClear();
+                setupSendNotificationMocks();
+
+                await notificationService.sendTemplateNotification('user-1', 'skipped_reply', {
+                    senderName: 'أحمد', reason,
+                });
+
+                const payload = spy.mock.calls[0][1];
+                // Arabic body should not have 3+ consecutive English letters (except brand names)
+                const bodyWithoutBrand = payload.bodyAr.replace(/Jawab24/g, '');
+                expect(bodyWithoutBrand).not.toMatch(/[a-zA-Z]{3,}/);
+            }
         });
     });
 });

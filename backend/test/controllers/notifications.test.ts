@@ -116,14 +116,34 @@ describe('Notifications Controller', () => {
 
     // ---- getNotifications ----
     describe('getNotifications', () => {
-        it('should return notifications with pagination defaults', async () => {
-            const mockResult = { notifications: [], total: 0 };
+        it('should return notifications with pagination defaults and lang=ar', async () => {
+            const mockResult = { notifications: [], unreadCount: 0 };
             vi.mocked(notificationService.getNotifications).mockResolvedValue(mockResult);
 
             await getNotifications(mockRequest as AuthenticatedRequest, mockReply as FastifyReply);
 
-            expect(notificationService.getNotifications).toHaveBeenCalledWith('user-123', 20, 0);
+            expect(notificationService.getNotifications).toHaveBeenCalledWith('user-123', 20, 0, 'ar');
             expect(mockReply.send).toHaveBeenCalledWith(mockResult);
+        });
+
+        it('should pass lang=en when query param is en', async () => {
+            mockRequest.query = { lang: 'en' };
+            const mockResult = { notifications: [], unreadCount: 0 };
+            vi.mocked(notificationService.getNotifications).mockResolvedValue(mockResult);
+
+            await getNotifications(mockRequest as AuthenticatedRequest, mockReply as FastifyReply);
+
+            expect(notificationService.getNotifications).toHaveBeenCalledWith('user-123', 20, 0, 'en');
+        });
+
+        it('should default to ar for unknown lang values', async () => {
+            mockRequest.query = { lang: 'fr' };
+            const mockResult = { notifications: [], unreadCount: 0 };
+            vi.mocked(notificationService.getNotifications).mockResolvedValue(mockResult);
+
+            await getNotifications(mockRequest as AuthenticatedRequest, mockReply as FastifyReply);
+
+            expect(notificationService.getNotifications).toHaveBeenCalledWith('user-123', 20, 0, 'ar');
         });
 
         it('should return 401 when user is missing', async () => {
