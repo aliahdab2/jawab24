@@ -430,7 +430,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       dir={isRTL ? 'rtl' : 'ltr'}
     >
       <div 
-        className={`bg-white rounded-3xl shadow-2xl overflow-hidden animate-In slide-in-from-bottom-4 duration-300 ${
+        className={`bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up ${
           isLandscape ? 'max-w-2xl w-full max-h-[90vh]' : 'max-w-md w-full max-h-[85vh]'
         } flex flex-col`}
         {...swipeHandlers}
@@ -449,7 +449,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         {/* Content */}
         <div 
           key={currentStep}
-          className={`animate-In fade-in duration-300 flex-1 overflow-y-auto ${
+          className={`animate-fade-in flex-1 overflow-y-auto ${
             isLandscape ? 'px-6 pb-4 pt-2' : 'px-6 pb-6 pt-2'
           }`}
         >

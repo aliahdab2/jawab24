@@ -568,40 +568,6 @@ const SettingsPage: NextPageWithLayout = () => {
           />
         </div>
 
-        {/* Human Takeover Pause Duration */}
-        <Card className="border-none shadow-[0_10_30px_rgba(0,0,0,0.04)] p-5 landscape:p-3">
-          <div className="flex items-center gap-4 mb-4 landscape:mb-3">
-            <div className="w-12 h-12 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
-              <UserCheck className="w-6 h-6 landscape:w-5 landscape:h-5" />
-            </div>
-            <div className="text-start">
-              <h3 className="font-bold text-surface-900 text-base landscape:text-sm">{t('settings.handoffPauseDuration' as TranslationKey)}</h3>
-              <p className="text-xs text-surface-500 font-medium">{t('settings.handoffPauseDurationDesc' as TranslationKey)}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { value: 15, label: t('settings.duration15min' as TranslationKey) },
-              { value: 30, label: t('settings.duration30min' as TranslationKey) },
-              { value: 60, label: t('settings.duration1hr' as TranslationKey) },
-              { value: 120, label: t('settings.duration2hr' as TranslationKey) },
-              { value: 1440, label: t('settings.duration24hr' as TranslationKey) },
-            ].map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setSettings({ ...settings, handoffPauseDurationMinutes: opt.value })}
-                className={clsx(
-                  'px-4 py-2 rounded-xl text-sm font-bold transition-all border',
-                  settings.handoffPauseDurationMinutes === opt.value
-                    ? 'bg-violet-100 text-violet-700 border-violet-300 shadow-sm'
-                    : 'bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100'
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </Card>
       </div>
 
       {/* Advanced Settings Toggle - Lighter Style */}
@@ -830,6 +796,41 @@ const SettingsPage: NextPageWithLayout = () => {
               </Card>
             </div>
 
+            {/* Human Takeover Pause Duration */}
+            <Card className="border-none shadow-md shadow-surface-200/30 p-5 landscape:p-3">
+              <div className="flex items-center gap-4 mb-4 landscape:mb-3">
+                <div className="w-12 h-12 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
+                  <UserCheck className="w-6 h-6 landscape:w-5 landscape:h-5" />
+                </div>
+                <div className="text-start">
+                  <h3 className="font-bold text-surface-900 text-base landscape:text-sm">{t('settings.handoffPauseDuration' as TranslationKey)}</h3>
+                  <p className="text-xs text-surface-500 font-medium">{t('settings.handoffPauseDurationDesc' as TranslationKey)}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: 15, label: t('settings.duration15min' as TranslationKey) },
+                  { value: 30, label: t('settings.duration30min' as TranslationKey) },
+                  { value: 60, label: t('settings.duration1hr' as TranslationKey) },
+                  { value: 120, label: t('settings.duration2hr' as TranslationKey) },
+                  { value: 1440, label: t('settings.duration24hr' as TranslationKey) },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setSettings({ ...settings, handoffPauseDurationMinutes: opt.value })}
+                    className={clsx(
+                      'px-4 py-2 rounded-xl text-sm font-bold transition-all border',
+                      settings.handoffPauseDurationMinutes === opt.value
+                        ? 'bg-violet-100 text-violet-700 border-violet-300 shadow-sm'
+                        : 'bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </Card>
+
             {/* Greeting Message (standalone — separate concept from away message) */}
             <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
               <div className="flex items-center gap-4 mb-4 landscape:mb-2">
@@ -904,7 +905,7 @@ const SettingsPage: NextPageWithLayout = () => {
       >
         <div className="space-y-6">
           {isDeleted ? (
-            <div className="py-8 flex flex-col items-center text-center animate-In fade-in zoom-in duration-500">
+            <div className="py-8 flex flex-col items-center text-center animate-fade-in">
               <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 animate-bounce-subtle">
                 <CheckCircle2 className="w-10 h-10" />
               </div>

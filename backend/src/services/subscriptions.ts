@@ -269,11 +269,16 @@ export const subscriptionsService = {
         const currentUsage = await this.getCurrentUsage(userId);
         const plan = subscription.plan;
 
-        // Count user's resources
+        // Count enabled page slots (FB + IG counted separately)
         const [pagesCount] = await db
-            .select({ count: pages.id })
-            .from(pages)
-            .where(eq(pages.userId, userId));
+            .select({
+                count: sql<number>`(
+                    SELECT count(*) FROM ${pages} WHERE ${pages.userId} = ${userId} AND ${pages.autoReplyEnabled} = true
+                ) + (
+                    SELECT count(*) FROM ${pages} WHERE ${pages.userId} = ${userId} AND ${pages.instagramAutoReplyEnabled} = true
+                )`,
+            })
+            .from(sql`(SELECT 1) as _dummy`);
 
         const [templatesCount] = await db
             .select({ count: templates.id })
@@ -466,6 +471,61 @@ export const subscriptionsService = {
             return {
                 allowed: false,
                 reason: 'Page limit reached. Upgrade to add more pages.',
+                limit,
+                used,
+                remaining: 0,
+            };
+        }
+
+        return {
+            allowed: true,
+            limit,
+            used,
+            remaining: limit - used,
+        };
+    },
+
+    /**
+     * Check if user can enable another page (counts enabled FB + IG slots separately).
+     * A page with FB auto-reply enabled = 1 slot. IG auto-reply enabled = 1 slot.
+     * A page with both = 2 slots. Used for: toggle, sync auto-enable decisions.
+     */
+    async canEnablePage(userId: string): Promise<LimitCheckResult> {
+        const subscription = await this.getUserSubscription(userId);
+
+        if (!subscription) {
+            return { allowed: false, reason: 'No active subscription' };
+        }
+
+        // Check subscription status (canceled/paused/expired)
+        const statusCheck = this.checkSubscriptionStatus(subscription);
+        if (!statusCheck.allowed) return statusCheck;
+
+        const plan = subscription.plan;
+
+        // Check if pages limit is unlimited (null)
+        if (plan.maxPages === null) {
+            return { allowed: true };
+        }
+
+        // Count enabled slots: FB auto-reply + IG auto-reply counted separately
+        const [result] = await db
+            .select({
+                count: sql<number>`(
+                    SELECT count(*) FROM ${pages} WHERE ${pages.userId} = ${userId} AND ${pages.autoReplyEnabled} = true
+                ) + (
+                    SELECT count(*) FROM ${pages} WHERE ${pages.userId} = ${userId} AND ${pages.instagramAutoReplyEnabled} = true
+                )`,
+            })
+            .from(sql`(SELECT 1) as _dummy`);
+
+        const used = Number(result?.count) || 0;
+        const limit = plan.maxPages;
+
+        if (used >= limit) {
+            return {
+                allowed: false,
+                reason: 'Enabled page limit reached. Disable another page or upgrade your plan.',
                 limit,
                 used,
                 remaining: 0,
