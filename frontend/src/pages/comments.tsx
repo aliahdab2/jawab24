@@ -42,9 +42,10 @@ function getApiParams(filter: FilterType): CommentsQueryParams {
       return { replied: true, replyMethod: 'ai' };
     case 'template':
       return { replied: true, replyMethod: 'template' };
-    // These filters need client-side filtering on top of server data
     case 'needs_attention':
     case 'flagged':
+      return { needsAttention: true };
+    // These filters need client-side filtering on top of server data
     case 'replied_today':
     case 'all':
     default:
@@ -140,9 +141,7 @@ const CommentsPage: NextPageWithLayout = () => {
     let result = allComments;
 
     // Apply client-side filter for special filters
-    if (filter === 'needs_attention' || filter === 'flagged') {
-      result = result.filter(c => checkNeedsAttention(c));
-    } else if (filter === 'replied_today') {
+    if (filter === 'replied_today') {
       result = result.filter(c => c.replied && c.repliedAt && isToday(new Date(c.repliedAt)));
     }
 

@@ -315,10 +315,21 @@ const SettingsPage: NextPageWithLayout = () => {
         router.replace('/');
       }, 2500);
       
-    } catch (error) {
-      console.error('Failed to delete account:', error);
+    } catch (error: unknown) {
+      const axiosErr = error as { response?: { data?: { error?: string; code?: string }; status?: number } };
+      const status = axiosErr.response?.status;
+      const code = axiosErr.response?.data?.code;
+      console.error('Failed to delete account:', { status, code, error });
       setSaving(false);
-      // Don't show success, just close or stay
+      // If 404, the account was already deleted (e.g. previous attempt timed out client-side)
+      if (status === 404) {
+        setIsDeleted(true);
+        setTimeout(async () => {
+          await useAuthStore.getState().logout();
+          router.replace('/');
+        }, 2500);
+        return;
+      }
       toast.error(t('common.error'));
     }
   };

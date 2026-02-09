@@ -155,6 +155,7 @@ export interface CommentsQueryParams {
   limit?: number;            // Comments per page (default 50, max 100)
   replied?: boolean;         // Filter: true = replied only, false = unreplied only
   replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
+  needsAttention?: boolean;  // Filter by needsAttention flag
 }
 
 // Comments Stats Interface

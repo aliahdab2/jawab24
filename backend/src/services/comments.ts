@@ -42,6 +42,7 @@ export class CommentsService {
     async getCommentsByUser(userId: string, options?: {
         replied?: boolean;
         replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
+        needsAttention?: boolean;  // Filter by needsAttention flag
         limit?: number;
         cursor?: string;  // Comment ID to start after (for pagination)
     }) {
@@ -58,6 +59,11 @@ export class CommentsService {
         // Filter by reply method (ai, template, manual)
         if (options?.replyMethod) {
             conditions.push(eq(comments.replyMethod, options.replyMethod));
+        }
+
+        // Filter by needsAttention flag
+        if (options?.needsAttention !== undefined) {
+            conditions.push(eq(comments.needsAttention, options.needsAttention));
         }
 
         // For cursor-based pagination, we need to get the createdAt of the cursor comment

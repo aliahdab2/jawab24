@@ -13,6 +13,7 @@ export class CommentsController {
      * - limit: Number of comments per page (default 50, max 100)
      * - replied: Filter by replied status ('true' | 'false')
      * - replyMethod: Filter by reply method ('ai' | 'template' | 'manual')
+     * - needsAttention: Filter by needsAttention flag ('true' | 'false')
      *
      * Response:
      * {
@@ -26,6 +27,7 @@ export class CommentsController {
             limit?: string;
             replied?: string;
             replyMethod?: 'ai' | 'template' | 'manual';
+            needsAttention?: string;
         }
     }>, reply: FastifyReply) {
         const user = (request as AuthenticatedRequest).user;
@@ -33,7 +35,7 @@ export class CommentsController {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { userId } = user;
-        const { cursor, limit, replied, replyMethod } = request.query;
+        const { cursor, limit, replied, replyMethod, needsAttention } = request.query;
 
         try {
             const options: {
@@ -41,6 +43,7 @@ export class CommentsController {
                 limit?: number;
                 replied?: boolean;
                 replyMethod?: 'ai' | 'template' | 'manual';
+                needsAttention?: boolean;
             } = {};
 
             // Parse cursor for pagination
@@ -62,6 +65,11 @@ export class CommentsController {
             // Parse replyMethod filter
             if (replyMethod && ['ai', 'template', 'manual'].includes(replyMethod)) {
                 options.replyMethod = replyMethod;
+            }
+
+            // Parse needsAttention filter
+            if (needsAttention !== undefined) {
+                options.needsAttention = needsAttention === 'true';
             }
 
             const result = await commentsService.getCommentsByUser(userId, options);

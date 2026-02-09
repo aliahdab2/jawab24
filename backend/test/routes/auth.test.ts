@@ -34,6 +34,7 @@ vi.mock('../../src/services/auth', () => ({
         createAuthResponse: vi.fn(),
         verifyToken: vi.fn(),
         getUserById: vi.fn(),
+        deleteUser: vi.fn(),
     },
 }));
 
@@ -562,6 +563,89 @@ describe('Auth Routes - Login Flow', () => {
             // Frontend should use this token and redirect to /checkout or wherever
             expect(body.token).toBe('redirect_jwt');
             expect(body.fbAccessToken).toBe('fb_token');
+        });
+    });
+
+    describe('DELETE /auth/me - Delete Account', () => {
+        it('should delete account successfully with valid token', async () => {
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_to_delete',
+                facebookId: 'fb_delete',
+            });
+            vi.mocked(authService.deleteUser).mockResolvedValue(undefined);
+
+            const response = await app.inject({
+                method: 'DELETE',
+                url: '/auth/me',
+                headers: {
+                    authorization: 'Bearer valid_token',
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = response.json();
+            expect(body.success).toBe(true);
+            expect(authService.deleteUser).toHaveBeenCalledWith('user_to_delete');
+        });
+
+        it('should return 401 without auth token', async () => {
+            const response = await app.inject({
+                method: 'DELETE',
+                url: '/auth/me',
+            });
+
+            expect(response.statusCode).toBe(401);
+        });
+
+        it('should return 404 when user not found', async () => {
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'ghost_user',
+                facebookId: 'fb_ghost',
+            });
+            vi.mocked(authService.deleteUser).mockRejectedValue(
+                new Error('User ghost_user not found')
+            );
+
+            const response = await app.inject({
+                method: 'DELETE',
+                url: '/auth/me',
+                headers: {
+                    authorization: 'Bearer valid_token',
+                },
+            });
+
+            expect(response.statusCode).toBe(404);
+            const body = response.json();
+            expect(body.error).toBe('User not found');
+        });
+
+        it('should return 500 when service throws unexpected error', async () => {
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_crash',
+                facebookId: 'fb_crash',
+            });
+            vi.mocked(authService.deleteUser).mockRejectedValue(
+                new Error('deadlock detected')
+            );
+
+            const response = await app.inject({
+                method: 'DELETE',
+                url: '/auth/me',
+                headers: {
+                    authorization: 'Bearer valid_token',
+                },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = response.json();
+            expect(body.error).toBe('Failed to delete account');
+            expect(body.code).toBeDefined();
         });
     });
 

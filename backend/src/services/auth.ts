@@ -6,7 +6,7 @@ import {
     usageLogs, deviceTokens, notifications, shopifyStores, shopifyProducts,
     pendingShopifyInstalls,
 } from '../db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { config } from '../config';
 import crypto from 'crypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
@@ -219,6 +219,9 @@ export class AuthService {
      */
     async deleteUser(userId: string): Promise<void> {
         await db.transaction(async (tx) => {
+            // Guard: prevent transaction from hanging (20s max)
+            await tx.execute(sql`SET LOCAL statement_timeout = '20s'`);
+
             // 1. Resolve user's page IDs (needed for multi-level deletes)
             const userPages = await tx.select({ id: pages.id }).from(pages).where(eq(pages.userId, userId));
             const pageIds = userPages.map(p => p.id);

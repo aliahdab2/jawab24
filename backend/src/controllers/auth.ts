@@ -276,7 +276,12 @@ export class AuthController {
             if (err.message?.includes('not found')) {
                 return reply.status(404).send({ error: 'User not found' });
             }
-            return reply.status(500).send({ error: 'Internal Server Error' });
+            // Classify the error for debugging
+            const code = err.code === '23503' ? 'FK_VIOLATION'
+                : err.code === '40P01' ? 'DEADLOCK'
+                : err.message?.includes('timeout') ? 'TIMEOUT'
+                : 'DELETE_FAILED';
+            return reply.status(500).send({ error: 'Failed to delete account', code });
         }
     }
 
