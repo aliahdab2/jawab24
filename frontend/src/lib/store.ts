@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from './zustandStorage';
+import { isNativePlatform } from './capacitor';
 
 export type Language = 'ar' | 'en';
 
@@ -104,7 +105,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => {
         if (typeof window !== 'undefined') {
             // Dynamic check for native platform
-            const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+            const isNative = isNativePlatform();
             if (!isNative) {
                 // On Web: Do NOT persist token or fbToken (security + conflict with cookies)
                 // We only persist the user object and isAuthenticated flag for UI state

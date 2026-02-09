@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
@@ -212,6 +213,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
+      toast.error(t('dashboard.fetchError' as TranslationKey) || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -226,7 +228,10 @@ const DashboardPage: NextPageWithLayout = () => {
         .then(() => {
           fetchDashboardData();
         })
-        .catch(err => console.error('Dashboard: Auto-sync failed', err));
+        .catch(err => {
+          console.error('Dashboard: Auto-sync failed', err);
+          toast.error(t('dashboard.syncError' as TranslationKey) || 'Failed to sync pages');
+        });
     }
   }, [loading, pages.length, fbToken, isAuthenticated, fetchDashboardData]);
 

@@ -13,6 +13,7 @@ import type { Language } from '@/i18n';
 import { dmSans, cairo, tajawal } from '@/lib/fonts';
 import { Toaster } from 'sonner';
 import { AppSkeleton } from '@/components/ui';
+import { isNativePlatform } from '@/lib/capacitor';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
 
@@ -70,19 +71,16 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   // This ensures CSS safe area rules apply from the start
   // Note: _document.tsx also adds this via inline script for even earlier application
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const cap = (window as any).Capacitor;
-    if (cap?.isNativePlatform?.()) {
-      // Ensure class is added (may already be added by _document.tsx script)
-      document.documentElement.classList.add('is-native');
-      document.body.classList.add('is-native');
-      
-      // Configure StatusBar overlay EARLY (before full init) for consistent safe areas
-      import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
-        StatusBar.setOverlaysWebView({ overlay: true }).catch((e) => console.warn('StatusBar overlay init:', e));
-        StatusBar.setStyle({ style: Style.Default }).catch((e) => console.warn('StatusBar style init:', e));
-      }).catch((e) => console.warn('StatusBar import failed:', e));
-    }
+    if (!isNativePlatform()) return;
+    // Ensure class is added (may already be added by _document.tsx script)
+    document.documentElement.classList.add('is-native');
+    document.body.classList.add('is-native');
+
+    // Configure StatusBar overlay EARLY (before full init) for consistent safe areas
+    import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
+      StatusBar.setOverlaysWebView({ overlay: true }).catch((e) => console.warn('StatusBar overlay init:', e));
+      StatusBar.setStyle({ style: Style.Default }).catch((e) => console.warn('StatusBar style init:', e));
+    }).catch((e) => console.warn('StatusBar import failed:', e));
   }, []); // Empty deps = runs once on mount
 
   // Sync Next.js locale with language store
@@ -108,9 +106,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   // Native platform initialization (only runs on mobile)
   useEffect(() => {
     const initNativePlatform = async () => {
-      if (typeof window === "undefined") return;
-      const cap = (window as any).Capacitor;
-      if (!cap?.isNativePlatform?.()) return;
+      if (!isNativePlatform()) return;
 
       // Note: is-native class is already added in the earlier useEffect
 
@@ -233,9 +229,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
   useEffect(() => {
     if (!hasHydrated || !isAuthenticated || !authToken) return;
-    if (typeof window === 'undefined') return;
-    const cap = (window as any).Capacitor;
-    if (!cap?.isNativePlatform?.()) return;
+    if (!isNativePlatform()) return;
 
     // 1. Set up listeners if permission already granted (returning users)
     import('@/lib/notifications').then(({ initPushNotifications, shouldShowNotificationPrePrompt }) => {
@@ -267,9 +261,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
   // Dedicated Deep Link Handling - Separate effect for reliability
   useEffect(() => {
-    if (!hasHydrated || typeof window === "undefined") return;
-    const cap = (window as any).Capacitor;
-    if (!cap?.isNativePlatform?.()) return;
+    if (!hasHydrated || !isNativePlatform()) return;
 
     let listenerHandle: any;
 

@@ -464,16 +464,28 @@ validate_env_files  # Fail early if required env vars are missing
 determine_target
 pre_build_cleanup  # Clean disk BEFORE building to prevent "no space" errors
 build_images
-start_new_env
-# Backup database before running migrations (safe rollback point)
+# Backup database BEFORE starting new containers (only old env is running = no lock contention)
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "💾 Pre-migration backup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if ./scripts/backup.sh --local-only 2>&1; then
-    echo "✅ Pre-migration backup created"
-else
-    echo "⚠️  Backup failed — continuing deployment (non-blocking)"
+BACKUP_OK=false
+for attempt in 1 2 3; do
+    if ./scripts/backup.sh --local-only 2>&1; then
+        echo "✅ Pre-migration backup created"
+        BACKUP_OK=true
+        break
+    fi
+    if [ "$attempt" -lt 3 ]; then
+        echo "⚠️  Backup attempt $attempt failed, retrying in 5s..."
+        sleep 5
+    fi
+done
+if [ "$BACKUP_OK" = false ]; then
+    echo "❌ Backup failed after 3 attempts — aborting deployment."
+    echo "   Will not run migrations without a safety backup."
+    exit 1
 fi
+start_new_env
 # Run migrations BEFORE switching traffic, but AFTER starting new env
 run_migrations
 verify_and_wait

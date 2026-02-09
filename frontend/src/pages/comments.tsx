@@ -283,7 +283,7 @@ const CommentsPage: NextPageWithLayout = () => {
         t('export.language'), t('export.date'), t('export.repliedAt'),
       ];
       const rows = allComments.map(c => {
-        const page = pages.find(p => p.id === (c as any).pageId);
+        const page = pages.find(p => p.id === c.pageId);
         return [
           page?.name || '', c.fromName || '', c.message || '',
           c.replied ? t('common.yes') : t('common.no'), c.replyText || '', c.replyMethod || '',
@@ -474,7 +474,7 @@ const CommentsPage: NextPageWithLayout = () => {
             )}
           >
             {filteredComments.map((comment, i) => {
-              const page = pages.find(p => p.id === (comment as any).pageId);
+              const page = pages.find(p => p.id === comment.pageId);
               return (
                 <CommentCard
                   key={comment.id}

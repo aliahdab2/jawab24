@@ -4,6 +4,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { AppSkeleton } from '@/components/ui';
+import { isNativePlatform } from '@/lib/capacitor';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -122,8 +123,7 @@ export default function AuthCallback() {
       // to open the app directly. We ONLY pass critical tokens here.
       // The app will fetch the full user profile using the token.
       if (platform === 'mobile') {
-        const cap = (window as any).Capacitor;
-        const isNative = typeof window !== 'undefined' && !!cap?.isNativePlatform?.();
+        const isNative = isNativePlatform();
         
         if (isNative) {
           routerRef.current.push(safeUrl);

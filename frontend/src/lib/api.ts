@@ -137,6 +137,7 @@ export interface CommentData {
   repliedAt: string | null;
   createdAt: string;
   postMessage: string | null;
+  pageId: string;
   pageName: string | null;
 }
 

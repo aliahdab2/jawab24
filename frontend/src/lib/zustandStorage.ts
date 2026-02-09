@@ -1,12 +1,5 @@
 import type { StateStorage } from "zustand/middleware";
-
-/**
- * Check if we're running in a native Capacitor environment
- */
-const isNativePlatform = (): boolean => {
-  if (typeof window === "undefined") return false;
-  return !!(window as any).Capacitor?.isNativePlatform?.();
-};
+import { isNativePlatform } from "./capacitor";
 
 /**
  * Web storage (fast, synchronous)
