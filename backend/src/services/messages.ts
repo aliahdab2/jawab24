@@ -4,6 +4,9 @@ import { messages, pages, conversationPauses } from '../db/schema';
 import { ConversationMessage } from '../types';
 import { Message } from '@jawab24/shared';
 
+/** DB connection or transaction — methods accepting this can participate in a transaction. */
+type DbConn = typeof db;
+
 export interface CreateMessageDTO {
     pageId: string;
     facebookMessageId: string;
@@ -189,9 +192,10 @@ export class MessagesService {
         replyMethod: 'template' | 'ai' | 'manual',
         needsAttention?: boolean,
         flagReason?: string,
-        aiIntent?: string
+        aiIntent?: string,
+        conn: DbConn = db
     ): Promise<void> {
-        await db.update(messages)
+        await conn.update(messages)
             .set({
                 replied: true,
                 replyText,
@@ -212,9 +216,10 @@ export class MessagesService {
         pageId: string,
         senderId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual'
+        replyMethod: 'template' | 'ai' | 'manual',
+        conn: DbConn = db
     ): Promise<Message> {
-        const [newMessage] = await db.insert(messages)
+        const [newMessage] = await conn.insert(messages)
             .values({
                 pageId,
                 facebookMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -343,9 +348,10 @@ export class MessagesService {
         senderId: string,
         excludeMessageId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual'
+        replyMethod: 'template' | 'ai' | 'manual',
+        conn: DbConn = db
     ): Promise<number> {
-        const result = await db.update(messages)
+        const result = await conn.update(messages)
             .set({
                 replied: true,
                 replyText,

@@ -5,6 +5,7 @@ import { notificationService } from '../notifications';
 import { replyGenerator } from './generator';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../../types';
+import { db } from '../../db';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 
 /**
@@ -191,21 +192,27 @@ export class MessageProcessor {
             }
             lap('13-sendReply');
 
-            // 14. Mark as replied
-            await adapter.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent);
+            // 14-16. Mark replied + store outgoing + mark older — wrapped in a transaction
+            // so all DB state changes succeed or fail together.
+            let markedOlder = 0;
+            await db.transaction(async (tx) => {
+                // 14. Mark as replied
+                await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent, tx);
 
-            // 15. Store outgoing message
-            await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod);
+                // 15. Store outgoing message
+                await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod, tx);
+
+                // 16. Mark older debounced messages as replied
+                if (unrepliedMessages.length > 1) {
+                    markedOlder = await messagesService.markOlderMessagesAsReplied(
+                        page.id, senderId, storedMessage.id, replyText, replyMethod, tx,
+                    );
+                }
+            });
             lap('15-postReply');
 
-            // 16. Mark older debounced messages as replied
-            if (unrepliedMessages.length > 1) {
-                const marked = await messagesService.markOlderMessagesAsReplied(
-                    page.id, senderId, storedMessage.id, replyText, replyMethod,
-                );
-                if (marked > 0) {
-                    this.logger.info(`[${platform}] Marked older debounced messages as replied`, { count: marked, senderId });
-                }
+            if (markedOlder > 0) {
+                this.logger.info(`[${platform}] Marked older debounced messages as replied`, { count: markedOlder, senderId });
             }
 
             // 17. Notify if flagged

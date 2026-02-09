@@ -336,23 +336,21 @@ export const subscriptionsService = {
      */
     async incrementAiReplies(userId: string, count: number = 1): Promise<void> {
         const now = new Date();
-        const _today = now.toISOString().split('T')[0];
 
-        // Get current usage period
+        // Ensure a usage period exists
         const currentUsage = await this.getCurrentUsage(userId);
-
         if (!currentUsage) {
-            // Create new usage period if doesn't exist
             const periodEnd = new Date(now);
             periodEnd.setMonth(periodEnd.getMonth() + 1);
             await this.initializeUsagePeriod(userId, now, periodEnd);
         }
 
-        // Update usage count
+        // Atomic increment — avoids race condition when concurrent requests
+        // both read the same count and overwrite each other's writes.
         await db
             .update(usage)
             .set({
-                aiRepliesCount: (currentUsage?.aiRepliesCount || 0) + count,
+                aiRepliesCount: sql`COALESCE(${usage.aiRepliesCount}, 0) + ${count}`,
                 updatedAt: new Date(),
             })
             .where(
@@ -363,7 +361,6 @@ export const subscriptionsService = {
                 )
             );
 
-        // Log the usage event
         await this.logUsageEvent(userId, 'ai_reply', { count });
     },
 
@@ -373,13 +370,11 @@ export const subscriptionsService = {
     async incrementTemplateReplies(userId: string, count: number = 1): Promise<void> {
         const now = new Date();
 
-        // Get current usage to increment properly
-        const currentUsage = await this.getCurrentUsage(userId);
-
+        // Atomic increment — same fix as incrementAiReplies
         await db
             .update(usage)
             .set({
-                templateRepliesCount: (currentUsage?.templateRepliesCount || 0) + count,
+                templateRepliesCount: sql`COALESCE(${usage.templateRepliesCount}, 0) + ${count}`,
                 updatedAt: new Date(),
             })
             .where(

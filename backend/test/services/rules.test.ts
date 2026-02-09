@@ -20,7 +20,11 @@ vi.mock('../../src/db', () => ({
                         }),
                     }),
                 }),
-                where: vi.fn(),
+                where: vi.fn().mockReturnValue({
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([]),
+                    }),
+                }),
             }),
         }),
         update: vi.fn().mockReturnValue({
@@ -239,9 +243,11 @@ describe('RulesService', () => {
             (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([
-                            { id: 'rule-1', keywords: ['price', 'cost'], priority: 10 },
-                        ]),
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([
+                                { id: 'rule-1', keywords: ['price', 'cost'], priority: 10 },
+                            ]),
+                        }),
                     }),
                 }),
             });
@@ -257,7 +263,9 @@ describe('RulesService', () => {
             (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([matchingRule]),
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([matchingRule]),
+                        }),
                     }),
                 }),
             });
@@ -275,7 +283,9 @@ describe('RulesService', () => {
             (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([highPriorityRule, lowPriorityRule]),
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([highPriorityRule, lowPriorityRule]),
+                        }),
                     }),
                 }),
             });
@@ -290,10 +300,12 @@ describe('RulesService', () => {
             (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([
-                            { id: 'rule-1', keywords: null, priority: 10 },
-                            { id: 'rule-2', keywords: [], priority: 5 },
-                        ]),
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([
+                                { id: 'rule-1', keywords: null, priority: 10 },
+                                { id: 'rule-2', keywords: [], priority: 5 },
+                            ]),
+                        }),
                     }),
                 }),
             });

@@ -5,7 +5,11 @@ vi.mock('../src/db', () => ({
   db: {
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([]),
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([]),
+          }),
+        }),
         limit: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
         }),
@@ -29,6 +33,20 @@ vi.mock('../src/db', () => ({
     delete: vi.fn().mockReturnValue({
       where: vi.fn().mockResolvedValue([]),
     }),
+    transaction: vi.fn(async (fn: Function) => fn({
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: 'mock-id' }]),
+          }),
+        }),
+      }),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{ id: 'mock-id' }]),
+        }),
+      }),
+    })),
     query: {},
   },
   client: {

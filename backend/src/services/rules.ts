@@ -126,12 +126,14 @@ export class RulesService {
      * Find matching rule for a comment
      */
     async findMatchingRule(userId: string, commentText: string) {
-        // Get all active rules for the user, ordered by priority
+        // Get active rules for the user, ordered by priority.
+        // Capped at 100 to prevent unbounded fetches if limits aren't enforced at the app layer.
         const userRules = await db
             .select()
             .from(rules)
             .where(and(eq(rules.userId, userId), eq(rules.active, true)))
-            .orderBy(desc(rules.priority));
+            .orderBy(desc(rules.priority))
+            .limit(100);
 
         const lowerComment = commentText.toLowerCase();
 

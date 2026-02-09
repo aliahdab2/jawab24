@@ -5,6 +5,20 @@ vi.mock('../../src/db', () => ({
         select: vi.fn(),
         update: vi.fn(),
         insert: vi.fn(),
+        transaction: vi.fn(async (fn: Function) => fn({
+            update: vi.fn().mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([{ id: 'mock-id' }]),
+                    }),
+                }),
+            }),
+            insert: vi.fn().mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'mock-id' }]),
+                }),
+            }),
+        })),
     },
 }));
 
