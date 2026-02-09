@@ -276,17 +276,22 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     const setupDeepLinks = async () => {
       const { App } = await import("@capacitor/app");
       
-      // Helper for URL parsing
+      // Helper for URL parsing — only allow known hosts
       const handleDeepLink = (url: string): string | null => {
-        if (url.includes("com.jawab24.app://")) {
+        // Custom scheme (e.g. com.jawab24.app://dashboard)
+        if (url.startsWith("com.jawab24.app://")) {
             const raw = url.replace("com.jawab24.app://", "/");
             return raw.startsWith("/") ? raw : `/${raw}`;
-        } else if (url.includes("localhost/")) {
-            const raw = url.split("localhost").pop() || "";
-            return raw.startsWith("/") ? raw : `/${raw}`;
-        } else if (url.includes(".com")) {
-            const raw = url.split(".com").pop() || "";
-            return raw.startsWith("/") ? raw : `/${raw}`;
+        }
+        // HTTPS universal links — parse with URL API and whitelist hosts
+        try {
+            const parsed = new URL(url);
+            const allowedHosts = ["localhost", "jawab24.com", "www.jawab24.com"];
+            if (allowedHosts.includes(parsed.hostname)) {
+                return parsed.pathname + parsed.search;
+            }
+        } catch {
+            // Invalid URL — ignore
         }
         return null;
       };

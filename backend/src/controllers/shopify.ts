@@ -146,7 +146,10 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
 export async function webhookUninstall(request: FastifyRequest, reply: FastifyReply) {
     const hmac = request.headers['x-shopify-hmac-sha256'] as string;
     const rawBody = (request as RawBodyRequest).rawBody;
-    const body = rawBody ? rawBody.toString('utf8') : JSON.stringify(request.body);
+    if (!rawBody) {
+        return reply.status(401).send({ error: 'Missing raw body for HMAC verification' });
+    }
+    const body = rawBody.toString('utf8');
 
     if (!hmac || !shopifyService.verifyWebhookHmac(body, hmac)) {
         return reply.status(401).send({ error: 'Invalid HMAC' });
@@ -163,7 +166,10 @@ export async function webhookUninstall(request: FastifyRequest, reply: FastifyRe
 export async function webhookProductsUpdate(request: FastifyRequest, reply: FastifyReply) {
     const hmac = request.headers['x-shopify-hmac-sha256'] as string;
     const rawBody = (request as RawBodyRequest).rawBody;
-    const body = rawBody ? rawBody.toString('utf8') : JSON.stringify(request.body);
+    if (!rawBody) {
+        return reply.status(401).send({ error: 'Missing raw body for HMAC verification' });
+    }
+    const body = rawBody.toString('utf8');
 
     if (!hmac || !shopifyService.verifyWebhookHmac(body, hmac)) {
         return reply.status(401).send({ error: 'Invalid HMAC' });
@@ -182,17 +188,41 @@ export async function webhookProductsUpdate(request: FastifyRequest, reply: Fast
     return reply.status(200).send({ ok: true });
 }
 
-// --- GDPR Mandatory Endpoints ---
+// --- GDPR Mandatory Endpoints (HMAC-verified) ---
+// Jawab24 only stores Shopify product catalog data, NOT customer PII.
+// customerDataRequest and customerRedact acknowledge the webhook but have
+// no customer data to export or delete. shopRedact fully removes store data.
 
-export async function gdprCustomerDataRequest(_request: FastifyRequest, reply: FastifyReply) {
+function verifyShopifyWebhookHmac(request: FastifyRequest, reply: FastifyReply): boolean {
+    const hmac = request.headers['x-shopify-hmac-sha256'] as string;
+    const rawBody = (request as RawBodyRequest).rawBody;
+    if (!rawBody) {
+        reply.status(401).send({ error: 'Missing raw body for HMAC verification' });
+        return false;
+    }
+    const body = rawBody.toString('utf8');
+    if (!hmac || !shopifyService.verifyWebhookHmac(body, hmac)) {
+        reply.status(401).send({ error: 'Invalid HMAC' });
+        return false;
+    }
+    return true;
+}
+
+export async function gdprCustomerDataRequest(request: FastifyRequest, reply: FastifyReply) {
+    if (!verifyShopifyWebhookHmac(request, reply)) return;
+    // No customer PII stored — acknowledge request
     return reply.status(200).send({ ok: true });
 }
 
-export async function gdprCustomerRedact(_request: FastifyRequest, reply: FastifyReply) {
+export async function gdprCustomerRedact(request: FastifyRequest, reply: FastifyReply) {
+    if (!verifyShopifyWebhookHmac(request, reply)) return;
+    // No customer PII stored — acknowledge request
     return reply.status(200).send({ ok: true });
 }
 
 export async function gdprShopRedact(request: FastifyRequest, reply: FastifyReply) {
+    if (!verifyShopifyWebhookHmac(request, reply)) return;
+
     const { shop_domain } = request.body as { shop_domain?: string };
     if (shop_domain) {
         await shopifyService.deactivateStore(shop_domain);

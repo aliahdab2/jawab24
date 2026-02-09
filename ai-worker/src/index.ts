@@ -9,6 +9,12 @@ import { config } from './config';
 import { buildServer } from './server';
 import { startWorker, stopWorker } from './worker';
 
+// Fail fast if critical env vars are missing
+if (!config.openai.apiKey) {
+    console.error('FATAL: OPENAI_API_KEY environment variable is required. AI worker cannot function without it.');
+    process.exit(1);
+}
+
 let server: Awaited<ReturnType<typeof buildServer>>;
 
 const start = async () => {

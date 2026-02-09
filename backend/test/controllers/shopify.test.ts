@@ -425,11 +425,25 @@ describe('Shopify Controller', () => {
     // --- webhookUninstall ---
 
     describe('webhookUninstall', () => {
+        it('should reject missing rawBody', async () => {
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac' },
+                body: { myshopify_domain: 'test.myshopify.com' },
+            });
+            const rep = mockReply();
+
+            await webhookUninstall(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(401);
+        });
+
         it('should reject invalid HMAC', async () => {
             mockVerifyWebhookHmac.mockReturnValue(false);
+            const body = { myshopify_domain: 'test.myshopify.com' };
             const req = mockRequest({
                 headers: { 'x-shopify-hmac-sha256': 'invalid' },
-                body: { myshopify_domain: 'test.myshopify.com' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
             });
             const rep = mockReply();
 
@@ -440,9 +454,11 @@ describe('Shopify Controller', () => {
 
         it('should deactivate store on valid uninstall webhook', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
+            const body = { myshopify_domain: 'test.myshopify.com' };
             const req = mockRequest({
                 headers: { 'x-shopify-hmac-sha256': 'valid_hmac' },
-                body: { myshopify_domain: 'test.myshopify.com' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
             });
             const rep = mockReply();
 
@@ -459,12 +475,14 @@ describe('Shopify Controller', () => {
         it('should enqueue sync on valid webhook', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {};
             const req = mockRequest({
                 headers: {
                     'x-shopify-hmac-sha256': 'valid_hmac',
                     'x-shopify-shop-domain': 'test.myshopify.com',
                 },
-                body: {},
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
             });
             const rep = mockReply();
 
@@ -477,11 +495,25 @@ describe('Shopify Controller', () => {
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
+        it('should reject missing rawBody for product webhook', async () => {
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac' },
+                body: {},
+            });
+            const rep = mockReply();
+
+            await webhookProductsUpdate(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(401);
+        });
+
         it('should reject invalid HMAC for product webhook', async () => {
             mockVerifyWebhookHmac.mockReturnValue(false);
+            const body = {};
             const req = mockRequest({
                 headers: { 'x-shopify-hmac-sha256': 'invalid' },
-                body: {},
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
             });
             const rep = mockReply();
 
@@ -494,23 +526,68 @@ describe('Shopify Controller', () => {
     // --- GDPR ---
 
     describe('GDPR endpoints', () => {
-        it('gdprCustomerDataRequest returns 200', async () => {
+        it('gdprCustomerDataRequest rejects missing rawBody', async () => {
             const rep = mockReply();
             await gdprCustomerDataRequest(mockRequest(), rep);
+            expect(rep.status).toHaveBeenCalledWith(401);
+        });
+
+        it('gdprCustomerDataRequest returns 200 with valid HMAC', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            const body = {};
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await gdprCustomerDataRequest(req, rep);
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
-        it('gdprCustomerRedact returns 200', async () => {
+        it('gdprCustomerRedact rejects missing rawBody', async () => {
             const rep = mockReply();
             await gdprCustomerRedact(mockRequest(), rep);
+            expect(rep.status).toHaveBeenCalledWith(401);
+        });
+
+        it('gdprCustomerRedact returns 200 with valid HMAC', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            const body = {};
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await gdprCustomerRedact(req, rep);
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
-        it('gdprShopRedact deactivates store', async () => {
-            const req = mockRequest({ body: { shop_domain: 'test.myshopify.com' } });
+        it('gdprShopRedact deactivates store with valid HMAC', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            const body = { shop_domain: 'test.myshopify.com' };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
             const rep = mockReply();
             await gdprShopRedact(req, rep);
             expect(mockDeactivateStore).toHaveBeenCalledWith('test.myshopify.com');
+        });
+
+        it('gdprShopRedact rejects invalid HMAC', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(false);
+            const body = { shop_domain: 'test.myshopify.com' };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'invalid' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await gdprShopRedact(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(401);
         });
     });
 
