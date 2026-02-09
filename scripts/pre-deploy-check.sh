@@ -91,7 +91,45 @@ else
 fi
 
 # =============================================
-# 0.7. Dependency security audit
+# 0.7. Fastify plugin compatibility check
+# =============================================
+echo ""
+echo "🔌 Checking Fastify plugin compatibility..."
+
+# Detect Fastify major version from backend/package.json
+FASTIFY_MAJOR=$(node -e "const p=require('./backend/package.json'); const v=p.dependencies.fastify.replace(/[\^~>=<]/g,''); console.log(v.split('.')[0])")
+
+if [ "$FASTIFY_MAJOR" -ge 5 ]; then
+    # All @fastify/* plugins must use fastify-plugin ^5.0.0 (not ^4.0.0) for Fastify 5
+    STALE_PLUGINS=$(node -e "
+        const lock = require('./package-lock.json');
+        const pkgs = lock.packages || {};
+        const bad = [];
+        for (const [key, val] of Object.entries(pkgs)) {
+            if (key.includes('@fastify/') && val.dependencies && val.dependencies['fastify-plugin']) {
+                const fpRange = val.dependencies['fastify-plugin'];
+                if (fpRange.startsWith('^4') || fpRange.startsWith('~4') || fpRange === '4') {
+                    bad.push(key.replace(/.*node_modules\//, '') + '@' + val.version + ' (needs fastify-plugin ' + fpRange + ')');
+                }
+            }
+        }
+        if (bad.length) { console.log(bad.join('\n')); process.exit(1); }
+    " 2>&1)
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}   ❌ Fastify plugin version mismatch detected!${NC}"
+        echo -e "${RED}   These plugins use fastify-plugin v4 but Fastify $FASTIFY_MAJOR requires v5:${NC}"
+        echo "$STALE_PLUGINS" | while read -r line; do echo -e "${RED}      - $line${NC}"; done
+        echo -e "${RED}   Upgrade these @fastify/* packages to Fastify $FASTIFY_MAJOR-compatible versions.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}   ✅ All @fastify plugins compatible with Fastify $FASTIFY_MAJOR${NC}"
+else
+    echo -e "${GREEN}   ✅ Fastify $FASTIFY_MAJOR — no compatibility check needed${NC}"
+fi
+
+# =============================================
+# 0.8. Dependency security audit
 # =============================================
 echo ""
 echo "🔒 Running dependency security audit..."
