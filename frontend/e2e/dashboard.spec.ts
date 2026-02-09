@@ -73,10 +73,6 @@ const MOCK_SETTINGS = {
 
 test.describe('Dashboard Page', () => {
   test.beforeEach(async ({ page }) => {
-    // Log browser errors for debugging
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') console.log(`BROWSER ERROR: ${msg.text()}`);
-    });
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
 
     // Set auth state in localStorage before navigating

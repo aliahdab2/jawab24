@@ -53,17 +53,10 @@ const MOCK_PLANS = [
 test.describe('Payment Flow', () => {
 
     test.beforeEach(async ({ page }) => {
-        // Enable console logging from the browser
-        page.on('console', msg => console.log(`BROWSER LOG: ${msg.text()}`));
-        page.on('pageerror', err => console.log(`BROWSER ERROR: ${err}`));
+        page.on('pageerror', err => console.log(`PAGE ERROR: ${err}`));
 
-        // 1. Generic Catch-all (Base Layer)
-        // Prevent CORS/External hits for any unhandled API calls
+        // Catch-all: return empty 200 for any unhandled API calls
         await page.route('**/api/**', async route => {
-             const url = route.request().url();
-             if (url.includes('/api/plans') || url.includes('/api/subscription/usage') || url.includes('/api/geo/check')) {
-                 return route.continue();
-             }
              await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
         });
 
