@@ -9,13 +9,22 @@ import './setup';
 describe('Health Routes — Integration (real Postgres)', () => {
     let app: FastifyInstance;
 
+    let savedCleanupToken: string | undefined;
+
     beforeEach(async () => {
+        savedCleanupToken = process.env.CLEANUP_SECRET_TOKEN;
         app = fastify();
         app.register(healthRoutes);
         await app.ready();
     });
 
     afterEach(async () => {
+        // Restore env to prevent leaks between tests
+        if (savedCleanupToken === undefined) {
+            delete process.env.CLEANUP_SECRET_TOKEN;
+        } else {
+            process.env.CLEANUP_SECRET_TOKEN = savedCleanupToken;
+        }
         await app.close();
     });
 
@@ -89,7 +98,5 @@ describe('Health Routes — Integration (real Postgres)', () => {
         const body = response.json();
         expect(body).toHaveProperty('since');
         expect(body).toHaveProperty('counters');
-
-        delete process.env.CLEANUP_SECRET_TOKEN;
     });
 });

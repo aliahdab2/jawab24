@@ -5,7 +5,7 @@ import { settingsService } from '../../src/services/settings';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { createTestUser, createTestPage, insertMessage, insertPause, testDb } from './setup';
 import { eq, and } from 'drizzle-orm';
-import { messages, settings } from '../../src/db/schema';
+import { messages } from '../../src/db/schema';
 import type { MessagePlatformAdapter, PlatformPage } from '../../src/interfaces';
 
 // ---------------------------------------------------------------------------
@@ -27,9 +27,9 @@ function createMockAdapter(page: PlatformPage, overrides: Partial<MessagePlatfor
         getInternalMessageId: vi.fn((id: string) => id),
         sendReply: vi.fn().mockResolvedValue(undefined),
         sendAwayMessage: vi.fn().mockResolvedValue(undefined),
-        markAsReplied: vi.fn(async (id, replyText, replyMethod, needsAttention, flagReason, aiIntent) => {
-            await messagesService.markAsReplied(id, replyText, replyMethod, needsAttention, flagReason, aiIntent);
-        }),
+        // Note: markAsReplied is required by the interface but the pipeline
+        // calls messagesService.markAsReplied directly, so this is never invoked.
+        markAsReplied: vi.fn().mockResolvedValue(undefined),
         ...overrides,
     };
 }
