@@ -16,6 +16,7 @@ import {
 import { Button, Toggle } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { pagesApi, api } from '@/lib/api';
+import { toast } from 'sonner';
 import type { Page } from '@jawab24/shared';
 
 import { useSwipe } from '@/hooks/useSwipe';
@@ -67,7 +68,8 @@ function PickPageStep({
   onToggle,
   isLandscape,
   t,
-  language
+  language,
+  pageLimit
 }: {
   pages: Page[];
   loading: boolean;
@@ -77,6 +79,7 @@ function PickPageStep({
   isLandscape: boolean;
   t: TFunction;
   language: string;
+  pageLimit: number | null;
 }) {
   const isRTL = language === 'ar';
 
@@ -135,6 +138,11 @@ function PickPageStep({
         </h2>
         <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'mb-6'}`}>
           {t('onboarding.pickPageDesc')}
+          {pageLimit !== null && (
+            <span className="block text-xs text-surface-400 mt-1">
+              {t('onboarding.pageLimitInfo' as TranslationKey, { limit: pageLimit })}
+            </span>
+          )}
         </p>
         
         <div className={`space-y-3 ${isLandscape ? 'max-h-[30vh] overflow-y-auto' : 'max-h-[40vh] overflow-y-auto'}`}>
@@ -311,6 +319,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fetchError, setFetchError] = useState(false);
+  const [pageLimit, setPageLimit] = useState<number | null>(null);
   
   // Reusable hooks
   const isLandscape = useLandscape();
@@ -345,17 +354,31 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     }
   }, []);
 
-  // Fetch pages on mount
+  // Fetch pages and page limit on mount
   useEffect(() => {
     fetchPages();
+    api.get('/subscriptions/usage').then((res) => {
+      const limit = res.data?.pages?.limit;
+      if (typeof limit === 'number') setPageLimit(limit);
+    }).catch(() => { /* fail open — backend toggle will still enforce */ });
   }, [fetchPages]);
 
   const handleToggle = useCallback(async (pageId: string, enabled: boolean) => {
+    // Check plan limit before enabling (FB + IG toggles count as separate slots)
+    if (enabled && pageLimit !== null) {
+      const fbSlots = pages.filter(p => p.autoReplyEnabled).length;
+      const igSlots = pages.filter(p => p.instagramAutoReplyEnabled).length;
+      if (fbSlots + igSlots >= pageLimit) {
+        toast.error(t('onboarding.pageLimitReached' as TranslationKey, { limit: pageLimit }));
+        return;
+      }
+    }
+
     // Optimistic update
-    setPages(prev => prev.map(p => 
+    setPages(prev => prev.map(p =>
       p.id === pageId ? { ...p, autoReplyEnabled: enabled } : p
     ));
-    
+
     // If enabling, select this page for info review
     if (enabled) {
       const page = pages.find(p => p.id === pageId);
@@ -366,14 +389,20 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
 
     try {
       await pagesApi.toggle(pageId, enabled);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to toggle page:', error);
-      // Revert on error
-      setPages(prev => prev.map(p => 
+      const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
+      if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+        toast.error(t('onboarding.pageLimitReached' as TranslationKey, { limit: pageLimit ?? 1 }));
+      } else {
+        toast.error(t('errors.somethingWentWrong' as TranslationKey));
+      }
+      // Revert optimistic update
+      setPages(prev => prev.map(p =>
         p.id === pageId ? { ...p, autoReplyEnabled: !enabled } : p
       ));
     }
-  }, [pages]);
+  }, [pages, pageLimit, t]);
 
   const handleComplete = async () => {
     // Save knowledge base if changed
@@ -466,6 +495,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               isLandscape={isLandscape}
               t={t}
               language={language}
+              pageLimit={pageLimit}
             />
           )}
           {currentStep === 2 && (

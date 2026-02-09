@@ -4,6 +4,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
+import { subscriptionsService } from './subscriptions';
 
 /**
  * Format Facebook hours object into readable text
@@ -197,7 +198,7 @@ export class PagesService {
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
-            return [];
+            return { syncedPages: [], skippedCount: 0 };
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
@@ -237,7 +238,17 @@ export class PagesService {
 
         const results = await Promise.all(processPromises);
 
-        // 3. Perform DB Writes (Sequential to ensure consistency)
+        // 3. Determine how many more pages can be auto-enabled
+        const enableCheck = await subscriptionsService.canEnablePage(userId);
+        let remainingSlots: number | null = null; // null = unlimited
+        if (enableCheck.allowed && enableCheck.remaining !== undefined) {
+            remainingSlots = enableCheck.remaining;
+        } else if (!enableCheck.allowed) {
+            remainingSlots = 0;
+        }
+        let skippedCount = 0;
+
+        // 4. Perform DB Writes (Sequential to ensure consistency)
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
         // or potential race conditions if multiple syncs happen simultaneously.
         for (const result of results) {
@@ -245,7 +256,7 @@ export class PagesService {
             const existingPage = existingPagesMap.get(fbPage.id);
 
             if (existingPage) {
-                // Update existing page
+                // Update existing page (always update tokens regardless of limit)
                 logger.debug(`[Pages] Updating existing page: ${fbPage.name}`);
                 const [updated] = await db
                     .update(pages)
@@ -263,8 +274,9 @@ export class PagesService {
                 // Subscribe page to webhook events (idempotent — safe to re-subscribe)
                 await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
             } else {
-                // Create new page - auto-apply knowledge base from Facebook page data
-                logger.debug(`[Pages] Creating new page: ${fbPage.name}`);
+                // Create new page - auto-enable only if within plan limit
+                const shouldAutoEnable = remainingSlots === null || remainingSlots > 0;
+                logger.debug(`[Pages] Creating new page: ${fbPage.name} (autoReply: ${shouldAutoEnable})`);
                 const suggestedKnowledgeBase = generateKnowledgeBase(fbPage);
                 if (suggestedKnowledgeBase) {
                     logger.info(`[Pages] Generated suggested knowledge base for ${fbPage.name}`, {
@@ -282,7 +294,7 @@ export class PagesService {
                         facebookPageId: fbPage.id,
                         name: fbPage.name,
                         accessToken: fbPage.access_token,
-                        autoReplyEnabled: true,
+                        autoReplyEnabled: shouldAutoEnable,
                         instagramAccountId,
                         instagramUsername,
                         instagramAutoReplyEnabled: false,
@@ -292,13 +304,20 @@ export class PagesService {
                     .returning();
                 syncedPages.push(created);
 
-                // Subscribe new page to webhook events
+                if (shouldAutoEnable && remainingSlots !== null) {
+                    remainingSlots--;
+                }
+                if (!shouldAutoEnable) {
+                    skippedCount++;
+                }
+
+                // Subscribe new page to webhook events (even if disabled, so webhooks work when enabled later)
                 await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
             }
         }
 
-        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced.`);
-        return syncedPages;
+        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} created with auto-reply disabled (plan limit).`);
+        return { syncedPages, skippedCount };
     }
 
     /**

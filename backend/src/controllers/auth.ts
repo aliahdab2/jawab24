@@ -44,8 +44,12 @@ export class AuthController {
             // 4. Generate JWT token
             const token = authService.generateToken(user);
 
-            // 5. Auto-sync pages from Facebook (non-blocking)
-            pagesService.syncFromFacebook(user.id, accessToken).catch((err) => {
+            // 5. Auto-sync pages from Facebook (non-blocking, respects plan page limit)
+            pagesService.syncFromFacebook(user.id, accessToken).then(({ skippedCount }) => {
+                if (skippedCount > 0) {
+                    request.log.info(`Auto-sync: ${skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+                }
+            }).catch((err) => {
                 request.log.error({ err }, 'Auto-sync pages failed');
             });
 
@@ -133,8 +137,12 @@ export class AuthController {
             // 6. Generate Internal JWT
             const token = authService.generateToken(user);
 
-            // 7. Auto-sync pages (Non-blocking)
-            pagesService.syncFromFacebook(user.id, longLivedToken).catch((err) => {
+            // 7. Auto-sync pages (Non-blocking, respects plan page limit)
+            pagesService.syncFromFacebook(user.id, longLivedToken).then(({ skippedCount }) => {
+                if (skippedCount > 0) {
+                    request.log.info(`Auto-sync: ${skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+                }
+            }).catch((err) => {
                 request.log.error({ err }, 'Auto-sync pages failed (Native Flow)');
             });
 

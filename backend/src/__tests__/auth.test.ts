@@ -83,7 +83,7 @@ describe('AuthController - Native Login', () => {
             user: { id: 'user-id', facebookId: 'fb-user-id', name: 'Test User' },
             settings: { dashboardLanguage: 'en' }
         });
-        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue([]);
+        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages: [], skippedCount: 0 });
 
         // Execute
         await authController.nativeLogin(mockRequest, mockReply);

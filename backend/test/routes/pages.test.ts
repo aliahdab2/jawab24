@@ -8,6 +8,7 @@ vi.mock('../../src/services/pages');
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canAddPage: vi.fn().mockResolvedValue({ allowed: true, limit: 10, used: 1, remaining: 9 }),
+        canEnablePage: vi.fn().mockResolvedValue({ allowed: true, limit: 10, used: 1, remaining: 9 }),
     }
 }));
 vi.mock('../../src/middleware/auth', () => ({

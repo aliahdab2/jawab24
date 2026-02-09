@@ -7,7 +7,7 @@ import { plansApi, subscriptionApi } from '@/lib/api';
 import { extractArrayData, extractObjectData } from '@/lib/api-utils';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
-import { Check, X, Zap, Crown, Sparkles, AlertCircle } from 'lucide-react';
+import { Check, X, Zap, Crown, Sparkles, AlertCircle, Store } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
@@ -155,11 +155,19 @@ function PlanCard({
           text={t('pricing.brandingHidden' as TranslationKey)}
         />
 
-        <FeatureRow
-          included={plan.shopifyEnabled}
-          text={t('pricing.featureShopify' as TranslationKey)}
-        />
       </div>
+
+      {/* Integration badge — shown only for plans with Shopify enabled */}
+      {plan.shopifyEnabled && (
+        <div className="mx-3 mt-2">
+          <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-lg border border-purple-100">
+            <Store className="w-4 h-4 text-purple-600 flex-shrink-0" />
+            <span className="text-xs font-medium text-purple-700">
+              {t('pricing.shopifyBadge' as TranslationKey)}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* CTA */}
       <div className="mt-auto pt-3 px-3 pb-1">

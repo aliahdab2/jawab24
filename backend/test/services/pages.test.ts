@@ -25,6 +25,12 @@ vi.mock('../../src/services/instagram', () => ({
     }
 }));
 
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        canEnablePage: vi.fn().mockResolvedValue({ allowed: true, remaining: null }),
+    }
+}));
+
 describe('PagesService', () => {
     beforeEach(() => {
         vi.clearAllMocks();

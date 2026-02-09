@@ -270,15 +270,7 @@ export const subscriptionsService = {
         const plan = subscription.plan;
 
         // Count enabled page slots (FB + IG counted separately)
-        const [pagesCount] = await db
-            .select({
-                count: sql<number>`(
-                    SELECT count(*) FROM ${pages} WHERE ${pages.userId} = ${userId} AND ${pages.autoReplyEnabled} = true
-                ) + (
-                    SELECT count(*) FROM ${pages} WHERE ${pages.userId} = ${userId} AND ${pages.instagramAutoReplyEnabled} = true
-                )`,
-            })
-            .from(sql`(SELECT 1) as _dummy`);
+        const pagesUsed = await this.countEnabledPageSlots(userId);
 
         const [templatesCount] = await db
             .select({ count: templates.id })
@@ -313,9 +305,9 @@ export const subscriptionsService = {
                 percentUsed: aiLimit ? Math.min(100, (aiUsed / aiLimit) * 100) : 0,
             },
             pages: {
-                used: Number(pagesCount?.count) || 0,
+                used: pagesUsed,
                 limit: plan.maxPages,
-                remaining: plan.maxPages ? Math.max(0, plan.maxPages - (Number(pagesCount?.count) || 0)) : null,
+                remaining: plan.maxPages ? Math.max(0, plan.maxPages - pagesUsed) : null,
             },
             templates: {
                 used: Number(templatesCount?.count) || 0,
@@ -486,6 +478,24 @@ export const subscriptionsService = {
     },
 
     /**
+     * Count enabled page slots for a user.
+     * FB auto-reply = 1 slot, IG auto-reply = 1 slot, both = 2 slots.
+     */
+    async countEnabledPageSlots(userId: string): Promise<number> {
+        const [fbCount] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(pages)
+            .where(and(eq(pages.userId, userId), eq(pages.autoReplyEnabled, true)));
+
+        const [igCount] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(pages)
+            .where(and(eq(pages.userId, userId), eq(pages.instagramAutoReplyEnabled, true)));
+
+        return (Number(fbCount?.count) || 0) + (Number(igCount?.count) || 0);
+    },
+
+    /**
      * Check if user can enable another page (counts enabled FB + IG slots separately).
      * A page with FB auto-reply enabled = 1 slot. IG auto-reply enabled = 1 slot.
      * A page with both = 2 slots. Used for: toggle, sync auto-enable decisions.
@@ -508,18 +518,7 @@ export const subscriptionsService = {
             return { allowed: true };
         }
 
-        // Count enabled slots: FB auto-reply + IG auto-reply counted separately
-        const [result] = await db
-            .select({
-                count: sql<number>`(
-                    SELECT count(*) FROM ${pages} WHERE ${pages.userId} = ${userId} AND ${pages.autoReplyEnabled} = true
-                ) + (
-                    SELECT count(*) FROM ${pages} WHERE ${pages.userId} = ${userId} AND ${pages.instagramAutoReplyEnabled} = true
-                )`,
-            })
-            .from(sql`(SELECT 1) as _dummy`);
-
-        const used = Number(result?.count) || 0;
+        const used = await this.countEnabledPageSlots(userId);
         const limit = plan.maxPages;
 
         if (used >= limit) {

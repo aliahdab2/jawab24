@@ -18,6 +18,7 @@ vi.mock('../../src/services/pages', () => ({
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canAddPage: vi.fn(),
+        canEnablePage: vi.fn(),
     },
 }));
 
@@ -49,7 +50,7 @@ describe('Pages Controller', () => {
     describe('create', () => {
         it('should create a page successfully', async () => {
             const newPage = { id: 'page-1', name: 'Test Page' };
-            vi.mocked(subscriptionsService.canAddPage).mockResolvedValue({ allowed: true, limit: 5, used: 1 } as any);
+            vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 1 } as any);
             vi.mocked(pagesService.createPage).mockResolvedValue(newPage as any);
             mockRequest.body = { facebookPageId: 'fb-page-1', name: 'Test Page', accessToken: 'tok' };
 
@@ -60,7 +61,7 @@ describe('Pages Controller', () => {
         });
 
         it('should return 403 when subscription limit reached', async () => {
-            vi.mocked(subscriptionsService.canAddPage).mockResolvedValue({
+            vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({
                 allowed: false,
                 reason: 'Page limit reached',
                 limit: 3,
@@ -143,6 +144,7 @@ describe('Pages Controller', () => {
     describe('toggleAutoReply', () => {
         it('should toggle auto-reply successfully', async () => {
             const toggled = { id: 'page-1', autoReplyEnabled: true };
+            vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 0, remaining: 5 } as any);
             vi.mocked(pagesService.toggleAutoReply).mockResolvedValue(toggled as any);
             mockRequest.params = { id: 'page-1' };
             mockRequest.body = { enabled: true };
@@ -158,8 +160,8 @@ describe('Pages Controller', () => {
     describe('sync', () => {
         it('should sync pages from Facebook successfully', async () => {
             const syncedPages = [{ id: 'page-1' }];
-            vi.mocked(subscriptionsService.canAddPage).mockResolvedValue({ allowed: true, limit: 5, used: 1 } as any);
-            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue(syncedPages as any);
+            vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 1, remaining: 4 } as any);
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages, skippedCount: 0 } as any);
             mockRequest.body = { accessToken: 'fb-token-abc' };
 
             await pagesController.sync(mockRequest as any, mockReply as FastifyReply);

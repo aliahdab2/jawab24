@@ -18,11 +18,12 @@ export class PagesController {
         const { userId } = user;
         
         try {
-            // Check page limit before creating
-            const limitCheck = await subscriptionsService.canAddPage(userId);
+            // Check enabled page limit before creating (new pages start enabled)
+            const limitCheck = await subscriptionsService.canEnablePage(userId);
             if (!limitCheck.allowed) {
-                return reply.status(403).send({ 
+                return reply.status(403).send({
                     error: limitCheck.reason || 'Page limit reached',
+                    code: 'PAGE_LIMIT_REACHED',
                     limit: limitCheck.limit,
                     used: limitCheck.used,
                 });
@@ -149,8 +150,21 @@ export class PagesController {
         const { userId } = user;
         const { id } = request.params;
         const { enabled } = request.body;
-        
+
         try {
+            // Only check limit when ENABLING (disabling is always allowed)
+            if (enabled) {
+                const limitCheck = await subscriptionsService.canEnablePage(userId);
+                if (!limitCheck.allowed) {
+                    return reply.status(403).send({
+                        error: limitCheck.reason || 'Page limit reached',
+                        code: 'PAGE_LIMIT_REACHED',
+                        limit: limitCheck.limit,
+                        used: limitCheck.used,
+                    });
+                }
+            }
+
             const page = await pagesService.toggleAutoReply(userId, id, enabled);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
@@ -182,28 +196,30 @@ export class PagesController {
         }
 
         try {
-            // Check page limit before syncing
-            const limitCheck = await subscriptionsService.canAddPage(userId);
-            
             request.log.info(`[Pages] Sync requested for user ${userId}`);
-            const pages = await pagesService.syncFromFacebook(userId, accessToken);
-            
-            if (pages.length === 0) {
-                return reply.send({ 
-                    synced: 0, 
+            const { syncedPages, skippedCount } = await pagesService.syncFromFacebook(userId, accessToken);
+
+            if (syncedPages.length === 0) {
+                return reply.send({
+                    synced: 0,
                     pages: [],
                     message: 'No pages found. Make sure you are an admin of at least one Facebook page and have granted the required permissions.'
                 });
             }
-            
-            // Warn if user is at or near their limit
-            const response: Record<string, unknown> = { synced: pages.length, pages };
-            if (!limitCheck.allowed) {
-                response.warning = `You have reached your page limit (${limitCheck.limit}). Some pages may not be synced. Upgrade to add more pages.`;
-            } else if (limitCheck.remaining !== null && limitCheck.remaining !== undefined && limitCheck.remaining <= 1) {
-                response.warning = `You can add ${limitCheck.remaining} more page(s). Consider upgrading for more pages.`;
+
+            const response: Record<string, unknown> = { synced: syncedPages.length, pages: syncedPages };
+
+            if (skippedCount > 0) {
+                response.warning = `${skippedCount} page(s) were synced but auto-reply was not enabled due to your plan limit. Upgrade to enable more pages.`;
+                response.skippedCount = skippedCount;
             }
-            
+
+            // Include current limit status for frontend display
+            const limitCheck = await subscriptionsService.canEnablePage(userId);
+            if (limitCheck.remaining !== undefined) {
+                response.enabledPagesRemaining = limitCheck.remaining;
+            }
+
             return reply.send(response);
         } catch (error) {
             request.log.error(error);

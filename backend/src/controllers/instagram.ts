@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { pagesService } from '../services/pages';
 import { instagramService } from '../services/instagram';
+import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
 import { instagramMedia, instagramComments } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
@@ -212,6 +213,19 @@ export class InstagramController {
         const { enabled } = request.body;
 
         try {
+            // Only check limit when ENABLING (disabling is always allowed)
+            if (enabled) {
+                const limitCheck = await subscriptionsService.canEnablePage(userId);
+                if (!limitCheck.allowed) {
+                    return reply.status(403).send({
+                        error: limitCheck.reason || 'Page limit reached',
+                        code: 'PAGE_LIMIT_REACHED',
+                        limit: limitCheck.limit,
+                        used: limitCheck.used,
+                    });
+                }
+            }
+
             const page = await pagesService.toggleInstagramAutoReply(userId, id, enabled);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
