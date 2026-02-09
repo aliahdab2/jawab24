@@ -87,7 +87,8 @@ describe('shopifyCrypto', () => {
         });
 
         it('should throw on invalid ciphertext format', () => {
-            expect(() => decrypt('no-dot-separator', 'abcd1234')).toThrow('Invalid ciphertext format');
+            const validIv = '0'.repeat(32); // valid 16-byte hex IV
+            expect(() => decrypt('no-dot-separator', validIv)).toThrow('Invalid ciphertext format');
         });
     });
 });

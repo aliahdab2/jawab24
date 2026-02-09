@@ -46,7 +46,7 @@ export const pages = pgTable('pages', {
     instagramUsername: varchar('instagram_username', { length: 255 }),
     instagramAutoReplyEnabled: boolean('instagram_auto_reply_enabled').default(true),
     // Shopify store linked to this page (for product-aware AI replies)
-    shopifyStoreId: uuid('shopify_store_id'),
+    shopifyStoreId: uuid('shopify_store_id').references(() => shopifyStores.id, { onDelete: 'set null' }),
     // Knowledge base for AI context - business info, products, FAQ
     knowledgeBase: text('knowledge_base'),
     // Suggested knowledge base from Facebook data - pending user confirmation
@@ -58,6 +58,7 @@ export const pages = pgTable('pages', {
         userIdIdx: index('idx_pages_user_id').on(table.userId),
         facebookPageIdIdx: index('idx_pages_facebook_page_id').on(table.facebookPageId),
         instagramAccountIdIdx: index('idx_pages_instagram_account_id').on(table.instagramAccountId),
+        shopifyStoreIdIdx: index('idx_pages_shopify_store_id').on(table.shopifyStoreId),
     };
 });
 

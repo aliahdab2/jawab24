@@ -7,10 +7,33 @@ const { mockClaimPendingInstall } = vi.hoisted(() => {
     };
 });
 
-// Mock shopify service
-vi.mock('../../src/services/shopify', () => ({
-    claimPendingInstall: (...args: any[]) => mockClaimPendingInstall(...args),
-}));
+// Mock integrations registry with a Shopify integration that delegates to mockClaimPendingInstall
+vi.mock('../../src/integrations', () => {
+    const mockIntegration = {
+        name: 'shopify',
+        isEnabled: () => true,
+        claimPendingInstall: async (request: any, reply: any, userId: string) => {
+            if (!request.cookies?.pendingShopifyId) return null;
+            const result = request.unsignCookie(request.cookies.pendingShopifyId);
+            if (!result.valid || !result.value) return null;
+            try {
+                const store = await mockClaimPendingInstall(result.value, userId);
+                if (store) {
+                    reply.clearCookie('pendingShopifyId', { path: '/' });
+                    return { shopifyOnboarding: true, shopifyStoreId: store.id };
+                }
+            } catch (err) {
+                request.log.error({ err }, 'Failed to claim pending Shopify install');
+            }
+            return null;
+        },
+    };
+    return {
+        integrationRegistry: {
+            getEnabled: () => [mockIntegration],
+        },
+    };
+});
 
 // Mock Facebook service
 const mockGetAccessToken = vi.fn().mockResolvedValue('fb_access_token');

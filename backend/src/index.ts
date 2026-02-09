@@ -32,13 +32,12 @@ import geoRoutes from "./routes/geo";
 import notificationRoutes from "./routes/notifications";
 import adminRoutes from "./routes/admin";
 import analyticsRoutes from "./routes/analytics";
-import shopifyRoutes from "./routes/shopify";
+import { integrationRegistry } from "./integrations";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
 import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
-import { startShopifySyncWorker, stopShopifySyncWorker, setSyncWorkerLogger } from "./workers/shopifySyncWorker";
 import { startEscalationCron, stopEscalationCron } from "./services/escalation";
 import { createRequestLogger } from "./types";
 import { config } from "./config";
@@ -201,7 +200,11 @@ const start = async () => {
     await server.register(notificationRoutes, { prefix: "/notifications" });
     await server.register(adminRoutes, { prefix: "/admin" });
     await server.register(analyticsRoutes, { prefix: "/analytics" });
-    await server.register(shopifyRoutes, { prefix: "/shopify" });
+
+    // Register e-commerce integration routes (Shopify, future WooCommerce, etc.)
+    for (const integration of integrationRegistry.getEnabled()) {
+      await integration.registerRoutes(server);
+    }
 
     const port = parseInt(process.env.PORT || "3000", 10);
     const host = "0.0.0.0";
@@ -220,11 +223,10 @@ const start = async () => {
     startWorker(workerLogger);
     console.log(`⚙️  Reply processing worker started`);
 
-    // Start Shopify sync worker (product sync, full sync)
-    if (config.shopify?.apiKey) {
-      setSyncWorkerLogger(workerLogger);
-      startShopifySyncWorker();
-      console.log(`🛍️  Shopify sync worker started`);
+    // Start e-commerce integration workers (Shopify, future WooCommerce, etc.)
+    for (const integration of integrationRegistry.getEnabled()) {
+      await integration.onStartup(workerLogger);
+      console.log(`⚙️  ${integration.name} integration started`);
     }
 
     // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
@@ -257,7 +259,10 @@ const gracefulShutdown = async (signal: string) => {
 
     // Stop workers (wait for in-progress jobs)
     console.log("⏳ Stopping workers...");
-    await Promise.all([stopWorker(), stopShopifySyncWorker()]);
+    await Promise.all([
+      stopWorker(),
+      ...integrationRegistry.getEnabled().map(i => i.onShutdown()),
+    ]);
     console.log("✅ Workers stopped");
 
     await server.close();

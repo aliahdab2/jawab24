@@ -2,12 +2,17 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import * as shopifyService from '../services/shopify';
 import { authService } from '../services/auth';
-import { SHOPIFY_SYNC_QUEUE_NAME } from '@jawab24/shared';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { enqueueSyncJob } from '../lib/shopifySyncQueue';
 import { config } from '../config';
 import {
     PENDING_SHOPIFY_COOKIE_OPTIONS,
     SHOPIFY_NONCE_COOKIE_OPTIONS,
 } from '../services/cookies';
+
+interface RawBodyRequest extends FastifyRequest {
+    rawBody?: Buffer;
+}
 
 // --- Helpers ---
 
@@ -42,17 +47,6 @@ function tryGetUserId(request: FastifyRequest): string | null {
     } catch {
         return null;
     }
-}
-
-/**
- * Enqueue a Shopify sync job via BullMQ
- */
-async function enqueueSync(storeId: string): Promise<void> {
-    const { Queue } = await import('bullmq');
-    const { redis } = await import('../lib/redis');
-    const syncQueue = new Queue(SHOPIFY_SYNC_QUEUE_NAME, { connection: redis as any });
-    await syncQueue.add('full_sync', { shopifyStoreId: storeId, jobType: 'full_sync' });
-    await syncQueue.close();
 }
 
 // --- OAuth Flow (PUBLIC — no JWT required) ---
@@ -115,7 +109,7 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
             });
 
             // Enqueue full sync (non-blocking)
-            enqueueSync(store.id).catch(err => {
+            enqueueSyncJob(store.id).catch(err => {
                 request.log.error({ err }, 'Failed to enqueue Shopify sync');
             });
 
@@ -151,7 +145,8 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
 
 export async function webhookUninstall(request: FastifyRequest, reply: FastifyReply) {
     const hmac = request.headers['x-shopify-hmac-sha256'] as string;
-    const body = (request as any).rawBody || JSON.stringify(request.body);
+    const rawBody = (request as RawBodyRequest).rawBody;
+    const body = rawBody ? rawBody.toString('utf8') : JSON.stringify(request.body);
 
     if (!hmac || !shopifyService.verifyWebhookHmac(body, hmac)) {
         return reply.status(401).send({ error: 'Invalid HMAC' });
@@ -167,7 +162,8 @@ export async function webhookUninstall(request: FastifyRequest, reply: FastifyRe
 
 export async function webhookProductsUpdate(request: FastifyRequest, reply: FastifyReply) {
     const hmac = request.headers['x-shopify-hmac-sha256'] as string;
-    const body = (request as any).rawBody || JSON.stringify(request.body);
+    const rawBody = (request as RawBodyRequest).rawBody;
+    const body = rawBody ? rawBody.toString('utf8') : JSON.stringify(request.body);
 
     if (!hmac || !shopifyService.verifyWebhookHmac(body, hmac)) {
         return reply.status(401).send({ error: 'Invalid HMAC' });
@@ -177,7 +173,7 @@ export async function webhookProductsUpdate(request: FastifyRequest, reply: Fast
     if (shopDomain) {
         const store = await shopifyService.getStoreByDomain(shopDomain);
         if (store) {
-            enqueueSync(store.id).catch(err => {
+            enqueueSyncJob(store.id).catch(err => {
                 request.log.error({ err }, 'Failed to enqueue product sync');
             });
         }
@@ -207,7 +203,7 @@ export async function gdprShopRedact(request: FastifyRequest, reply: FastifyRepl
 // --- Protected API (Jawab24 JWT required) ---
 
 export async function getStore(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as any).userId;
+    const userId = (request as AuthenticatedRequest).user!.userId;
     const store = await shopifyService.getStoreByUserId(userId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
@@ -229,7 +225,7 @@ export async function connectStore(request: FastifyRequest, reply: FastifyReply)
 }
 
 export async function disconnectStoreHandler(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as any).userId;
+    const userId = (request as AuthenticatedRequest).user!.userId;
     const store = await shopifyService.getStoreByUserId(userId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
@@ -239,7 +235,7 @@ export async function disconnectStoreHandler(request: FastifyRequest, reply: Fas
 }
 
 export async function syncStore(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as any).userId;
+    const userId = (request as AuthenticatedRequest).user!.userId;
     const store = await shopifyService.getStoreByUserId(userId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
@@ -250,7 +246,7 @@ export async function syncStore(request: FastifyRequest, reply: FastifyReply) {
 }
 
 export async function getStoreProducts(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as any).userId;
+    const userId = (request as AuthenticatedRequest).user!.userId;
     const store = await shopifyService.getStoreByUserId(userId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
@@ -261,7 +257,7 @@ export async function getStoreProducts(request: FastifyRequest, reply: FastifyRe
 }
 
 export async function linkPage(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as any).userId;
+    const userId = (request as AuthenticatedRequest).user!.userId;
     const { pageId } = request.body as { pageId?: string };
 
     if (!pageId) {
@@ -276,8 +272,8 @@ export async function linkPage(request: FastifyRequest, reply: FastifyReply) {
     try {
         await shopifyService.linkStoreToPage(store.id, pageId, userId);
         return reply.send({ ok: true });
-    } catch (error: any) {
-        if (error.message?.includes('does not belong to user')) {
+    } catch (error) {
+        if (error instanceof Error && error.message?.includes('does not belong to user')) {
             return reply.status(403).send({ error: 'Page does not belong to user' });
         }
         throw error;

@@ -8,12 +8,20 @@ const mockInsert = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 
+const txProxy = {
+    select: () => mockSelect(),
+    insert: () => mockInsert(),
+    update: () => mockUpdate(),
+    delete: () => mockDelete(),
+};
+
 vi.mock('../../src/db', () => ({
     db: {
         select: () => mockSelect(),
         insert: () => mockInsert(),
         update: () => mockUpdate(),
         delete: () => mockDelete(),
+        transaction: async (fn: (tx: typeof txProxy) => Promise<void>) => fn(txProxy),
     },
 }));
 

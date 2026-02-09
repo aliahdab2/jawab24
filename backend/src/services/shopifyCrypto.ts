@@ -39,6 +39,11 @@ export function encrypt(plaintext: string): { ciphertext: string; iv: string } {
  */
 export function decrypt(ciphertext: string, iv: string): string {
     const key = getKey();
+
+    // Validate IV format: must be exactly 32 hex chars (16 bytes)
+    if (!/^[0-9a-f]{32}$/i.test(iv)) {
+        throw new Error('Invalid IV format');
+    }
     const ivBuf = Buffer.from(iv, 'hex');
 
     const parts = ciphertext.split('.');
@@ -48,6 +53,11 @@ export function decrypt(ciphertext: string, iv: string): string {
 
     const [encryptedData, authTagB64] = parts;
     const authTag = Buffer.from(authTagB64, 'base64');
+
+    // Validate auth tag length
+    if (authTag.length !== AUTH_TAG_LENGTH) {
+        throw new Error('Invalid auth tag length');
+    }
 
     const decipher = crypto.createDecipheriv(ALGORITHM, key, ivBuf, { authTagLength: AUTH_TAG_LENGTH });
     decipher.setAuthTag(authTag);

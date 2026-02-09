@@ -33,6 +33,7 @@ import {
 import Link from 'next/link';
 import { useTranslation, useLanguage, type TranslationKey } from '@/i18n';
 import type { NextPageWithLayout } from './_app';
+import type { Page, ShopifyStore } from '@jawab24/shared';
 
 // Simple toggle row component with better design
 function SimpleToggle({
@@ -69,10 +70,10 @@ function SimpleToggle({
 // Shopify Integration Section — only visible when user has a connected Shopify store
 function ShopifySection() {
   const { t } = useTranslation();
-  const [store, setStore] = useState<any>(null);
+  const [store, setStore] = useState<ShopifyStore | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [pages, setPages] = useState<any[]>([]);
+  const [pages, setPages] = useState<Page[]>([]);
   /* shopDomain + handleConnect removed — connection happens from Shopify App Store */
 
   const fetchStore = useCallback(async () => {
@@ -173,7 +174,7 @@ function ShopifySection() {
               <p className="text-sm font-medium mb-2">{t('shopify.linkPage' as TranslationKey)}</p>
               <p className="text-xs text-surface-500 mb-2">{t('shopify.linkPageDesc' as TranslationKey)}</p>
               <div className="flex flex-wrap gap-2">
-                {pages.map((page: any) => (
+                {pages.map((page) => (
                   <button
                     key={page.id}
                     onClick={() => handleLinkPage(page.id)}

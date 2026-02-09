@@ -169,43 +169,69 @@ export async function disconnectStore(storeId: string) {
  * Link a Shopify store to a Facebook/Instagram page (with ownership validation)
  */
 export async function linkStoreToPage(storeId: string, pageId: string, userId: string) {
-    // Validate page belongs to user
-    const page = await db.select().from(pages)
-        .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
-        .limit(1);
+    await db.transaction(async (tx) => {
+        // Validate page belongs to user (inside transaction for atomicity)
+        const page = await tx.select().from(pages)
+            .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
+            .limit(1);
 
-    if (!page[0]) {
-        throw new Error('Page not found or does not belong to user');
-    }
+        if (!page[0]) {
+            throw new Error('Page not found or does not belong to user');
+        }
 
-    await db.update(pages).set({ shopifyStoreId: storeId, updatedAt: new Date() })
-        .where(eq(pages.id, pageId));
+        await tx.update(pages).set({ shopifyStoreId: storeId, updatedAt: new Date() })
+            .where(eq(pages.id, pageId));
+    });
 }
 
 // --- Shopify Admin API helpers ---
 
-async function shopifyGraphQL<T = any>(shop: string, accessToken: string, query: string): Promise<T> {
-    const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': accessToken,
-        },
-        body: JSON.stringify({ query }),
-    });
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 1000;
 
-    if (!response.ok) {
-        throw new Error(`Shopify GraphQL HTTP error: ${response.status}`);
+async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, query: string): Promise<T> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Access-Token': accessToken,
+            },
+            body: JSON.stringify({ query }),
+        });
+
+        // Retry on 429 (rate limit) or 5xx (server error)
+        if (response.status === 429 || response.status >= 500) {
+            const retryAfter = response.headers.get('retry-after');
+            const delayMs = retryAfter
+                ? parseInt(retryAfter, 10) * 1000
+                : RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+
+            if (attempt < MAX_RETRIES) {
+                await new Promise(r => setTimeout(r, delayMs));
+                continue;
+            }
+            lastError = new Error(`Shopify API ${response.status} after ${MAX_RETRIES} retries`);
+            break;
+        }
+
+        if (!response.ok) {
+            throw new Error(`Shopify GraphQL HTTP error: ${response.status}`);
+        }
+
+        const result = await response.json() as T & { errors?: Array<{ message: string }> };
+
+        // Shopify GraphQL returns 200 even on query errors
+        if (result.errors && result.errors.length > 0) {
+            throw new Error(`Shopify GraphQL error: ${result.errors.map(e => e.message).join(', ')}`);
+        }
+
+        return result;
     }
 
-    const result = await response.json() as T & { errors?: Array<{ message: string }> };
-
-    // Shopify GraphQL returns 200 even on query errors
-    if (result.errors && result.errors.length > 0) {
-        throw new Error(`Shopify GraphQL error: ${result.errors.map(e => e.message).join(', ')}`);
-    }
-
-    return result;
+    throw lastError || new Error('Shopify API request failed');
 }
 
 async function fetchShopInfo(shop: string, accessToken: string) {

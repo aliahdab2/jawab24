@@ -4,7 +4,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
-import { getEnrichedKnowledgeBase } from '../shopify';
+import { integrationRegistry } from '../../integrations';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
@@ -165,11 +165,12 @@ export class MessageProcessor {
                 ? unrepliedMessages.map(m => m.message).join('\n')
                 : messageText;
 
-            // 12. Generate reply (enrich KB with Shopify data if linked)
+            // 12. Generate reply (enrich KB with e-commerce data if linked)
             const userSettings = await settingsService.getSettings(userId);
             let knowledgeBase = page.knowledgeBase || undefined;
-            if (page.shopifyStoreId) {
-                knowledgeBase = await getEnrichedKnowledgeBase(knowledgeBase, page.shopifyStoreId);
+            for (const integration of integrationRegistry.getEnabled()) {
+                const enriched = await integration.enrichKnowledgeBase(knowledgeBase, page as unknown as Record<string, unknown>);
+                if (enriched !== null) { knowledgeBase = enriched; break; }
             }
             let { replyText, replyMethod, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForMessage(

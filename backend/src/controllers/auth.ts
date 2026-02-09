@@ -5,24 +5,12 @@ import { refreshTokenService } from '../services/refreshToken';
 import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
 import { settingsService } from '../services/settings';
-import * as shopifyService from '../services/shopify';
+import { integrationRegistry } from '../integrations';
 import { AuthRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
-
-/**
- * Read pending Shopify install ID from signed cookie.
- */
-function getPendingShopifyId(request: FastifyRequest): string | null {
-    if (!request.cookies) return null;
-    const cookie = request.cookies.pendingShopifyId;
-    if (!cookie) return null;
-    if (!request.unsignCookie) return null;
-    const result = request.unsignCookie(cookie);
-    return result.valid ? (result.value || null) : null;
-}
 
 export class AuthController {
     /**
@@ -76,19 +64,10 @@ export class AuthController {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
 
-            // 10. Check for pending Shopify install (Shopify-first flow)
-            const pendingId = getPendingShopifyId(request);
-            if (pendingId) {
-                try {
-                    const store = await shopifyService.claimPendingInstall(pendingId, user.id);
-                    if (store) {
-                        reply.clearCookie('pendingShopifyId', { path: '/' });
-                        response.shopifyOnboarding = true;
-                        response.shopifyStoreId = store.id;
-                    }
-                } catch (err) {
-                    request.log.error({ err }, 'Failed to claim pending Shopify install');
-                }
+            // 10. Check for pending e-commerce integration installs
+            for (const integration of integrationRegistry.getEnabled()) {
+                const claim = await integration.claimPendingInstall(request, reply, user.id);
+                if (claim) Object.assign(response, claim);
             }
 
             return reply.send(response);
@@ -172,19 +151,10 @@ export class AuthController {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
 
-            // 10. Check for pending Shopify install (Shopify-first flow)
-            const pendingId = getPendingShopifyId(request);
-            if (pendingId) {
-                try {
-                    const store = await shopifyService.claimPendingInstall(pendingId, user.id);
-                    if (store) {
-                        reply.clearCookie('pendingShopifyId', { path: '/' });
-                        response.shopifyOnboarding = true;
-                        response.shopifyStoreId = store.id;
-                    }
-                } catch (err) {
-                    request.log.error({ err }, 'Failed to claim pending Shopify install');
-                }
+            // 10. Check for pending e-commerce integration installs
+            for (const integration of integrationRegistry.getEnabled()) {
+                const claim = await integration.claimPendingInstall(request, reply, user.id);
+                if (claim) Object.assign(response, claim);
             }
 
             return reply.send(response);

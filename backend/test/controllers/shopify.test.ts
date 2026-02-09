@@ -72,18 +72,10 @@ vi.mock('@jawab24/shared', () => ({
     SHOPIFY_SYNC_QUEUE_NAME: 'shopify-sync-queue',
 }));
 
-// Mock BullMQ
-const mockQueueAdd = vi.fn().mockResolvedValue(undefined);
-const mockQueueClose = vi.fn().mockResolvedValue(undefined);
-vi.mock('bullmq', () => ({
-    Queue: vi.fn().mockImplementation(() => ({
-        add: mockQueueAdd,
-        close: mockQueueClose,
-    })),
-}));
-
-vi.mock('../../src/lib/redis', () => ({
-    redis: {},
+// Mock the singleton sync queue
+const mockEnqueueSyncJob = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../src/lib/shopifySyncQueue', () => ({
+    enqueueSyncJob: (...args: any[]) => mockEnqueueSyncJob(...args),
 }));
 
 import {
@@ -108,7 +100,7 @@ function mockRequest(overrides: Partial<any> = {}): any {
         body: {},
         headers: {},
         cookies: {},
-        userId: 'user-123',
+        user: { userId: 'user-123', facebookId: 'fb-123' },
         unsignCookie: vi.fn().mockReturnValue({ valid: false, value: null }),
         log: {
             error: vi.fn(),
@@ -423,12 +415,10 @@ describe('Shopify Controller', () => {
 
             await authCallback(req, rep);
 
-            // enqueueSync is fire-and-forget — wait a tick for it to settle
+            // enqueueSyncJob is fire-and-forget — wait a tick for it to settle
             await new Promise(r => setTimeout(r, 10));
 
-            expect(mockQueueAdd).toHaveBeenCalledWith('full_sync', expect.objectContaining({
-                shopifyStoreId: 'store-1',
-            }));
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1');
         });
     });
 
@@ -480,12 +470,10 @@ describe('Shopify Controller', () => {
 
             await webhookProductsUpdate(req, rep);
 
-            // enqueueSync is fire-and-forget — wait a tick for it to settle
+            // enqueueSyncJob is fire-and-forget — wait a tick for it to settle
             await new Promise(r => setTimeout(r, 10));
 
-            expect(mockQueueAdd).toHaveBeenCalledWith('full_sync', expect.objectContaining({
-                shopifyStoreId: 'store-1',
-            }));
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1');
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 

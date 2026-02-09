@@ -10,6 +10,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { toast } from 'sonner';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { shopifyApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
@@ -93,7 +94,7 @@ export default function ShopifyOnboarding() {
       await shopifyApi.linkPage(selectedPageId);
       setStep(2);
     } catch {
-      // Show error but don't block
+      toast.error(t('shopify.pageLinkError' as TranslationKey));
     }
     setLinking(false);
   };

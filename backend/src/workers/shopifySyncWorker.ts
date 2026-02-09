@@ -26,7 +26,7 @@ async function processJob(job: Job<ShopifySyncJobData>) {
         case 'product_update':
             return shopifyService.syncProducts(shopifyStoreId);
         default:
-            logger.error('[ShopifySync] Unknown job type', { jobType });
+            throw new Error(`[ShopifySync] Unknown job type: ${jobType}`);
     }
 }
 
