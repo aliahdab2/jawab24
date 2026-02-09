@@ -20,14 +20,17 @@ export interface AuthenticatedRequest extends FastifyRequest {
 
 // ==================== Result Types ====================
 
-/** Standard result for reply operations */
-export interface ReplyResult {
+/** Standard result for comment reply operations */
+export interface CommentResult {
     success: boolean;
     commentId: string;
     replyText?: string;
     replyMethod?: 'template' | 'ai' | 'manual';
     error?: string;
 }
+
+/** @deprecated Use CommentResult instead */
+export type ReplyResult = CommentResult;
 
 /** Standard result for message operations (re-exported from interfaces) */
 export type { MessageResult } from '../interfaces';

@@ -58,14 +58,8 @@ export interface InstagramCommentsResponse {
     };
 }
 
-/** Result for Instagram reply operations */
-export interface InstagramReplyResult {
-    success: boolean;
-    commentId: string;
-    replyText?: string;
-    replyMethod?: 'template' | 'ai' | 'manual';
-    error?: string;
-}
+/** @deprecated Use CommentResult from './common' instead */
+export type { CommentResult as InstagramReplyResult } from './common';
 
 /** Result for Instagram message operations (same as shared MessageResult) */
 export type { MessageResult as InstagramMessageResult } from '../interfaces';

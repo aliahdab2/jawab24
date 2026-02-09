@@ -5,3 +5,4 @@
  */
 export * from './platform-adapter';
 export * from './message-processing';
+export * from './comment-adapter';
