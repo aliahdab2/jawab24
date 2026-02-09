@@ -83,7 +83,9 @@
       "Bash(for pkg in cookie compress cors helmet rate-limit swagger swagger-ui)",
       "Bash(do echo \"=== @fastify/$pkg ===\")",
       "Bash(bash scripts/pre-deploy-check.sh:*)",
-      "Bash(npm ci:*)"
+      "Bash(npm ci:*)",
+      "Bash(git symbolic-ref:*)",
+      "Bash(GIT_SEQUENCE_EDITOR=\"sed -i '''' ''s/^pick 6ceac32/edit 6ceac32/''\" git rebase -i 6ceac32~1)"
     ]
   }
 }
