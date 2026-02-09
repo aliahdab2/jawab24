@@ -77,7 +77,9 @@
       "Bash(xargs:*)",
       "Bash(npm uninstall:*)",
       "Bash(npm show:*)",
-      "Bash(npm run test:integration:*)"
+      "Bash(npm run test:integration:*)",
+      "Bash(npm audit fix:*)",
+      "Bash(npm update:*)"
     ]
   }
 }
