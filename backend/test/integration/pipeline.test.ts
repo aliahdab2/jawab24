@@ -1,0 +1,325 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MessageProcessor } from '../../src/services/reply/messageProcessor';
+import { messagesService } from '../../src/services/messages';
+import { settingsService } from '../../src/services/settings';
+import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
+import { createTestUser, createTestPage, insertMessage, insertPause, testDb } from './setup';
+import { eq, and } from 'drizzle-orm';
+import { messages, settings } from '../../src/db/schema';
+import type { MessagePlatformAdapter, PlatformPage } from '../../src/interfaces';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Create a mock adapter that stubs external calls but delegates DB writes to real services */
+function createMockAdapter(page: PlatformPage, overrides: Partial<MessagePlatformAdapter> = {}): MessagePlatformAdapter {
+    return {
+        platform: 'facebook',
+        getPage: vi.fn().mockResolvedValue(page),
+        fetchSenderName: vi.fn().mockResolvedValue('Test Sender'),
+        storeIncomingMessage: vi.fn(async (pageId, msgId, senderId, text, senderName) => {
+            const { message, isNew } = await messagesService.findOrCreateFromWebhook(
+                pageId, msgId, senderId, text, senderName,
+            );
+            return { message: { id: message.id, replied: message.replied }, isNew };
+        }),
+        getInternalMessageId: vi.fn((id: string) => id),
+        sendReply: vi.fn().mockResolvedValue(undefined),
+        sendAwayMessage: vi.fn().mockResolvedValue(undefined),
+        markAsReplied: vi.fn(async (id, replyText, replyMethod, needsAttention, flagReason, aiIntent) => {
+            await messagesService.markAsReplied(id, replyText, replyMethod, needsAttention, flagReason, aiIntent);
+        }),
+        ...overrides,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Mocks: external services that the pipeline depends on but that need no DB
+// ---------------------------------------------------------------------------
+
+// vi.hoisted runs before vi.mock hoisting, so the fn is available in factories
+const { mockGenerateForMessage } = vi.hoisted(() => ({
+    mockGenerateForMessage: vi.fn().mockResolvedValue({
+        replyText: 'Mocked AI reply',
+        replyMethod: 'ai' as const,
+        needsAttention: false,
+        flagReason: undefined,
+        aiIntent: 'GREETING',
+    }),
+}));
+
+// Rate limiter (Redis-backed) — always allow
+vi.mock('../../src/services/protection', () => ({
+    rateLimiter: {
+        check: vi.fn().mockResolvedValue({ allowed: true, count: 0 }),
+        setLogger: vi.fn(),
+    },
+}));
+
+// Reply generator (AI/template) — return a canned reply
+vi.mock('../../src/services/reply/generator', () => ({
+    replyGenerator: {
+        generateForMessage: mockGenerateForMessage,
+        setLogger: vi.fn(),
+    },
+}));
+
+// Notification service — no-op
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: {
+        sendTemplateNotification: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('Message Pipeline — Integration (real Postgres)', () => {
+    let processor: MessageProcessor;
+    let userId: string;
+    let pageId: string;
+    let platformPage: PlatformPage;
+    const senderId = 'sender-pipeline-test';
+
+    beforeEach(async () => {
+        processor = new MessageProcessor();
+        pipelineMetrics.reset();
+        mockGenerateForMessage.mockClear();
+
+        const user = await createTestUser();
+        userId = user.id;
+        const page = await createTestPage(userId, { facebookPageId: 'page-fb-pipeline' });
+        pageId = page.id;
+
+        platformPage = {
+            id: page.id,
+            userId: page.userId,
+            name: page.name,
+            accessToken: page.accessToken,
+            knowledgeBase: null,
+            autoReplyEnabled: true,
+        };
+
+        // Ensure settings exist with messages auto-reply ON
+        await settingsService.updateSettings(userId, { messagesAutoReply: true });
+    });
+
+    // =========================================================
+    // 1. Happy path: new message → stored → replied
+    // =========================================================
+    it('processes a new message end-to-end: stores, replies, and marks as replied', async () => {
+        const adapter = createMockAdapter(platformPage);
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'Hello!', 'fb-happy-001',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyText).toBe('Mocked AI reply');
+        expect(result.replyMethod).toBe('ai');
+
+        // Verify message was stored in DB
+        const [row] = await testDb
+            .select()
+            .from(messages)
+            .where(eq(messages.facebookMessageId, 'fb-happy-001'));
+        expect(row).toBeDefined();
+        expect(row.senderId).toBe(senderId);
+        expect(row.message).toBe('Hello!');
+        expect(row.replied).toBe(true);
+        expect(row.replyText).toBe('Mocked AI reply');
+        expect(row.replyMethod).toBe('ai');
+        expect(row.repliedAt).toBeTruthy();
+
+        // Verify outgoing message was stored
+        const outgoing = await testDb
+            .select()
+            .from(messages)
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.direction, 'outgoing'),
+                eq(messages.senderId, senderId),
+            ));
+        expect(outgoing.length).toBe(1);
+        expect(outgoing[0].message).toBe('Mocked AI reply');
+
+        // Verify adapter.sendReply was called
+        expect(adapter.sendReply).toHaveBeenCalledOnce();
+
+        // Verify pipeline metrics recorded success
+        const metrics = pipelineMetrics.getMetrics();
+        expect(metrics.counters['facebook_message.success']).toBe(1);
+    });
+
+    // =========================================================
+    // 2. Debounce: newer message skips older
+    // =========================================================
+    it('skips older message when a newer unreplied message exists (debounce)', async () => {
+        // Pre-insert two messages: older (msg-1) and newer (msg-2)
+        await insertMessage(pageId, senderId, {
+            facebookMessageId: 'fb-debounce-old',
+            message: 'First',
+            createdAt: new Date('2026-02-01T10:00:00Z'),
+        });
+        await insertMessage(pageId, senderId, {
+            facebookMessageId: 'fb-debounce-new',
+            message: 'Second',
+            createdAt: new Date('2026-02-01T10:00:01Z'),
+        });
+
+        // Process the OLDER message — should be debounced
+        const adapter = createMockAdapter(platformPage, {
+            storeIncomingMessage: vi.fn(async () => {
+                // Return the already-existing older message
+                const existing = await testDb.select().from(messages)
+                    .where(eq(messages.facebookMessageId, 'fb-debounce-old'));
+                return {
+                    message: { id: existing[0].id, replied: false },
+                    isNew: false,
+                };
+            }),
+            getInternalMessageId: vi.fn(() => 'fb-debounce-old'),
+        });
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'First', 'fb-debounce-old',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('newer message pending');
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+    });
+
+    // =========================================================
+    // 3. Consolidation: multiple unreplied → single reply
+    // =========================================================
+    it('consolidates multiple unreplied messages into a single AI prompt', async () => {
+        // Pre-insert 3 unreplied messages
+        await insertMessage(pageId, senderId, {
+            facebookMessageId: 'fb-cons-1',
+            message: 'Hello',
+            createdAt: new Date('2026-02-01T10:00:00Z'),
+        });
+        await insertMessage(pageId, senderId, {
+            facebookMessageId: 'fb-cons-2',
+            message: 'Are you there?',
+            createdAt: new Date('2026-02-01T10:00:01Z'),
+        });
+        await insertMessage(pageId, senderId, {
+            facebookMessageId: 'fb-cons-3',
+            message: 'Please reply!',
+            createdAt: new Date('2026-02-01T10:00:02Z'),
+        });
+
+        // Process the newest — it should consolidate all 3
+        const adapter = createMockAdapter(platformPage, {
+            getInternalMessageId: vi.fn(() => 'fb-cons-3'),
+        });
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'Please reply!', 'fb-cons-3',
+        );
+
+        expect(result.success).toBe(true);
+
+        // Verify the AI was called with consolidated text
+        expect(mockGenerateForMessage).toHaveBeenCalledOnce();
+        const calledWith = mockGenerateForMessage.mock.calls[0][0];
+        expect(calledWith.text).toContain('Hello');
+        expect(calledWith.text).toContain('Are you there?');
+        expect(calledWith.text).toContain('Please reply!');
+
+        // Verify all 3 messages are now marked as replied
+        const allMsgs = await testDb
+            .select()
+            .from(messages)
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+            ));
+
+        const unreplied = allMsgs.filter(m => !m.replied);
+        expect(unreplied.length).toBe(0);
+    });
+
+    // =========================================================
+    // 4. Paused conversation skips auto-reply
+    // =========================================================
+    it('skips auto-reply when conversation is paused', async () => {
+        // Insert an active pause
+        const futureDate = new Date(Date.now() + 30 * 60 * 1000);
+        await insertPause(pageId, senderId, futureDate);
+
+        const adapter = createMockAdapter(platformPage);
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'Hello', 'fb-pause-001',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Handoff active');
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+
+        // Message should still be stored but NOT replied
+        const [row] = await testDb
+            .select()
+            .from(messages)
+            .where(eq(messages.facebookMessageId, 'fb-pause-001'));
+        expect(row).toBeDefined();
+        expect(row.replied).toBe(false);
+    });
+
+    // =========================================================
+    // 5. needsAttention flag stored correctly
+    // =========================================================
+    it('stores needsAttention and flagReason when AI flags the reply', async () => {
+        mockGenerateForMessage.mockResolvedValueOnce({
+            replyText: 'Sorry about that',
+            replyMethod: 'ai' as const,
+            needsAttention: true,
+            flagReason: 'angry_customer',
+            aiIntent: 'COMPLAINT',
+        });
+
+        const adapter = createMockAdapter(platformPage);
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'This is terrible!', 'fb-flag-001',
+        );
+
+        expect(result.success).toBe(true);
+
+        const [row] = await testDb
+            .select()
+            .from(messages)
+            .where(eq(messages.facebookMessageId, 'fb-flag-001'));
+        expect(row.needsAttention).toBe(true);
+        expect(row.flagReason).toBe('angry_customer');
+        expect(row.aiIntent).toBe('COMPLAINT');
+    });
+
+    // =========================================================
+    // 6. Auto-reply disabled → away message sent
+    // =========================================================
+    it('sends away message when messages auto-reply is disabled', async () => {
+        await settingsService.updateSettings(userId, {
+            messagesAutoReply: false,
+            awayMessage: 'We are currently away.',
+        });
+
+        const adapter = createMockAdapter(platformPage);
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'Hello', 'fb-away-001',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Messages auto-reply disabled');
+        expect(adapter.sendAwayMessage).toHaveBeenCalledWith(
+            platformPage, senderId, 'We are currently away.',
+        );
+    });
+});

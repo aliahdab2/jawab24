@@ -8,5 +8,7 @@ export default defineConfig({
     testTimeout: 30000,
     hookTimeout: 30000,
     setupFiles: ['./test/integration/setup.ts'],
+    // Serialize test files — they share one Postgres database and truncate between tests.
+    threads: false,
   },
 });
