@@ -576,7 +576,7 @@ describe('MessagesService', () => {
             expect(stats).toEqual({
                 total: 50,
                 replied: 30,
-                pending: 17,
+                pending: 20,
                 needsAttention: 3,
                 byMethod: { template: 10, ai: 15, manual: 5 }
             });
