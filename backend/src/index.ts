@@ -125,6 +125,7 @@ const start = async () => {
     await server.register(cors, {
       origin: allowedOrigins,
       credentials: true,
+      methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
     });
 
     await server.register(helmet, {
