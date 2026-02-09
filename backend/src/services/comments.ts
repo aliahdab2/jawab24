@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { comments, posts, pages, logs } from '../db/schema';
+import { comments, posts, pages, logs, instagramComments, instagramMedia } from '../db/schema';
 import { eq, desc, sql, and, gte } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 
@@ -48,71 +48,105 @@ export class CommentsService {
     }) {
         const limit = options?.limit || 50;
 
-        // Build base conditions
-        const conditions = [eq(pages.userId, userId)];
-
-        // Filter by replied status
-        if (options?.replied !== undefined) {
-            conditions.push(eq(comments.replied, options.replied));
-        }
-
-        // Filter by reply method (ai, template, manual)
-        if (options?.replyMethod) {
-            conditions.push(eq(comments.replyMethod, options.replyMethod));
-        }
-
-        // Filter by needsAttention flag
-        if (options?.needsAttention !== undefined) {
-            conditions.push(eq(comments.needsAttention, options.needsAttention));
-        }
-
-        // For cursor-based pagination, we need to get the createdAt of the cursor comment
-        // and fetch comments older than that
+        // Resolve cursor timestamp once (could be FB or IG comment)
+        let cursorDate: Date | null = null;
         if (options?.cursor) {
-            const cursorComment = await db
-                .select({ createdAt: comments.createdAt })
-                .from(comments)
-                .where(eq(comments.id, options.cursor))
-                .limit(1);
-
-            if (cursorComment[0]) {
-                conditions.push(sql`${comments.createdAt} < ${cursorComment[0].createdAt}`);
+            const fbCursor = await db.select({ createdAt: comments.createdAt })
+                .from(comments).where(eq(comments.id, options.cursor)).limit(1);
+            if (fbCursor[0]) {
+                cursorDate = fbCursor[0].createdAt;
+            } else {
+                const igCursor = await db.select({ createdAt: instagramComments.createdAt })
+                    .from(instagramComments).where(eq(instagramComments.id, options.cursor)).limit(1);
+                if (igCursor[0]) cursorDate = igCursor[0].createdAt;
             }
         }
 
-        // Fetch limit + 1 to check if there are more
-        const data = await db
-            .select({
-                id: comments.id,
-                postId: comments.postId,
-                facebookCommentId: comments.facebookCommentId,
-                message: comments.message,
-                fromId: comments.fromId,
-                fromName: comments.fromName,
-                replied: comments.replied,
-                replyText: comments.replyText,
-                replyMethod: comments.replyMethod,
-                detectedLanguage: comments.detectedLanguage,
-                createdTime: comments.createdTime,
-                repliedAt: comments.repliedAt,
-                createdAt: comments.createdAt,
-                postMessage: posts.message,
-                pageId: pages.id,
-                pageName: pages.name,
-                needsAttention: comments.needsAttention,
-                flagReason: comments.flagReason,
-                aiIntent: comments.aiIntent,
-            })
+        // --- Facebook comments query ---
+        const fbConditions = [eq(pages.userId, userId)];
+        if (options?.replied !== undefined) fbConditions.push(eq(comments.replied, options.replied));
+        if (options?.replyMethod) fbConditions.push(eq(comments.replyMethod, options.replyMethod));
+        if (options?.needsAttention !== undefined) fbConditions.push(eq(comments.needsAttention, options.needsAttention));
+        if (cursorDate) fbConditions.push(sql`${comments.createdAt} < ${cursorDate}`);
+
+        const fbQuery = db.select({
+            id: comments.id,
+            postId: comments.postId,
+            facebookCommentId: comments.facebookCommentId,
+            message: comments.message,
+            fromId: comments.fromId,
+            fromName: comments.fromName,
+            replied: comments.replied,
+            replyText: comments.replyText,
+            replyMethod: comments.replyMethod,
+            detectedLanguage: comments.detectedLanguage,
+            createdTime: comments.createdTime,
+            repliedAt: comments.repliedAt,
+            createdAt: comments.createdAt,
+            postMessage: posts.message,
+            pageId: pages.id,
+            pageName: pages.name,
+            needsAttention: comments.needsAttention,
+            flagReason: comments.flagReason,
+            aiIntent: comments.aiIntent,
+            source: sql<string>`'facebook'`.as('source'),
+        })
             .from(comments)
             .innerJoin(posts, eq(comments.postId, posts.id))
             .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(and(...conditions))
+            .where(and(...fbConditions))
             .orderBy(desc(comments.createdAt))
             .limit(limit + 1);
 
-        // Check if there are more results
-        const hasMore = data.length > limit;
-        const results = hasMore ? data.slice(0, limit) : data;
+        // --- Instagram comments query ---
+        const igConditions = [eq(pages.userId, userId)];
+        if (options?.replied !== undefined) igConditions.push(eq(instagramComments.replied, options.replied));
+        if (options?.replyMethod) igConditions.push(eq(instagramComments.replyMethod, options.replyMethod));
+        if (options?.needsAttention !== undefined) igConditions.push(eq(instagramComments.needsAttention, options.needsAttention));
+        if (cursorDate) igConditions.push(sql`${instagramComments.createdAt} < ${cursorDate}`);
+
+        const igQuery = db.select({
+            id: instagramComments.id,
+            postId: instagramMedia.id,
+            facebookCommentId: instagramComments.instagramCommentId,
+            message: instagramComments.message,
+            fromId: instagramComments.fromId,
+            fromName: instagramComments.fromUsername,
+            replied: instagramComments.replied,
+            replyText: instagramComments.replyText,
+            replyMethod: instagramComments.replyMethod,
+            detectedLanguage: instagramComments.detectedLanguage,
+            createdTime: instagramComments.createdTime,
+            repliedAt: instagramComments.repliedAt,
+            createdAt: instagramComments.createdAt,
+            postMessage: instagramMedia.caption,
+            pageId: pages.id,
+            pageName: pages.name,
+            needsAttention: instagramComments.needsAttention,
+            flagReason: instagramComments.flagReason,
+            aiIntent: instagramComments.aiIntent,
+            source: sql<string>`'instagram'`.as('source'),
+        })
+            .from(instagramComments)
+            .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+            .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+            .where(and(...igConditions))
+            .orderBy(desc(instagramComments.createdAt))
+            .limit(limit + 1);
+
+        // Run both queries in parallel
+        const [fbData, igData] = await Promise.all([fbQuery, igQuery]);
+
+        // Merge, sort by createdAt desc, take limit+1
+        const merged = [...fbData, ...igData]
+            .sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return dateB - dateA;
+            });
+
+        const hasMore = merged.length > limit;
+        const results = merged.slice(0, limit);
         const nextCursor = hasMore && results.length > 0 ? results[results.length - 1].id : null;
 
         return {
@@ -282,93 +316,94 @@ export class CommentsService {
      * Optimized to use SQL aggregation instead of in-memory counting
      */
     async getStats(userId: string) {
-        // Get total counts joined by page -> user
-        const totalResult = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(comments)
-            .innerJoin(posts, eq(comments.postId, posts.id))
-            .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(eq(pages.userId, userId));
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
 
-        const total = Number(totalResult[0]?.count || 0);
+        // Query Facebook comments and Instagram comments in parallel
+        const [fbTotal, fbReplied, fbByMethod, fbNeedsAttention, fbRepliedToday,
+               igTotal, igReplied, igByMethod, igNeedsAttention, igRepliedToday] = await Promise.all([
+            // --- Facebook comments ---
+            db.select({ count: sql<number>`count(*)` })
+                .from(comments)
+                .innerJoin(posts, eq(comments.postId, posts.id))
+                .innerJoin(pages, eq(posts.pageId, pages.id))
+                .where(eq(pages.userId, userId)),
+            db.select({ count: sql<number>`count(*)` })
+                .from(comments)
+                .innerJoin(posts, eq(comments.postId, posts.id))
+                .innerJoin(pages, eq(posts.pageId, pages.id))
+                .where(and(eq(pages.userId, userId), eq(comments.replied, true))),
+            db.select({ method: comments.replyMethod, count: sql<number>`count(*)` })
+                .from(comments)
+                .innerJoin(posts, eq(comments.postId, posts.id))
+                .innerJoin(pages, eq(posts.pageId, pages.id))
+                .where(and(eq(pages.userId, userId), eq(comments.replied, true)))
+                .groupBy(comments.replyMethod),
+            db.select({ count: sql<number>`count(*)` })
+                .from(comments)
+                .innerJoin(posts, eq(comments.postId, posts.id))
+                .innerJoin(pages, eq(posts.pageId, pages.id))
+                .where(and(eq(pages.userId, userId), eq(comments.needsAttention, true))),
+            db.select({ count: sql<number>`count(*)` })
+                .from(comments)
+                .innerJoin(posts, eq(comments.postId, posts.id))
+                .innerJoin(pages, eq(posts.pageId, pages.id))
+                .where(and(eq(pages.userId, userId), eq(comments.replied, true), gte(comments.repliedAt, todayStart))),
+            // --- Instagram comments ---
+            db.select({ count: sql<number>`count(*)` })
+                .from(instagramComments)
+                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                .where(eq(pages.userId, userId)),
+            db.select({ count: sql<number>`count(*)` })
+                .from(instagramComments)
+                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                .where(and(eq(pages.userId, userId), eq(instagramComments.replied, true))),
+            db.select({ method: instagramComments.replyMethod, count: sql<number>`count(*)` })
+                .from(instagramComments)
+                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                .where(and(eq(pages.userId, userId), eq(instagramComments.replied, true)))
+                .groupBy(instagramComments.replyMethod),
+            db.select({ count: sql<number>`count(*)` })
+                .from(instagramComments)
+                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                .where(and(eq(pages.userId, userId), eq(instagramComments.needsAttention, true))),
+            db.select({ count: sql<number>`count(*)` })
+                .from(instagramComments)
+                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                .where(and(eq(pages.userId, userId), eq(instagramComments.replied, true), gte(instagramComments.repliedAt, todayStart))),
+        ]);
+
+        // Sum Facebook + Instagram counts
+        const total = Number(fbTotal[0]?.count || 0) + Number(igTotal[0]?.count || 0);
 
         if (total === 0) {
             return {
-                total: 0,
-                replied: 0,
-                unreplied: 0,
-                needsAttention: 0,
-                repliedToday: 0,
-                replyRate: '0',
+                total: 0, replied: 0, unreplied: 0, needsAttention: 0,
+                repliedToday: 0, replyRate: '0',
                 byMethod: { template: 0, ai: 0, manual: 0 },
             };
         }
 
-        // Get replied count
-        const repliedResult = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(comments)
-            .innerJoin(posts, eq(comments.postId, posts.id))
-            .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(and(eq(pages.userId, userId), eq(comments.replied, true)));
+        const replied = Number(fbReplied[0]?.count || 0) + Number(igReplied[0]?.count || 0);
+        const needsAttention = Number(fbNeedsAttention[0]?.count || 0) + Number(igNeedsAttention[0]?.count || 0);
+        const repliedToday = Number(fbRepliedToday[0]?.count || 0) + Number(igRepliedToday[0]?.count || 0);
 
-        const replied = Number(repliedResult[0]?.count || 0);
-
-        // Get counts by method
-        const byMethodResult = await db
-            .select({
-                method: comments.replyMethod,
-                count: sql<number>`count(*)`,
-            })
-            .from(comments)
-            .innerJoin(posts, eq(comments.postId, posts.id))
-            .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(and(eq(pages.userId, userId), eq(comments.replied, true)))
-            .groupBy(comments.replyMethod);
-
-        const byMethod = {
-            template: 0,
-            ai: 0,
-            manual: 0,
-        };
-
-        byMethodResult.forEach((row) => {
-            if (row.method === 'template') byMethod.template = Number(row.count);
-            else if (row.method === 'ai') byMethod.ai = Number(row.count);
-            else if (row.method === 'manual') byMethod.manual = Number(row.count);
+        const byMethod = { template: 0, ai: 0, manual: 0 };
+        [...fbByMethod, ...igByMethod].forEach((row) => {
+            if (row.method === 'template') byMethod.template += Number(row.count);
+            else if (row.method === 'ai') byMethod.ai += Number(row.count);
+            else if (row.method === 'manual') byMethod.manual += Number(row.count);
         });
-
-        // Get needs attention count
-        const needsAttentionResult = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(comments)
-            .innerJoin(posts, eq(comments.postId, posts.id))
-            .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(and(eq(pages.userId, userId), eq(comments.needsAttention, true), eq(comments.replied, false)));
-
-        const needsAttention = Number(needsAttentionResult[0]?.count || 0);
-
-        // Get replied today count
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-
-        const repliedTodayResult = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(comments)
-            .innerJoin(posts, eq(comments.postId, posts.id))
-            .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(and(
-                eq(pages.userId, userId),
-                eq(comments.replied, true),
-                gte(comments.repliedAt, todayStart)
-            ));
-
-        const repliedToday = Number(repliedTodayResult[0]?.count || 0);
 
         return {
             total,
             replied,
-            unreplied: total - replied - needsAttention,
+            unreplied: total - replied,
             needsAttention,
             repliedToday,
             replyRate: (replied / total * 100).toFixed(1),

@@ -38,6 +38,7 @@ export interface Comment {
   needsAttention?: boolean;
   flagReason?: string | null;
   aiIntent?: string | null;
+  source?: 'facebook' | 'instagram';
 }
 
 // --- Page Types ---

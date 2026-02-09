@@ -425,7 +425,7 @@ export class MessagesService {
 
         const replied = Number(repliedResult[0]?.count || 0);
 
-        // Get needs attention count (only unreplied — resolved ones don't need attention)
+        // Get needs attention count (all flagged items, including already-replied ones)
         const needsAttentionResult = await db
             .select({ count: sql<number>`count(*)` })
             .from(messages)
@@ -434,7 +434,6 @@ export class MessagesService {
                 eq(pages.userId, userId),
                 eq(messages.direction, 'incoming'),
                 eq(messages.needsAttention, true),
-                eq(messages.replied, false)
             ));
 
         const needsAttention = Number(needsAttentionResult[0]?.count || 0);
@@ -464,7 +463,7 @@ export class MessagesService {
         return {
             total,
             replied,
-            pending: total - replied - needsAttention,
+            pending: total - replied,
             needsAttention,
             byMethod,
         };
