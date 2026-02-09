@@ -16,6 +16,7 @@ nginx/ssl/*
 env/*.env
 !env/*.env.example
 *.backup
+backups/
 *.tsbuildinfo
 coverage/
 frontend/out/

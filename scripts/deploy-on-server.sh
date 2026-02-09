@@ -465,6 +465,15 @@ determine_target
 pre_build_cleanup  # Clean disk BEFORE building to prevent "no space" errors
 build_images
 start_new_env
+# Backup database before running migrations (safe rollback point)
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "💾 Pre-migration backup"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if ./scripts/backup.sh --local-only 2>&1; then
+    echo "✅ Pre-migration backup created"
+else
+    echo "⚠️  Backup failed — continuing deployment (non-blocking)"
+fi
 # Run migrations BEFORE switching traffic, but AFTER starting new env
 run_migrations
 verify_and_wait

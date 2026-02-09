@@ -226,6 +226,93 @@ docker exec jawab24-nginx nginx -s reload
 echo "blue" > .active-env
 ```
 
+## Backup & Restore
+
+### Automated Backups
+
+Backups run daily via cron and upload to Backblaze B2 (offsite).
+
+**What gets backed up:** Full PostgreSQL dump (`jawab24` database), compressed with gzip.
+
+**Retention:**
+- Local (on server): last 7 days
+- Backblaze B2 (offsite): last 30 days (lifecycle rule)
+
+### Setup (one-time on server)
+
+```bash
+# 1. Install B2 CLI
+pip3 install b2
+
+# 2. Create env/backup.env with your B2 credentials
+#    (see env/backup.env.example for template)
+
+# 3. Test it works
+cd /var/www/jawab24
+./scripts/backup.sh
+
+# 4. Add daily cron job (runs at 3 AM)
+crontab -e
+# Add this line:
+0 3 * * * cd /var/www/jawab24 && ./scripts/backup.sh >> /var/log/jawab24-backup.log 2>&1
+```
+
+### Manual Backup
+
+```bash
+cd /var/www/jawab24
+
+# Full backup (local + B2 upload)
+./scripts/backup.sh
+
+# Local only (no B2 upload)
+./scripts/backup.sh --local-only
+```
+
+### Restore from Local Backup
+
+```bash
+cd /var/www/jawab24
+
+# List available local backups
+ls -lh backups/
+
+# Restore (will ask for confirmation)
+./scripts/restore.sh backups/jawab24_20260209_030000.sql.gz
+```
+
+### Restore from Backblaze B2
+
+```bash
+cd /var/www/jawab24
+
+# List remote backups
+./scripts/restore.sh --list-b2
+
+# Download from B2 and restore
+./scripts/restore.sh --from-b2 jawab24_20260209_030000.sql.gz
+```
+
+### Pre-deploy Backups
+
+The deployment script (`deploy-on-server.sh`) automatically creates a local backup before running database migrations. This is non-blocking — if the backup fails, deployment continues.
+
+### Verify Backups Are Running
+
+```bash
+# Check last backup log
+tail -20 /var/log/jawab24-backup.log
+
+# Check cron is scheduled
+crontab -l | grep backup
+
+# Check B2 has recent uploads
+cd /var/www/jawab24
+./scripts/restore.sh --list-b2
+```
+
+---
+
 ## Monitoring
 
 ### Check deployment status:
