@@ -21,6 +21,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
             accessToken: page.accessToken,
             knowledgeBase: page.knowledgeBase,
             autoReplyEnabled: page.autoReplyEnabled ?? true,
+            shopifyStoreId: page.shopifyStoreId,
         };
     }
 

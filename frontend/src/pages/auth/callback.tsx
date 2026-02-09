@@ -105,6 +105,12 @@ export default function AuthCallback() {
       const finalLocale = data.settings?.dashboardLanguage || preferredLocale || 'ar';
       useUIStore.getState().setLanguage(finalLocale as any);
 
+      // Check if Shopify onboarding is needed (Shopify-first install flow)
+      if (data.shopifyOnboarding) {
+        routerRef.current.push('/shopify/onboarding');
+        return;
+      }
+
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
         routerRef.current.push(`/complete-profile?redirect=${encodeURIComponent(safeUrl)}`);

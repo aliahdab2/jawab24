@@ -29,6 +29,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             accessToken: page.accessToken,
             knowledgeBase: page.knowledgeBase,
             autoReplyEnabled: page.autoReplyEnabled ?? true,
+            shopifyStoreId: page.shopifyStoreId,
         };
     }
 

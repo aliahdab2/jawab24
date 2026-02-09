@@ -32,6 +32,7 @@ import geoRoutes from "./routes/geo";
 import notificationRoutes from "./routes/notifications";
 import adminRoutes from "./routes/admin";
 import analyticsRoutes from "./routes/analytics";
+import { integrationRegistry } from "./integrations";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
 import { validateEnv } from "./utils/env";
@@ -200,6 +201,11 @@ const start = async () => {
     await server.register(adminRoutes, { prefix: "/admin" });
     await server.register(analyticsRoutes, { prefix: "/analytics" });
 
+    // Register e-commerce integration routes (Shopify, future WooCommerce, etc.)
+    for (const integration of integrationRegistry.getEnabled()) {
+      await integration.registerRoutes(server);
+    }
+
     const port = parseInt(process.env.PORT || "3000", 10);
     const host = "0.0.0.0";
 
@@ -216,6 +222,12 @@ const start = async () => {
     const workerLogger = createRequestLogger(server.log);
     startWorker(workerLogger);
     console.log(`⚙️  Reply processing worker started`);
+
+    // Start e-commerce integration workers (Shopify, future WooCommerce, etc.)
+    for (const integration of integrationRegistry.getEnabled()) {
+      await integration.onStartup(workerLogger);
+      console.log(`⚙️  ${integration.name} integration started`);
+    }
 
     // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
     startEscalationCron();
@@ -245,10 +257,13 @@ const gracefulShutdown = async (signal: string) => {
     // Stop the escalation cron
     stopEscalationCron();
 
-    // Stop the reply worker first (wait for in-progress jobs)
-    console.log("⏳ Stopping reply worker...");
-    await stopWorker();
-    console.log("✅ Reply worker stopped");
+    // Stop workers (wait for in-progress jobs)
+    console.log("⏳ Stopping workers...");
+    await Promise.all([
+      stopWorker(),
+      ...integrationRegistry.getEnabled().map(i => i.onShutdown()),
+    ]);
+    console.log("✅ Workers stopped");
 
     await server.close();
     await redis.quit();

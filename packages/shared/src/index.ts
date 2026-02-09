@@ -50,6 +50,8 @@ export interface Page {
   instagramAccountId?: string | null;
   instagramUsername?: string | null;
   instagramAutoReplyEnabled?: boolean | null;
+  // Shopify fields
+  shopifyStoreId?: string | null;
   // Other fields
   knowledgeBase?: string | null;
   suggestedKnowledgeBase?: string | null;
@@ -143,6 +145,7 @@ export interface Plan {
   // Features
   facebookEnabled: boolean;
   instagramEnabled: boolean;
+  shopifyEnabled: boolean;
   whatsappEnabled: boolean;
   showBranding: boolean;
   prioritySupport: boolean;
@@ -271,3 +274,43 @@ export interface ReplyJobResult {
 }
 
 export const REPLY_QUEUE_NAME = 'reply-processing-queue';
+
+// --- Shopify Types ---
+export interface ShopifyStore {
+  id: string;
+  userId: string;
+  shopDomain: string;
+  shopName: string | null;
+  shopEmail: string | null;
+  shopCurrency: string | null;
+  productCount: number;
+  productSummary: string | null;
+  policiesSummary: string | null;
+  lastSyncAt: Date | null;
+  isActive: boolean;
+  installedAt: Date | null;
+}
+
+export interface ShopifyProduct {
+  id: string;
+  shopifyStoreId: string;
+  shopifyProductId: string;
+  title: string;
+  productType: string | null;
+  vendor: string | null;
+  status: string;
+  priceRange: string | null;
+  currency: string | null;
+  totalInventory: number;
+  hasVariants: boolean;
+  variantSummary: string | null;
+  tags: string | null;
+}
+
+export interface ShopifySyncJobData {
+  shopifyStoreId: string;
+  jobType: 'full_sync' | 'product_update';
+  shopifyProductId?: string; // For incremental product_update
+}
+
+export const SHOPIFY_SYNC_QUEUE_NAME = 'shopify-sync-queue';

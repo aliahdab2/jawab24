@@ -45,6 +45,8 @@ export const pages = pgTable('pages', {
     instagramAccountId: varchar('instagram_account_id', { length: 255 }),
     instagramUsername: varchar('instagram_username', { length: 255 }),
     instagramAutoReplyEnabled: boolean('instagram_auto_reply_enabled').default(true),
+    // Shopify store linked to this page (for product-aware AI replies)
+    shopifyStoreId: uuid('shopify_store_id').references(() => shopifyStores.id, { onDelete: 'set null' }),
     // Knowledge base for AI context - business info, products, FAQ
     knowledgeBase: text('knowledge_base'),
     // Suggested knowledge base from Facebook data - pending user confirmation
@@ -56,6 +58,7 @@ export const pages = pgTable('pages', {
         userIdIdx: index('idx_pages_user_id').on(table.userId),
         facebookPageIdIdx: index('idx_pages_facebook_page_id').on(table.facebookPageId),
         instagramAccountIdIdx: index('idx_pages_instagram_account_id').on(table.instagramAccountId),
+        shopifyStoreIdIdx: index('idx_pages_shopify_store_id').on(table.shopifyStoreId),
     };
 });
 
@@ -335,6 +338,7 @@ export const plans = pgTable('plans', {
     facebookEnabled: boolean('facebook_enabled').default(true),
     instagramEnabled: boolean('instagram_enabled').default(true),
     whatsappEnabled: boolean('whatsapp_enabled').default(false),
+    shopifyEnabled: boolean('shopify_enabled').default(false),
     showBranding: boolean('show_branding').default(true), // Show "Powered by Jawab24"
     prioritySupport: boolean('priority_support').default(false),
 
@@ -483,6 +487,97 @@ export const notifications = pgTable('notifications', {
         userIdIdx: index('idx_notifications_user_id').on(table.userId),
         unreadIdx: index('idx_notifications_unread').on(table.userId, table.read),
         typeIdx: index('idx_notifications_type').on(table.type),
+    };
+});
+
+// ============================================
+// SHOPIFY TABLES
+// ============================================
+
+// 17a. Pending Shopify Installs - Temporary storage for Shopify-first install flow
+export const pendingShopifyInstalls = pgTable('pending_shopify_installs', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    shopDomain: varchar('shop_domain', { length: 255 }).notNull(),
+    accessToken: text('access_token').notNull(),       // AES-256-GCM encrypted
+    accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
+    scopes: text('scopes'),
+    nonce: varchar('nonce', { length: 64 }).notNull(),  // CSRF nonce for OAuth
+    status: varchar('status', { length: 20 }).default('pending'), // pending|claimed|expired
+    claimedByUserId: uuid('claimed_by_user_id').references(() => users.id),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        shopDomainIdx: index('idx_pending_shopify_shop_domain').on(table.shopDomain),
+        statusIdx: index('idx_pending_shopify_status').on(table.status),
+        expiresAtIdx: index('idx_pending_shopify_expires_at').on(table.expiresAt),
+    };
+});
+
+// 17. Shopify Stores Table - Connected Shopify stores
+export const shopifyStores = pgTable('shopify_stores', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    shopDomain: varchar('shop_domain', { length: 255 }).unique().notNull(), // e.g. "my-store.myshopify.com"
+    accessToken: text('access_token').notNull(),
+
+    // Store info (synced from Shopify)
+    shopName: varchar('shop_name', { length: 255 }),
+    shopEmail: varchar('shop_email', { length: 255 }),
+    shopCurrency: varchar('shop_currency', { length: 10 }),
+    shopTimezone: varchar('shop_timezone', { length: 100 }),
+    planName: varchar('plan_name', { length: 100 }),
+
+    // Synced product data
+    productCount: integer('product_count').default(0),
+    productSummary: text('product_summary'), // ~800 chars structured summary for AI
+    policiesSummary: text('policies_summary'), // shipping, returns, etc.
+
+    // Sync state
+    lastSyncAt: timestamp('last_sync_at'),
+    isActive: boolean('is_active').default(true),
+    installedAt: timestamp('installed_at').defaultNow(),
+    uninstalledAt: timestamp('uninstalled_at'),
+
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        userIdIdx: index('idx_shopify_stores_user_id').on(table.userId),
+        shopDomainIdx: index('idx_shopify_stores_shop_domain').on(table.shopDomain),
+        isActiveIdx: index('idx_shopify_stores_is_active').on(table.isActive),
+    };
+});
+
+// 18. Shopify Products Table - Individual product data for detailed queries
+export const shopifyProducts = pgTable('shopify_products', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    shopifyStoreId: uuid('shopify_store_id').references(() => shopifyStores.id, { onDelete: 'cascade' }).notNull(),
+    shopifyProductId: varchar('shopify_product_id', { length: 255 }).notNull(),
+
+    // Product info
+    title: varchar('title', { length: 500 }).notNull(),
+    productType: varchar('product_type', { length: 255 }),
+    vendor: varchar('vendor', { length: 255 }),
+    status: varchar('status', { length: 20 }).default('active'), // 'active', 'draft', 'archived'
+
+    // Pricing & inventory
+    priceRange: varchar('price_range', { length: 100 }), // "220 - 350 AED"
+    currency: varchar('currency', { length: 10 }),
+    totalInventory: integer('total_inventory').default(0),
+    hasVariants: boolean('has_variants').default(false),
+    variantSummary: text('variant_summary'), // "S, M, L in Black, White"
+
+    // Metadata
+    tags: text('tags'),
+
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        storeIdIdx: index('idx_shopify_products_store_id').on(table.shopifyStoreId),
+        shopifyProductIdIdx: index('idx_shopify_products_product_id').on(table.shopifyProductId),
+        statusIdx: index('idx_shopify_products_status').on(table.status),
     };
 });
 

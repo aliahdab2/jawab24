@@ -397,3 +397,31 @@ export const adminApi = {
     return response.data;
   },
 };
+
+// Shopify API - Manage Shopify store connection
+export const shopifyApi = {
+  getStore: async () => {
+    const response = await api.get('/shopify/store');
+    return response.data;
+  },
+  connectStore: async (shopDomain: string) => {
+    const response = await api.post('/shopify/store/connect', { shopDomain });
+    return response.data;
+  },
+  disconnectStore: async () => {
+    const response = await api.delete('/shopify/store');
+    return response.data;
+  },
+  syncProducts: async () => {
+    const response = await api.post('/shopify/store/sync');
+    return response.data;
+  },
+  getProducts: async () => {
+    const response = await api.get('/shopify/store/products');
+    return response.data;
+  },
+  linkPage: async (pageId: string) => {
+    const response = await api.patch('/shopify/store/link-page', { pageId });
+    return response.data;
+  },
+};

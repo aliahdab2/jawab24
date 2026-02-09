@@ -25,6 +25,26 @@ export const REFRESH_COOKIE_OPTIONS = {
     path: '/auth/refresh', // ONLY send to refresh endpoint
 };
 
+// Shopify pending install cookie (lax sameSite for cross-site redirect from Shopify)
+export const PENDING_SHOPIFY_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,  // MUST be 'lax' — Shopify redirects cross-site
+    path: '/',
+    signed: true,
+    maxAge: 30 * 60,  // 30 minutes
+};
+
+// Shopify OAuth nonce cookie (CSRF protection during OAuth round-trip)
+export const SHOPIFY_NONCE_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+    signed: true,
+    maxAge: 10 * 60,  // 10 minutes
+};
+
 export class CookiesService {
     /**
      * Set authentication cookies

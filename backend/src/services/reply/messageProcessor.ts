@@ -4,6 +4,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
+import { integrationRegistry } from '../../integrations';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
@@ -164,15 +165,20 @@ export class MessageProcessor {
                 ? unrepliedMessages.map(m => m.message).join('\n')
                 : messageText;
 
-            // 12. Generate reply
+            // 12. Generate reply (enrich KB with e-commerce data if linked)
             const userSettings = await settingsService.getSettings(userId);
+            let knowledgeBase = page.knowledgeBase || undefined;
+            for (const integration of integrationRegistry.getEnabled()) {
+                const enriched = await integration.enrichKnowledgeBase(knowledgeBase, page as unknown as Record<string, unknown>);
+                if (enriched !== null) { knowledgeBase = enriched; break; }
+            }
             let { replyText, replyMethod, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForMessage(
                     {
                         userId,
                         text: consolidatedText,
                         pageName: page.name || undefined,
-                        knowledgeBase: page.knowledgeBase || undefined,
+                        knowledgeBase,
                         pageId: page.id,
                         senderId,
                     },

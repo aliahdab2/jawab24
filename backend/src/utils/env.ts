@@ -35,6 +35,12 @@ const EnvSchema = z.object({
     AI_ENABLED: z.string().transform(val => val === 'true').default('false'),
     AI_CACHE_ENABLED: z.string().transform(val => val !== 'false').default('true'),
 
+    // Shopify (optional — required for Shopify integration)
+    SHOPIFY_API_KEY: z.string().optional(),
+    SHOPIFY_API_SECRET: z.string().optional(),
+    SHOPIFY_HOST_NAME: z.string().optional(),
+    SHOPIFY_TOKEN_ENCRYPTION_KEY: z.string().min(32, 'SHOPIFY_TOKEN_ENCRYPTION_KEY must be at least 32 characters').optional(),
+
     // Stripe (optional for development)
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_PUBLISHABLE_KEY: z.string().optional(),

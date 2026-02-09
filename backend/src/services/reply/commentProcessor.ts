@@ -4,6 +4,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
+import { integrationRegistry } from '../../integrations';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger, CommentResult } from '../../types';
 import type { CommentPlatformAdapter } from '../../interfaces';
@@ -125,10 +126,14 @@ export class CommentProcessor {
                 await this.delay(replyDelay * 1000);
             }
 
-            // 8. Generate reply
+            // 8. Generate reply (enrich KB with e-commerce data if linked)
             const userSettings = await settingsService.getSettings(userId);
             const generatorContext = adapter.buildGeneratorContext(page, content, contentId);
             generatorContext.text = commentMessage;
+            for (const integration of integrationRegistry.getEnabled()) {
+                const enriched = await integration.enrichKnowledgeBase(generatorContext.knowledgeBase, page as unknown as Record<string, unknown>);
+                if (enriched !== null) { generatorContext.knowledgeBase = enriched; break; }
+            }
             let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false);
 

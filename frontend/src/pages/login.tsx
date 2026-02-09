@@ -9,7 +9,8 @@ import {
   Sparkles,
   MessageSquare,
   Bot,
-  Star
+  Star,
+  ShoppingBag
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button, BrandLogo, FacebookIcon, AppSkeleton } from '@/components/ui';
@@ -337,6 +338,33 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-5">
+                {/* Shopify-first install banner */}
+                {router.query.shopify_pending === 'true' && (
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+                    <div className="flex gap-3 items-start">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                        <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-emerald-900 text-sm">
+                          {t('shopify.installDetected' as any)}
+                        </p>
+                        <p className="text-emerald-700 text-sm mt-1">
+                          {t('shopify.loginToConnect' as any)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {router.query.shopify_error === 'already_connected' && (
+                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
+                    <p className="font-bold text-red-900 text-sm">
+                      {t('shopify.errorAlreadyConnected' as any)}
+                    </p>
+                  </div>
+                )}
+
                 <Button
                   onClick={handleFacebookLogin}
                   size="lg"

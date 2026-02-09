@@ -5,6 +5,7 @@ import { refreshTokenService } from '../services/refreshToken';
 import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
 import { settingsService } from '../services/settings';
+import { integrationRegistry } from '../integrations';
 import { AuthRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
@@ -58,10 +59,17 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            // 9. Return response
-            const response = authService.createAuthResponse(user, token, accessToken, {
+            // 9. Build response
+            const response: Record<string, any> = authService.createAuthResponse(user, token, accessToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
+
+            // 10. Check for pending e-commerce integration installs
+            for (const integration of integrationRegistry.getEnabled()) {
+                const claim = await integration.claimPendingInstall(request, reply, user.id);
+                if (claim) Object.assign(response, claim);
+            }
+
             return reply.send(response);
 
         } catch (error) {
@@ -138,10 +146,17 @@ export class AuthController {
             // 8. Set cookies (HttpOnly + CSRF)
             cookiesService.setAuthCookies(reply, token);
 
-            // 9. Return response
-            const response = authService.createAuthResponse(user, token, longLivedToken, {
+            // 9. Build response
+            const response: Record<string, any> = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
+
+            // 10. Check for pending e-commerce integration installs
+            for (const integration of integrationRegistry.getEnabled()) {
+                const claim = await integration.claimPendingInstall(request, reply, user.id);
+                if (claim) Object.assign(response, claim);
+            }
+
             return reply.send(response);
 
         } catch (error) {
