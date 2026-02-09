@@ -16,7 +16,12 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
     retries: 3,
     retryDelay: 1000, // Start with 1 second
     retryCondition: (error: AxiosError) => {
-        // Retry on network errors or 5xx server errors
+        // Never retry non-idempotent methods (DELETE, POST, PATCH) — they can cause duplicate operations
+        const method = error.config?.method?.toLowerCase();
+        if (method && ['delete', 'post', 'patch'].includes(method)) {
+            return false;
+        }
+        // Retry on network errors or 5xx server errors (GET/PUT only)
         return !error.response || (error.response.status >= 500 && error.response.status < 600);
     },
 };
@@ -88,8 +93,8 @@ export function addTimeoutConfig(
  */
 export function isNetworkError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
-    const axiosError = error as AxiosError;
-    return !axiosError.response && axiosError.code !== 'ECONNABORTED';
+    const e = error as AxiosError;
+    return !e.response && e.code !== 'ECONNABORTED';
 }
 
 /**
@@ -97,8 +102,8 @@ export function isNetworkError(error: unknown): boolean {
  */
 export function isTimeoutError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
-    const axiosError = error as AxiosError;
-    return axiosError.code === 'ECONNABORTED' || axiosError.message.includes('timeout');
+    const e = error as AxiosError;
+    return e.code === 'ECONNABORTED' || e.message.includes('timeout');
 }
 
 /**
@@ -117,14 +122,14 @@ export function getErrorMessage(error: unknown, language: 'en' | 'ar' = 'en'): s
             : 'Cannot connect to server. Please check your internet connection.';
     }
 
-    const axiosError = error as AxiosError;
-    if (axiosError.response?.status === 429) {
+    const e = error as AxiosError;
+    if (e?.response?.status === 429) {
         return language === 'ar'
             ? 'تم تجاوز الحد المسموح من الطلبات. يرجى المحاولة لاحقاً.'
             : 'Too many requests. Please try again later.';
     }
 
-    if (axiosError.response?.status && axiosError.response.status >= 500) {
+    if (e?.response?.status && e.response.status >= 500) {
         return language === 'ar'
             ? 'حدث خطأ في الخادم. يرجى المحاولة لاحقاً.'
             : 'Server error. Please try again later.';

@@ -127,9 +127,7 @@ export class AuthController {
 
             // 5. Store Instagram permission status
             if (hasInstagram) {
-                db.update(users).set({ hasInstagramPermission: true }).where(eq(users.id, user.id)).catch((err) => {
-                    request.log.error({ err }, 'Failed to update Instagram permission flag');
-                });
+                await db.update(users).set({ hasInstagramPermission: true }).where(eq(users.id, user.id));
             }
 
             // 6. Generate Internal JWT
@@ -140,18 +138,18 @@ export class AuthController {
                 request.log.error({ err }, 'Auto-sync pages failed (Native Flow)');
             });
 
-            // 7. Fetch user settings
+            // 8. Fetch user settings
             const userSettings = await settingsService.getSettings(user.id);
 
-            // 8. Set cookies (HttpOnly + CSRF)
+            // 9. Set cookies (HttpOnly + CSRF)
             cookiesService.setAuthCookies(reply, token);
 
-            // 9. Build response
+            // 10. Build response
             const response: Record<string, any> = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
 
-            // 10. Check for pending e-commerce integration installs
+            // 11. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
                 const claim = await integration.claimPendingInstall(request, reply, user.id);
                 if (claim) Object.assign(response, claim);
@@ -272,8 +270,11 @@ export class AuthController {
         try {
             await authService.deleteUser(userId);
             return reply.send({ success: true, message: 'Account deleted successfully' });
-        } catch (error) {
-            request.log.error({ err: error }, 'Delete account failed');
+        } catch (error: any) {
+            request.log.error({ err: error, userId, errorCode: error?.code, errorDetail: error?.detail }, 'Delete account failed');
+            if (error?.message?.includes('not found')) {
+                return reply.status(404).send({ error: 'User not found' });
+            }
             return reply.status(500).send({ error: 'Internal Server Error' });
         }
     }

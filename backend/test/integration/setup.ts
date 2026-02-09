@@ -28,7 +28,12 @@ beforeAll(async () => {
 beforeEach(async () => {
     // Truncate all tables that integration tests touch (CASCADE handles FK deps).
     await testDb.execute(sql`
-        TRUNCATE TABLE messages, pages, users, settings, conversation_pauses CASCADE
+        TRUNCATE TABLE
+            logs, comments, instagram_comments, posts, instagram_media,
+            messages, conversation_pauses, rules, templates, settings,
+            subscriptions, usage, usage_logs, device_tokens, notifications,
+            refresh_tokens, pages, users
+        CASCADE
     `);
 });
 

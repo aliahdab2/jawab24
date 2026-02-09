@@ -1,6 +1,12 @@
 import { db } from '../db';
-import { users } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import {
+    users, refreshTokens, pages, posts, instagramMedia,
+    comments, instagramComments, messages, conversationPauses,
+    templates, rules, settings, logs, subscriptions, usage,
+    usageLogs, deviceTokens, notifications, shopifyStores, shopifyProducts,
+    pendingShopifyInstalls,
+} from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
 import { config } from '../config';
 import crypto from 'crypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
@@ -131,10 +137,6 @@ export class AuthService {
     /**
      * Verify and decode token
      */
-
-    /**
-     * Verify and decode token
-     */
     verifyToken(token: string): JWTPayload | null {
         try {
             const parts = token.split('.');
@@ -210,8 +212,79 @@ export class AuthService {
         };
     }
 
+    /**
+     * Delete user and all associated data in explicit order.
+     * Uses a transaction with ordered deletes (leaf → root) to avoid FK violations.
+     * Does NOT rely on CASCADE — makes deletion behavior explicit and debuggable.
+     */
     async deleteUser(userId: string): Promise<void> {
-        await db.delete(users).where(eq(users.id, userId));
+        await db.transaction(async (tx) => {
+            // 1. Resolve user's page IDs (needed for multi-level deletes)
+            const userPages = await tx.select({ id: pages.id }).from(pages).where(eq(pages.userId, userId));
+            const pageIds = userPages.map(p => p.id);
+
+            if (pageIds.length > 0) {
+                // 2. Resolve post and media IDs under those pages
+                const userPosts = await tx.select({ id: posts.id }).from(posts).where(inArray(posts.pageId, pageIds));
+                const postIds = userPosts.map(p => p.id);
+
+                const userMedia = await tx.select({ id: instagramMedia.id }).from(instagramMedia).where(inArray(instagramMedia.pageId, pageIds));
+                const mediaIds = userMedia.map(m => m.id);
+
+                // 3. Delete leaf-level data (comments, instagram comments)
+                if (postIds.length > 0) {
+                    await tx.delete(logs).where(inArray(logs.commentId,
+                        tx.select({ id: comments.id }).from(comments).where(inArray(comments.postId, postIds))
+                    ));
+                    await tx.delete(comments).where(inArray(comments.postId, postIds));
+                }
+                if (mediaIds.length > 0) {
+                    await tx.delete(instagramComments).where(inArray(instagramComments.mediaId, mediaIds));
+                }
+
+                // 4. Delete page-level data
+                await tx.delete(messages).where(inArray(messages.pageId, pageIds));
+                await tx.delete(conversationPauses).where(inArray(conversationPauses.pageId, pageIds));
+                await tx.delete(posts).where(inArray(posts.pageId, pageIds));
+                await tx.delete(instagramMedia).where(inArray(instagramMedia.pageId, pageIds));
+            }
+
+            // 5. Delete user-level data (order doesn't matter — all reference users directly)
+            await tx.delete(logs).where(eq(logs.userId, userId));
+            await tx.delete(usageLogs).where(eq(usageLogs.userId, userId));
+            await tx.delete(rules).where(eq(rules.userId, userId));
+            await tx.delete(templates).where(eq(templates.userId, userId));
+            await tx.delete(settings).where(eq(settings.userId, userId));
+            await tx.delete(subscriptions).where(eq(subscriptions.userId, userId));
+            await tx.delete(usage).where(eq(usage.userId, userId));
+            await tx.delete(deviceTokens).where(eq(deviceTokens.userId, userId));
+            await tx.delete(notifications).where(eq(notifications.userId, userId));
+            await tx.delete(refreshTokens).where(eq(refreshTokens.userId, userId));
+
+            // 6. Delete Shopify data (shopifyProducts → shopifyStores → pages.shopifyStoreId)
+            const userStores = await tx.select({ id: shopifyStores.id }).from(shopifyStores).where(eq(shopifyStores.userId, userId));
+            const storeIds = userStores.map(s => s.id);
+            if (storeIds.length > 0) {
+                await tx.delete(shopifyProducts).where(inArray(shopifyProducts.shopifyStoreId, storeIds));
+            }
+            await tx.delete(shopifyStores).where(eq(shopifyStores.userId, userId));
+
+            // 6b. Nullify pending Shopify installs claimed by this user
+            await tx.update(pendingShopifyInstalls)
+                .set({ claimedByUserId: null })
+                .where(eq(pendingShopifyInstalls.claimedByUserId, userId));
+
+            // 7. Delete pages (now safe — all children removed)
+            if (pageIds.length > 0) {
+                await tx.delete(pages).where(inArray(pages.id, pageIds));
+            }
+
+            // 8. Finally, delete the user
+            const result = await tx.delete(users).where(eq(users.id, userId)).returning({ id: users.id });
+            if (result.length === 0) {
+                throw new Error(`User ${userId} not found`);
+            }
+        });
     }
 
 }

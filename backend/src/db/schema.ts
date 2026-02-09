@@ -129,7 +129,7 @@ export const comments = pgTable('comments', {
     replied: boolean('replied').default(false),
     replyText: text('reply_text'),
     replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
-    templateId: uuid('template_id').references(() => templates.id),
+    templateId: uuid('template_id').references(() => templates.id, { onDelete: 'set null' }),
     detectedLanguage: varchar('detected_language', { length: 10 }),
     replyLanguage: varchar('reply_language', { length: 10 }),
     needsAttention: boolean('needs_attention').default(false),
@@ -503,7 +503,7 @@ export const pendingShopifyInstalls = pgTable('pending_shopify_installs', {
     scopes: text('scopes'),
     nonce: varchar('nonce', { length: 64 }).notNull(),  // CSRF nonce for OAuth
     status: varchar('status', { length: 20 }).default('pending'), // pending|claimed|expired
-    claimedByUserId: uuid('claimed_by_user_id').references(() => users.id),
+    claimedByUserId: uuid('claimed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     expiresAt: timestamp('expires_at').notNull(),
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => {

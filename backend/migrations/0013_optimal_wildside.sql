@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS "shopify_stores" (
 	CONSTRAINT "shopify_stores_shop_domain_unique" UNIQUE("shop_domain")
 );
 --> statement-breakpoint
-ALTER TABLE "pages" ADD COLUMN "shopify_store_id" uuid;--> statement-breakpoint
-ALTER TABLE "plans" ADD COLUMN "shopify_enabled" boolean DEFAULT false;--> statement-breakpoint
+ALTER TABLE "pages" ADD COLUMN IF NOT EXISTS "shopify_store_id" uuid;--> statement-breakpoint
+ALTER TABLE "plans" ADD COLUMN IF NOT EXISTS "shopify_enabled" boolean DEFAULT false;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_shopify_products_store_id" ON "shopify_products" ("shopify_store_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_shopify_products_product_id" ON "shopify_products" ("shopify_product_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_shopify_products_status" ON "shopify_products" ("status");--> statement-breakpoint
