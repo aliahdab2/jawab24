@@ -73,7 +73,11 @@
       "Bash(docker compose:*)",
       "Bash(docker exec:*)",
       "Bash(ssh -i \"$HOME/.ssh/id_jawab24_deploy\" root@91.99.95.196 \"grep ''REDIS'' /var/www/jawab24/env/ai.env 2>/dev/null || echo ''No REDIS vars or file not found''\")",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(xargs:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm show:*)",
+      "Bash(npm run test:integration:*)"
     ]
   }
 }
