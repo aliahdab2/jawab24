@@ -32,7 +32,7 @@ import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
-type FilterType = 'all' | 'pending' | 'ai' | 'template' | 'needs_attention' | 'replied_today';
+type FilterType = 'all' | 'pending' | 'replied' | 'ai' | 'template' | 'needs_attention' | 'replied_today';
 
 // Custom hook for debounced value
 function useDebounce<T>(value: T, delay: number): T {
@@ -265,6 +265,8 @@ const MessagesPage: NextPageWithLayout = () => {
       convList = convList.filter(c => c.messages.some(m => m.direction === 'outgoing' && m.replyMethod === 'ai'));
     } else if (filter === 'template') {
       convList = convList.filter(c => c.messages.some(m => m.direction === 'outgoing' && m.replyMethod === 'template'));
+    } else if (filter === 'replied') {
+      convList = convList.filter(c => c.lastMessage.replied);
     } else if (filter === 'replied_today') {
       convList = convList.filter(c => {
         const lastOutgoing = c.messages.find(m => m.direction === 'outgoing');
@@ -394,6 +396,7 @@ const MessagesPage: NextPageWithLayout = () => {
       case 'template': return t('dashboard.templateReply');
       case 'ai': return t('dashboard.aiReply');
       case 'pending': return t('comments.pending');
+      case 'replied': return t('comments.replied');
       case 'needs_attention': return t('comments.needsAttention');
       case 'replied_today': return t('comments.repliedToday');
       default: return '';
@@ -449,14 +452,14 @@ const MessagesPage: NextPageWithLayout = () => {
             />
           </div>
         )}
-        <div>
+        <div onClick={() => updateFilter('replied')}>
           <StatCard
             nameKey="comments.replied"
             value={stats.replied.toLocaleString()}
             icon={CheckCircle}
             color="emerald"
             index={2}
-            isActive={false}
+            isActive={filter === 'replied'}
           />
         </div>
         <div onClick={() => updateFilter('ai')}>
@@ -518,13 +521,14 @@ const MessagesPage: NextPageWithLayout = () => {
                   filter === 'pending' && "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100",
                   filter === 'ai' && "bg-violet-50 text-violet-700 ring-violet-200 hover:bg-violet-100",
                   filter === 'needs_attention' && "bg-red-50 text-red-700 ring-red-200 hover:bg-red-100",
+                  filter === 'replied' && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100",
                   (filter === 'template' || filter === 'replied_today') && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100"
                 )}
               >
                 {filter === 'pending' && <Clock className="w-4 h-4" />}
                 {filter === 'ai' && <Bot className="w-4 h-4" />}
                 {filter === 'needs_attention' && <AlertTriangle className="w-4 h-4" />}
-                {(filter === 'template' || filter === 'replied_today') && <CheckCircle className="w-4 h-4" />}
+                {(filter === 'replied' || filter === 'template' || filter === 'replied_today') && <CheckCircle className="w-4 h-4" />}
 
                 <span className="font-bold text-sm tracking-wide">{getFilterChipLabel(filter)}</span>
 
