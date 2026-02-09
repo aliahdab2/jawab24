@@ -82,7 +82,8 @@
       "Bash(npm update:*)",
       "Bash(for pkg in cookie compress cors helmet rate-limit swagger swagger-ui)",
       "Bash(do echo \"=== @fastify/$pkg ===\")",
-      "Bash(bash scripts/pre-deploy-check.sh:*)"
+      "Bash(bash scripts/pre-deploy-check.sh:*)",
+      "Bash(npm ci:*)"
     ]
   }
 }
