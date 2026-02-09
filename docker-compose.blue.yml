@@ -17,7 +17,8 @@ services:
       - DEPLOY_ENV=blue
       - GIT_COMMIT=${GIT_COMMIT:-unknown}
       - REDIS_HOST=redis
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme_in_production}
       - AI_SERVICE_URL=http://ai-worker-blue:3002
     depends_on:
       postgres:
@@ -81,7 +82,8 @@ services:
       - NODE_ENV=production
       - DEPLOY_ENV=blue
       - REDIS_HOST=redis
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme_in_production}
     depends_on:
       redis:
         condition: service_healthy

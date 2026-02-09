@@ -127,6 +127,11 @@ build_images() {
     if [ -f ./env/frontend.env ]; then
         export $(grep -v '^#' ./env/frontend.env | xargs)
     fi
+    # Export REDIS_PASSWORD so docker-compose can interpolate it
+    if [ -f ./env/backend.env ]; then
+        REDIS_PASSWORD=$(grep '^REDIS_PASSWORD=' ./env/backend.env | cut -d'=' -f2-)
+        export REDIS_PASSWORD="${REDIS_PASSWORD:-changeme_in_production}"
+    fi
     export GIT_COMMIT=$(git rev-parse HEAD)
     echo "📝 Git commit: $(git rev-parse --short HEAD)"
 
@@ -305,7 +310,7 @@ validate_env_files() {
     local failed=false
 
     # Backend required vars
-    local backend_required=("DATABASE_URL" "JWT_SECRET" "COOKIE_SECRET" "FACEBOOK_APP_ID" "FACEBOOK_APP_SECRET" "FACEBOOK_REDIRECT_URI" "FACEBOOK_WEBHOOK_VERIFY_TOKEN")
+    local backend_required=("DATABASE_URL" "JWT_SECRET" "COOKIE_SECRET" "REDIS_PASSWORD" "FACEBOOK_APP_ID" "FACEBOOK_APP_SECRET" "FACEBOOK_REDIRECT_URI" "FACEBOOK_WEBHOOK_VERIFY_TOKEN")
     if [ -f ./env/backend.env ]; then
         for var in "${backend_required[@]}"; do
             if ! grep -q "^${var}=" ./env/backend.env; then
