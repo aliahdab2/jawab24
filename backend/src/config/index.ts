@@ -45,6 +45,14 @@ export const config = {
         model: 'gpt-4o-mini',
     },
 
+    // Shopify App
+    shopify: {
+        apiKey: process.env.SHOPIFY_API_KEY || '',
+        apiSecret: process.env.SHOPIFY_API_SECRET || '',
+        scopes: 'read_products,read_content',
+        hostName: process.env.SHOPIFY_HOST_NAME || '',
+    },
+
     // Stripe Payment
     stripe: {
         secretKey: process.env.STRIPE_SECRET_KEY || '',

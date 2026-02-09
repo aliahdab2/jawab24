@@ -80,6 +80,7 @@ export interface AiGenerateResponse {
     intent?: string;
     confidence?: string;
     flags?: string[];
+    tokensUsed?: number;
 }
 
 export interface AiCacheEntry {

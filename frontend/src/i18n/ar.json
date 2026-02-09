@@ -930,5 +930,25 @@
   "notifications.prePrompt.title": "ابقَ على اطلاع",
   "notifications.prePrompt.body": "احصل على إشعار عندما تحتاج التعليقات انتباهك أو عند حدوث شيء مهم في صفحاتك.",
   "notifications.prePrompt.enable": "تفعيل الإشعارات",
-  "notifications.prePrompt.later": "ليس الآن"
+  "notifications.prePrompt.later": "ليس الآن",
+
+  "shopify.title": "ربط Shopify",
+  "shopify.desc": "اربط متجرك على Shopify ليرد الذكاء الاصطناعي على أسئلة المنتجات تلقائياً",
+  "shopify.notConnected": "لا يوجد متجر Shopify مربوط",
+  "shopify.connect": "ربط المتجر",
+  "shopify.disconnect": "إلغاء الربط",
+  "shopify.disconnectConfirm": "هل أنت متأكد من إلغاء ربط متجر Shopify؟",
+  "shopify.storeDomain": "رابط المتجر",
+  "shopify.storeDomainPlaceholder": "your-store.myshopify.com",
+  "shopify.products": "المنتجات المزامنة",
+  "shopify.lastSync": "آخر مزامنة",
+  "shopify.syncNow": "مزامنة الآن",
+  "shopify.syncing": "جاري المزامنة...",
+  "shopify.syncSuccess": "تم مزامنة المنتجات بنجاح",
+  "shopify.syncError": "فشل في مزامنة المنتجات",
+  "shopify.linkPage": "ربط بصفحة فيسبوك",
+  "shopify.linkPageDesc": "اختر الصفحة التي تستخدم بيانات منتجات Shopify للردود الذكية",
+  "shopify.noPages": "لا توجد صفحات متاحة",
+  "shopify.connected": "مربوط",
+  "shopify.never": "لم يتم بعد"
 }

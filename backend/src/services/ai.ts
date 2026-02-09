@@ -185,6 +185,7 @@ export class AiService {
                 intent?: string;
                 confidence?: string;
                 flags?: string[];
+                tokensUsed?: number;
             }>(
                 `${config.ai.serviceUrl}/generate`,
                 {
@@ -215,6 +216,7 @@ export class AiService {
                 intent: response.data.intent,
                 confidence: response.data.confidence,
                 flags: response.data.flags,
+                tokensUsed: response.data.tokensUsed,
             };
         } catch (error) {
             this.logger.error('AI Service error', {

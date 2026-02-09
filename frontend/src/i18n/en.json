@@ -934,5 +934,25 @@
   "notifications.prePrompt.title": "Stay in the loop",
   "notifications.prePrompt.body": "Get notified when comments need your attention or when something important happens with your pages.",
   "notifications.prePrompt.enable": "Enable notifications",
-  "notifications.prePrompt.later": "Not now"
+  "notifications.prePrompt.later": "Not now",
+
+  "shopify.title": "Shopify Integration",
+  "shopify.desc": "Connect your Shopify store to let AI answer product questions automatically",
+  "shopify.notConnected": "No Shopify store connected",
+  "shopify.connect": "Connect Store",
+  "shopify.disconnect": "Disconnect",
+  "shopify.disconnectConfirm": "Are you sure you want to disconnect your Shopify store?",
+  "shopify.storeDomain": "Store domain",
+  "shopify.storeDomainPlaceholder": "your-store.myshopify.com",
+  "shopify.products": "Products synced",
+  "shopify.lastSync": "Last sync",
+  "shopify.syncNow": "Sync Now",
+  "shopify.syncing": "Syncing...",
+  "shopify.syncSuccess": "Products synced successfully",
+  "shopify.syncError": "Failed to sync products",
+  "shopify.linkPage": "Link to Facebook page",
+  "shopify.linkPageDesc": "Select which page should use Shopify product data for AI replies",
+  "shopify.noPages": "No pages available",
+  "shopify.connected": "Connected",
+  "shopify.never": "Never"
 }

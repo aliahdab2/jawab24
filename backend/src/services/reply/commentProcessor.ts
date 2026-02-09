@@ -4,6 +4,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
+import { getEnrichedKnowledgeBase } from '../shopify';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger, CommentResult } from '../../types';
 import type { CommentPlatformAdapter } from '../../interfaces';
@@ -125,10 +126,13 @@ export class CommentProcessor {
                 await this.delay(replyDelay * 1000);
             }
 
-            // 8. Generate reply
+            // 8. Generate reply (enrich KB with Shopify data if linked)
             const userSettings = await settingsService.getSettings(userId);
             const generatorContext = adapter.buildGeneratorContext(page, content, contentId);
             generatorContext.text = commentMessage;
+            if (page.shopifyStoreId) {
+                generatorContext.knowledgeBase = await getEnrichedKnowledgeBase(generatorContext.knowledgeBase, page.shopifyStoreId);
+            }
             let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false);
 

@@ -4,7 +4,7 @@ import { aiService } from '../ai';
 import { messagesService } from '../messages';
 import { subscriptionsService } from '../subscriptions';
 import { postsService } from '../posts';
-import { Logger, noopLogger } from '../../types';
+import { AiGenerateResponse, Logger, noopLogger } from '../../types';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
@@ -57,6 +57,7 @@ export interface GenerateReplyResult {
 /**
  * Reply Generator Service
  * Handles the logic of generating reply text from templates or AI
+ * Platform-agnostic: works for Facebook, Instagram, and Shopify-linked pages
  */
 export class ReplyGenerator {
     private logger: Logger = noopLogger;
@@ -75,85 +76,40 @@ export class ReplyGenerator {
     ): Promise<GenerateReplyResult> {
         const { userId, text, pageName, knowledgeBase, postId, pageId, accessToken } = context;
 
-        let replyText: string | null = null;
-        let replyMethod: 'template' | 'ai' = 'ai';
-        let templateId: string | undefined;
-
         // 1. Try to find a matching rule with template
-        const matchingRule = await rulesService.findMatchingRule(userId, text);
-
-        if (matchingRule?.templateId) {
-            const template = await templatesService.getTemplate(userId, matchingRule.templateId);
-
-            if (template?.translations) {
-                const translations = template.translations as Record<string, string>;
-                replyText = translations['en'] || translations['ar'] || Object.values(translations)[0];
-                replyMethod = 'template';
-                templateId = template.id;
-                this.logger.debug('[Generator] Using template', { templateName: template.name });
-            }
-        }
+        const templateResult = await this.tryTemplateMatch(userId, text);
+        if (templateResult) return templateResult;
 
         // 2. If no template, use AI if enabled
-        if (!replyText && aiEnabled) {
+        if (aiEnabled) {
             const limitCheck = await subscriptionsService.canUseAiReplies(userId);
 
             if (!limitCheck.allowed) {
                 this.logger.info('[Generator] AI limit reached', { reason: limitCheck.reason });
-                replyText = 'Thank you for your comment!';
-                replyMethod = 'template';
-            } else {
-                // Fetch post content lazily if needed
-                let postMessage = context.postMessage;
-                if (!postMessage && postId && pageId && accessToken) {
-                    this.logger.debug('[Generator] Fetching post content for AI context');
-                    const post = await postsService.findOrCreateFromWebhook(
-                        pageId, 
-                        postId, 
-                        undefined, 
-                        accessToken
-                    );
-                    postMessage = post.message || undefined;
-                }
-
-                const aiResponse = await aiService.generateReply({
-                    comment: text,
-                    context: {
-                        pageId,
-                        pageName,
-                        postMessage,
-                        knowledgeBase,
-                    }
-                });
-                replyText = aiResponse.reply;
-                replyMethod = 'ai';
-
-                // Determine flagging from AI metadata
-                const flags = aiResponse.flags || [];
-                const needsAttention = flags.length > 0 ||
-                    aiResponse.confidence === 'low' ||
-                    aiResponse.intent === 'COMPLAINT' ||
-                    aiResponse.intent === 'OFFENSIVE';
-                const flagReason = flags.join(',') ||
-                    (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
-                    (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
-                    undefined;
-                const aiIntent = aiResponse.intent;
-
-                await subscriptionsService.incrementAiReplies(userId);
-
-                return { replyText, replyMethod, templateId, needsAttention, flagReason, aiIntent };
+                return { replyText: 'Thank you for your comment!', replyMethod: 'template', needsAttention: false };
             }
+
+            // Fetch post content lazily if needed
+            let postMessage = context.postMessage;
+            if (!postMessage && postId && pageId && accessToken) {
+                this.logger.debug('[Generator] Fetching post content for AI context');
+                const post = await postsService.findOrCreateFromWebhook(
+                    pageId, postId, undefined, accessToken
+                );
+                postMessage = post.message || undefined;
+            }
+
+            const aiResponse = await aiService.generateReply({
+                comment: text,
+                context: { pageId, pageName, postMessage, knowledgeBase }
+            });
+
+            return this.processAiResponse(aiResponse, userId, pageId);
         }
 
-        // 3. Fallback if still no reply
-        if (!replyText) {
-            replyText = 'Thank you for your comment!';
-            replyMethod = 'template';
-            this.logger.debug('[Generator] Using fallback reply');
-        }
-
-        return { replyText, replyMethod, templateId, needsAttention: false };
+        // 3. Fallback
+        this.logger.debug('[Generator] Using fallback reply');
+        return { replyText: 'Thank you for your comment!', replyMethod: 'template', needsAttention: false };
     }
 
     /**
@@ -166,10 +122,38 @@ export class ReplyGenerator {
     ): Promise<GenerateReplyResult> {
         const { userId, text, pageName, knowledgeBase, pageId, senderId } = context;
 
-        let replyText: string | null = null;
-        let replyMethod: 'template' | 'ai' = 'ai';
-
         // 1. Try to find a matching rule with template
+        const templateResult = await this.tryTemplateMatch(userId, text);
+        if (templateResult) return templateResult;
+
+        // 2. If no template, use AI with conversation context
+        if (aiEnabled) {
+            const limitCheck = await subscriptionsService.canUseAiReplies(userId);
+
+            if (!limitCheck.allowed) {
+                this.logger.info('[Generator] AI limit reached', { reason: limitCheck.reason });
+                return { replyText: 'Thank you for your message! We will get back to you soon.', replyMethod: 'template', needsAttention: false };
+            }
+
+            if (pageId && senderId) {
+                const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 6);
+
+                const aiResponse = await aiService.generateReply({
+                    comment: text,
+                    context: { pageId, pageName, knowledgeBase, conversationHistory }
+                });
+
+                return this.processAiResponse(aiResponse, userId, pageId);
+            }
+        }
+
+        return { replyText: null, replyMethod: 'ai', needsAttention: false };
+    }
+
+    /**
+     * Try to match a template rule — shared across all platforms
+     */
+    private async tryTemplateMatch(userId: string, text: string): Promise<GenerateReplyResult | null> {
         const matchingRule = await rulesService.findMatchingRule(userId, text);
 
         if (matchingRule?.templateId) {
@@ -177,58 +161,48 @@ export class ReplyGenerator {
 
             if (template?.translations) {
                 const translations = template.translations as Record<string, string>;
-                replyText = translations['en'] || translations['ar'] || Object.values(translations)[0];
-                replyMethod = 'template';
+                const replyText = translations['en'] || translations['ar'] || Object.values(translations)[0];
+                this.logger.debug('[Generator] Using template', { templateName: template.name });
+                return { replyText, replyMethod: 'template', templateId: template.id, needsAttention: false };
             }
         }
 
-        // 2. If no template, use AI with conversation context
-        if (!replyText && aiEnabled) {
-            const limitCheck = await subscriptionsService.canUseAiReplies(userId);
+        return null;
+    }
 
-            if (!limitCheck.allowed) {
-                this.logger.info('[Generator] AI limit reached', { reason: limitCheck.reason });
-                replyText = 'Thank you for your message! We will get back to you soon.';
-                replyMethod = 'template';
-            } else if (pageId && senderId) {
-                // Get conversation history for context
-                const conversationHistory = await messagesService.getConversationHistory(
-                    pageId,
-                    senderId,
-                    6
-                );
+    /**
+     * Process AI response — shared flagging, usage tracking, and cost logging
+     * Works identically for Facebook comments, Instagram comments, and DMs
+     */
+    private async processAiResponse(
+        aiResponse: AiGenerateResponse,
+        userId: string,
+        pageId?: string
+    ): Promise<GenerateReplyResult> {
+        const flags = aiResponse.flags || [];
+        const needsAttention = flags.length > 0 ||
+            aiResponse.confidence === 'low' ||
+            aiResponse.intent === 'COMPLAINT' ||
+            aiResponse.intent === 'OFFENSIVE';
+        const flagReason = flags.join(',') ||
+            (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
+            (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
+            undefined;
 
-                const aiResponse = await aiService.generateReply({
-                    comment: text,
-                    context: {
-                        pageId,
-                        pageName,
-                        knowledgeBase,
-                        conversationHistory,
-                    }
-                });
-                replyText = aiResponse.reply;
-                replyMethod = 'ai';
+        await subscriptionsService.incrementAiReplies(userId);
 
-                // Determine flagging from AI metadata
-                const flags = aiResponse.flags || [];
-                const needsAttention = flags.length > 0 ||
-                    aiResponse.confidence === 'low' ||
-                    aiResponse.intent === 'COMPLAINT' ||
-                    aiResponse.intent === 'OFFENSIVE';
-                const flagReason = flags.join(',') ||
-                    (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
-                    (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
-                    undefined;
-                const aiIntent = aiResponse.intent;
-
-                await subscriptionsService.incrementAiReplies(userId);
-
-                return { replyText, replyMethod, needsAttention, flagReason, aiIntent };
-            }
+        // Log token usage for cost tracking (skip for cached responses)
+        if (!aiResponse.cached) {
+            await subscriptionsService.logAiUsage(userId, pageId, aiResponse.tokensUsed, aiResponse.model || 'gpt-4o-mini');
         }
 
-        return { replyText, replyMethod, needsAttention: false };
+        return {
+            replyText: aiResponse.reply,
+            replyMethod: 'ai',
+            needsAttention,
+            flagReason,
+            aiIntent: aiResponse.intent,
+        };
     }
 }
 
