@@ -37,7 +37,7 @@ export function MessageCard({
   animationDelay = 0,
   className,
 }: MessageCardProps) {
-  const { t, language, dateLocale } = useTranslation();
+  const { t, dateLocale } = useTranslation();
 
   const isPending = !conv.lastMessage.replied && conv.lastMessage.direction === 'incoming';
 
