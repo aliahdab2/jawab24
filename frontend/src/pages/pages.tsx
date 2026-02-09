@@ -18,7 +18,7 @@ import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseMod
 import type { NextPageWithLayout } from './_app';
 
 const PagesPage: NextPageWithLayout = () => {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { isAuthenticated, fbToken } = useAuthStore();
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
@@ -301,7 +301,7 @@ const PagesPage: NextPageWithLayout = () => {
                         </p>
                       </div>
                     </div>
-                    <ChevronRight className={`w-5 h-5 transition-transform group-hover:translate-x-1 ${page.knowledgeBase ? 'text-brand-500' : 'text-surface-300'} ${language === 'ar' ? 'rotate-180 group-hover:-translate-x-1' : ''}`} />
+                    <ChevronRight className={`w-5 h-5 transition-transform ${page.knowledgeBase ? 'text-brand-500' : 'text-surface-300'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
                   </div>
                 </button>
               </div>

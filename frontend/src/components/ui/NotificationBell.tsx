@@ -166,8 +166,6 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         return t('notifications.daysAgo', { count: diffDays });
     };
 
-    const Chevron = language === 'ar' ? ChevronLeft : ChevronRight;
-
     return (
         <div className="relative" ref={dropdownRef}>
             {/* Bell Button */}
@@ -317,7 +315,10 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                             {/* Action area */}
                                             <div className="flex items-center self-center flex-shrink-0">
                                                 {getNotificationRoute(notification) ? (
-                                                    <Chevron className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors" />
+                                                    <>
+                                                        <ChevronRight className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors ltr:block rtl:hidden" />
+                                                        <ChevronLeft className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors rtl:block ltr:hidden" />
+                                                    </>
                                                 ) : isUnread ? (
                                                     <button
                                                         onClick={(e) => {

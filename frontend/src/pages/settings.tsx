@@ -614,7 +614,7 @@ const SettingsPage: NextPageWithLayout = () => {
                     </p>
                     <div className="mt-auto flex items-center gap-1 text-violet-600 font-bold text-sm uppercase tracking-widest">
                       <span>{t('settings.viewTemplates')}</span>
-                      <ChevronRight className={`w-4 h-4 ${language === 'ar' ? 'rotate-180' : ''}`} />
+                      <ChevronRight className="w-4 h-4 rtl:rotate-180" />
                     </div>
                   </div>
                 </Card>
@@ -632,7 +632,7 @@ const SettingsPage: NextPageWithLayout = () => {
                     </p>
                     <div className="mt-auto flex items-center gap-1 text-amber-600 font-bold text-sm uppercase tracking-widest">
                       <span>{t('settings.viewRules')}</span>
-                      <ChevronRight className={`w-4 h-4 ${language === 'ar' ? 'rotate-180' : ''}`} />
+                      <ChevronRight className="w-4 h-4 rtl:rotate-180" />
                     </div>
                   </div>
                 </Card>

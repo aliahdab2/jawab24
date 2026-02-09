@@ -75,7 +75,7 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
 const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
 
 const DashboardPage: NextPageWithLayout = () => {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { isAuthenticated, fbToken } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   
@@ -217,7 +217,7 @@ const DashboardPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [setOnboardingVisible]);
+  }, [setOnboardingVisible, t]);
 
   // Auto-sync if no pages found (Ported from pages.tsx)
   const syncAttemptedRef = useRef(false);
@@ -233,7 +233,7 @@ const DashboardPage: NextPageWithLayout = () => {
           toast.error(t('dashboard.syncError' as TranslationKey) || 'Failed to sync pages');
         });
     }
-  }, [loading, pages.length, fbToken, isAuthenticated, fetchDashboardData]);
+  }, [loading, pages.length, fbToken, isAuthenticated, fetchDashboardData, t]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -535,10 +535,7 @@ const DashboardPage: NextPageWithLayout = () => {
             {recentComments.length > 0 && (
               <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
                 <span>{t('common.viewAll')}</span>
-                <ArrowRight className={clsx(
-                  "w-4 h-4 transition-transform",
-                  language === 'ar' ? "rotate-180 group-hover:-translate-x-1" : "group-hover:translate-x-1"
-                )} />
+                <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
               </Link>
             )}
           </div>
@@ -725,11 +722,7 @@ const DashboardPage: NextPageWithLayout = () => {
                         )}
                       </div>
                     </div>
-                    <ChevronRight className={clsx(
-                      "w-5 h-5 text-surface-300 group-hover:text-brand-500 transition-all",
-                      "group-hover:translate-x-1",
-                      language === 'ar' && "rotate-180 group-hover:-translate-x-1"
-                    )} />
+                    <ChevronRight className="w-5 h-5 text-surface-300 group-hover:text-brand-500 transition-all ltr:group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1" />
                   </Link>
                 );
               }) : (
