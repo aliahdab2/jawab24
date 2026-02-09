@@ -117,9 +117,10 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             );
             return { success: true };
         } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error);
             return {
                 success: false,
-                error: 'Failed to post reply to Instagram',
+                error: `Failed to post reply to Instagram: ${detail}`,
             };
         }
     }
@@ -150,6 +151,8 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             .where(eq(instagramComments.id, commentId));
     }
 
+    // Instagram doesn't expose a postId or require accessToken for reply generation
+    // (unlike Facebook which fetches post content via API). Only media caption is used.
     buildGeneratorContext(
         page: PlatformPage,
         contentEntity: ContentEntity,

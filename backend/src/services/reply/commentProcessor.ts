@@ -113,6 +113,8 @@ export class CommentProcessor {
                     this.logger.info(`[${platform}] Comment rate limited`, { fromId, count: rateCheck.count });
                     return { success: false, commentId: comment.id, error: 'Rate limited' };
                 }
+            } else {
+                this.logger.debug(`[${platform}] Rate limit skipped — no fromId`, { platformCommentId });
             }
 
             // 7. Reply delay

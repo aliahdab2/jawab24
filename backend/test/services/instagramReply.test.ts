@@ -299,7 +299,7 @@ describe('InstagramReplyService', () => {
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
 
             expect(result.success).toBe(false);
-            expect(result.error).toBe('Failed to post reply to Instagram');
+            expect(result.error).toBe('Failed to post reply to Instagram: API error');
         });
 
         it('should catch and return unexpected errors', async () => {

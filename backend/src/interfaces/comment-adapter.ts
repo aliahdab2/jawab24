@@ -79,7 +79,10 @@ export interface CommentPlatformAdapter {
         aiIntent?: string,
     ): Promise<void>;
 
-    /** Build the reply generator context from platform-specific data */
+    /**
+     * Build the reply generator context from platform-specific data.
+     * Called only after processor validates page.userId is non-null.
+     */
     buildGeneratorContext(
         page: PlatformPage,
         contentEntity: ContentEntity,
