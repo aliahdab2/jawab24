@@ -56,7 +56,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AdminCustomerDetailPage() {
     const router = useRouter();
     const { userId } = router.query;
-    const { t, language } = useTranslation();
+    const { t, language, intlLocale } = useTranslation();
     const isRTL = language === 'ar';
 
     const [customer, setCustomer] = useState<CustomerDetail | null>(null);
@@ -114,7 +114,7 @@ export default function AdminCustomerDetailPage() {
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return '-';
-        return new Date(dateStr).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
+        return new Date(dateStr).toLocaleDateString(intlLocale, {
             year: 'numeric',
             month: 'long',
             day: 'numeric',

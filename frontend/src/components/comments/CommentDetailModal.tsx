@@ -20,7 +20,6 @@ import {
   PlayCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { ar, enUS } from 'date-fns/locale';
 
 interface CommentDetailModalProps {
   comment: Comment;
@@ -35,7 +34,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   onReplySuccess,
   mode = 'full',
 }) => {
-  const { t, language } = useTranslation();
+  const { t, language, dateLocale } = useTranslation();
   
   // Close on ESC
   useEscapeKey(onClose);
@@ -121,7 +120,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const formatFullTime = (dateValue: string | Date | null | undefined) => {
     if (!dateValue) return '-';
     try {
-      return format(new Date(dateValue), 'PPp', { locale: language === 'ar' ? ar : enUS });
+      return format(new Date(dateValue), 'PPp', { locale: dateLocale });
     } catch {
       return String(dateValue);
     }

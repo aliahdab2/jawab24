@@ -129,8 +129,7 @@ export default function CompleteProfilePage() {
   if (success) {
     return (
       <div 
-        className="flex-1 overflow-y-auto bg-surface-50 px-4 py-8 pt-safe pb-safe" 
-        dir={isRTL ? 'rtl' : 'ltr'}
+        className="flex-1 overflow-y-auto bg-surface-50 px-4 py-8 pt-safe pb-safe"
         role="main"
         aria-label={t('profile.complete')}
       >
@@ -165,8 +164,7 @@ export default function CompleteProfilePage() {
       </Head>
 
       <div 
-        className="flex-1 overflow-y-auto bg-surface-50 px-4 py-8 pt-safe pb-safe" 
-        dir={isRTL ? 'rtl' : 'ltr'}
+        className="flex-1 overflow-y-auto bg-surface-50 px-4 py-8 pt-safe pb-safe"
         role="main"
       >
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto animate-fade-in">

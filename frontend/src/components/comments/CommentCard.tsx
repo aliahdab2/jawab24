@@ -11,7 +11,6 @@ import {
   User
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { ar, enUS } from 'date-fns/locale';
 import type { Comment } from '@jawab24/shared';
 
 export interface CommentCardProps {
@@ -75,14 +74,14 @@ export function CommentCard({
   animationDelay = 0,
   className
 }: CommentCardProps) {
-  const { t, language } = useTranslation();
+  const { t, language, dateLocale } = useTranslation();
   const needsAttention = checkNeedsAttention(comment);
 
   const formatTime = (date?: string | Date | null) => {
     if (!date) return '';
     return formatDistanceToNow(new Date(date), {
       addSuffix: true,
-      locale: language === 'ar' ? ar : enUS
+      locale: dateLocale
     });
   };
 

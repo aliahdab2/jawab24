@@ -71,7 +71,7 @@ export function PublicLayout({
           <title>{pageTitle}</title>
           {description && <meta name="description" content={description} />}
         </Head>
-        <div dir={isRTL ? 'rtl' : 'ltr'}>
+        <div>
           {children}
         </div>
       </>
@@ -85,7 +85,7 @@ export function PublicLayout({
         {description && <meta name="description" content={description} />}
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-white">
         {/* Header - Consistent across all public pages */}
         {variant === 'landing' && (
           <nav className="fixed w-full z-50 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe">

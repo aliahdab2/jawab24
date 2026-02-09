@@ -1,9 +1,24 @@
 import { useRouter } from 'next/router';
 import { useCallback } from 'react';
+import { ar, enUS } from 'date-fns/locale';
+import type { Locale } from 'date-fns';
 import { useUIStore } from '@/lib/store';
 import { createT, Language, TranslationKey } from './translations';
 
 export { type TranslationKey };
+
+const DATE_LOCALES: Record<string, Locale> = { ar, en: enUS };
+const INTL_LOCALES: Record<string, string> = { ar: 'ar-SA', en: 'en-US' };
+
+/** Get date-fns locale for a language string (standalone, for non-component code) */
+export function getDateLocale(language: string): Locale {
+  return DATE_LOCALES[language] ?? enUS;
+}
+
+/** Get Intl locale string for toLocaleString() (standalone, for non-component code) */
+export function getIntlLocale(language: string): string {
+  return INTL_LOCALES[language] ?? 'en-US';
+}
 
 // React hook for translations - uses Next.js router locale
 export function useTranslation() {
@@ -21,7 +36,10 @@ export function useTranslation() {
     router.push(router.pathname, router.asPath, { locale: newLang });
   }, [router]);
 
-  return { t, language, setLanguage };
+  const dateLocale = DATE_LOCALES[language] ?? enUS;
+  const intlLocale = INTL_LOCALES[language] ?? 'en-US';
+
+  return { t, language, setLanguage, dateLocale, intlLocale };
 }
 
 // Hook to get/set language - uses Next.js router locale

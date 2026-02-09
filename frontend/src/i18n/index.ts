@@ -2,4 +2,4 @@
 export { translations, createT, ar, en } from './translations';
 export type { Language, TranslationKey } from './translations';
 
-export { useTranslation, useLanguage } from './hooks';
+export { useTranslation, useLanguage, getDateLocale, getIntlLocale } from './hooks';

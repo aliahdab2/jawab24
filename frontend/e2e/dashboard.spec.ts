@@ -185,10 +185,10 @@ test.describe('Dashboard Page', () => {
     ).toBeVisible({ timeout: 15000 });
 
     // Comment stats section should render with actual numbers (not just the icon)
-    await expect(page.locator('text=42').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('42', { exact: true }).first()).toBeVisible({ timeout: 15000 });
 
     // Message stats should also be visible
-    await expect(page.locator('text=15').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('15', { exact: true }).first()).toBeVisible({ timeout: 15000 });
 
     // Navigation should be present (bottom nav on mobile or sidebar on desktop)
     const hasNav = await page.locator('nav').count();
@@ -198,8 +198,10 @@ test.describe('Dashboard Page', () => {
   test('should not show only an image or icon as page content', async ({ page }) => {
     await page.goto('/en/dashboard');
 
-    // Wait for the page to finish loading
-    await page.waitForLoadState('networkidle');
+    // Wait for dashboard content to render (not networkidle — Next.js HMR keeps connections open)
+    await expect(
+      page.locator('h1').filter({ hasText: /Home|الرئيسية/i }).first()
+    ).toBeVisible({ timeout: 15000 });
 
     // The page should have meaningful text content, not just an image
     // This catches the specific bug where only app-icon.png was displayed

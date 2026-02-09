@@ -106,7 +106,7 @@ export default function ShopifyOnboarding() {
       <Head>
         <title>{(t as TFunc)('shopify.onboarding.title')} | Jawab24</title>
       </Head>
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-brand-50 flex items-center justify-center p-4" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-brand-50 flex items-center justify-center p-4">
         <div className="w-full max-w-lg">
           {/* Progress indicator */}
           <div className="flex gap-2 mb-8 justify-center">

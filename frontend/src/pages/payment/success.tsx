@@ -9,8 +9,7 @@ import { CheckCircle2 } from 'lucide-react';
 export default function PaymentSuccessPage() {
   const router = useRouter();
   const { session_id } = router.query;
-  const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
+  const { t } = useTranslation();
   const [countdown, setCountdown] = useState(5);
   
   // Use ref for router to avoid dependency issues
@@ -42,7 +41,7 @@ export default function PaymentSuccessPage() {
         <title>{t('payment.success.title')} - Jawab24</title>
       </Head>
 
-      <div className="min-h-[100dvh] bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4 pt-safe pb-safe" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="min-h-[100dvh] bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4 pt-safe pb-safe">
         <div className="max-w-md w-full">
           <div className="bg-white rounded-3xl shadow-xl p-8 text-center">
             {/* Success Icon */}

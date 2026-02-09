@@ -27,7 +27,6 @@ export default function LoginPage() {
   const { t, language, setLanguage } = useTranslation();
   const setAuth = useAuthStore((state) => state.setAuth);
 
-  const isRTL = language === 'ar';
   const [mounted, setMounted] = useState(false);
   // isProcessing: true after Facebook returns, while we authenticate with backend
   // This shows a blank screen instead of the login page to avoid flashing
@@ -241,7 +240,7 @@ export default function LoginPage() {
         <meta property="og:url" content="https://jawab24.com/login" />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row min-h-[100dvh]" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row min-h-[100dvh]">
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
         <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}

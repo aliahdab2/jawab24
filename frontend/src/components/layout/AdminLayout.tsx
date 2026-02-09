@@ -61,9 +61,8 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
             <Head>
                 <title>{pageTitle}</title>
             </Head>
-            <div 
+            <div
                 className="min-h-screen bg-surface-50"
-                dir={isRTL ? 'rtl' : 'ltr'}
             >
                 {/* Admin Header */}
                 <header className="sticky top-0 z-40 bg-surface-900 text-white shadow-lg">

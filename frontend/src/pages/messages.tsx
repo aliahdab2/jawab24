@@ -28,7 +28,6 @@ import {
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
-import { ar, enUS } from 'date-fns/locale';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -50,7 +49,7 @@ function useDebounce<T>(value: T, delay: number): T {
 const MESSAGES_PER_PAGE = 50;
 
 const MessagesPage: NextPageWithLayout = () => {
-  const { t, language } = useTranslation();
+  const { t, language, dateLocale } = useTranslation();
   const { isAuthenticated } = useAuthStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -345,7 +344,7 @@ const MessagesPage: NextPageWithLayout = () => {
   const formatFullTime = (dateValue: string | Date | null | undefined) => {
     if (!dateValue) return '-';
     try {
-      return format(new Date(dateValue), 'PPp', { locale: language === 'ar' ? ar : enUS });
+      return format(new Date(dateValue), 'PPp', { locale: dateLocale });
     } catch {
       return String(dateValue);
     }

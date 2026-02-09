@@ -68,7 +68,6 @@ function PickPageStep({
   onToggle,
   isLandscape,
   t,
-  language,
   pageLimit
 }: {
   pages: Page[];
@@ -78,11 +77,8 @@ function PickPageStep({
   onToggle: (pageId: string, enabled: boolean) => void;
   isLandscape: boolean;
   t: TFunction;
-  language: string;
   pageLimit: number | null;
 }) {
-  const isRTL = language === 'ar';
-
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -154,7 +150,6 @@ function PickPageStep({
                   ? 'border-brand-500 bg-brand-50/50' 
                   : 'border-surface-200 bg-white'
               }`}
-              dir={isRTL ? 'rtl' : 'ltr'}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
@@ -454,9 +449,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   });
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" 
-      dir={isRTL ? 'rtl' : 'ltr'}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
     >
       <div 
         className={`bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up ${
@@ -494,7 +488,6 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               onToggle={handleToggle}
               isLandscape={isLandscape}
               t={t}
-              language={language}
               pageLimit={pageLimit}
             />
           )}

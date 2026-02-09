@@ -2,6 +2,7 @@
  * Shared CSV export utility.
  * Escapes fields per RFC 4180 and triggers browser download with BOM for Excel compatibility.
  */
+import { getIntlLocale } from '@/i18n';
 
 function escapeCSVField(value: string): string {
   if (value.includes(',') || value.includes('"') || value.includes('\n')) {
@@ -39,7 +40,7 @@ export function formatDateForExport(
   if (!dateValue) return '';
   try {
     const d = new Date(dateValue);
-    return d.toLocaleString(language === 'ar' ? 'ar-SA' : 'en-US', {
+    return d.toLocaleString(getIntlLocale(language), {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

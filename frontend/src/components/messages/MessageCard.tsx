@@ -13,7 +13,6 @@ import {
   PauseCircle,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { ar, enUS } from 'date-fns/locale';
 import type { Message } from '@/lib/api';
 
 export interface Conversation {
@@ -38,7 +37,7 @@ export function MessageCard({
   animationDelay = 0,
   className,
 }: MessageCardProps) {
-  const { t, language } = useTranslation();
+  const { t, language, dateLocale } = useTranslation();
 
   const isPending = !conv.lastMessage.replied && conv.lastMessage.direction === 'incoming';
 
@@ -46,7 +45,7 @@ export function MessageCard({
     if (!date) return '';
     return formatDistanceToNow(new Date(date), {
       addSuffix: true,
-      locale: language === 'ar' ? ar : enUS,
+      locale: dateLocale,
     });
   };
 

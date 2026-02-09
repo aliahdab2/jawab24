@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+
 
 interface Section {
   title: string;
@@ -39,9 +39,6 @@ export function LegalPageLayout({
   sections,
   ogImage = 'https://jawab24.com/brand/og-social.png',
 }: LegalPageLayoutProps) {
-  const { language } = useTranslation();
-  const isRTL = language === 'ar';
-
   return (
     <>
       <Head>
@@ -59,7 +56,7 @@ export function LegalPageLayout({
         <meta name="twitter:image" content={ogImage} />
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="flex-1 overflow-y-auto bg-slate-900 text-white">
+      <div className="flex-1 overflow-y-auto bg-slate-900 text-white">
         {/* Fixed top safe area background */}
         <div
           className="fixed-safe-bg top-safe-bg bg-slate-900"
