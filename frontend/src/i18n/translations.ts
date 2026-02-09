@@ -13,11 +13,17 @@ export const translations: Record<Language, TranslationDictionary> = {
   en,
 };
 
-// Create translation function with strict key typing
+// Cached translation functions — one per language, referentially stable
+const tCache = new Map<Language, (key: TranslationKey, params?: Record<string, string | number>) => string>();
+
+// Create (or return cached) translation function with strict key typing
 export function createT(lang: Language) {
+  const cached = tCache.get(lang);
+  if (cached) return cached;
+
   const dict = translations[lang];
 
-  return function t(key: TranslationKey, params?: Record<string, string | number>): string {
+  const t = function t(key: TranslationKey, params?: Record<string, string | number>): string {
     const translation = dict[key] || key;
 
     if (!params) return translation;
@@ -27,6 +33,9 @@ export function createT(lang: Language) {
       translation
     );
   };
+
+  tCache.set(lang, t);
+  return t;
 }
 
 export { ar, en };

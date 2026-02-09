@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { ar, enUS } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
 import { useUIStore } from '@/lib/store';
@@ -27,7 +27,7 @@ export function useTranslation() {
 
   // Use router locale if available, fallback to store
   const language = (router.locale as Language) || storeLanguage;
-  const t = useMemo(() => createT(language), [language]);
+  const t = createT(language);
 
   // Function to change language via Next.js routing (memoized to prevent infinite loops)
   const setLanguage = useCallback((newLang: Language) => {
