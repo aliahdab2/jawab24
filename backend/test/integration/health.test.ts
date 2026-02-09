@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
 import healthRoutes from '../../src/routes/health';
+import { config } from '../../src/config';
 
 // Import setup to ensure DATABASE_URL points at the test DB
 // and the schema is pushed before tests run.
@@ -9,22 +10,18 @@ import './setup';
 describe('Health Routes — Integration (real Postgres)', () => {
     let app: FastifyInstance;
 
-    let savedCleanupToken: string | undefined;
+    let savedCleanupToken: string;
 
     beforeEach(async () => {
-        savedCleanupToken = process.env.CLEANUP_SECRET_TOKEN;
+        savedCleanupToken = config.cleanupSecretToken;
         app = fastify();
         app.register(healthRoutes);
         await app.ready();
     });
 
     afterEach(async () => {
-        // Restore env to prevent leaks between tests
-        if (savedCleanupToken === undefined) {
-            delete process.env.CLEANUP_SECRET_TOKEN;
-        } else {
-            process.env.CLEANUP_SECRET_TOKEN = savedCleanupToken;
-        }
+        // Restore config to prevent leaks between tests
+        (config as any).cleanupSecretToken = savedCleanupToken;
         await app.close();
     });
 
@@ -86,7 +83,7 @@ describe('Health Routes — Integration (real Postgres)', () => {
 
     it('GET /health/pipeline-metrics returns metrics with valid token', async () => {
         const TOKEN = 'test-cleanup-token';
-        process.env.CLEANUP_SECRET_TOKEN = TOKEN;
+        (config as any).cleanupSecretToken = TOKEN;
 
         const response = await app.inject({
             method: 'GET',
