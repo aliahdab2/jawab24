@@ -46,6 +46,11 @@ export const config = {
         model: 'gpt-4o-mini',
     },
 
+    // OpenAI (for KB embeddings — same key as ai-worker)
+    openai: {
+        apiKey: process.env.OPENAI_API_KEY || '',
+    },
+
     // Shopify App
     shopify: {
         apiKey: process.env.SHOPIFY_API_KEY || '',

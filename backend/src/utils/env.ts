@@ -36,6 +36,9 @@ const EnvSchema = z.object({
     AI_ENABLED: z.string().transform(val => val === 'true').default('false'),
     AI_CACHE_ENABLED: z.string().transform(val => val !== 'false').default('true'),
 
+    // OpenAI (optional — required for KB embedding/RAG)
+    OPENAI_API_KEY: z.string().optional(),
+
     // Shopify (optional — required for Shopify integration)
     SHOPIFY_API_KEY: z.string().optional(),
     SHOPIFY_API_SECRET: z.string().optional(),
