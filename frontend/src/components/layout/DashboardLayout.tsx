@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, MessageSquare, Settings, MoreHorizontal, X, LogOut } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, MessageSquare, Settings, MoreHorizontal, X, LogOut, BookTemplate, Zap, FileText, CreditCard } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -251,7 +251,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 onClick={() => setMobileMenuOpen(true)}
                 icon={<MoreHorizontal className="w-7 h-7" />}
                 label={t('nav.more') || 'More'}
-                active={mobileMenuOpen}
+                active={mobileMenuOpen || ['/pages', '/templates', '/rules', '/pricing', '/settings'].includes(router.pathname)}
               />
             </nav>
           </>
@@ -370,8 +370,12 @@ function MobileMenuOverlay({
 
   const menuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
+    { path: '/pages', icon: FileText, label: t('nav.pages') },
     { path: '/comments', icon: MessageSquare, label: t('nav.comments') },
     { path: '/messages', icon: MessageCircle, label: t('nav.messages') },
+    { path: '/templates', icon: BookTemplate, label: t('nav.templates') },
+    { path: '/rules', icon: Zap, label: t('nav.rules') },
+    { path: '/pricing', icon: CreditCard, label: t('pricing.title') },
     { path: '/settings', icon: Settings, label: t('nav.settings') },
   ];
 
@@ -466,23 +470,23 @@ function MobileMenuOverlay({
             </div>
           ) : (
             // Portrait: Grid layout (iOS/Android standard)
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               {menuItems.map((item) => (
                 <button
                   key={item.path}
                   onClick={() => handleNavigate(item.path)}
                   className={clsx(
-                    "flex flex-col items-center justify-center p-5 rounded-2xl transition-all duration-200",
+                    "flex flex-col items-center justify-center p-4 rounded-2xl transition-all duration-200",
                     "bg-white border border-surface-100/60",
                     "shadow-[0_4px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
-                    "active:scale-95 min-h-[110px]",
+                    "active:scale-95 min-h-[90px]",
                     router.pathname === item.path && "border-brand-200 bg-brand-50/50"
                   )}
                 >
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-3 text-brand-600">
-                    <item.icon className="w-7 h-7" />
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-2 text-brand-600">
+                    <item.icon className="w-6 h-6" />
                   </div>
-                  <span className="font-bold text-sm text-surface-900 text-center line-clamp-2">
+                  <span className="font-bold text-xs text-surface-900 text-center line-clamp-1">
                     {item.label}
                   </span>
                 </button>
