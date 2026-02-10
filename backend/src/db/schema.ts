@@ -51,6 +51,13 @@ export const pages = pgTable('pages', {
     knowledgeBase: text('knowledge_base'),
     // Suggested knowledge base from Facebook data - pending user confirmation
     suggestedKnowledgeBase: text('suggested_knowledge_base'),
+    // KB versioning — kbVersion bumps on every KB change, kbActiveVersion set after ingestion completes
+    kbVersion: integer('kb_version').default(1),
+    kbActiveVersion: integer('kb_active_version').default(1),
+    kbUpdatedAt: timestamp('kb_updated_at'),
+    // Business profile — structured data from Facebook sync
+    businessProfile: jsonb('business_profile').default({}),
+    businessProfileUpdatedAt: timestamp('business_profile_updated_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {

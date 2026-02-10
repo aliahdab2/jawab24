@@ -100,6 +100,11 @@ export interface Page {
     accessToken: string;
     autoReplyEnabled: boolean | null;
     knowledgeBase: string | null;
+    kbVersion: number | null;
+    kbActiveVersion: number | null;
+    kbUpdatedAt: Date | null;
+    businessProfile: Record<string, unknown> | null;
+    businessProfileUpdatedAt: Date | null;
     createdAt: Date | null;
     updatedAt: Date | null;
 }
@@ -117,6 +122,7 @@ export interface UpdatePageDTO {
     accessToken?: string;
     autoReplyEnabled?: boolean;
     knowledgeBase?: string;
+    businessProfile?: Record<string, unknown>;
 }
 
 // Post Types

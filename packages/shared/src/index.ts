@@ -47,6 +47,24 @@ export interface Comment {
   source?: 'facebook' | 'instagram';
 }
 
+// --- Business Profile Types ---
+export interface BusinessProfile {
+  name?: string;
+  category?: string;
+  about?: string;
+  phone?: string;
+  website?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  hours?: Record<string, string[]>;
+  channels?: {
+    preferred?: 'dm' | 'whatsapp' | 'phone';
+    whatsapp?: string;
+  };
+  language_hint?: 'ar' | 'en';
+}
+
 // --- Page Types ---
 export interface Page {
   id: string;
@@ -59,9 +77,16 @@ export interface Page {
   instagramAutoReplyEnabled?: boolean | null;
   // Shopify fields
   shopifyStoreId?: string | null;
-  // Other fields
+  // KB fields
   knowledgeBase?: string | null;
   suggestedKnowledgeBase?: string | null;
+  kbVersion?: number;
+  kbActiveVersion?: number;
+  kbUpdatedAt?: string | Date | null;
+  // Business profile
+  businessProfile?: BusinessProfile;
+  businessProfileUpdatedAt?: string | Date | null;
+  // Computed/joined fields
   commentsCount?: number;
   repliesCount?: number;
   replyRate?: number;

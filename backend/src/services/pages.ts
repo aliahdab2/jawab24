@@ -1,7 +1,8 @@
 import { db } from '../db';
 import { pages } from '../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
+import type { BusinessProfile } from '@jawab24/shared';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
@@ -88,6 +89,73 @@ function generateKnowledgeBase(fbPage: FacebookPage): string {
     return parts.join('\n\n');
 }
 
+/**
+ * Parse Facebook hours into structured format: { "mon": ["09:00-18:00"], ... }
+ */
+export function parseBusinessHours(hours: FacebookPageHours | undefined): Record<string, string[]> | undefined {
+    if (!hours || Object.keys(hours).length === 0) return undefined;
+
+    const daySlots: Record<string, { open: string; close: string }[]> = {};
+
+    for (const [key, value] of Object.entries(hours)) {
+        const match = key.match(/^(mon|tue|wed|thu|fri|sat|sun)_(\d+)_(open|close)$/);
+        if (match) {
+            const [, day, slot, type] = match;
+            if (!daySlots[day]) daySlots[day] = [];
+            if (!daySlots[day][parseInt(slot) - 1]) {
+                daySlots[day][parseInt(slot) - 1] = { open: '', close: '' };
+            }
+            daySlots[day][parseInt(slot) - 1][type as 'open' | 'close'] = value;
+        }
+    }
+
+    const result: Record<string, string[]> = {};
+    for (const [day, slots] of Object.entries(daySlots)) {
+        const ranges = slots
+            .filter(s => s.open && s.close)
+            .map(s => `${s.open}-${s.close}`);
+        if (ranges.length > 0) {
+            result[day] = ranges;
+        }
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/**
+ * Detect language hint from text — simple Arabic character ratio check
+ */
+export function detectLanguageHint(text: string): 'ar' | 'en' {
+    const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
+    return arabicChars / Math.max(text.length, 1) > 0.3 ? 'ar' : 'en';
+}
+
+/**
+ * Build structured business profile from Facebook page data.
+ * All fields are optional — partial profile is still valuable.
+ */
+export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
+    const profile: BusinessProfile = {};
+
+    if (fbPage.name) profile.name = fbPage.name;
+    if (fbPage.category) profile.category = fbPage.category;
+    if (fbPage.about) profile.about = fbPage.about;
+    if (fbPage.phone) profile.phone = fbPage.phone;
+    if (fbPage.website) profile.website = fbPage.website;
+    if (fbPage.single_line_address) profile.address = fbPage.single_line_address;
+
+    const hours = parseBusinessHours(fbPage.hours);
+    if (hours) profile.hours = hours;
+
+    // Detect language hint from name + about text
+    const textForDetection = [fbPage.name, fbPage.about].filter(Boolean).join(' ');
+    if (textForDetection) {
+        profile.language_hint = detectLanguageHint(textForDetection);
+    }
+
+    return profile;
+}
+
 export class PagesService {
     private logger: Logger = noopLogger;
     /**
@@ -144,15 +212,30 @@ export class PagesService {
     }
 
     /**
-     * Update a page
+     * Update a page.
+     * When knowledgeBase changes, bumps kbVersion and sets kbUpdatedAt.
+     * kbActiveVersion is NOT touched here — it's set after ingestion completes.
      */
     async updatePage(userId: string, pageId: string, data: UpdatePageDTO) {
+        const setData: Record<string, unknown> = {
+            ...data,
+            updatedAt: new Date(),
+        };
+
+        // Bump KB version when knowledge base content changes
+        if (data.knowledgeBase !== undefined) {
+            setData.kbVersion = sql`COALESCE(${pages.kbVersion}, 0) + 1`;
+            setData.kbUpdatedAt = new Date();
+        }
+
+        // Update businessProfileUpdatedAt when businessProfile changes
+        if (data.businessProfile !== undefined) {
+            setData.businessProfileUpdatedAt = new Date();
+        }
+
         const [updatedPage] = await db
             .update(pages)
-            .set({
-                ...data,
-                updatedAt: new Date(),
-            })
+            .set(setData)
             .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
             .returning();
 
@@ -258,6 +341,7 @@ export class PagesService {
             if (existingPage) {
                 // Update existing page (always update tokens regardless of limit)
                 logger.debug(`[Pages] Updating existing page: ${fbPage.name}`);
+                const businessProfile = buildBusinessProfile(fbPage);
                 const [updated] = await db
                     .update(pages)
                     .set({
@@ -265,6 +349,8 @@ export class PagesService {
                         accessToken: fbPage.access_token,
                         instagramAccountId,
                         instagramUsername,
+                        businessProfile,
+                        businessProfileUpdatedAt: new Date(),
                         updatedAt: new Date(),
                     })
                     .where(eq(pages.id, existingPage.id))
@@ -287,6 +373,7 @@ export class PagesService {
                         hasWebsite: !!fbPage.website,
                     });
                 }
+                const businessProfile = buildBusinessProfile(fbPage);
                 const [created] = await db
                     .insert(pages)
                     .values({
@@ -300,6 +387,8 @@ export class PagesService {
                         instagramAutoReplyEnabled: false,
                         knowledgeBase: suggestedKnowledgeBase || null,
                         suggestedKnowledgeBase: suggestedKnowledgeBase || null,
+                        businessProfile,
+                        businessProfileUpdatedAt: new Date(),
                     })
                     .returning();
                 syncedPages.push(created);

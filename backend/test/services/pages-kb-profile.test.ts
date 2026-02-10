@@ -1,0 +1,430 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { pagesService, buildBusinessProfile, parseBusinessHours, detectLanguageHint } from '../../src/services/pages';
+import { db } from '../../src/db';
+import { facebookService } from '../../src/services/facebook';
+import { instagramService } from '../../src/services/instagram';
+import type { FacebookPage } from '../../src/types';
+
+vi.mock('../../src/db', () => ({
+    db: {
+        insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: vi.fn() })) })),
+        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn() })) })) })),
+        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ orderBy: vi.fn() })) })) })),
+    }
+}));
+
+vi.mock('../../src/services/facebook', () => ({
+    facebookService: {
+        getUserPages: vi.fn(),
+        subscribePageToWebhooks: vi.fn().mockResolvedValue(true),
+    }
+}));
+
+vi.mock('../../src/services/instagram', () => ({
+    instagramService: {
+        getLinkedInstagramAccount: vi.fn(),
+    }
+}));
+
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        canEnablePage: vi.fn().mockResolvedValue({ allowed: true, remaining: null }),
+    }
+}));
+
+describe('PR2: KB Versioning + Business Profile', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    // =========================================
+    // KB Version Bumping
+    // =========================================
+    describe('KB version bumping', () => {
+        it('bumps kbVersion when knowledgeBase changes', async () => {
+            let capturedSetData: any = null;
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((data) => {
+                    capturedSetData = data;
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'page-1', ...data }])
+                        })
+                    };
+                })
+            } as any);
+
+            await pagesService.updatePage('user-1', 'page-1', { knowledgeBase: 'new KB text' });
+
+            expect(capturedSetData).toBeDefined();
+            // kbVersion should be a SQL expression (COALESCE + increment)
+            expect(capturedSetData.kbVersion).toBeDefined();
+            // kbUpdatedAt should be set
+            expect(capturedSetData.kbUpdatedAt).toBeInstanceOf(Date);
+            // updatedAt always set
+            expect(capturedSetData.updatedAt).toBeInstanceOf(Date);
+        });
+
+        it('does NOT bump kbVersion for non-KB updates', async () => {
+            let capturedSetData: any = null;
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((data) => {
+                    capturedSetData = data;
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'page-1', ...data }])
+                        })
+                    };
+                })
+            } as any);
+
+            await pagesService.updatePage('user-1', 'page-1', { name: 'New Name' });
+
+            expect(capturedSetData).toBeDefined();
+            expect(capturedSetData.kbVersion).toBeUndefined();
+            expect(capturedSetData.kbUpdatedAt).toBeUndefined();
+            expect(capturedSetData.name).toBe('New Name');
+        });
+
+        it('does NOT change kbActiveVersion on KB update', async () => {
+            let capturedSetData: any = null;
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((data) => {
+                    capturedSetData = data;
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'page-1', ...data }])
+                        })
+                    };
+                })
+            } as any);
+
+            await pagesService.updatePage('user-1', 'page-1', { knowledgeBase: 'updated text' });
+
+            expect(capturedSetData).toBeDefined();
+            // kbActiveVersion must NOT be in the set data
+            expect(capturedSetData.kbActiveVersion).toBeUndefined();
+        });
+
+        it('sets businessProfileUpdatedAt when businessProfile changes', async () => {
+            let capturedSetData: any = null;
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((data) => {
+                    capturedSetData = data;
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'page-1', ...data }])
+                        })
+                    };
+                })
+            } as any);
+
+            await pagesService.updatePage('user-1', 'page-1', {
+                businessProfile: { name: 'Test', category: 'Restaurant' }
+            });
+
+            expect(capturedSetData).toBeDefined();
+            expect(capturedSetData.businessProfileUpdatedAt).toBeInstanceOf(Date);
+        });
+    });
+
+    // =========================================
+    // buildBusinessProfile
+    // =========================================
+    describe('buildBusinessProfile', () => {
+        it('builds full profile from complete Facebook page', () => {
+            const fbPage: FacebookPage = {
+                id: 'fb-1',
+                name: 'Pizza House',
+                access_token: 'token',
+                category: 'Restaurant',
+                about: 'Best pizza in Dubai',
+                phone: '0591234567',
+                single_line_address: 'Dubai, UAE',
+                website: 'https://pizza.com',
+                hours: {
+                    mon_1_open: '09:00', mon_1_close: '22:00',
+                    tue_1_open: '09:00', tue_1_close: '22:00',
+                },
+            };
+
+            const profile = buildBusinessProfile(fbPage);
+
+            expect(profile.name).toBe('Pizza House');
+            expect(profile.category).toBe('Restaurant');
+            expect(profile.about).toBe('Best pizza in Dubai');
+            expect(profile.phone).toBe('0591234567');
+            expect(profile.address).toBe('Dubai, UAE');
+            expect(profile.website).toBe('https://pizza.com');
+            expect(profile.hours).toEqual({
+                mon: ['09:00-22:00'],
+                tue: ['09:00-22:00'],
+            });
+            expect(profile.language_hint).toBe('en');
+        });
+
+        it('handles partial Facebook data without crashing', () => {
+            const fbPage: FacebookPage = {
+                id: 'fb-2',
+                name: 'Minimal Page',
+                access_token: 'token',
+            };
+
+            const profile = buildBusinessProfile(fbPage);
+
+            expect(profile).toBeDefined();
+            expect(typeof profile).toBe('object');
+            expect(profile.name).toBe('Minimal Page');
+            expect(profile.phone).toBeUndefined();
+            expect(profile.address).toBeUndefined();
+            expect(profile.hours).toBeUndefined();
+            expect(profile.about).toBeUndefined();
+            expect(profile.website).toBeUndefined();
+        });
+
+        it('handles page with only name + category', () => {
+            const fbPage: FacebookPage = {
+                id: 'fb-3',
+                name: 'محل ورد',
+                access_token: 'token',
+                category: 'Florist',
+            };
+
+            const profile = buildBusinessProfile(fbPage);
+
+            expect(profile.name).toBe('محل ورد');
+            expect(profile.category).toBe('Florist');
+            expect(profile.language_hint).toBe('ar');
+        });
+
+        it('detects Arabic language hint from about field', () => {
+            const fbPage: FacebookPage = {
+                id: 'fb-4',
+                name: 'My Store',
+                access_token: 'token',
+                about: 'متجر متخصص في بيع الملابس العربية الأصيلة',
+            };
+
+            const profile = buildBusinessProfile(fbPage);
+
+            expect(profile.language_hint).toBe('ar');
+        });
+    });
+
+    // =========================================
+    // parseBusinessHours
+    // =========================================
+    describe('parseBusinessHours', () => {
+        it('parses Facebook hours to structured format', () => {
+            const hours = {
+                mon_1_open: '09:00', mon_1_close: '18:00',
+                tue_1_open: '10:00', tue_1_close: '20:00',
+            };
+
+            const result = parseBusinessHours(hours);
+
+            expect(result).toEqual({
+                mon: ['09:00-18:00'],
+                tue: ['10:00-20:00'],
+            });
+        });
+
+        it('handles multiple slots per day', () => {
+            const hours = {
+                fri_1_open: '09:00', fri_1_close: '12:00',
+                fri_2_open: '16:00', fri_2_close: '22:00',
+            };
+
+            const result = parseBusinessHours(hours);
+
+            expect(result).toEqual({
+                fri: ['09:00-12:00', '16:00-22:00'],
+            });
+        });
+
+        it('returns undefined for undefined input', () => {
+            expect(parseBusinessHours(undefined)).toBeUndefined();
+        });
+
+        it('returns undefined for empty hours object', () => {
+            expect(parseBusinessHours({})).toBeUndefined();
+        });
+
+        it('handles all 7 days', () => {
+            const hours: Record<string, string> = {};
+            const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+            for (const day of days) {
+                hours[`${day}_1_open`] = '08:00';
+                hours[`${day}_1_close`] = '20:00';
+            }
+
+            const result = parseBusinessHours(hours);
+
+            expect(result).toBeDefined();
+            expect(Object.keys(result!)).toHaveLength(7);
+            for (const day of days) {
+                expect(result![day]).toEqual(['08:00-20:00']);
+            }
+        });
+    });
+
+    // =========================================
+    // detectLanguageHint
+    // =========================================
+    describe('detectLanguageHint', () => {
+        it('returns "ar" for Arabic text', () => {
+            expect(detectLanguageHint('مطعم البيتزا الشهي')).toBe('ar');
+        });
+
+        it('returns "en" for English text', () => {
+            expect(detectLanguageHint('Pizza House Restaurant')).toBe('en');
+        });
+
+        it('returns "ar" for mixed text with >30% Arabic', () => {
+            expect(detectLanguageHint('محل Flowers ورد')).toBe('ar');
+        });
+
+        it('returns "en" for mostly English with few Arabic chars', () => {
+            expect(detectLanguageHint('Best Pizza House in Town مطعم')).toBe('en');
+        });
+
+        it('handles empty string', () => {
+            // empty string → 0/1 = 0 which is < 0.3, so 'en'
+            expect(detectLanguageHint('')).toBe('en');
+        });
+    });
+
+    // =========================================
+    // syncFromFacebook populates businessProfile
+    // =========================================
+    describe('syncFromFacebook populates businessProfile', () => {
+        it('sets businessProfile on new page creation', async () => {
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{
+                    id: 'fb-page-1',
+                    name: 'Test Business',
+                    access_token: 'pt-1',
+                    category: 'Restaurant',
+                    about: 'We are a test restaurant',
+                    phone: '0501234567',
+                    single_line_address: 'Riyadh, Saudi Arabia',
+                }]
+            });
+
+            // No existing pages
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue([])
+                    })
+                })
+            } as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            let insertedValues: any = null;
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((values) => {
+                    insertedValues = values;
+                    return {
+                        returning: vi.fn().mockResolvedValue([{ id: 'new-id', ...values }])
+                    };
+                })
+            } as any);
+
+            await pagesService.syncFromFacebook('user-1', 'token');
+
+            expect(insertedValues).toBeDefined();
+            expect(insertedValues.businessProfile).toBeDefined();
+            expect(insertedValues.businessProfile.name).toBe('Test Business');
+            expect(insertedValues.businessProfile.category).toBe('Restaurant');
+            expect(insertedValues.businessProfile.phone).toBe('0501234567');
+            expect(insertedValues.businessProfile.address).toBe('Riyadh, Saudi Arabia');
+            expect(insertedValues.businessProfileUpdatedAt).toBeInstanceOf(Date);
+        });
+
+        it('updates businessProfile on existing page sync', async () => {
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{
+                    id: 'fb-page-1',
+                    name: 'Updated Business',
+                    access_token: 'pt-new',
+                    phone: '0509999999',
+                }]
+            });
+
+            // Existing page
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue([
+                            { id: 'p1', facebookPageId: 'fb-page-1', name: 'Old Business' }
+                        ])
+                    })
+                })
+            } as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            let capturedSetData: any = null;
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((data) => {
+                    capturedSetData = data;
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'p1', ...data }])
+                        })
+                    };
+                })
+            } as any);
+
+            await pagesService.syncFromFacebook('user-1', 'token');
+
+            expect(capturedSetData).toBeDefined();
+            expect(capturedSetData.businessProfile).toBeDefined();
+            expect(capturedSetData.businessProfile.name).toBe('Updated Business');
+            expect(capturedSetData.businessProfile.phone).toBe('0509999999');
+            expect(capturedSetData.businessProfileUpdatedAt).toBeInstanceOf(Date);
+        });
+
+        it('handles Facebook page with no business info — businessProfile still valid', async () => {
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{
+                    id: 'fb-page-1',
+                    name: 'Bare Page',
+                    access_token: 'pt-1',
+                }]
+            });
+
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue([])
+                    })
+                })
+            } as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            let insertedValues: any = null;
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((values) => {
+                    insertedValues = values;
+                    return {
+                        returning: vi.fn().mockResolvedValue([{ id: 'new-id', ...values }])
+                    };
+                })
+            } as any);
+
+            await pagesService.syncFromFacebook('user-1', 'token');
+
+            expect(insertedValues).toBeDefined();
+            expect(insertedValues.businessProfile).toBeDefined();
+            expect(typeof insertedValues.businessProfile).toBe('object');
+            // Only name should be present
+            expect(insertedValues.businessProfile.name).toBe('Bare Page');
+            expect(insertedValues.businessProfile.phone).toBeUndefined();
+            expect(insertedValues.businessProfile.address).toBeUndefined();
+        });
+    });
+});

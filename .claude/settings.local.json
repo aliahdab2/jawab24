@@ -86,7 +86,10 @@
       "Bash(npm ci:*)",
       "Bash(git symbolic-ref:*)",
       "Bash(GIT_SEQUENCE_EDITOR=\"sed -i '''' ''s/^pick 6ceac32/edit 6ceac32/''\" git rebase -i 6ceac32~1)",
-      "Bash(SSH_KEY=\"$HOME/.ssh/id_jawab24_deploy\")"
+      "Bash(SSH_KEY=\"$HOME/.ssh/id_jawab24_deploy\")",
+      "Bash(npx playwright:*)",
+      "Bash(curl:*)",
+      "Bash(sort:*)"
     ]
   }
 }
