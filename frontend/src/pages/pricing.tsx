@@ -437,7 +437,7 @@ const PricingPage: NextPageWithLayout = () => {
               {/* Usage Stats */}
               <div className="flex items-center gap-6 text-sm">
                 <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2">
-                  <span className="text-surface-500 font-medium">{t('pricing.repliesUsed' as TranslationKey) !== 'pricing.repliesUsed' ? t('pricing.repliesUsed' as TranslationKey) : 'Replies:'}</span>
+                  <span className="text-surface-500 font-medium">{t('pricing.repliesUsed' as TranslationKey)}</span>
                   <span className="font-bold text-brand-600">
                     {usage.aiReplies.used} / {usage.aiReplies.limit || '∞'}
                   </span>
