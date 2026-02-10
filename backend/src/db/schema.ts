@@ -588,6 +588,52 @@ export const shopifyProducts = pgTable('shopify_products', {
 });
 
 // ============================================
+// RAG / KNOWLEDGE BASE TABLES
+// ============================================
+
+// KB Chunks Table — chunked + embedded knowledge base content for vector search
+export const kbChunks = pgTable('kb_chunks', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    type: varchar('type', { length: 50 }).notNull(), // 'offering', 'policy', 'faq', 'info', 'hours', 'location'
+    language: varchar('language', { length: 10 }),
+    title: varchar('title', { length: 500 }),
+    contentOriginal: text('content_original').notNull(),
+    contentNormalized: text('content_normalized').notNull(),
+    titleNormalized: varchar('title_normalized', { length: 500 }),
+    tokenCount: integer('token_count'),
+    metadata: jsonb('metadata').default({}),
+    // Note: embedding vector(512) column added via raw SQL in migration (Drizzle doesn't support vector type)
+    kbVersion: integer('kb_version').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        pageIdIdx: index('idx_kb_chunks_page_id').on(table.pageId),
+        typeIdx: index('idx_kb_chunks_type').on(table.type),
+        pageVersionIdx: index('idx_kb_chunks_page_version').on(table.pageId, table.kbVersion),
+    };
+});
+
+// KB Gaps Table — tracks questions the KB couldn't answer (for merchant notifications)
+export const kbGaps = pgTable('kb_gaps', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    queryText: text('query_text').notNull(),
+    queryNormalized: text('query_normalized').notNull(),
+    detectedIntent: varchar('detected_intent', { length: 50 }),
+    occurrenceCount: integer('occurrence_count').default(1),
+    firstSeenAt: timestamp('first_seen_at').defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').defaultNow(),
+    resolved: boolean('resolved').default(false),
+}, (table) => {
+    return {
+        pageIdIdx: index('idx_kb_gaps_page_id').on(table.pageId),
+        unresolvedIdx: index('idx_kb_gaps_unresolved').on(table.pageId, table.resolved),
+    };
+});
+
+// ============================================
 // ADMIN TABLES
 // ============================================
 
