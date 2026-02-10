@@ -1,5 +1,7 @@
 import OpenAI from 'openai';
 import type { EmbeddingProvider } from './interfaces';
+import type { Logger } from '../../types/logger';
+import { noopLogger } from '../../types/logger';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const EMBEDDING_DIMENSIONS = 512;
@@ -8,7 +10,7 @@ const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
 
 /** Retry with exponential backoff for transient API failures */
-async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, logger: Logger, retries = MAX_RETRIES): Promise<T> {
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
             return await fn();
@@ -19,6 +21,7 @@ async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promis
             if (isLastAttempt || !isRetryable) throw error;
 
             const delay = BASE_DELAY_MS * Math.pow(2, attempt);
+            logger.warn('Embedding API call failed, retrying', { attempt, status, delay });
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
@@ -31,9 +34,14 @@ async function withRetry<T>(fn: () => Promise<T>, retries = MAX_RETRIES): Promis
  */
 export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     private client: OpenAI;
+    private logger: Logger = noopLogger;
 
     constructor(apiKey: string) {
         this.client = new OpenAI({ apiKey });
+    }
+
+    setLogger(logger: Logger): void {
+        this.logger = logger;
     }
 
     getDimensions(): number {
@@ -46,7 +54,8 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
                 model: EMBEDDING_MODEL,
                 input: text,
                 dimensions: EMBEDDING_DIMENSIONS,
-            })
+            }),
+            this.logger,
         );
         return response.data[0].embedding;
     }
@@ -57,12 +66,14 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
         const results: number[][] = [];
         for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
             const batch = texts.slice(i, i + MAX_BATCH_SIZE);
+            this.logger.debug('Embedding batch', { batchStart: i, batchSize: batch.length, totalTexts: texts.length });
             const response = await withRetry(() =>
                 this.client.embeddings.create({
                     model: EMBEDDING_MODEL,
                     input: batch,
                     dimensions: EMBEDDING_DIMENSIONS,
-                })
+                }),
+                this.logger,
             );
             const sorted = response.data.sort((a, b) => a.index - b.index);
             results.push(...sorted.map(d => d.embedding));
