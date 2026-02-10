@@ -89,7 +89,8 @@
       "Bash(SSH_KEY=\"$HOME/.ssh/id_jawab24_deploy\")",
       "Bash(npx playwright:*)",
       "Bash(curl:*)",
-      "Bash(sort:*)"
+      "Bash(sort:*)",
+      "Bash(npx drizzle-kit generate:*)"
     ]
   }
 }
