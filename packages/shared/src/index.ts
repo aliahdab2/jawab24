@@ -1,5 +1,11 @@
 // Shared Types for Jawab24
 
+// --- Utilities ---
+export { normalizeArabic } from './utils/arabic-normalize';
+export type { NormalizeOptions } from './utils/arabic-normalize';
+export { sanitizeUserInput } from './utils/sanitize';
+export { sanitizeKbContent } from './utils/sanitize-kb';
+
 // --- Message Types ---
 export interface Message {
   id: string;
