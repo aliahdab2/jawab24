@@ -4,6 +4,8 @@ import { eq, sql } from 'drizzle-orm';
 import type { EmbeddingProvider, VectorStore, ChunkWithEmbedding } from './interfaces';
 import { chunkKnowledgeBase, chunkBusinessProfile } from './chunker';
 import type { KbChunk } from './chunker';
+import type { Logger } from '../../types/logger';
+import { noopLogger } from '../../types/logger';
 
 /**
  * KB Ingestion Pipeline.
@@ -17,10 +19,16 @@ import type { KbChunk } from './chunker';
  * 4. Old version chunks are cleaned up separately
  */
 export class KbIngestionService {
+    private logger: Logger = noopLogger;
+
     constructor(
         private embeddingProvider: EmbeddingProvider,
         private vectorStore: VectorStore,
     ) {}
+
+    setLogger(logger: Logger): void {
+        this.logger = logger;
+    }
 
     /**
      * Full KB re-ingestion from raw text.
@@ -29,7 +37,12 @@ export class KbIngestionService {
     async ingestKnowledgeBase(pageId: string, rawText: string, kbVersion: number): Promise<void> {
         // 1. Chunk the raw text
         const chunks = chunkKnowledgeBase(rawText);
-        if (chunks.length === 0) return;
+        if (chunks.length === 0) {
+            this.logger.debug('KB ingestion skipped: no chunks from text', { pageId, kbVersion });
+            return;
+        }
+
+        this.logger.info('KB ingestion started', { pageId, kbVersion, chunkCount: chunks.length });
 
         // 2. Embed all chunks
         const chunksWithEmbeddings = await this.embedChunks(pageId, chunks, kbVersion);
@@ -41,16 +54,22 @@ export class KbIngestionService {
         await db.update(pages)
             .set({ kbActiveVersion: kbVersion })
             .where(eq(pages.id, pageId));
+
+        this.logger.info('KB ingestion completed, version activated', { pageId, kbVersion, chunkCount: chunks.length });
     }
 
     /**
      * Ingest chunks from business profile (hours, location, contact).
      * These supplement KB chunks even if the merchant hasn't written any KB text.
+     *
+     * Note: Does NOT activate kbActiveVersion — profile chunks are supplementary.
+     * Call ingestKnowledgeBase() to activate the version after all chunks are stored.
      */
     async ingestBusinessProfile(pageId: string, profile: Record<string, unknown>, kbVersion: number): Promise<void> {
         const chunks = chunkBusinessProfile(profile);
         if (chunks.length === 0) return;
 
+        this.logger.info('Business profile ingestion started', { pageId, kbVersion, chunkCount: chunks.length });
         const chunksWithEmbeddings = await this.embedChunks(pageId, chunks, kbVersion);
         await this.vectorStore.upsertChunks(pageId, chunksWithEmbeddings);
     }

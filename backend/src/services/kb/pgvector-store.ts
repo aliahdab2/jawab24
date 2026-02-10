@@ -3,6 +3,20 @@ import { kbChunks } from '../../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import type { VectorStore, ChunkWithEmbedding, ScoredChunk } from './interfaces';
 
+/** Validate that a vector is an array of finite numbers */
+function validateVector(vec: number[], expectedDim: number): void {
+    if (!Array.isArray(vec) || vec.length !== expectedDim) {
+        throw new Error(`Invalid embedding: expected ${expectedDim} dimensions, got ${vec.length}`);
+    }
+    for (let i = 0; i < vec.length; i++) {
+        if (!Number.isFinite(vec[i])) {
+            throw new Error(`Invalid embedding: non-finite value at index ${i}`);
+        }
+    }
+}
+
+const EMBEDDING_DIMENSIONS = 512;
+
 /**
  * pgvector-backed vector store.
  * Uses raw SQL for vector operations (Drizzle doesn't support vector type natively).
@@ -15,6 +29,8 @@ export class PgVectorStore implements VectorStore {
         // Use a transaction so partial failures don't leave orphaned rows
         await db.transaction(async (tx) => {
             for (const chunk of chunks) {
+                validateVector(chunk.embedding, EMBEDDING_DIMENSIONS);
+
                 const [inserted] = await tx
                     .insert(kbChunks)
                     .values({
@@ -48,6 +64,7 @@ export class PgVectorStore implements VectorStore {
         topK: number,
         kbActiveVersion: number,
     ): Promise<ScoredChunk[]> {
+        validateVector(queryVector, EMBEDDING_DIMENSIONS);
         const vectorStr = `[${queryVector.join(',')}]`;
 
         // Vector-only search via HNSW index.
