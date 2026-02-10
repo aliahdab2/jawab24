@@ -11,7 +11,9 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
-  Shield
+  Shield,
+  BookTemplate,
+  Zap
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -103,12 +105,13 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name }: { picture?:
   );
 })
 
-// Simple navigation - Templates & Rules are in Settings > Advanced
 const navigationKeys = [
   { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
   { key: 'nav.pages', href: '/pages', icon: FileText },
   { key: 'nav.comments', href: '/comments', icon: MessageSquare },
   { key: 'nav.messages', href: '/messages', icon: MessageCircle },
+  { key: 'nav.templates', href: '/templates', icon: BookTemplate },
+  { key: 'nav.rules', href: '/rules', icon: Zap },
   { key: 'pricing.title', href: '/pricing', icon: CreditCard },
   { key: 'nav.settings', href: '/settings', icon: Settings },
 ];

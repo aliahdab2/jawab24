@@ -11,7 +11,6 @@ const MOCK_TEMPLATES = [
     id: 'tpl_1',
     name: 'Welcome',
     translations: { en: 'Hello! Welcome to our page.', ar: 'مرحبا! أهلا بك في صفحتنا.' },
-    keywords: ['hello', 'hi'],
     active: true,
   },
 ];

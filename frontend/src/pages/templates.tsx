@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, type ReactElement } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
 import { useTranslation } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
-import { templatesApi } from '@/lib/api';
+import { templatesApi, rulesApi } from '@/lib/api';
 import {
   BookTemplate,
   Plus,
@@ -12,23 +12,24 @@ import {
   Trash2,
   Copy,
   Globe,
-  Tag,
-  Zap
+  Zap,
+  Link2
 } from 'lucide-react';
-import type { Template } from '@jawab24/shared';
+import type { Template, Rule } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 
 const TemplatesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
-  
+
   // Available template languages - add new ones here for future expansion
   const templateLanguages: ('en' | 'ar')[] = ['en', 'ar'];
-  
+
   // Default to interface language if supported
   const getDefaultLang = (): 'en' | 'ar' => {
     if (templateLanguages.includes(language as 'en' | 'ar')) {
@@ -36,15 +37,14 @@ const TemplatesPage: NextPageWithLayout = () => {
     }
     return templateLanguages[0];
   };
-  
+
   const [activeLang, setActiveLang] = useState<'en' | 'ar'>(getDefaultLang());
   const [formData, setFormData] = useState({
     name: '',
     en: '',
     ar: '',
-    keywords: '',
   });
-  
+
   const [showFormErrors, setShowFormErrors] = useState(false);
 
   // Form validation: name required + at least one translation
@@ -52,16 +52,34 @@ const TemplatesPage: NextPageWithLayout = () => {
   const nameError = showFormErrors && formData.name.trim() === '';
   const translationError = showFormErrors && formData.en.trim() === '' && formData.ar.trim() === '';
 
-  const fetchTemplates = useCallback(async () => {
+  // Count how many rules reference each template
+  const rulesCountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const rule of rules) {
+      if (rule.templateId) {
+        map[rule.templateId] = (map[rule.templateId] || 0) + 1;
+      }
+    }
+    return map;
+  }, [rules]);
+
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await templatesApi.getAll();
-      const data = Array.isArray(response.data)
-        ? response.data
-        : (Array.isArray(response.data?.data) ? response.data.data : []);
-      setTemplates(data);
+      const [templatesRes, rulesRes] = await Promise.all([
+        templatesApi.getAll(),
+        rulesApi.getAll()
+      ]);
+      const templatesData = Array.isArray(templatesRes.data)
+        ? templatesRes.data
+        : (Array.isArray(templatesRes.data?.data) ? templatesRes.data.data : []);
+      const rulesData = Array.isArray(rulesRes.data)
+        ? rulesRes.data
+        : (Array.isArray(rulesRes.data?.data) ? rulesRes.data.data : []);
+      setTemplates(templatesData);
+      setRules(rulesData);
     } catch (error) {
-      console.error('Failed to fetch templates:', error);
+      console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -70,9 +88,9 @@ const TemplatesPage: NextPageWithLayout = () => {
   useEffect(() => {
     // Use isAuthenticated instead of token - on web, auth is via cookies
     if (isAuthenticated) {
-      fetchTemplates();
+      fetchData();
     }
-  }, [isAuthenticated, fetchTemplates]);
+  }, [isAuthenticated, fetchData]);
 
   const handleOpenModal = (template?: Template) => {
     if (template) {
@@ -81,11 +99,10 @@ const TemplatesPage: NextPageWithLayout = () => {
         name: template.name,
         en: template.translations.en || '',
         ar: template.translations.ar || '',
-        keywords: (template.keywords || []).join(', '),
       });
     } else {
       setEditingTemplate(null);
-      setFormData({ name: '', en: '', ar: '', keywords: '' });
+      setFormData({ name: '', en: '', ar: '' });
     }
     setActiveLang(getDefaultLang());
     setShowFormErrors(false);
@@ -105,8 +122,6 @@ const TemplatesPage: NextPageWithLayout = () => {
     const templateData = {
       name: formData.name,
       translations,
-      keywords: formData.keywords.split(',').map(k => k.trim()).filter(Boolean),
-      active: editingTemplate?.active ?? true,
     };
 
     try {
@@ -129,7 +144,6 @@ const TemplatesPage: NextPageWithLayout = () => {
       name: `${template.name} (Copy)`,
       en: template.translations.en || '',
       ar: template.translations.ar || '',
-      keywords: (template.keywords || []).join(', '),
     });
     setActiveLang(getDefaultLang());
     setIsModalOpen(true);
@@ -231,7 +245,7 @@ const TemplatesPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     <p className="text-sm text-surface-700 leading-relaxed text-start italic italic-arabic" dir="rtl">
-                      "{template.translations.ar}"
+                      &ldquo;{template.translations.ar}&rdquo;
                     </p>
                   </div>
                 )}
@@ -245,28 +259,23 @@ const TemplatesPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     <p className="text-sm text-surface-700 leading-relaxed text-start italic">
-                      "{template.translations.en}"
+                      &ldquo;{template.translations.en}&rdquo;
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* Keywords */}
+              {/* Rules usage badge */}
               <div className="px-5 pb-2">
-                <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
-                  <Tag className="w-3.5 h-3.5 text-surface-300" />
-                  {(template.keywords || []).length > 0 ? (
-                    (template.keywords || []).slice(0, 6).map((keyword) => (
-                      <span key={keyword} className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-600 text-[10px] font-bold">
-                        {keyword}
-                      </span>
-                    ))
+                <div className="flex items-center gap-1.5 min-h-[32px]">
+                  <Link2 className="w-3.5 h-3.5 text-surface-300" />
+                  {(rulesCountMap[template.id] || 0) > 0 ? (
+                    <span className="text-[10px] font-bold text-brand-600">
+                      {t('templates.usedByRules', { count: rulesCountMap[template.id] })}
+                    </span>
                   ) : (
-                    <span className="text-[10px] font-medium text-surface-400 italic">{t('templates.noKeywords')}</span>
-                  )}
-                  {(template.keywords || []).length > 6 && (
-                    <span className="px-2 py-0.5 rounded-md bg-surface-100 text-surface-600 text-[10px] font-bold uppercase tracking-wider">
-                      +{(template.keywords || []).length - 6}
+                    <span className="text-[10px] font-medium text-surface-400 italic">
+                      {t('templates.notUsedByRules')}
                     </span>
                   )}
                 </div>
@@ -284,10 +293,10 @@ const TemplatesPage: NextPageWithLayout = () => {
                   <Button variant="ghost" size="sm" onClick={() => handleOpenModal(template)} className="text-surface-400 hover:text-brand-600 hover:bg-brand-50">
                     <Edit className="w-4 h-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleDuplicate(template)} 
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDuplicate(template)}
                     className="text-surface-400 hover:text-brand-600 hover:bg-brand-50"
                   >
                     <Copy className="w-4 h-4" />
@@ -337,15 +346,6 @@ const TemplatesPage: NextPageWithLayout = () => {
               <p className="text-xs text-red-500 mt-1">{t('templates.templateNameRequired')}</p>
             )}
           </div>
-
-          <Input
-            label={t('templates.keywords')}
-            placeholder="price, cost, how much, سعر"
-            value={formData.keywords}
-            onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-            helperText={t('templates.keywordsHelper')}
-            className="!py-2.5"
-          />
 
           {/* Language Tabs - Compact switcher */}
           <div>

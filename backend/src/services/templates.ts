@@ -14,7 +14,7 @@ export class TemplatesService {
                 userId,
                 name: data.name,
                 translations: data.translations,
-                keywords: data.keywords,
+
                 active: data.active ?? true,
             })
             .returning();

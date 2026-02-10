@@ -11,14 +11,12 @@ const MOCK_TEMPLATES = [
     id: 'tpl_1',
     name: 'Welcome',
     translations: { en: 'Hello! Welcome to our page.', ar: 'مرحبا! أهلا بك في صفحتنا.' },
-    keywords: ['hello', 'hi'],
     active: true,
   },
   {
     id: 'tpl_2',
     name: 'Pricing',
     translations: { en: 'Our prices start at $5.', ar: 'أسعارنا تبدأ من 5 دولار.' },
-    keywords: ['price', 'cost'],
     active: true,
   },
 ];

@@ -258,7 +258,6 @@ const DEMO_TEMPLATES = [
             ar: 'التسجيل مفتوح! للتسجيل يرجى التواصل معنا أو زيارتنا في المقر 📝',
             en: 'Registration is open! Please contact us or visit our location to register 📝',
         },
-        keywords: ['تسجيل', 'register', 'registration', 'أسجل', 'سجلني'],
         active: true,
     },
     {
@@ -267,7 +266,6 @@ const DEMO_TEMPLATES = [
             ar: 'للاطلاع على الرسوم والأسعار يرجى مراسلتنا على الخاص أو الاتصال بنا 💰',
             en: 'For fees and pricing, please DM us or call us directly 💰',
         },
-        keywords: ['رسوم', 'سعر', 'أسعار', 'كم', 'price', 'fees', 'cost'],
         active: true,
     },
     {
@@ -276,7 +274,6 @@ const DEMO_TEMPLATES = [
             ar: 'أوقات الدوام: الأحد - الخميس من 8 صباحاً حتى 9 مساءً ⏰',
             en: 'Working hours: Sunday - Thursday, 8 AM to 9 PM ⏰',
         },
-        keywords: ['دوام', 'وقت', 'متى', 'ساعات', 'hours', 'time', 'when'],
         active: true,
     },
     {
@@ -285,7 +282,6 @@ const DEMO_TEMPLATES = [
             ar: 'شكراً لتواصلك معنا! نسعد بخدمتك دائماً 🙏❤️',
             en: 'Thank you for reaching out! We are always happy to serve you 🙏❤️',
         },
-        keywords: ['شكرا', 'thanks', 'ممتاز', 'رائع', 'جميل'],
         active: true,
     },
 ];
@@ -485,7 +481,6 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
             userId,
             name: templateData.name,
             translations: templateData.translations,
-            keywords: templateData.keywords,
             active: templateData.active,
         });
     }

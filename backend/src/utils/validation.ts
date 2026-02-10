@@ -30,7 +30,6 @@ export const CreateTemplateSchema = z.object({
         (data) => data.en || data.ar,
         'At least one translation (en or ar) is required'
     ),
-    keywords: z.array(z.string()).optional(),
     active: z.boolean().default(true),
 });
 

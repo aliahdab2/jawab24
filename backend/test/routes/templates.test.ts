@@ -30,9 +30,8 @@ describe('Templates Routes', () => {
 
     it('should create a new template', async () => {
         const newTemplateData = { 
-            name: 'Welcome Template', 
-            translations: { en: 'Welcome!', ar: 'أهلاً بك!' },
-            keywords: ['hi', 'hello'] 
+            name: 'Welcome Template',
+            translations: { en: 'Welcome!', ar: 'أهلاً بك!' }
         };
         const createdTemplate = { 
             ...newTemplateData, 

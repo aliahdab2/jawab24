@@ -36,7 +36,6 @@ export interface Template {
     userId: string | null;
     name: string;
     translations: Record<string, string>;
-    keywords: string[] | null;
     active: boolean | null;
     createdAt: Date | null;
     updatedAt: Date | null;
@@ -45,7 +44,6 @@ export interface Template {
 export interface CreateTemplateDTO {
     name: string;
     translations: Record<string, string>;
-    keywords?: string[];
     active?: boolean;
 }
 

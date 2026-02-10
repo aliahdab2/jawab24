@@ -101,7 +101,6 @@ export interface Template {
   id: string;
   name: string;
   translations: Record<string, string>;
-  keywords: string[] | null;
   active: boolean | null;
   usageCount?: number;
 }

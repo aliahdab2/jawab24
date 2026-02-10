@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
+import { Card, Button, Input, Textarea, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { rulesApi, templatesApi } from '@/lib/api';
@@ -20,7 +20,7 @@ import type { Rule, Template } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 
 const RulesPage: NextPageWithLayout = () => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -32,6 +32,11 @@ const RulesPage: NextPageWithLayout = () => {
     keywords: '',
     templateId: '',
   });
+
+  // Quick-create template state
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickTemplate, setQuickTemplate] = useState({ name: '', text: '' });
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -79,6 +84,8 @@ const RulesPage: NextPageWithLayout = () => {
       setEditingRule(null);
       setFormData({ name: '', keywords: '', templateId: '' });
     }
+    setShowQuickCreate(false);
+    setQuickTemplate({ name: '', text: '' });
     setIsModalOpen(true);
   };
 
@@ -97,11 +104,39 @@ const RulesPage: NextPageWithLayout = () => {
         setRules(rules.map(r => r.id === editingRule.id ? response.data : r));
       } else {
         const response = await rulesApi.create(ruleData);
-        setRules([...rules, response.data].sort((a, b) => a.priority - b.priority));
+        setRules([...rules, response.data].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0)));
       }
       setIsModalOpen(false);
     } catch (error) {
       console.error('Failed to save rule:', error);
+    }
+  };
+
+  const handleQuickCreateTemplate = async () => {
+    if (!quickTemplate.name.trim() || !quickTemplate.text.trim()) return;
+    setSavingTemplate(true);
+    try {
+      const translations: Record<string, string> = {};
+      // Auto-detect language: if mostly Arabic chars, save as ar; otherwise en
+      const arabicRegex = /[\u0600-\u06FF]/;
+      if (arabicRegex.test(quickTemplate.text)) {
+        translations.ar = quickTemplate.text;
+      } else {
+        translations.en = quickTemplate.text;
+      }
+      const response = await templatesApi.create({
+        name: quickTemplate.name,
+        translations,
+      });
+      const newTemplate = response.data;
+      setTemplates(prev => [newTemplate, ...prev]);
+      setFormData(prev => ({ ...prev, templateId: newTemplate.id }));
+      setShowQuickCreate(false);
+      setQuickTemplate({ name: '', text: '' });
+    } catch (error) {
+      console.error('Failed to create template:', error);
+    } finally {
+      setSavingTemplate(false);
     }
   };
 
@@ -112,6 +147,7 @@ const RulesPage: NextPageWithLayout = () => {
       keywords: (rule.keywords || []).join(', '),
       templateId: rule.templateId || '',
     });
+    setShowQuickCreate(false);
     setIsModalOpen(true);
   };
 
@@ -167,8 +203,6 @@ const RulesPage: NextPageWithLayout = () => {
 
     // Update backend (ideally use a reorder endpoint, but loop updates for now)
     try {
-      // This is race-condition prone but okay for MVP. Better to have a bulk update or reorder endpoint.
-      // I'll just update the two modified rules.
       await Promise.all([
         rulesApi.update(newRules[index].id, { priority: newRules[index].priority ?? undefined }),
         rulesApi.update(newRules[swapIndex].id, { priority: newRules[swapIndex].priority ?? undefined })
@@ -182,6 +216,14 @@ const RulesPage: NextPageWithLayout = () => {
   const getTemplateName = (id: string | null) => {
     if (!id) return t('common.unknown');
     return templates.find(t => t.id === id)?.name || t('common.unknown');
+  };
+
+  // Build template options with preview text
+  const getTemplatePreview = (template: Template) => {
+    const text = template.translations[language] || template.translations.en || template.translations.ar || '';
+    if (!text) return template.name;
+    const preview = text.length > 40 ? text.slice(0, 40) + '...' : text;
+    return `${template.name} — ${preview}`;
   };
 
   if (loading && rules.length === 0) {
@@ -200,22 +242,6 @@ const RulesPage: NextPageWithLayout = () => {
           </Button>
         }
       />
-
-      {/* Info Card */}
-      <Card className="mb-8 border-none shadow-lg shadow-brand-100/50 bg-gradient-to-r from-brand-50 to-white overflow-hidden relative">
-        <div className="absolute -end-8 -top-8 w-32 h-32 bg-brand-100 rounded-full opacity-50 blur-2xl"></div>
-        <div className="relative z-10 flex items-start gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center flex-shrink-0 shadow-inner">
-            <Zap className="w-6 h-6" />
-          </div>
-          <div className="text-start">
-            <h3 className="font-bold text-surface-900 text-lg mb-1">{t('rules.title')}</h3>
-            <p className="text-sm text-surface-600 leading-relaxed max-w-2xl">
-              {t('rules.description')}
-            </p>
-          </div>
-        </div>
-      </Card>
 
       {/* Rules List */}
       {rules.length > 0 ? (
@@ -330,7 +356,7 @@ const RulesPage: NextPageWithLayout = () => {
                     className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
                   >
                     <Copy className="w-4 h-4" />
-                    <span className="lg:hidden text-xs font-bold uppercase tracking-wider">Duplicate</span>
+                    <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('rules.duplicateRule')}</span>
                   </Button>
                   <Button
                     variant="ghost"
@@ -389,24 +415,74 @@ const RulesPage: NextPageWithLayout = () => {
               placeholder={t('rules.keywordsPlaceholder' as TranslationKey)}
               value={formData.keywords}
               onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-              helperText={t('templates.variablesDesc')}
+              helperText={t('rules.keywordsHelper' as TranslationKey)}
               className="!py-2.5 sm:!py-3"
             />
           </div>
 
-          <Select
-            label={t('templates.title')}
-            placeholder={`${t('rules.actions.replyWithTemplate')}...`}
-            value={formData.templateId}
-            onChange={(value) => setFormData({ ...formData, templateId: value })}
-            options={[
-              { value: '', label: `${t('rules.actions.replyWithTemplate')}...` },
-              ...templates.map((template) => ({
-                value: template.id,
-                label: template.name
-              }))
-            ]}
-          />
+          <div>
+            <Select
+              label={t('rules.actions.replyWithTemplate')}
+              placeholder={`${t('rules.actions.replyWithTemplate')}...`}
+              value={formData.templateId}
+              onChange={(value) => setFormData({ ...formData, templateId: value })}
+              options={[
+                { value: '', label: `${t('rules.actions.replyWithTemplate')}...` },
+                ...templates.map((template) => ({
+                  value: template.id,
+                  label: getTemplatePreview(template)
+                }))
+              ]}
+            />
+
+            {/* Quick-create template */}
+            {!showQuickCreate ? (
+              <button
+                type="button"
+                onClick={() => setShowQuickCreate(true)}
+                className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{t('rules.newTemplate' as TranslationKey)}</span>
+              </button>
+            ) : (
+              <div className="mt-3 p-4 rounded-2xl bg-surface-50 border border-surface-200 space-y-3 animate-slide-up">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-surface-400 uppercase tracking-wider">
+                  <BookTemplate className="w-3 h-3" />
+                  <span>{t('rules.quickCreateTemplate' as TranslationKey)}</span>
+                </div>
+                <Input
+                  placeholder={t('templates.templateNamePlaceholder' as TranslationKey)}
+                  value={quickTemplate.name}
+                  onChange={(e) => setQuickTemplate({ ...quickTemplate, name: e.target.value })}
+                  className="!py-2"
+                />
+                <Textarea
+                  placeholder={language === 'ar' ? t('templates.arabicPlaceholder' as TranslationKey) : t('templates.englishPlaceholder' as TranslationKey)}
+                  value={quickTemplate.text}
+                  onChange={(e) => setQuickTemplate({ ...quickTemplate, text: e.target.value })}
+                  className="!py-2 min-h-[60px]"
+                  dir="auto"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setShowQuickCreate(false); setQuickTemplate({ name: '', text: '' }); }}
+                  >
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleQuickCreateTemplate}
+                    disabled={!quickTemplate.name.trim() || !quickTemplate.text.trim() || savingTemplate}
+                  >
+                    {savingTemplate ? '...' : t('common.add')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-end gap-3 pt-6 border-t border-surface-100 mt-6 pb-2 sm:pb-0">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>

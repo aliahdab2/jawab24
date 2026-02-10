@@ -197,9 +197,9 @@ export const commentsApi = {
 export const templatesApi = {
   getAll: () => api.get('/templates'),
   getById: (id: string) => api.get(`/templates/${id}`),
-  create: (data: { name: string; translations: Record<string, string>; keywords?: string[] }) =>
+  create: (data: { name: string; translations: Record<string, string> }) =>
     api.post('/templates', data),
-  update: (id: string, data: { name?: string; translations?: Record<string, string>; keywords?: string[]; active?: boolean }) =>
+  update: (id: string, data: { name?: string; translations?: Record<string, string>; active?: boolean }) =>
     api.put(`/templates/${id}`, data),
   delete: (id: string) => api.delete(`/templates/${id}`),
 };

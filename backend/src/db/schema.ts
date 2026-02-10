@@ -105,7 +105,6 @@ export const templates = pgTable('templates', {
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }).notNull(),
     translations: jsonb('translations').notNull().default({}),
-    keywords: text('keywords').array(),
     active: boolean('active').default(true),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
