@@ -476,6 +476,198 @@ describe('AI Service', () => {
     });
 });
 
+describe('AI Service - Semantic Cache Integration', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    function setupMocks(overrides: {
+        redisReply?: string | null;
+        dbCacheRows?: unknown[];
+        axiosReply?: Record<string, unknown>;
+        semanticCacheHit?: { reply: string; intent: string; confidence?: string; flags?: string[] } | null;
+        openaiApiKey?: string;
+    } = {}) {
+        vi.doMock('../../src/lib/redis', () => ({
+            redis: {
+                get: vi.fn().mockResolvedValue(overrides.redisReply ?? null),
+                set: vi.fn(),
+                quit: vi.fn(),
+            },
+        }));
+
+        vi.doMock('../../src/db', () => ({
+            db: {
+                select: vi.fn().mockReturnValue({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue(overrides.dbCacheRows ?? []),
+                    }),
+                }),
+                insert: vi.fn().mockReturnValue({
+                    values: vi.fn().mockReturnValue({
+                        onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+                    }),
+                }),
+                execute: vi.fn(),
+            },
+        }));
+
+        vi.doMock('../../src/db/schema', () => ({ aiCache: {} }));
+        vi.doMock('drizzle-orm', () => ({ eq: vi.fn(), sql: vi.fn().mockReturnValue('sql-mock') }));
+
+        const mockSemCache = {
+            check: vi.fn().mockResolvedValue(overrides.semanticCacheHit ?? null),
+            save: vi.fn().mockResolvedValue(undefined),
+            setLogger: vi.fn(),
+        };
+        vi.doMock('../../src/services/kb/semantic-cache', () => ({
+            semanticCacheService: mockSemCache,
+        }));
+
+        const mockEmbed = vi.fn().mockResolvedValue(new Array(512).fill(0.1));
+        vi.doMock('../../src/services/kb/embedding', () => ({
+            OpenAIEmbeddingProvider: vi.fn().mockImplementation(() => ({
+                embed: mockEmbed,
+                setLogger: vi.fn(),
+            })),
+        }));
+
+        vi.doMock('../../src/config', () => ({
+            config: {
+                ai: { enabled: true, cacheEnabled: true, serviceUrl: 'http://localhost:3002', model: 'gpt-4o-mini' },
+                openai: { apiKey: overrides.openaiApiKey ?? 'test-key' },
+            },
+        }));
+
+        if (overrides.axiosReply) {
+            vi.doMock('axios', () => ({
+                default: { post: vi.fn().mockResolvedValue({ data: overrides.axiosReply }) },
+            }));
+        }
+
+        return { mockSemCache, mockEmbed };
+    }
+
+    it('should return semantic cache hit when available', async () => {
+        const { mockSemCache } = setupMocks({
+            semanticCacheHit: { reply: 'Cached via semantic', intent: 'PRICE', confidence: 'high', flags: [] },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({
+            comment: 'How much is this?',
+            context: { pageId: 'page-1', kbActiveVersion: 1 },
+        });
+
+        expect(result.reply).toBe('Cached via semantic');
+        expect(result.cached).toBe(true);
+        expect(result.intent).toBe('PRICE');
+        expect(mockSemCache.check).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip semantic cache when kbActiveVersion is null', async () => {
+        const { mockSemCache } = setupMocks({
+            axiosReply: { reply: 'Fresh AI reply', language: 'en', intent: 'QUESTION', confidence: 'high', flags: [] },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'Hello',
+            context: { pageId: 'page-1', kbActiveVersion: null },
+        });
+
+        expect(mockSemCache.check).not.toHaveBeenCalled();
+    });
+
+    it('should skip semantic cache when no OPENAI_API_KEY and no pre-computed embedding', async () => {
+        const { mockSemCache } = setupMocks({
+            openaiApiKey: '',
+            axiosReply: { reply: 'Fresh reply', language: 'en', intent: 'QUESTION', confidence: 'high', flags: [] },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'Hello',
+            context: { pageId: 'page-1', kbActiveVersion: 1 },
+        });
+
+        expect(mockSemCache.check).not.toHaveBeenCalled();
+    });
+
+    it('should use pre-computed queryEmbedding instead of calling embed again', async () => {
+        const preComputed = new Array(512).fill(0.5);
+        const { mockSemCache, mockEmbed } = setupMocks({
+            semanticCacheHit: null,
+            axiosReply: { reply: 'Fresh', language: 'en', intent: 'PRICE', confidence: 'high', flags: [] },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'How much?',
+            context: { pageId: 'page-1', kbActiveVersion: 1, queryEmbedding: preComputed },
+        });
+
+        // Should use pre-computed embedding, NOT call embed()
+        expect(mockEmbed).not.toHaveBeenCalled();
+        // But should still check semantic cache
+        expect(mockSemCache.check).toHaveBeenCalledTimes(1);
+        // The embedding passed to check should be the pre-computed one
+        expect(mockSemCache.check).toHaveBeenCalledWith('page-1', preComputed, expect.any(String), 1);
+    });
+
+    it('should save to semantic cache with pre-GPT intent after AI call', async () => {
+        const { mockSemCache } = setupMocks({
+            semanticCacheHit: null,
+            axiosReply: { reply: 'Price is $50', language: 'en', intent: 'QUESTION', confidence: 'high', flags: [] },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'How much is this?',
+            context: { pageId: 'page-1', kbActiveVersion: 2 },
+        });
+
+        // Wait for fire-and-forget save
+        await new Promise(r => setTimeout(r, 50));
+
+        expect(mockSemCache.save).toHaveBeenCalledTimes(1);
+        const saveArgs = mockSemCache.save.mock.calls[0][0];
+        expect(saveArgs.pageId).toBe('page-1');
+        expect(saveArgs.replyText).toBe('Price is $50');
+        expect(saveArgs.kbActiveVersion).toBe(2);
+        // Intent should be pre-GPT (PRICE), not GPT (QUESTION)
+        expect(saveArgs.intent).toBe('PRICE');
+    });
+
+    it('should gracefully continue to AI when semantic cache check throws', async () => {
+        const { mockSemCache } = setupMocks({
+            axiosReply: { reply: 'Fallback AI reply', language: 'en', intent: 'QUESTION', confidence: 'high', flags: [] },
+        });
+        mockSemCache.check.mockRejectedValue(new Error('DB connection lost'));
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({
+            comment: 'Hello',
+            context: { pageId: 'page-1', kbActiveVersion: 1 },
+        });
+
+        expect(result.reply).toBe('Fallback AI reply');
+        expect(result.cached).toBe(false);
+    });
+});
+
 describe('AI Service (disabled)', () => {
     beforeEach(() => {
         vi.resetModules();
