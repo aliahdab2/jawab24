@@ -58,8 +58,16 @@ export class KbIngestionService {
 
         // 5. Resolve all existing KB gaps — the merchant just updated their KB,
         //    so previous gaps may now be covered by the new content.
-        gapDetectorService.setLogger(this.logger);
-        await gapDetectorService.resolveAllForPage(pageId);
+        //    Non-critical: failure here should not break the ingestion success path.
+        try {
+            gapDetectorService.setLogger(this.logger);
+            await gapDetectorService.resolveAllForPage(pageId);
+        } catch (error) {
+            this.logger.error('Failed to resolve KB gaps after ingestion', {
+                error: error instanceof Error ? error.message : String(error),
+                pageId,
+            });
+        }
 
         this.logger.info('KB ingestion completed, version activated', { pageId, kbVersion, chunkCount: chunks.length });
     }

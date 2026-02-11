@@ -13,6 +13,13 @@ vi.mock('../../../src/db', () => ({
     },
 }));
 
+vi.mock('../../../src/services/kb/gap-detector', () => ({
+    gapDetectorService: {
+        setLogger: vi.fn(),
+        resolveAllForPage: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
 describe('KbIngestionService', () => {
     let mockEmbedding: EmbeddingProvider;
     let mockStore: VectorStore;
@@ -115,6 +122,48 @@ describe('KbIngestionService', () => {
         const embedCall = (mockEmbedding.embedBatch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string[];
         // First text should include the title
         expect(embedCall[0]).toContain('Our Menu');
+    });
+
+    it('resolves all KB gaps after successful ingestion', async () => {
+        const { gapDetectorService } = await import('../../../src/services/kb/gap-detector');
+        const service = new KbIngestionService(mockEmbedding, mockStore);
+
+        await service.ingestKnowledgeBase(
+            'page-1',
+            'Our restaurant serves the best pizza\n\nDelivery available across Dubai',
+            2,
+        );
+
+        expect(gapDetectorService.resolveAllForPage).toHaveBeenCalledWith('page-1');
+    });
+
+    it('does NOT resolve gaps when ingestion is skipped (empty text)', async () => {
+        const { gapDetectorService } = await import('../../../src/services/kb/gap-detector');
+        const service = new KbIngestionService(mockEmbedding, mockStore);
+
+        await service.ingestKnowledgeBase('page-1', '', 1);
+
+        expect(gapDetectorService.resolveAllForPage).not.toHaveBeenCalled();
+    });
+
+    it('ingestion succeeds even if gap resolution fails', async () => {
+        const { gapDetectorService } = await import('../../../src/services/kb/gap-detector');
+        (gapDetectorService.resolveAllForPage as ReturnType<typeof vi.fn>)
+            .mockRejectedValueOnce(new Error('DB down'));
+
+        const service = new KbIngestionService(mockEmbedding, mockStore);
+
+        // Should not throw — gap resolution failure is non-critical
+        await expect(
+            service.ingestKnowledgeBase(
+                'page-1',
+                'Our restaurant serves the best pizza\n\nDelivery available across Dubai',
+                2,
+            )
+        ).resolves.not.toThrow();
+
+        // Chunks should still be stored and version activated
+        expect(mockStore.upsertChunks).toHaveBeenCalledTimes(1);
     });
 
     it('cleans up old versions', async () => {
