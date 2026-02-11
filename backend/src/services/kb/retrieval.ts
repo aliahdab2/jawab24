@@ -121,7 +121,7 @@ export class RetrievalService {
             type: row.type as string,
             language: (row.language as string) || null,
             title: (row.title as string) || null,
-            content: row.content_original as string,
+            content: (row.content_original as string) || '',
             vectorScore: Number(row.vec_score),
             textScore: Number(row.text_score),
             finalScore: Number(row.final_score),

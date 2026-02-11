@@ -194,7 +194,7 @@ export class ReplyGenerator {
         const retrieval = getRetrievalService();
 
         // No retrieval possible: missing service, pageId, or active version
-        if (!retrieval || !pageId || !kbActiveVersion) {
+        if (!retrieval || !pageId || kbActiveVersion === null || kbActiveVersion === undefined) {
             return { effectiveKB: staticKB };
         }
 

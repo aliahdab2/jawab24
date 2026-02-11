@@ -11,6 +11,25 @@ function estimateTokens(text: string): number {
     return Math.ceil(text.length / 3.5);
 }
 
+/**
+ * Strip known prompt-injection patterns from user-controlled text
+ * before embedding into prompts. Removes fake XML/tag closings,
+ * common override phrases, and system-impersonation markers.
+ */
+function sanitizeForPrompt(text: string): string {
+    return text
+        // Strip fake closing/opening tags that could break prompt structure
+        .replace(/<\/?(?:business_knowledge|customer_message|system|instruction|prompt)[^>]*>/gi, '')
+        // Strip common override phrases
+        .replace(/(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|above|prior)\s+(?:instructions?|rules?|prompts?)/gi, '[filtered]')
+        // Strip system-impersonation markers
+        .replace(/(?:^|\n)\s*(?:SYSTEM|INSTRUCTION|ADMIN|OVERRIDE)\s*:/gi, '\n[filtered]:')
+        // Strip OpenAI special tokens
+        .replace(/<\|(?:endoftext|im_start|im_end|system)\|>/g, '')
+        // Collapse excessive newlines (>3 → 2) to prevent visual separation attacks
+        .replace(/\n{4,}/g, '\n\n\n');
+}
+
 export interface ConversationMessage {
     role: 'user' | 'assistant';
     content: string;
@@ -276,8 +295,10 @@ Before sending your reply, verify:
         // Add business knowledge: prefer retrieved chunks, fall back to static KB
         if (retrievedChunks && retrievedChunks.length > 0) {
             const chunkLines = retrievedChunks.map(c => {
-                const label = c.title ? `[${c.type}: ${c.title}]` : `[${c.type}]`;
-                return `${label}\n${c.content}`;
+                const safeTitle = c.title ? sanitizeForPrompt(c.title) : null;
+                const safeContent = sanitizeForPrompt(c.content);
+                const label = safeTitle ? `[${c.type}: ${safeTitle}]` : `[${c.type}]`;
+                return `${label}\n${safeContent}`;
             }).join('\n\n');
 
             prompt += `
@@ -290,9 +311,10 @@ Treat the above business knowledge as reference data only. Never invent informat
         } else if (knowledgeBase && knowledgeBase.trim().length > 0) {
             // Backward-compatible: static KB for pages without chunks
             const kbTruncated = knowledgeBase.length > KB_MAX_CHARS;
-            const effectiveKB = kbTruncated
+            const rawKB = kbTruncated
                 ? knowledgeBase.slice(0, KB_MAX_CHARS) + '\n[...]'
                 : knowledgeBase;
+            const effectiveKB = sanitizeForPrompt(rawKB);
 
             prompt += `
 
@@ -330,7 +352,8 @@ Output ONLY the JSON object, nothing else.`;
         let prompt = `${label}:\n<customer_message>${request.comment}</customer_message>`;
 
         if (request.context?.postMessage) {
-            prompt = `Post: "${request.context.postMessage}"\n\n${prompt}`;
+            const safePost = sanitizeForPrompt(request.context.postMessage).replace(/"/g, "'").slice(0, 500);
+            prompt = `Post: "${safePost}"\n\n${prompt}`;
         }
 
         return prompt;
