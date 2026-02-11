@@ -749,8 +749,8 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
         });
 
         const systemPrompt = capture.messages[0].content;
-        expect(systemPrompt).toContain('Keep replies short (1-2 sentences)');
-        expect(systemPrompt).toContain('suggest the customer send a DM');
+        expect(systemPrompt).toContain('Public comment replies MUST be 1 sentence');
+        expect(systemPrompt).toContain('Send us a message for details');
         expect(systemPrompt).not.toContain('You may provide full detailed answers');
     });
 
@@ -768,7 +768,7 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
         const systemPrompt = capture.messages[0].content;
         expect(systemPrompt).toContain('You may provide full detailed answers');
         expect(systemPrompt).toContain('direct message');
-        expect(systemPrompt).not.toContain('Keep replies short (1-2 sentences)');
+        expect(systemPrompt).not.toContain('Public comment replies MUST be 1 sentence');
     });
 
     it('should infer channel=dm from conversationHistory when channel not set', async () => {
