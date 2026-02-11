@@ -196,19 +196,28 @@ export class AiService {
             };
         }
 
-        // Layer 2: Semantic cache (only when we have pageId + kbActiveVersion + embedding provider)
+        // Layer 2: Semantic cache (only when we have pageId + kbActiveVersion)
         const kbActiveVersion = request.context?.kbActiveVersion;
-        const embeddingProvider = getEmbeddingProvider();
-        let queryEmbedding: number[] | null = null;
+        let queryEmbedding: number[] | null = request.context?.queryEmbedding || null;
         let detectedPreGptIntent: string | null = null;
 
-        if (pageId && embeddingProvider && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+        if (pageId && kbActiveVersion !== null && kbActiveVersion !== undefined) {
             try {
-                const normalized = normalizeArabic(request.comment);
                 detectedPreGptIntent = detectIntent(request.comment);
 
-                embeddingProvider.setLogger(this.logger);
-                queryEmbedding = await embeddingProvider.embed(normalized);
+                // Reuse pre-computed embedding from retrieval if available, else compute
+                if (!queryEmbedding) {
+                    const embeddingProvider = getEmbeddingProvider();
+                    if (embeddingProvider) {
+                        embeddingProvider.setLogger(this.logger);
+                        queryEmbedding = await embeddingProvider.embed(normalizeArabic(request.comment));
+                    }
+                }
+
+                if (!queryEmbedding) {
+                    // No embedding available (no API key configured) — skip semantic cache
+                    throw new Error('No embedding provider available');
+                }
 
                 semanticCacheService.setLogger(this.logger);
                 const semanticHit = await semanticCacheService.check(
@@ -270,7 +279,7 @@ export class AiService {
                     pageId,
                     queryText: request.comment,
                     queryEmbedding,
-                    intent: response.data.intent || detectedPreGptIntent,
+                    intent: detectedPreGptIntent,
                     replyText: aiReply,
                     kbActiveVersion,
                     metadata: { confidence: response.data.confidence, flags: response.data.flags },

@@ -78,6 +78,7 @@ export interface AiGenerateRequest {
         channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
         kbActiveVersion?: number | null;
+        queryEmbedding?: number[];
     };
 }
 

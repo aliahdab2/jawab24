@@ -1,13 +1,10 @@
 import { db } from '../../db';
 import { sql } from 'drizzle-orm';
-import { semanticCache } from '../../db/schema';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
 
 /** Minimum cosine similarity to consider a semantic cache hit */
 const SIMILARITY_THRESHOLD = 0.93;
-/** Maximum age of a cache entry in days */
-const MAX_AGE_DAYS = 7;
 
 export interface SemanticCacheHit {
     reply: string;
@@ -58,6 +55,7 @@ export class SemanticCacheService {
 
             const results = await db.execute(sql`
                 SELECT
+                    id,
                     reply_text,
                     intent,
                     metadata,
@@ -66,7 +64,7 @@ export class SemanticCacheService {
                 WHERE page_id = ${pageId}
                   AND intent = ${intent}
                   AND kb_active_version_at_creation = ${kbActiveVersion}
-                  AND created_at > NOW() - INTERVAL '${sql.raw(String(MAX_AGE_DAYS))} days'
+                  AND created_at > NOW() - INTERVAL '7 days'
                   AND 1 - (query_embedding <=> ${vectorStr}::vector) >= ${SIMILARITY_THRESHOLD}
                 ORDER BY 1 - (query_embedding <=> ${vectorStr}::vector) DESC
                 LIMIT 1
@@ -87,7 +85,11 @@ export class SemanticCacheService {
             });
 
             // Update hit count asynchronously (fire-and-forget)
-            this.incrementHitCount(row.id as string).catch(() => {});
+            this.incrementHitCount(row.id as string).catch(err => {
+                this.logger.debug('[SemanticCache] hit count update failed', {
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            });
 
             return {
                 reply: row.reply_text as string,

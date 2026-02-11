@@ -116,13 +116,13 @@ export class ReplyGenerator {
             }
 
             // Run RAG retrieval if enabled
-            const { retrievedChunks, effectiveKB } = await this.resolveKnowledge(
+            const { retrievedChunks, effectiveKB, queryEmbedding } = await this.resolveKnowledge(
                 pageId, text, knowledgeBase, context.kbActiveVersion, 'comment',
             );
 
             const aiResponse = await aiService.generateReply({
                 comment: text,
-                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: 'comment', kbActiveVersion: context.kbActiveVersion }
+                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: 'comment', kbActiveVersion: context.kbActiveVersion, queryEmbedding }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId);
@@ -160,13 +160,13 @@ export class ReplyGenerator {
                 const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 6);
 
                 // Run RAG retrieval if enabled
-                const { retrievedChunks, effectiveKB } = await this.resolveKnowledge(
+                const { retrievedChunks, effectiveKB, queryEmbedding } = await this.resolveKnowledge(
                     pageId, text, knowledgeBase, context.kbActiveVersion, 'dm',
                 );
 
                 const aiResponse = await aiService.generateReply({
                     comment: text,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion }
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
                 });
 
                 return this.processAiResponse(aiResponse, userId, pageId);
@@ -190,7 +190,7 @@ export class ReplyGenerator {
         staticKB: string | undefined,
         kbActiveVersion: number | null | undefined,
         channel: 'comment' | 'dm',
-    ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string }> {
+    ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[] }> {
         const retrieval = getRetrievalService();
 
         // No retrieval possible: missing service, pageId, or active version
@@ -200,11 +200,11 @@ export class ReplyGenerator {
 
         try {
             retrieval.setLogger(this.logger);
-            const chunks = await retrieval.retrieve(pageId, query, kbActiveVersion);
+            const { chunks, queryEmbedding } = await retrieval.retrieve(pageId, query, kbActiveVersion);
 
             if (chunks.length === 0) {
                 this.logger.debug('[Generator] RAG returned no chunks, using static KB', { pageId, channel });
-                return { effectiveKB: staticKB };
+                return { effectiveKB: staticKB, queryEmbedding };
             }
 
             const retrievedChunks: RetrievedChunkContext[] = chunks.map(c => ({
@@ -222,11 +222,11 @@ export class ReplyGenerator {
                     topScore: retrievedChunks[0]?.score,
                     topChunkType: retrievedChunks[0]?.type,
                 });
-                return { effectiveKB: staticKB };
+                return { effectiveKB: staticKB, queryEmbedding };
             }
 
             // RAG_MODE = 'on': use chunks, omit static KB
-            return { retrievedChunks, effectiveKB: undefined };
+            return { retrievedChunks, effectiveKB: undefined, queryEmbedding };
         } catch (error) {
             this.logger.error('[Generator] RAG retrieval failed, falling back to static KB', {
                 pageId, error: error instanceof Error ? error.message : String(error),

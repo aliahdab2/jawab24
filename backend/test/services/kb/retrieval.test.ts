@@ -54,7 +54,7 @@ describe('RetrievalService', () => {
             createMockRow({ id: 'c2', type: 'faq', title: 'FAQ Item', vec_score: 0.7, text_score: 0.6, final_score: 0.68 }),
         ] as any);
 
-        const chunks = await service.retrieve('page-1', 'What products do you have?', 1);
+        const { chunks } = await service.retrieve('page-1', 'What products do you have?', 1);
 
         expect(chunks).toHaveLength(2);
         expect(chunks[0]).toMatchObject({
@@ -74,9 +74,18 @@ describe('RetrievalService', () => {
     it('returns empty array when DB returns no results', async () => {
         vi.mocked(db.execute).mockResolvedValue([] as any);
 
-        const chunks = await service.retrieve('page-1', 'Something unusual', 1);
+        const { chunks } = await service.retrieve('page-1', 'Something unusual', 1);
 
         expect(chunks).toHaveLength(0);
+    });
+
+    it('returns the computed queryEmbedding for reuse', async () => {
+        vi.mocked(db.execute).mockResolvedValue([] as any);
+
+        const { queryEmbedding } = await service.retrieve('page-1', 'test query', 1);
+
+        expect(queryEmbedding).toHaveLength(512);
+        expect(queryEmbedding[0]).toBe(0.1);
     });
 
     it('calls embedding provider with normalized query', async () => {
@@ -93,7 +102,7 @@ describe('RetrievalService', () => {
             createMockRow({ language: null, title: null }),
         ] as any);
 
-        const chunks = await service.retrieve('page-1', 'test', 1);
+        const { chunks } = await service.retrieve('page-1', 'test', 1);
 
         expect(chunks[0].language).toBeNull();
         expect(chunks[0].title).toBeNull();

@@ -22,3 +22,4 @@ CREATE INDEX IF NOT EXISTS idx_semantic_cache_embedding
 CREATE INDEX IF NOT EXISTS idx_semantic_cache_page_id ON semantic_cache (page_id);
 CREATE INDEX IF NOT EXISTS idx_semantic_cache_intent ON semantic_cache (intent);
 CREATE INDEX IF NOT EXISTS idx_semantic_cache_page_version ON semantic_cache (page_id, kb_active_version_at_creation);
+CREATE INDEX IF NOT EXISTS idx_semantic_cache_created_at ON semantic_cache (created_at);

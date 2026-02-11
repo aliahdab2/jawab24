@@ -16,6 +16,11 @@ export interface RetrievedChunk {
     finalScore: number;
 }
 
+export interface RetrievalResult {
+    chunks: RetrievedChunk[];
+    queryEmbedding: number[];
+}
+
 /** Minimum final score to include a chunk in results */
 const MIN_SCORE_THRESHOLD = 0.3;
 /** Default number of chunks to return */
@@ -54,14 +59,14 @@ export class RetrievalService {
 
     /**
      * Retrieve relevant KB chunks for a query.
-     * Returns empty array if no chunks meet the score threshold.
+     * Returns chunks + the computed query embedding (reusable by semantic cache).
      */
     async retrieve(
         pageId: string,
         query: string,
         kbActiveVersion: number,
         topK: number = DEFAULT_TOP_K,
-    ): Promise<RetrievedChunk[]> {
+    ): Promise<RetrievalResult> {
         // 1. Normalize + embed
         const normalizedQuery = normalizeArabic(query);
         const queryLanguage = detectQueryLanguage(query);
@@ -134,6 +139,6 @@ export class RetrievalService {
             topScore: chunks[0]?.finalScore ?? 0,
         });
 
-        return chunks;
+        return { chunks, queryEmbedding };
     }
 }
