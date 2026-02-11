@@ -72,6 +72,17 @@ describe('NotificationService', () => {
             expect(template.bodyAr).toContain('{minutes}');
         });
 
+        it('should have kb_gap template with correct placeholders', () => {
+            expect(NOTIFICATION_TEMPLATES).toHaveProperty('kb_gap');
+            const template = NOTIFICATION_TEMPLATES.kb_gap;
+            expect(template.titleEn).toBe('Knowledge Base Gap Detected');
+            expect(template.titleAr).toBe('فجوة في قاعدة المعرفة');
+            expect(template.bodyEn).toContain('{pageName}');
+            expect(template.bodyEn).toContain('{topic}');
+            expect(template.bodyAr).toContain('{pageName}');
+            expect(template.bodyAr).toContain('{topic}');
+        });
+
         it('should have bilingual content for each template', () => {
             for (const [key, template] of Object.entries(NOTIFICATION_TEMPLATES)) {
                 expect(template.titleEn).toBeDefined();

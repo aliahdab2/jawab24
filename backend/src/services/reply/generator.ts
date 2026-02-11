@@ -8,6 +8,7 @@ import { config } from '../../config';
 import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '../../types';
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
+import { gapDetectorService } from '../kb/gap-detector';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
@@ -204,6 +205,15 @@ export class ReplyGenerator {
 
             if (chunks.length === 0) {
                 this.logger.debug('[Generator] RAG returned no chunks, using static KB', { pageId, channel });
+
+                // Fire-and-forget: record KB gap for merchant insights
+                gapDetectorService.setLogger(this.logger);
+                gapDetectorService.recordGap(pageId, query).catch(err => {
+                    this.logger.error('[Generator] Gap detection error', {
+                        error: err instanceof Error ? err.message : String(err),
+                    });
+                });
+
                 return { effectiveKB: staticKB, queryEmbedding };
             }
 

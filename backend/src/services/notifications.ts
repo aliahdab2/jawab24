@@ -12,7 +12,8 @@ export type NotificationType =
     | 'flagged_reply'
     | 'skipped_reply'
     | 'new_comment'
-    | 'stale_comment';
+    | 'stale_comment'
+    | 'kb_gap';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -78,6 +79,12 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationP
         titleAr: 'تعليقات بدون رد تحتاج انتباهك',
         bodyEn: '{count} comments waiting for your reply for over {minutes} minutes.',
         bodyAr: '{count} تعليقات بانتظار ردك منذ أكثر من {minutes} دقيقة.',
+    },
+    kb_gap: {
+        titleEn: 'Knowledge Base Gap Detected',
+        titleAr: 'فجوة في قاعدة المعرفة',
+        bodyEn: 'Customers on "{pageName}" keep asking about "{topic}" but your knowledge base doesn\'t cover it.',
+        bodyAr: 'عملاء "{pageName}" يسألون عن "{topic}" لكن قاعدة المعرفة لا تغطي هذا الموضوع.',
     },
 };
 
