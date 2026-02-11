@@ -6,6 +6,20 @@ import { eq, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 import { redis } from '../lib/redis';
+import { normalizeArabic } from '@jawab24/shared';
+import { detectIntent } from './kb/intent-detector';
+import { semanticCacheService } from './kb/semantic-cache';
+import { OpenAIEmbeddingProvider } from './kb/embedding';
+
+/** Lazy-init embedding provider for semantic cache (only when OPENAI_API_KEY exists) */
+let _embeddingProvider: OpenAIEmbeddingProvider | null = null;
+function getEmbeddingProvider(): OpenAIEmbeddingProvider | null {
+    if (!config.openai?.apiKey) return null;
+    if (!_embeddingProvider) {
+        _embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
+    }
+    return _embeddingProvider;
+}
 
 export class AiService {
     private logger: Logger = noopLogger;
@@ -149,12 +163,17 @@ export class AiService {
     }
 
     /**
-     * Generate AI reply for a comment
+     * Generate AI reply for a comment.
+     *
+     * Cache hierarchy:
+     *   1. Exact cache (hash lookup — free)
+     *   2. Semantic cache (embedding similarity — 1 embedding call, no GPT)
+     *   3. Full AI worker call (GPT)
      */
     async generateReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
         const pageId = request.context?.pageId;
 
-        // Check cache first (scoped per page to avoid cross-page collisions)
+        // Layer 1: Exact cache (scoped per page to avoid cross-page collisions)
         const cachedData = await this.checkCache(request.comment, request.language, pageId);
         if (cachedData) {
             return {
@@ -177,8 +196,44 @@ export class AiService {
             };
         }
 
+        // Layer 2: Semantic cache (only when we have pageId + kbActiveVersion + embedding provider)
+        const kbActiveVersion = request.context?.kbActiveVersion;
+        const embeddingProvider = getEmbeddingProvider();
+        let queryEmbedding: number[] | null = null;
+        let detectedPreGptIntent: string | null = null;
+
+        if (pageId && embeddingProvider && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+            try {
+                const normalized = normalizeArabic(request.comment);
+                detectedPreGptIntent = detectIntent(request.comment);
+
+                embeddingProvider.setLogger(this.logger);
+                queryEmbedding = await embeddingProvider.embed(normalized);
+
+                semanticCacheService.setLogger(this.logger);
+                const semanticHit = await semanticCacheService.check(
+                    pageId, queryEmbedding, detectedPreGptIntent, kbActiveVersion,
+                );
+
+                if (semanticHit) {
+                    return {
+                        reply: semanticHit.reply,
+                        language: request.language || 'auto',
+                        cached: true,
+                        intent: semanticHit.intent,
+                        confidence: semanticHit.confidence,
+                        flags: semanticHit.flags,
+                    };
+                }
+            } catch (error) {
+                this.logger.error('Semantic cache check failed, continuing to AI', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+
+        // Layer 3: Full AI worker call
         try {
-            // Call AI Worker service
             const response = await axios.post<{
                 reply: string;
                 language: string;
@@ -194,19 +249,37 @@ export class AiService {
                     context: request.context,
                 },
                 {
-                    timeout: 30000, // 30 second timeout
+                    timeout: 30000,
                 }
             );
 
             const aiReply = response.data.reply;
             const detectedLanguage = response.data.language || request.language || 'en';
-
-            // Save to cache (scoped per page, with AI metadata)
-            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, {
+            const aiMetadata = {
                 intent: response.data.intent,
                 confidence: response.data.confidence,
                 flags: response.data.flags,
-            });
+            };
+
+            // Save to exact cache
+            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, aiMetadata);
+
+            // Save to semantic cache (fire-and-forget, non-blocking)
+            if (pageId && queryEmbedding && detectedPreGptIntent && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+                semanticCacheService.save({
+                    pageId,
+                    queryText: request.comment,
+                    queryEmbedding,
+                    intent: response.data.intent || detectedPreGptIntent,
+                    replyText: aiReply,
+                    kbActiveVersion,
+                    metadata: { confidence: response.data.confidence, flags: response.data.flags },
+                }).catch(err => {
+                    this.logger.error('Semantic cache save failed', {
+                        error: err instanceof Error ? err.message : String(err),
+                    });
+                });
+            }
 
             return {
                 reply: aiReply,

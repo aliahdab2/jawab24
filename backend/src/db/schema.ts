@@ -615,6 +615,26 @@ export const kbChunks = pgTable('kb_chunks', {
     };
 });
 
+// Semantic Cache Table — vector-based reply caching for semantically similar questions
+export const semanticCache = pgTable('semantic_cache', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    queryText: text('query_text').notNull(),
+    // Note: query_embedding vector(512) column added via raw SQL in migration (Drizzle doesn't support vector type)
+    intent: varchar('intent', { length: 50 }).notNull(),
+    replyText: text('reply_text').notNull(),
+    metadata: jsonb('metadata').default({}),
+    kbActiveVersionAtCreation: integer('kb_active_version_at_creation').notNull(),
+    hitCount: integer('hit_count').default(0),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        pageIdIdx: index('idx_semantic_cache_page_id').on(table.pageId),
+        intentIdx: index('idx_semantic_cache_intent').on(table.intent),
+        pageVersionIdx: index('idx_semantic_cache_page_version').on(table.pageId, table.kbActiveVersionAtCreation),
+    };
+});
+
 // KB Gaps Table — tracks questions the KB couldn't answer (for merchant notifications)
 export const kbGaps = pgTable('kb_gaps', {
     id: uuid('id').defaultRandom().primaryKey(),

@@ -77,6 +77,7 @@ export interface AiGenerateRequest {
         retrievedChunks?: RetrievedChunkContext[];
         channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
+        kbActiveVersion?: number | null;
     };
 }
 

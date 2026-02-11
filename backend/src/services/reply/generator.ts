@@ -122,7 +122,7 @@ export class ReplyGenerator {
 
             const aiResponse = await aiService.generateReply({
                 comment: text,
-                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: 'comment' }
+                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: 'comment', kbActiveVersion: context.kbActiveVersion }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId);
@@ -166,7 +166,7 @@ export class ReplyGenerator {
 
                 const aiResponse = await aiService.generateReply({
                     comment: text,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory }
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion }
                 });
 
                 return this.processAiResponse(aiResponse, userId, pageId);
