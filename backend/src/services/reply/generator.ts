@@ -4,7 +4,10 @@ import { aiService } from '../ai';
 import { messagesService } from '../messages';
 import { subscriptionsService } from '../subscriptions';
 import { postsService } from '../posts';
-import { AiGenerateResponse, Logger, noopLogger } from '../../types';
+import { config } from '../../config';
+import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '../../types';
+import { RetrievalService } from '../kb/retrieval';
+import { OpenAIEmbeddingProvider } from '../kb/embedding';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
@@ -36,6 +39,7 @@ export interface GenerateReplyContext {
     text: string;
     pageName?: string;
     knowledgeBase?: string;
+    kbActiveVersion?: number | null;
     // For comments
     postId?: string;
     postMessage?: string;
@@ -52,6 +56,18 @@ export interface GenerateReplyResult {
     needsAttention?: boolean;
     flagReason?: string;
     aiIntent?: string;
+}
+
+/** Lazy-init retrieval service (only created when RAG_MODE != 'off' and OPENAI_API_KEY exists) */
+let _retrievalService: RetrievalService | null = null;
+function getRetrievalService(): RetrievalService | null {
+    if (!config.ragMode || config.ragMode === 'off') return null;
+    if (!config.openai?.apiKey) return null;
+    if (!_retrievalService) {
+        const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
+        _retrievalService = new RetrievalService(embeddingProvider);
+    }
+    return _retrievalService;
 }
 
 /**
@@ -99,9 +115,14 @@ export class ReplyGenerator {
                 postMessage = post.message || undefined;
             }
 
+            // Run RAG retrieval if enabled
+            const { retrievedChunks, effectiveKB } = await this.resolveKnowledge(
+                pageId, text, knowledgeBase, context.kbActiveVersion, 'comment',
+            );
+
             const aiResponse = await aiService.generateReply({
                 comment: text,
-                context: { pageId, pageName, postMessage, knowledgeBase }
+                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: 'comment' }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId);
@@ -138,9 +159,14 @@ export class ReplyGenerator {
             if (pageId && senderId) {
                 const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 6);
 
+                // Run RAG retrieval if enabled
+                const { retrievedChunks, effectiveKB } = await this.resolveKnowledge(
+                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm',
+                );
+
                 const aiResponse = await aiService.generateReply({
                     comment: text,
-                    context: { pageId, pageName, knowledgeBase, conversationHistory }
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory }
                 });
 
                 return this.processAiResponse(aiResponse, userId, pageId);
@@ -148,6 +174,65 @@ export class ReplyGenerator {
         }
 
         return { replyText: null, replyMethod: 'ai', needsAttention: false };
+    }
+
+    /**
+     * Resolve knowledge: run RAG retrieval if enabled, otherwise fall back to static KB.
+     *
+     * RAG_MODE behavior:
+     * - 'off': returns static KB, no retrieval
+     * - 'shadow': runs retrieval + logs results, but still sends static KB to GPT
+     * - 'on': runs retrieval, sends chunks to GPT (static KB omitted)
+     */
+    private async resolveKnowledge(
+        pageId: string | undefined,
+        query: string,
+        staticKB: string | undefined,
+        kbActiveVersion: number | null | undefined,
+        channel: 'comment' | 'dm',
+    ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string }> {
+        const retrieval = getRetrievalService();
+
+        // No retrieval possible: missing service, pageId, or active version
+        if (!retrieval || !pageId || !kbActiveVersion) {
+            return { effectiveKB: staticKB };
+        }
+
+        try {
+            retrieval.setLogger(this.logger);
+            const chunks = await retrieval.retrieve(pageId, query, kbActiveVersion);
+
+            if (chunks.length === 0) {
+                this.logger.debug('[Generator] RAG returned no chunks, using static KB', { pageId, channel });
+                return { effectiveKB: staticKB };
+            }
+
+            const retrievedChunks: RetrievedChunkContext[] = chunks.map(c => ({
+                type: c.type,
+                title: c.title,
+                content: c.content,
+                score: c.finalScore,
+            }));
+
+            if (config.ragMode === 'shadow') {
+                // Shadow mode: log what RAG would have returned but use static KB for actual reply
+                this.logger.info('[Generator] RAG shadow mode — retrieval completed', {
+                    pageId, channel,
+                    chunkCount: retrievedChunks.length,
+                    topScore: retrievedChunks[0]?.score,
+                    topChunkType: retrievedChunks[0]?.type,
+                });
+                return { effectiveKB: staticKB };
+            }
+
+            // RAG_MODE = 'on': use chunks, omit static KB
+            return { retrievedChunks, effectiveKB: undefined };
+        } catch (error) {
+            this.logger.error('[Generator] RAG retrieval failed, falling back to static KB', {
+                pageId, error: error instanceof Error ? error.message : String(error),
+            });
+            return { effectiveKB: staticKB };
+        }
     }
 
     /**

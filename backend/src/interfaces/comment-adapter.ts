@@ -28,6 +28,7 @@ export interface CommentReplyContext {
     text: string;
     pageName?: string;
     knowledgeBase?: string;
+    kbActiveVersion?: number | null;
     postId?: string;
     postMessage?: string;
     pageId: string;

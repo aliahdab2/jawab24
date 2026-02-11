@@ -29,6 +29,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             name: page.name,
             accessToken: page.accessToken,
             knowledgeBase: page.knowledgeBase,
+            kbActiveVersion: page.kbActiveVersion ?? null,
             autoReplyEnabled: page.instagramAutoReplyEnabled ?? true,
             shopifyStoreId: page.shopifyStoreId,
         };
@@ -176,6 +177,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             text: '',  // filled by processor with commentMessage
             pageName: page.name || undefined,
             knowledgeBase: page.knowledgeBase || undefined,
+            kbActiveVersion: page.kbActiveVersion,
             postMessage: contentEntity.message || undefined,
             pageId: page.id,
         };

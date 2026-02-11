@@ -12,6 +12,8 @@ export interface PlatformPage {
     name: string | null;
     accessToken: string;
     knowledgeBase: string | null;
+    /** Active KB version for RAG retrieval (null = no chunks ingested yet) */
+    kbActiveVersion: number | null;
     /** Whether auto-reply is enabled for this platform on this page */
     autoReplyEnabled: boolean;
     /** Platform-specific account ID (e.g., instagramAccountId) — set by adapter */

@@ -51,6 +51,9 @@ export const config = {
         apiKey: process.env.OPENAI_API_KEY || '',
     },
 
+    // RAG mode: 'off' = static KB, 'shadow' = run RAG but use static KB, 'on' = full RAG
+    ragMode: (process.env.RAG_MODE || 'off') as 'off' | 'shadow' | 'on',
+
     // Shopify App
     shopify: {
         apiKey: process.env.SHOPIFY_API_KEY || '',

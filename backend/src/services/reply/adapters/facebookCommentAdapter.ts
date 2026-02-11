@@ -28,6 +28,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             name: page.name,
             accessToken: page.accessToken,
             knowledgeBase: page.knowledgeBase,
+            kbActiveVersion: page.kbActiveVersion ?? null,
             autoReplyEnabled: page.autoReplyEnabled ?? true,
             shopifyStoreId: page.shopifyStoreId,
         };
@@ -116,6 +117,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             text: '',  // filled by processor with commentMessage
             pageName: page.name || undefined,
             knowledgeBase: page.knowledgeBase || undefined,
+            kbActiveVersion: page.kbActiveVersion,
             postId: contentId,
             postMessage: contentEntity.message || undefined,
             pageId: page.id,

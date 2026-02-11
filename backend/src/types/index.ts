@@ -56,6 +56,14 @@ export interface ConversationMessage {
     timestamp?: Date;
 }
 
+// Retrieved KB chunk passed from retrieval to AI prompt
+export interface RetrievedChunkContext {
+    type: string;
+    title: string | null;
+    content: string;
+    score: number;
+}
+
 // AI Types
 export interface AiGenerateRequest {
     comment: string;
@@ -66,6 +74,8 @@ export interface AiGenerateRequest {
         pageName?: string;
         previousReplies?: string[];
         knowledgeBase?: string;
+        retrievedChunks?: RetrievedChunkContext[];
+        channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
     };
 }

@@ -179,6 +179,7 @@ export class MessageProcessor {
                         text: consolidatedText,
                         pageName: page.name || undefined,
                         knowledgeBase,
+                        kbActiveVersion: page.kbActiveVersion,
                         pageId: page.id,
                         senderId,
                     },
