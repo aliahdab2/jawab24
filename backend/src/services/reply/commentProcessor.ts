@@ -8,6 +8,7 @@ import { integrationRegistry } from '../../integrations';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger, CommentResult } from '../../types';
 import type { CommentPlatformAdapter } from '../../interfaces';
+import { formatBusinessProfile } from '../../utils/businessProfile';
 
 /**
  * Unified Comment Processor
@@ -133,6 +134,14 @@ export class CommentProcessor {
             for (const integration of integrationRegistry.getEnabled()) {
                 const enriched = await integration.enrichKnowledgeBase(generatorContext.knowledgeBase, page as unknown as Record<string, unknown>);
                 if (enriched !== null) { generatorContext.knowledgeBase = enriched; break; }
+            }
+
+            // Append business profile (hours, location, phone) to KB context
+            const profileText = formatBusinessProfile(page.businessProfile);
+            if (profileText) {
+                generatorContext.knowledgeBase = generatorContext.knowledgeBase
+                    ? `${generatorContext.knowledgeBase}\n\n--- Business Info ---\n${profileText}`
+                    : profileText;
             }
             let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false);

@@ -9,6 +9,7 @@ import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
+import { formatBusinessProfile } from '../../utils/businessProfile';
 
 /**
  * Unified Message Processor
@@ -171,6 +172,14 @@ export class MessageProcessor {
             for (const integration of integrationRegistry.getEnabled()) {
                 const enriched = await integration.enrichKnowledgeBase(knowledgeBase, page as unknown as Record<string, unknown>);
                 if (enriched !== null) { knowledgeBase = enriched; break; }
+            }
+
+            // Append business profile (hours, location, phone) to KB context
+            const profileText = formatBusinessProfile(page.businessProfile);
+            if (profileText) {
+                knowledgeBase = knowledgeBase
+                    ? `${knowledgeBase}\n\n--- Business Info ---\n${profileText}`
+                    : profileText;
             }
             let { replyText, replyMethod, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForMessage(

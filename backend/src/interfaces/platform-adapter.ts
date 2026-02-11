@@ -20,6 +20,8 @@ export interface PlatformPage {
     platformAccountId?: string;
     /** Linked Shopify store ID for product-aware AI replies */
     shopifyStoreId?: string | null;
+    /** Structured business profile from Facebook sync (hours, phone, address, etc.) */
+    businessProfile?: Record<string, unknown> | null;
 }
 
 /** Stored message returned by the adapter's storeIncomingMessage */

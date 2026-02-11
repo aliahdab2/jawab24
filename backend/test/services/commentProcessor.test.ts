@@ -517,6 +517,135 @@ describe('CommentProcessor', () => {
         expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
     });
 
+    // --- Business profile enrichment tests ---
+
+    it('should append business profile to knowledgeBase when page has businessProfile', async () => {
+        const mockPage: PlatformPage = {
+            id: 'page-uuid',
+            userId: 'user-uuid',
+            name: 'Test Page',
+            accessToken: 'token-123',
+            knowledgeBase: 'We sell shoes.',
+            kbActiveVersion: null,
+            autoReplyEnabled: true,
+            businessProfile: {
+                phone: '+961 1 234 567',
+                address: '123 Main St',
+                city: 'Beirut',
+                hours: { mon: ['09:00-18:00'], tue: ['09:00-18:00'] },
+            },
+        };
+
+        const buildGeneratorContext = vi.fn().mockReturnValue({
+            userId: 'user-uuid',
+            text: '',
+            pageName: 'Test Page',
+            knowledgeBase: 'We sell shoes.',
+            pageId: 'page-uuid',
+        } as CommentReplyContext);
+
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue(mockPage),
+            buildGeneratorContext,
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'What are your hours?', 'from-1',
+        );
+
+        const generatorCall = vi.mocked(replyGenerator.generateForComment).mock.calls[0];
+        const contextArg = generatorCall[0];
+        expect(contextArg.knowledgeBase).toContain('We sell shoes.');
+        expect(contextArg.knowledgeBase).toContain('--- Business Info ---');
+        expect(contextArg.knowledgeBase).toContain('Phone: +961 1 234 567');
+        expect(contextArg.knowledgeBase).toContain('Location: 123 Main St, Beirut');
+        expect(contextArg.knowledgeBase).toContain('Monday: 09:00-18:00');
+    });
+
+    it('should use business profile as sole KB when page has no knowledgeBase', async () => {
+        const mockPage: PlatformPage = {
+            id: 'page-uuid',
+            userId: 'user-uuid',
+            name: 'Test Page',
+            accessToken: 'token-123',
+            knowledgeBase: null,
+            kbActiveVersion: null,
+            autoReplyEnabled: true,
+            businessProfile: {
+                category: 'Restaurant',
+                phone: '+1 555 0000',
+            },
+        };
+
+        const buildGeneratorContext = vi.fn().mockReturnValue({
+            userId: 'user-uuid',
+            text: '',
+            pageName: 'Test Page',
+            knowledgeBase: undefined,
+            pageId: 'page-uuid',
+        } as CommentReplyContext);
+
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue(mockPage),
+            buildGeneratorContext,
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForComment).mock.calls[0][0];
+        expect(contextArg.knowledgeBase).toContain('Business type: Restaurant');
+        expect(contextArg.knowledgeBase).toContain('Phone: +1 555 0000');
+        // No separator when there's no preceding KB text
+        expect(contextArg.knowledgeBase).not.toContain('--- Business Info ---');
+    });
+
+    it('should NOT modify knowledgeBase when businessProfile is empty object', async () => {
+        const mockPage: PlatformPage = {
+            id: 'page-uuid',
+            userId: 'user-uuid',
+            name: 'Test Page',
+            accessToken: 'token-123',
+            knowledgeBase: 'We sell shoes.',
+            kbActiveVersion: null,
+            autoReplyEnabled: true,
+            businessProfile: {},
+        };
+
+        const buildGeneratorContext = vi.fn().mockReturnValue({
+            userId: 'user-uuid',
+            text: '',
+            pageName: 'Test Page',
+            knowledgeBase: 'We sell shoes.',
+            pageId: 'page-uuid',
+        } as CommentReplyContext);
+
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue(mockPage),
+            buildGeneratorContext,
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForComment).mock.calls[0][0];
+        expect(contextArg.knowledgeBase).toBe('We sell shoes.');
+    });
+
+    it('should NOT modify knowledgeBase when businessProfile is null/undefined', async () => {
+        const adapter = createMockAdapter(); // default mock page has no businessProfile
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForComment).mock.calls[0][0];
+        // Default mock buildGeneratorContext returns no knowledgeBase
+        expect(contextArg.knowledgeBase).toBeUndefined();
+    });
+
     // --- Existing behavior preservation tests ---
 
     it('should NOT skip reply for low_confidence flag', async () => {

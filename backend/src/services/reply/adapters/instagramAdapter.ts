@@ -27,6 +27,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
             autoReplyEnabled: page.instagramAutoReplyEnabled ?? true,
             platformAccountId: page.instagramAccountId ?? undefined,
             shopifyStoreId: page.shopifyStoreId,
+            businessProfile: page.businessProfile as Record<string, unknown> | null,
         };
     }
 

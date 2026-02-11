@@ -32,6 +32,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             kbActiveVersion: page.kbActiveVersion ?? null,
             autoReplyEnabled: page.instagramAutoReplyEnabled ?? true,
             shopifyStoreId: page.shopifyStoreId,
+            businessProfile: page.businessProfile as Record<string, unknown> | null,
         };
     }
 
