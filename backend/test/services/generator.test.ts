@@ -20,6 +20,10 @@ vi.mock('../../src/services/ai', () => ({
     },
 }));
 
+vi.mock('../../src/utils/language', () => ({
+    detectLanguageCode: vi.fn().mockReturnValue('en'),
+}));
+
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
         getConversationHistory: vi.fn().mockResolvedValue([]),
@@ -478,6 +482,134 @@ describe('ReplyGenerator - Flagging System', () => {
 
             expect(result.replyText).toBe('Our prices start at $10.');
             expect(result.replyMethod).toBe('template');
+        });
+    });
+
+    // --- Language-aware template selection tests ---
+
+    describe('language-aware template selection', () => {
+        let generator: ReplyGenerator;
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+            generator = new ReplyGenerator();
+        });
+
+        it('should select Arabic template for Arabic comment', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+            const { detectLanguageCode } = await import('../../src/utils/language');
+
+            vi.mocked(detectLanguageCode).mockReturnValue('ar');
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1',
+                templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1',
+                name: 'Price',
+                translations: { en: 'Our prices start at $10.', ar: 'أسعارنا تبدأ من ١٠ دولار.' },
+            } as any);
+
+            const result = await generator.generateForComment(
+                { userId: 'u', text: 'كم السعر', pageName: 'Test' }, true,
+            );
+
+            expect(result.replyText).toBe('أسعارنا تبدأ من ١٠ دولار.');
+        });
+
+        it('should select English template for English comment', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+            const { detectLanguageCode } = await import('../../src/utils/language');
+
+            vi.mocked(detectLanguageCode).mockReturnValue('en');
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1',
+                templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1',
+                name: 'Price',
+                translations: { en: 'Our prices start at $10.', ar: 'أسعارنا تبدأ من ١٠ دولار.' },
+            } as any);
+
+            const result = await generator.generateForComment(
+                { userId: 'u', text: 'what is the price', pageName: 'Test' }, true,
+            );
+
+            expect(result.replyText).toBe('Our prices start at $10.');
+        });
+
+        it('should fall back to English when detected language has no template', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+            const { detectLanguageCode } = await import('../../src/utils/language');
+
+            vi.mocked(detectLanguageCode).mockReturnValue('ar');
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1',
+                templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1',
+                name: 'English Only',
+                translations: { en: 'Welcome!' },
+            } as any);
+
+            const result = await generator.generateForComment(
+                { userId: 'u', text: 'مرحبا', pageName: 'Test' }, true,
+            );
+
+            // No 'ar' translation, falls back to 'en'
+            expect(result.replyText).toBe('Welcome!');
+        });
+
+        it('should use Arabic for unknown language when text contains Arabic chars', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+            const { detectLanguageCode } = await import('../../src/utils/language');
+
+            vi.mocked(detectLanguageCode).mockReturnValue('unknown');
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1',
+                templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1',
+                name: 'Mixed',
+                translations: { en: 'Welcome!', ar: 'أهلاً!' },
+            } as any);
+
+            // Mixed Arabic/English — "unknown" language but has Arabic chars
+            const result = await generator.generateForComment(
+                { userId: 'u', text: 'Hello مرحبا', pageName: 'Test' }, true,
+            );
+
+            expect(result.replyText).toBe('أهلاً!');
+        });
+
+        it('should default to English for unknown language with no Arabic chars', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+            const { detectLanguageCode } = await import('../../src/utils/language');
+
+            vi.mocked(detectLanguageCode).mockReturnValue('unknown');
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1',
+                templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1',
+                name: 'Mixed',
+                translations: { en: 'Welcome!', ar: 'أهلاً!' },
+            } as any);
+
+            const result = await generator.generateForComment(
+                { userId: 'u', text: '123', pageName: 'Test' }, true,
+            );
+
+            expect(result.replyText).toBe('Welcome!');
         });
     });
 });

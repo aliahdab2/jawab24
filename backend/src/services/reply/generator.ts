@@ -9,6 +9,7 @@ import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '.
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService } from '../kb/gap-detector';
+import { detectLanguageCode } from '../../utils/language';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
@@ -256,8 +257,14 @@ export class ReplyGenerator {
 
             if (template?.translations) {
                 const translations = template.translations as Record<string, string>;
-                const replyText = translations['en'] || translations['ar'] || Object.values(translations)[0];
-                this.logger.debug('[Generator] Using template', { templateName: template.name });
+                // Pick template translation matching comment language
+                let lang = detectLanguageCode(text);
+                if (lang === 'unknown') {
+                    // Mixed Arabic/English comments are common — check for Arabic chars
+                    lang = /[\u0600-\u06FF]/.test(text) ? 'ar' : 'en';
+                }
+                const replyText = translations[lang] || translations['en'] || translations['ar'] || Object.values(translations)[0];
+                this.logger.debug('[Generator] Using template', { templateName: template.name, lang });
                 return { replyText, replyMethod: 'template', templateId: template.id, needsAttention: false };
             }
         }

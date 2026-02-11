@@ -2,6 +2,33 @@ import { db } from '../db';
 import { rules, templates } from '../db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { CreateRuleDTO, UpdateRuleDTO } from '../types';
+import { normalizeArabic } from '@jawab24/shared';
+
+const ARABIC_RE = /[\u0600-\u06FF]/;
+
+/** Escape special regex characters in a string */
+function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Match a keyword against text with proper boundary handling.
+ * - English keywords: word-boundary regex (\b) to avoid "price" matching "surprise"
+ * - Arabic keywords: substring matching (Arabic morphology expects partial stem matching)
+ * Both sides are pre-normalized with normalizeArabic() before this is called.
+ */
+export function matchesKeyword(normalizedText: string, normalizedKeyword: string): boolean {
+    if (!normalizedKeyword) return false;
+
+    // Arabic keywords: use substring matching (stems naturally overlap)
+    if (ARABIC_RE.test(normalizedKeyword)) {
+        return normalizedText.includes(normalizedKeyword);
+    }
+
+    // English/Latin keywords: word-boundary matching
+    const pattern = new RegExp(`\\b${escapeRegex(normalizedKeyword)}\\b`, 'i');
+    return pattern.test(normalizedText);
+}
 
 export interface PaginationOptions {
     page?: number;
@@ -135,14 +162,13 @@ export class RulesService {
             .orderBy(desc(rules.priority))
             .limit(100);
 
-        const lowerComment = commentText.toLowerCase();
+        // Normalize once outside the loop
+        const normalizedComment = normalizeArabic(commentText.toLowerCase());
 
-        // Simple keyword matching
-        // In a real app, this might be more sophisticated (regex, fuzzy match, etc.)
         for (const rule of userRules) {
             if (rule.keywords && rule.keywords.length > 0) {
-                const match = rule.keywords.some(keyword => 
-                    lowerComment.includes(keyword.toLowerCase())
+                const match = rule.keywords.some(keyword =>
+                    matchesKeyword(normalizedComment, normalizeArabic(keyword.toLowerCase()))
                 );
                 if (match) {
                     return rule;

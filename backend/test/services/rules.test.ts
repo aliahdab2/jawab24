@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RulesService, PaginatedResult } from '../../src/services/rules';
+import { RulesService, PaginatedResult, matchesKeyword } from '../../src/services/rules';
 
 // Mock the database
 vi.mock('../../src/db', () => ({
@@ -313,5 +313,174 @@ describe('RulesService', () => {
             const result = await service.findMatchingRule('user-123', 'any text');
             expect(result).toBeNull();
         });
+
+        it('should NOT match English keyword as substring (word boundaries)', async () => {
+            const { db } = await import('../../src/db');
+            const rule = { id: 'rule-1', keywords: ['price'], priority: 10 };
+
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([rule]),
+                        }),
+                    }),
+                }),
+            });
+
+            // "price" should NOT match "surprise" or "priceless"
+            expect(await service.findMatchingRule('user-123', 'what a surprise')).toBeNull();
+            expect(await service.findMatchingRule('user-123', 'priceless art')).toBeNull();
+        });
+
+        it('should match English keyword at word boundaries with punctuation', async () => {
+            const { db } = await import('../../src/db');
+            const rule = { id: 'rule-1', keywords: ['price'], priority: 10 };
+
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([rule]),
+                        }),
+                    }),
+                }),
+            });
+
+            expect(await service.findMatchingRule('user-123', 'what is the price?')).toEqual(rule);
+            expect(await service.findMatchingRule('user-123', 'price!')).toEqual(rule);
+            expect(await service.findMatchingRule('user-123', 'the price, please')).toEqual(rule);
+        });
+
+        it('should match multi-word keyword with boundaries', async () => {
+            const { db } = await import('../../src/db');
+            const rule = { id: 'rule-1', keywords: ['price list'], priority: 10 };
+
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([rule]),
+                        }),
+                    }),
+                }),
+            });
+
+            expect(await service.findMatchingRule('user-123', 'send me the price list please')).toEqual(rule);
+            expect(await service.findMatchingRule('user-123', 'send pricelist')).toBeNull();
+        });
+
+        it('should match Arabic keyword as substring (no word boundaries)', async () => {
+            const { db } = await import('../../src/db');
+            const rule = { id: 'rule-1', keywords: ['سعر'], priority: 10 };
+
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([rule]),
+                        }),
+                    }),
+                }),
+            });
+
+            // Arabic uses substring matching — "سعر" should match inside "الأسعار" or "كم السعر"
+            expect(await service.findMatchingRule('user-123', 'كم السعر')).toEqual(rule);
+        });
+
+        it('should match Arabic keyword with diacritics normalized', async () => {
+            const { db } = await import('../../src/db');
+            const rule = { id: 'rule-1', keywords: ['مرحبا'], priority: 10 };
+
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([rule]),
+                        }),
+                    }),
+                }),
+            });
+
+            // مَرْحَباً (with diacritics) should match مرحبا (without)
+            expect(await service.findMatchingRule('user-123', '\u0645\u064E\u0631\u0652\u062D\u064E\u0628\u064B\u0627')).toEqual(rule);
+        });
+
+        it('should match Arabic keyword with alef variants normalized', async () => {
+            const { db } = await import('../../src/db');
+            const rule = { id: 'rule-1', keywords: ['إسلام'], priority: 10 };
+
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([rule]),
+                        }),
+                    }),
+                }),
+            });
+
+            // إسلام and اسلام should match (alef variant normalization)
+            expect(await service.findMatchingRule('user-123', 'اسلام عليكم')).toEqual(rule);
+        });
+
+        it('should match mixed English/Arabic keyword', async () => {
+            const { db } = await import('../../src/db');
+            const rule = { id: 'rule-1', keywords: ['iPhone 15'], priority: 10 };
+
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([rule]),
+                        }),
+                    }),
+                }),
+            });
+
+            expect(await service.findMatchingRule('user-123', 'do you have iPhone 15?')).toEqual(rule);
+        });
+    });
+});
+
+// --- Pure helper function tests (no DB mocking needed) ---
+
+describe('matchesKeyword', () => {
+    // English word boundaries
+    it('matches English keyword at word boundary', () => {
+        expect(matchesKeyword('what is the price', 'price')).toBe(true);
+        expect(matchesKeyword('price!', 'price')).toBe(true);
+        expect(matchesKeyword('the price, please', 'price')).toBe(true);
+    });
+
+    it('does NOT match English keyword inside another word', () => {
+        expect(matchesKeyword('what a surprise', 'price')).toBe(false);
+        expect(matchesKeyword('priceless art', 'price')).toBe(false);
+    });
+
+    it('matches multi-word English keyword', () => {
+        expect(matchesKeyword('send me the price list please', 'price list')).toBe(true);
+    });
+
+    it('does NOT match multi-word keyword when concatenated', () => {
+        expect(matchesKeyword('send pricelist', 'price list')).toBe(false);
+    });
+
+    // Arabic substring matching
+    it('matches Arabic keyword as substring', () => {
+        expect(matchesKeyword('كم السعر', 'سعر')).toBe(true);
+        expect(matchesKeyword('التوصيل متاح', 'توصيل')).toBe(true);
+    });
+
+    it('returns false for empty keyword', () => {
+        expect(matchesKeyword('any text', '')).toBe(false);
+    });
+
+    it('handles special regex characters in keyword safely (no crash)', () => {
+        // Keywords with special regex chars should not throw — they get escaped
+        // \b only works at word-char boundaries, so $10 won't match via \b
+        // but the function must not crash
+        expect(() => matchesKeyword('price is $10.00', '$10.00')).not.toThrow();
+        expect(() => matchesKeyword('call (555) 123', '(555)')).not.toThrow();
     });
 });
