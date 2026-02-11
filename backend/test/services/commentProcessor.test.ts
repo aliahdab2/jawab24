@@ -484,15 +484,12 @@ describe('CommentProcessor', () => {
         );
 
         expect(result.success).toBe(true);
-        // Reply IS sent (not skipped), but with safe fallback text
-        expect(adapter.sendReply).toHaveBeenCalledWith(
-            expect.objectContaining({
-                replyText: PRICE_FALLBACK['en'],  // detectLanguageCode mock returns 'en'
-            }),
-        );
+        // Reply IS sent (not skipped), but with safe fallback text + DM CTA (PURCHASE_INTENT in public mode)
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toContain(PRICE_FALLBACK['en']);
+        expect(sendCall.replyText).toContain('Send us a message for more details');
         expect(adapter.flagComment).not.toHaveBeenCalled(); // not offensive
         expect(adapter.markAsReplied).toHaveBeenCalled();
-        expect(result.replyText).toBe(PRICE_FALLBACK['en']);
     });
 
     // --- Duplicate webhook guard tests ---
@@ -664,6 +661,199 @@ describe('CommentProcessor', () => {
         expect(result.success).toBe(true);
         expect(adapter.sendReply).toHaveBeenCalled();
         expect(adapter.flagComment).not.toHaveBeenCalled();
+    });
+
+    // --- Reply length enforcement tests ---
+
+    it('should truncate AI reply exceeding 280 chars before sending', async () => {
+        const longReply = 'Thank you so much for your wonderful question about our products and services. We have a wide variety of items available in our store including electronics, clothing, accessories, and home goods. Our dedicated team is always ready to help you find exactly what you need at the best possible price.';
+        expect(longReply.length).toBeGreaterThan(280); // verify test data
+
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: longReply,
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'COMPLIMENT',
+        });
+        const adapter = createMockAdapter();
+
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Your store is great!', 'from-1',
+        );
+
+        expect(result.success).toBe(true);
+        // The sent reply should be truncated
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText.length).toBeLessThanOrEqual(280);
+    });
+
+    it('should NOT truncate AI reply under 280 chars', async () => {
+        const shortReply = 'Thank you for your kind words!';
+
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: shortReply,
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'COMPLIMENT',
+        });
+        const adapter = createMockAdapter();
+
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Great page!', 'from-1',
+        );
+
+        expect(result.success).toBe(true);
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toBe(shortReply);
+    });
+
+    // --- DM CTA auto-append tests ---
+
+    it('should append English DM CTA for QUESTION intent in public mode', async () => {
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'Great question!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'QUESTION',
+        });
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentReplyMode: 'public',
+        } as any);
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'What are your hours?', 'from-1',
+        );
+
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toContain('Send us a message for more details');
+    });
+
+    it('should append Arabic DM CTA for QUESTION intent with Arabic comment', async () => {
+        const { detectLanguageCode } = await import('../../src/utils/language');
+        vi.mocked(detectLanguageCode).mockReturnValue('ar');
+
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'شكراً لسؤالك!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'QUESTION',
+        });
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentReplyMode: 'public',
+        } as any);
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر المنتج؟', 'from-1',
+        );
+
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toContain('راسلنا على الخاص');
+    });
+
+    it('should NOT append DM CTA when AI reply already mentions DM', async () => {
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'Great question! Send us a DM for details.',
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'QUESTION',
+        });
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentReplyMode: 'public',
+        } as any);
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'What is the price?', 'from-1',
+        );
+
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        // Should NOT double-append
+        expect(sendCall.replyText).toBe('Great question! Send us a DM for details.');
+    });
+
+    it('should NOT append DM CTA for COMPLIMENT intent', async () => {
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'Thank you so much!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'COMPLIMENT',
+        });
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentReplyMode: 'public',
+        } as any);
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Love your products!', 'from-1',
+        );
+
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toBe('Thank you so much!');
+        expect(sendCall.replyText).not.toContain('Send us a message');
+    });
+
+    it('should NOT append DM CTA in dual mode (DM already sent)', async () => {
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'Great question!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'QUESTION',
+        });
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentReplyMode: 'dual',
+        } as any);
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'What are your hours?', 'from-1',
+        );
+
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toBe('Great question!');
+        expect(sendCall.replyText).not.toContain('Send us a message');
+    });
+
+    it('should append DM CTA for PURCHASE_INTENT', async () => {
+        const { detectLanguageCode } = await import('../../src/utils/language');
+        vi.mocked(detectLanguageCode).mockReturnValue('en');
+
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'We would love to help you with your order!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'PURCHASE_INTENT',
+        });
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentReplyMode: 'public',
+        } as any);
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'I want to buy this!', 'from-1',
+        );
+
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toContain('Send us a message for more details');
     });
 });
 

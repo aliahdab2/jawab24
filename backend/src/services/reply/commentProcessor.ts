@@ -9,6 +9,7 @@ import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { Logger, noopLogger, CommentResult } from '../../types';
 import type { CommentPlatformAdapter } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
+import { truncateAtSentence } from '../../utils/text';
 
 /**
  * Unified Comment Processor
@@ -187,6 +188,30 @@ export class CommentProcessor {
                     }
                     pipelineMetrics.record(pipeline, 'no_reply_generated');
                     return { success: false, commentId: comment.id, error: 'No reply generated' };
+                }
+            }
+
+            // 9b. Enforce max length for public comment replies (280 chars, tweet-length)
+            const MAX_COMMENT_REPLY_CHARS = 280;
+            if (replyText.length > MAX_COMMENT_REPLY_CHARS) {
+                const originalLength = replyText.length;
+                replyText = truncateAtSentence(replyText, MAX_COMMENT_REPLY_CHARS);
+                this.logger.info('[CommentProcessor] Reply truncated to max length', {
+                    originalLength,
+                    truncatedLength: replyText.length,
+                });
+            }
+
+            // 9c. Auto-append DM CTA for question/purchase intents (public mode only)
+            const replyMode = userSettings.commentReplyMode || 'public';
+            if (replyMode === 'public' && ['QUESTION', 'PURCHASE_INTENT'].includes(aiIntent || '')) {
+                const hasDmMention = /\b(DM|message|رسالة|خاص|الخاص)\b/i.test(replyText);
+                if (!hasDmMention) {
+                    const lang = detectLanguageCode(commentMessage);
+                    const cta = lang === 'ar' || /[\u0600-\u06FF]/.test(commentMessage)
+                        ? '\nراسلنا على الخاص للمزيد من التفاصيل 📩'
+                        : '\nSend us a message for more details 📩';
+                    replyText = replyText.trimEnd() + cta;
                 }
             }
 
