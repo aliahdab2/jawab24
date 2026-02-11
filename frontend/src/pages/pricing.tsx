@@ -7,7 +7,7 @@ import { plansApi, subscriptionApi } from '@/lib/api';
 import { extractArrayData, extractObjectData } from '@/lib/api-utils';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
-import { Check, X, Zap, Crown, Sparkles, AlertCircle, Store } from 'lucide-react';
+import { Check, X, Zap, Crown, Sparkles, AlertCircle, Store, ChevronDown } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
@@ -24,6 +24,7 @@ function PlanCard({
   currentPlanPrice,
   subscriptionStatus,
   isSanctioned,
+  billingInterval,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
@@ -34,9 +35,15 @@ function PlanCard({
   currentPlanPrice: number;
   subscriptionStatus?: string;
   isSanctioned: boolean;
+  billingInterval: 'month' | 'year';
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
+  const isAnnual = billingInterval === 'year';
+
+  // Annual = 10 months (save 2 months ≈ 17%)
+  const displayPrice = isAnnual && !isFree ? plan.price * 10 : plan.price;
+  const monthlyEquivalent = isAnnual && !isFree ? Math.round(displayPrice / 12) : plan.price;
 
   // Translate plan names and descriptions based on slug with fallbacks
   const planName = t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
@@ -110,12 +117,17 @@ function PlanCard({
       <div className="text-center mb-4 py-3 bg-surface-50/50 rounded-xl mx-3">
         <div className="flex items-baseline justify-center gap-1">
           <span className="text-3xl md:text-4xl font-extrabold text-surface-900">
-            {isFree ? '$0' : formatPrice(plan.price)}
+            {isFree ? '$0' : isAnnual ? formatPrice(monthlyEquivalent) : formatPrice(plan.price)}
           </span>
           {!isFree && (
             <span className="text-surface-500 text-sm font-medium">{t('pricing.perMonth')}</span>
           )}
         </div>
+        {isAnnual && !isFree && (
+          <p className="text-xs text-surface-400 mt-1">
+            {t('pricing.billedYearly' as TranslationKey, { amount: formatPrice(displayPrice) })}
+          </p>
+        )}
         {/* Only show trial badge if user doesn't have an active subscription */}
         {plan.trialDays > 0 && !hasActiveSubscription && (
           <div className="inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
@@ -190,8 +202,8 @@ function PlanCard({
             onClick={onSelect}
             loading={loading}
             disabled={isCurrentPlan}
-            variant={isPopular ? 'primary' : 'secondary'}
-            className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold border-surface-300' : 'font-bold'
+            variant={isPopular ? 'primary' : plan.slug === 'pro' ? 'primary' : 'secondary'}
+            className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold !bg-surface-800 !text-white hover:!bg-surface-700 shadow-lg shadow-surface-300' : 'font-bold'
               }`}
           >
             {isCurrentPlan ? (
@@ -270,6 +282,8 @@ const PricingPage: NextPageWithLayout = () => {
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
   const [isSanctioned, setIsSanctioned] = useState<boolean>(false); // Default: not sanctioned
   const [usingFallback, setUsingFallback] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   // OPTIMIZED: Parallel loading with non-blocking geo check
   useEffect(() => {
@@ -457,6 +471,38 @@ const PricingPage: NextPageWithLayout = () => {
           </div>
         )}
 
+        {/* Platform support banner */}
+        <div className="max-w-2xl mx-auto mb-2 px-4">
+          <div className="flex items-center justify-center gap-3 py-3 px-5 bg-brand-50 rounded-xl border border-brand-100">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" /></svg>
+              <svg className="w-4 h-4 text-pink-600" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" /></svg>
+            </div>
+            <span className="text-sm font-semibold text-brand-700">
+              {t('pricing.allPlansInclude')}
+            </span>
+          </div>
+        </div>
+
+        {/* Billing interval toggle */}
+        <div className="flex items-center justify-center gap-3 pt-4 pb-2">
+          <button
+            onClick={() => setBillingInterval('month')}
+            className={`px-4 py-2 text-sm font-semibold rounded-full transition-all ${billingInterval === 'month' ? 'bg-brand-600 text-white shadow-md' : 'text-surface-500 hover:text-surface-700'}`}
+          >
+            {t('pricing.monthly')}
+          </button>
+          <button
+            onClick={() => setBillingInterval('year')}
+            className={`px-4 py-2 text-sm font-semibold rounded-full transition-all flex items-center gap-2 ${billingInterval === 'year' ? 'bg-brand-600 text-white shadow-md' : 'text-surface-500 hover:text-surface-700'}`}
+          >
+            {t('pricing.yearly')}
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${billingInterval === 'year' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-700'}`}>
+              {t('pricing.savePercent' as TranslationKey)}
+            </span>
+          </button>
+        </div>
+
         {/* Plans Grid - Responsive grid based on count */}
         <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0 pt-6 sm:pt-10 md:pt-12`}>
           {activePlans.map((plan) => (
@@ -471,13 +517,41 @@ const PricingPage: NextPageWithLayout = () => {
               subscriptionStatus={usage?.subscription?.status}
               t={t}
               isSanctioned={isSanctioned === true}
+              billingInterval={billingInterval}
             />
           ))}
         </div>
 
-        {/* Simple footer note */}
-        <div className="text-center py-6 text-sm text-surface-400">
-          {t('pricing.allPlansInclude')}
+        {/* FAQ Section */}
+        <div className="max-w-3xl mx-auto px-4 pb-12 pt-4">
+          <h2 className="text-xl font-bold text-surface-900 text-center mb-6">
+            {t('pricing.faqTitle' as TranslationKey)}
+          </h2>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => {
+              const qKey = `pricing.faq${i}Q` as TranslationKey;
+              const aKey = `pricing.faq${i}A` as TranslationKey;
+              const question = t(qKey);
+              // Skip if translation key is missing (returns the key itself)
+              if (question === qKey) return null;
+              return (
+                <div key={i} className="border border-surface-200 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    className="w-full flex items-center justify-between gap-3 px-5 py-4 text-start hover:bg-surface-50 transition-colors"
+                  >
+                    <span className="text-sm font-semibold text-surface-800">{question}</span>
+                    <ChevronDown className={`w-4 h-4 text-surface-400 flex-shrink-0 transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`} />
+                  </button>
+                  {openFaq === i && (
+                    <div className="px-5 pb-4 text-sm text-surface-600 leading-relaxed">
+                      {t(aKey)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
         </div>
     </>

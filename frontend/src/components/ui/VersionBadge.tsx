@@ -1,7 +1,16 @@
+import { useRouter } from 'next/router';
 import { useVersion } from '@/lib/useVersion';
+
+const PUBLIC_PATHS = ['/', '/pricing', '/login', '/register'];
 
 export function VersionBadge() {
   const { versionInfo, displayVersion, environment } = useVersion();
+  const { pathname } = useRouter();
+
+  // Hide badge on public-facing pages
+  if (PUBLIC_PATHS.includes(pathname)) {
+    return null;
+  }
 
   // Hide badge if no version info or if version is unknown
   if (!versionInfo || displayVersion === 'unknown' || environment === 'unknown') {

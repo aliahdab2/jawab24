@@ -91,7 +91,8 @@
       "Bash(curl:*)",
       "Bash(sort:*)",
       "Bash(npx drizzle-kit generate:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(cd /Users/aliahdab/Documents/AutoReply/frontend && npm run translation:validate:*)"
     ]
   }
 }
