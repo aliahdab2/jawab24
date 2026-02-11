@@ -90,7 +90,8 @@
       "Bash(npx playwright:*)",
       "Bash(curl:*)",
       "Bash(sort:*)",
-      "Bash(npx drizzle-kit generate:*)"
+      "Bash(npx drizzle-kit generate:*)",
+      "Bash(bash:*)"
     ]
   }
 }
