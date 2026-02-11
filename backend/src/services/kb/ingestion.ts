@@ -4,6 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { EmbeddingProvider, VectorStore, ChunkWithEmbedding } from './interfaces';
 import { chunkKnowledgeBase, chunkBusinessProfile } from './chunker';
 import type { KbChunk } from './chunker';
+import { gapDetectorService } from './gap-detector';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
 
@@ -54,6 +55,11 @@ export class KbIngestionService {
         await db.update(pages)
             .set({ kbActiveVersion: kbVersion })
             .where(eq(pages.id, pageId));
+
+        // 5. Resolve all existing KB gaps — the merchant just updated their KB,
+        //    so previous gaps may now be covered by the new content.
+        gapDetectorService.setLogger(this.logger);
+        await gapDetectorService.resolveAllForPage(pageId);
 
         this.logger.info('KB ingestion completed, version activated', { pageId, kbVersion, chunkCount: chunks.length });
     }
