@@ -34,6 +34,8 @@ import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
 import type { NextPageWithLayout } from './_app';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
+import { formatDuration } from '@/lib/formatDuration';
+import { useIsDemoUser } from '@/features/demo';
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
@@ -74,10 +76,18 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
 // Key for localStorage to track if onboarding was completed
 const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
 
+// Map plan names from backend to existing translation keys
+const PLAN_NAME_KEYS: Record<string, TranslationKey> = {
+  'Starter': 'plans.starter.name' as TranslationKey,
+  'Business': 'plans.business.name' as TranslationKey,
+  'Pro': 'plans.pro.name' as TranslationKey,
+};
+
 const DashboardPage: NextPageWithLayout = () => {
   const { t } = useTranslation();
   const { isAuthenticated, fbToken } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
+  const isDemoUser = useIsDemoUser();
   
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -401,7 +411,7 @@ const DashboardPage: NextPageWithLayout = () => {
       </div>
 
       {/* Messages Stats Section */}
-      <div className="mb-10">
+      <div className={clsx("mb-10", statsData.totalMessages === 0 && statsData.messagesPending === 0 && statsData.messagesNeedsAttention === 0 && statsData.messagesRepliedToday === 0 && "opacity-50")}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageCircle className="w-4 h-4" />
@@ -453,7 +463,7 @@ const DashboardPage: NextPageWithLayout = () => {
             />
             <StatCard
               nameKey={'dashboard.avgSpeed' as TranslationKey}
-              value={analytics.responseTime.avgSeconds != null ? `${Math.round(analytics.responseTime.avgSeconds)}${t('dashboard.seconds' as TranslationKey)}` : '—'}
+              value={analytics.responseTime.avgSeconds != null ? formatDuration(analytics.responseTime.avgSeconds, t) : '—'}
               icon={Timer}
               color="violet"
               index={10}
@@ -481,17 +491,16 @@ const DashboardPage: NextPageWithLayout = () => {
                 <p className="text-sm font-bold text-surface-900">
                   {statsData.commentsToday} {t('dashboard.todayComments' as TranslationKey)}
                 </p>
-                <p className="text-xs text-surface-500">
-                  {trend.direction === 'up' && (
-                    <span className="text-emerald-600">+{trend.percent}% {t('dashboard.vsYesterday')}</span>
-                  )}
-                  {trend.direction === 'down' && (
-                    <span className="text-red-500">-{trend.percent}% {t('dashboard.vsYesterday')}</span>
-                  )}
-                  {trend.direction === 'neutral' && (
-                    <span className="text-surface-400">{t('dashboard.vsYesterday')}</span>
-                  )}
-                </p>
+                {statsData.commentsYesterday > 0 && (
+                  <p className="text-xs text-surface-500">
+                    {trend.direction === 'up' && (
+                      <span className="text-emerald-600">+{trend.percent}% {t('dashboard.vsYesterday')}</span>
+                    )}
+                    {trend.direction === 'down' && (
+                      <span className="text-red-500">-{trend.percent}% {t('dashboard.vsYesterday')}</span>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -500,22 +509,22 @@ const DashboardPage: NextPageWithLayout = () => {
 
             {/* AI vs Manual Breakdown */}
             <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-brand-600" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
+                  <Bot className="w-5 h-5 text-brand-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-surface-900">{statsData.aiReplies}</p>
-                  <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wide">{t('dashboard.aiReply' as TranslationKey)}</p>
+                  <p className="text-lg font-bold text-surface-900">{statsData.aiReplies}</p>
+                  <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">{t('dashboard.aiReply' as TranslationKey)}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-                  <Zap className="w-4 h-4 text-emerald-600" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-surface-900">{statsData.templateReplies}</p>
-                  <p className="text-[10px] font-medium text-surface-400 uppercase tracking-wide">{t('dashboard.templateReply' as TranslationKey)}</p>
+                  <p className="text-lg font-bold text-surface-900">{statsData.templateReplies}</p>
+                  <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">{t('dashboard.templateReply' as TranslationKey)}</p>
                 </div>
               </div>
             </div>
@@ -602,8 +611,8 @@ const DashboardPage: NextPageWithLayout = () => {
                       </div>
                       <div className="min-w-0 flex-1 text-start">
                         <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                        <h4 className="text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
-                          {usage.subscription.plan.name}
+                        <h4 className="text-2xl font-display font-bold text-surface-900 break-words tracking-tight">
+                          {PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}
                           {isTrialing && (
                             <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
                               TRIAL
@@ -620,12 +629,20 @@ const DashboardPage: NextPageWithLayout = () => {
                         limit={usage.aiReplies.limit}
                         percent={usage.aiReplies.percentUsed}
                       />
-                      <UsageProgress
-                        label={t('subscription.pagesUsed')}
-                        used={Math.max(usage.pages.used, pages.length)}
-                        limit={usage.pages.limit}
-                        percent={usage.pages.limit ? (Math.max(usage.pages.used, pages.length) / usage.pages.limit) * 100 : 0}
-                      />
+                      {(() => {
+                        const effectivePagesUsed = Math.max(usage.pages.used, pages.length);
+                        const effectivePagesLimit = isDemoUser
+                          ? Math.max(usage.pages.limit ?? 0, pages.length)
+                          : usage.pages.limit;
+                        return (
+                          <UsageProgress
+                            label={t('subscription.pagesUsed')}
+                            used={effectivePagesUsed}
+                            limit={effectivePagesLimit}
+                            percent={effectivePagesLimit ? (effectivePagesUsed / effectivePagesLimit) * 100 : 0}
+                          />
+                        );
+                      })()}
                     </div>
 
                     {isTrialing && usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
@@ -708,7 +725,7 @@ const DashboardPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0 text-start">
-                      <p className="font-bold text-surface-900 truncate group-hover:text-brand-600 transition-colors">
+                      <p className="font-bold text-surface-900 truncate group-hover:text-brand-600 transition-colors" title={page.name}>
                         {page.name}
                       </p>
                       <div className="flex items-center gap-3 mt-1.5">

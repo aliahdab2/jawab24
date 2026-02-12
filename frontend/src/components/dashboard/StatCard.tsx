@@ -28,7 +28,7 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
           {value}
         </p>
         <p className={clsx(
-          "text-[11px] sm:text-xs font-bold uppercase tracking-widest truncate leading-tight",
+          "text-[11px] sm:text-xs font-bold uppercase tracking-widest line-clamp-2 leading-tight",
           isActive 
               ? (color === 'brand' ? 'text-brand-700' : 
                  color === 'emerald' ? 'text-emerald-700' : 

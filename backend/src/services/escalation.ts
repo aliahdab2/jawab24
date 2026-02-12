@@ -92,7 +92,7 @@ async function escalateComments(): Promise<void> {
             .update(comments)
             .set({
                 needsAttention: true,
-                flagReason: `SLA: no reply after ${thresholdMinutes} min`,
+                flagReason: `sla_no_reply:${thresholdMinutes}`,
                 updatedAt: new Date(),
             })
             .where(sql`${comments.id} IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})`);
@@ -148,7 +148,7 @@ async function escalateMessages(): Promise<void> {
             .update(messages)
             .set({
                 needsAttention: true,
-                flagReason: `SLA: no reply after ${thresholdMinutes} min`,
+                flagReason: `sla_no_reply:${thresholdMinutes}`,
                 updatedAt: new Date(),
             })
             .where(sql`${messages.id} IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})`);

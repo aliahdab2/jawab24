@@ -79,9 +79,9 @@ describe('nginx.conf - www redirect (CSP guard)', () => {
     const cspMatch = nginxConf.match(/Content-Security-Policy\s+"([^"]+)"/);
     expect(cspMatch).not.toBeNull();
 
-    const csp = cspMatch![1];
+    const csp = (cspMatch as RegExpMatchArray)[1];
     const connectSrc = csp.match(/connect-src\s+([^;]+)/);
     expect(connectSrc).not.toBeNull();
-    expect(connectSrc![1]).toContain("'self'");
+    expect((connectSrc as RegExpMatchArray)[1]).toContain("'self'");
   });
 });

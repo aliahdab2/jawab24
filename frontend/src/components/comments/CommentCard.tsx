@@ -50,16 +50,27 @@ export function checkNeedsAttention(comment: Comment): boolean {
  */
 export function translateFlagReason(
   flagReason: string | null | undefined,
-  t: (key: any) => string,   
+  t: (key: any, params?: Record<string, string>) => string,
   locale: string,
 ): string {
   if (!flagReason) return '';
   const separator = locale === 'ar' ? '، ' : ', ';
   return flagReason.split(',')
     .map(f => {
-      const key = `flagReason.${f.trim()}`;
+      const trimmed = f.trim();
+      // New structured format: "sla_no_reply:60"
+      const slaMatch = trimmed.match(/^sla_no_reply:(\d+)$/);
+      if (slaMatch) {
+        return t('flagReason.slaNoReply', { minutes: slaMatch[1] });
+      }
+      // Legacy format: "SLA: no reply after 60 min"
+      const legacySlaMatch = trimmed.match(/^SLA: no reply after (\d+) min$/);
+      if (legacySlaMatch) {
+        return t('flagReason.slaNoReply', { minutes: legacySlaMatch[1] });
+      }
+      const key = `flagReason.${trimmed}`;
       const translated = t(key);
-      return translated === key ? f.trim() : translated;
+      return translated === key ? trimmed : translated;
     })
     .join(separator);
 }

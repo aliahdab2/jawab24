@@ -168,12 +168,12 @@ Use these terms consistently in UI text, code comments, and translations:
 - Never say "AI reply" in user-facing text — use "Smart Reply"
 - Business Hours controls when auto-reply is active; Away Message is what's sent during the off period
 
-### 4. Linting
+### 7. Linting
 
-**Always check for lint errors after editing files.**
+**Always check for lint errors AND warnings after editing files. The codebase must have zero warnings and zero errors.**
 
 ```bash
-# Check linting
+# Check linting (must produce 0 errors AND 0 warnings)
 npm run lint
 
 # Auto-fix
@@ -342,7 +342,7 @@ refactor(css): consolidate safe areas
 
 ## ✅ Before Committing Checklist
 
-- [ ] Ran `npm run lint` - no errors
+- [ ] Ran `npm run lint` - no errors AND no warnings
 - [ ] Used logical properties for RTL (`ps-*`, `pe-*`)
 - [ ] No hardcoded strings (used `t('key')`)
 - [ ] Safe areas use `var(--sai-*)` or CSS classes (no hardcoded values)

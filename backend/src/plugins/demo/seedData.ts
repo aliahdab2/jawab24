@@ -457,6 +457,7 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
     // Create demo comments
     for (const commentData of DEMO_COMMENTS) {
         const post = createdPosts[commentData.postIndex];
+        const commentCreatedTime = new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000);
         await db.insert(comments).values({
             postId: post.id,
             facebookCommentId: commentData.facebookCommentId,
@@ -468,8 +469,10 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
             replyMethod: commentData.replyMethod,
             detectedLanguage: 'ar',
             replyLanguage: 'ar',
-            createdTime: new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000),
-            repliedAt: commentData.replied ? new Date() : null,
+            createdTime: commentCreatedTime,
+            repliedAt: commentData.replied
+                ? new Date(commentCreatedTime.getTime() + (5 + Math.random() * 115) * 1000) // 5-120s after creation
+                : null,
         });
     }
 

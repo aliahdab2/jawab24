@@ -20,6 +20,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { BrandLogo, NotificationBell } from '@/components/ui';
+import { useIsDemoUser } from '@/features/demo';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -126,16 +127,17 @@ export const Sidebar = memo(function Sidebar() {
   const { logout, user } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { t } = useTranslation();
+  const isDemoUser = useIsDemoUser();
 
   // Memoize logout handler to prevent unnecessary re-renders
   const handleLogout = useCallback(() => {
     logout();
     router.push('/login');
   }, [logout, router]);
-  
+
   // Memoize user data to prevent ProfileAvatar re-renders
   const userPicture = user?.picture;
-  const userName = user?.name;
+  const userName = isDemoUser ? t('auth.demoUserName') : user?.name;
 
   return (
     <aside
@@ -272,7 +274,7 @@ export const Sidebar = memo(function Sidebar() {
             <ProfileAvatar picture={userPicture} name={userName} />
             {sidebarOpen && (
               <div className="min-w-0 text-start">
-                <p className="text-sm font-bold text-white truncate leading-tight">{user.name}</p>
+                <p className="text-sm font-bold text-white truncate leading-tight">{userName}</p>
               </div>
             )}
           </div>
