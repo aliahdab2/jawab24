@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { getTableColumns } from 'drizzle-orm';
 import { createTestUser, createTestPage, testDb } from './setup';
 import * as schema from '../../src/db/schema';
 import { pagesService } from '../../src/services/pages';
@@ -95,44 +96,25 @@ describe('pagesService.getPages — integration', () => {
         expect(pages[0].replyRate).toBe(50);
     });
 
-    it('returns all page columns (no missing fields)', async () => {
+    it('returns every schema column plus computed stats', async () => {
         const user = await createTestUser();
-        await createTestPage(user.id, {
-            name: 'Full Page',
-            instagramAccountId: 'ig-123',
-            instagramUsername: 'testuser',
-            knowledgeBase: 'Some KB',
-        });
+        await createTestPage(user.id, { name: 'Full Page' });
 
         const pages = await pagesService.getPages(user.id);
         const page = pages[0];
+        const returnedKeys = Object.keys(page);
 
-        // Core columns that must always be present
-        expect(page).toHaveProperty('id');
-        expect(page).toHaveProperty('userId');
-        expect(page).toHaveProperty('facebookPageId');
-        expect(page).toHaveProperty('name', 'Full Page');
-        expect(page).toHaveProperty('accessToken');
-        expect(page).toHaveProperty('autoReplyEnabled');
-        expect(page).toHaveProperty('instagramAccountId', 'ig-123');
-        expect(page).toHaveProperty('instagramUsername', 'testuser');
-        expect(page).toHaveProperty('instagramAutoReplyEnabled');
-        expect(page).toHaveProperty('knowledgeBase', 'Some KB');
-        expect(page).toHaveProperty('kbActiveVersion');
-        expect(page).toHaveProperty('createdAt');
-        expect(page).toHaveProperty('updatedAt');
-        // Columns that caused the previous 500 when missing
-        expect(page).toHaveProperty('shopifyStoreId');
-        expect(page).toHaveProperty('suggestedKnowledgeBase');
-        expect(page).toHaveProperty('kbVersion');
-        expect(page).toHaveProperty('kbUpdatedAt');
-        expect(page).toHaveProperty('businessProfile');
-        expect(page).toHaveProperty('businessProfileUpdatedAt');
-        // Computed stats
-        expect(page).toHaveProperty('commentsCount');
-        expect(page).toHaveProperty('repliesCount');
-        expect(page).toHaveProperty('replyRate');
-        expect(page).toHaveProperty('lastActivity');
+        // Dynamically get ALL column names from the schema — if a column is
+        // added to the schema, this test will fail if getPages() drops it.
+        const schemaColumns = Object.keys(getTableColumns(schema.pages));
+        for (const col of schemaColumns) {
+            expect(returnedKeys, `missing schema column: ${col}`).toContain(col);
+        }
+
+        // Computed stats must also be present
+        for (const stat of ['commentsCount', 'repliesCount', 'replyRate', 'lastActivity']) {
+            expect(returnedKeys, `missing computed stat: ${stat}`).toContain(stat);
+        }
     });
 
     it('returns empty array for user with no pages', async () => {
