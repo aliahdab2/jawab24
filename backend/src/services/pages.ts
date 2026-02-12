@@ -186,36 +186,41 @@ export class PagesService {
             .where(eq(pages.userId, userId))
             .orderBy(desc(pages.createdAt));
 
-        if (userPages.length === 0) return userPages.map(p => ({ ...p, commentsCount: 0, repliesCount: 0, replyRate: 0, lastActivity: null as number | null }));
+        const emptyStats = { commentsCount: 0, repliesCount: 0, replyRate: 0, lastActivity: null as number | null };
+        if (userPages.length === 0) return userPages.map(p => ({ ...p, ...emptyStats }));
 
-        // Fetch per-page stats with a single parameterized query
-        const statsRows = await db.execute(
-            sql`SELECT
-                p.id AS page_id,
-                (SELECT COUNT(*)::int FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id)
-                + (SELECT COUNT(*)::int FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
-                AS comments_count,
-                (SELECT COUNT(*)::int FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id AND c.replied = true)
-                + (SELECT COUNT(*)::int FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id AND ic.replied = true)
-                AS replies_count,
-                EXTRACT(EPOCH FROM GREATEST(
-                    (SELECT MAX(c.replied_at) FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id),
-                    (SELECT MAX(ic.replied_at) FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
-                )) AS last_activity
-            FROM pages p
-            WHERE p.user_id = ${userId}`
-        );
-
+        // Stats are best-effort — if the query fails, pages still load with zeroed stats
         const statsMap = new Map<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>();
-        const rows = statsRows as unknown as Array<Record<string, unknown>>;
-        for (const row of rows) {
-            const cc = Number(row.comments_count) || 0;
-            const rc = Number(row.replies_count) || 0;
-            statsMap.set(row.page_id as string, {
-                commentsCount: cc,
-                repliesCount: rc,
-                lastActivity: row.last_activity ? Math.round(Number(row.last_activity) * 1000) : null,
-            });
+        try {
+            const statsRows = await db.execute(
+                sql`SELECT
+                    p.id AS page_id,
+                    (SELECT COUNT(*)::int FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id)
+                    + (SELECT COUNT(*)::int FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
+                    AS comments_count,
+                    (SELECT COUNT(*)::int FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id AND c.replied = true)
+                    + (SELECT COUNT(*)::int FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id AND ic.replied = true)
+                    AS replies_count,
+                    EXTRACT(EPOCH FROM GREATEST(
+                        (SELECT MAX(c.replied_at) FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id),
+                        (SELECT MAX(ic.replied_at) FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
+                    )) AS last_activity
+                FROM pages p
+                WHERE p.user_id = ${userId}`
+            );
+
+            const rows = statsRows as unknown as Array<Record<string, unknown>>;
+            for (const row of rows) {
+                const cc = Number(row.comments_count) || 0;
+                const rc = Number(row.replies_count) || 0;
+                statsMap.set(row.page_id as string, {
+                    commentsCount: cc,
+                    repliesCount: rc,
+                    lastActivity: row.last_activity ? Math.round(Number(row.last_activity) * 1000) : null,
+                });
+            }
+        } catch (err) {
+            console.error('[PagesService] Stats query failed, returning pages without stats:', err);
         }
 
         return userPages.map(page => {
