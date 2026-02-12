@@ -7,7 +7,7 @@ import path from 'path';
  * Captures full-page screenshots of every page in the application
  * in both desktop (webapp) and mobile viewports.
  *
- * Run: npx playwright test e2e/screenshots.spec.ts
+ * Run: npx playwright test scripts/screenshots.spec.ts
  * Output: frontend/screenshots/
  */
 
