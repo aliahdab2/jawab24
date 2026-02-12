@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Clock
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseModal';
@@ -103,6 +104,12 @@ const PagesPage: NextPageWithLayout = () => {
       setPages(pages.map(page =>
         page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
       ));
+      const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
+      if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+        toast.error(t('pages.pageLimitReached' as TranslationKey));
+      } else {
+        toast.error(t('common.error'));
+      }
     }
   };
 
@@ -120,6 +127,12 @@ const PagesPage: NextPageWithLayout = () => {
       setPages(pages.map(page =>
         page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
       ));
+      const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
+      if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+        toast.error(t('pages.pageLimitReached' as TranslationKey));
+      } else {
+        toast.error(t('common.error'));
+      }
     }
   };
 

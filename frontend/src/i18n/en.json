@@ -208,6 +208,7 @@
   "pages.editBusinessInfo": "Edit Your Business Info",
   "pages.addBusinessInfo": "Add Your Business Info",
   "pages.notLinked": "Not linked",
+  "pages.pageLimitReached": "Page limit reached. Disable another page or upgrade your plan.",
   "pages.instagramTooltip": "Link your Instagram Business account to your Facebook Page first, then click Sync to detect it.",
   "pages.businessInfoActive": "Business Info Active",
   "pages.clickToEdit": "Click to edit information",

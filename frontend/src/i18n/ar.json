@@ -207,6 +207,7 @@
   "pages.editBusinessInfo": "تعديل معلومات النشاط",
   "pages.addBusinessInfo": "إضافة معلومات النشاط",
   "pages.notLinked": "غير مرتبط",
+  "pages.pageLimitReached": "تم الوصول للحد الأقصى للصفحات. أوقف صفحة أخرى أو قم بترقية خطتك.",
   "pages.instagramTooltip": "اربط حساب إنستغرام للأعمال بصفحتك على فيسبوك أولاً، ثم اضغط مزامنة لاكتشافه.",
   "pages.businessInfoActive": "معلومات النشاط التجاري جاهزة",
   "pages.clickToEdit": "انقر لتعديل المعلومات",

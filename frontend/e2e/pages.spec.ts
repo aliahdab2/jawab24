@@ -174,6 +174,110 @@ test.describe('Pages Page', () => {
     expect(bodyText.length).toBeGreaterThan(20);
   });
 
+  test('should toggle Facebook auto-reply OFF successfully', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      const method = route.request().method();
+
+      if (method === 'PATCH' && url.includes('/auto-reply')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ...MOCK_PAGES[0], autoReplyEnabled: false }),
+        });
+      }
+      if (url.includes('/pages')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ data: MOCK_PAGES }),
+        });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
+      }
+      if (url.includes('/settings')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/pages');
+
+    await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 15000 });
+
+    // Toggle order: page_1 FB (ON), page_1 IG (OFF), page_2 FB (OFF)
+    // The first toggle (page_1 FB) should be ON
+    const allToggles = page.locator('button[role="switch"]');
+    const firstToggle = allToggles.nth(0);
+    await expect(firstToggle).toHaveAttribute('aria-checked', 'true');
+
+    // Click to toggle OFF
+    await firstToggle.click();
+
+    // Toggle should now be OFF
+    await expect(firstToggle).toHaveAttribute('aria-checked', 'false');
+  });
+
+  test('should show error toast when enabling Facebook toggle hits page limit', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      const method = route.request().method();
+
+      if (method === 'PATCH' && url.includes('/auto-reply')) {
+        return route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: 'Page limit reached',
+            code: 'PAGE_LIMIT_REACHED',
+            limit: 1,
+            used: 1,
+          }),
+        });
+      }
+      if (url.includes('/pages')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ data: MOCK_PAGES }),
+        });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
+      }
+      if (url.includes('/settings')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/pages');
+
+    await expect(page.getByText('Second Page').first()).toBeVisible({ timeout: 15000 });
+
+    // No instagramUsername in mock data, so only FB toggles exist
+    // Toggle order: page_1 FB (ON), page_2 FB (OFF)
+    const allToggles = page.locator('button[role="switch"]');
+    const page2FbToggle = allToggles.nth(1);
+    await expect(page2FbToggle).toHaveAttribute('aria-checked', 'false');
+
+    // Click to try enabling — should fail with 403
+    await page2FbToggle.click();
+
+    // Toast should appear with limit message
+    await expect(page.getByText(/Page limit reached|الحد الأقصى/i).first()).toBeVisible({ timeout: 5000 });
+
+    // Toggle should revert back to OFF
+    await expect(page2FbToggle).toHaveAttribute('aria-checked', 'false');
+  });
+
   test('should handle API failures gracefully', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();

@@ -355,11 +355,13 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   }, [fetchPages]);
 
   const handleToggle = useCallback(async (pageId: string, enabled: boolean) => {
-    // Check plan limit before enabling (FB + IG toggles count as separate slots)
+    // Check plan limit before enabling (1 physical page = 1 slot, FB + IG share the slot)
     if (enabled && pageLimit !== null) {
-      const fbSlots = pages.filter(p => p.autoReplyEnabled).length;
-      const igSlots = pages.filter(p => p.instagramAutoReplyEnabled).length;
-      if (fbSlots + igSlots >= pageLimit) {
+      const enabledPages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled).length;
+      // Only block if the page being toggled doesn't already have any auto-reply enabled
+      const targetPage = pages.find(p => p.id === pageId);
+      const targetAlreadyEnabled = targetPage?.autoReplyEnabled || targetPage?.instagramAutoReplyEnabled;
+      if (!targetAlreadyEnabled && enabledPages >= pageLimit) {
         toast.error(t('onboarding.pageLimitReached' as TranslationKey, { limit: pageLimit }));
         return;
       }

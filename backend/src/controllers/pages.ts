@@ -154,7 +154,7 @@ export class PagesController {
         try {
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
-                const limitCheck = await subscriptionsService.canEnablePage(userId);
+                const limitCheck = await subscriptionsService.canEnablePage(userId, id);
                 if (!limitCheck.allowed) {
                     return reply.status(403).send({
                         error: limitCheck.reason || 'Page limit reached',

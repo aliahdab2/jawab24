@@ -336,7 +336,7 @@ export const plans = pgTable('plans', {
 
     // Limits
     maxPages: integer('max_pages').default(1),
-    maxAiRepliesPerMonth: integer('max_ai_replies_per_month').default(50),
+    maxAiRepliesPerMonth: integer('max_ai_replies_per_month').default(200),
     maxTemplates: integer('max_templates').default(3), // null = unlimited
     maxRules: integer('max_rules').default(2), // null = unlimited
 

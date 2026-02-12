@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
+import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { subscriptions, plans, usage, usageLogs, pages, templates, rules } from '../db/schema';
 import { plansService } from './plans';
@@ -479,28 +479,26 @@ export const subscriptionsService = {
 
     /**
      * Count enabled page slots for a user.
-     * FB auto-reply = 1 slot, IG auto-reply = 1 slot, both = 2 slots.
+     * 1 physical page = 1 slot (regardless of whether FB, IG, or both are enabled).
      */
     async countEnabledPageSlots(userId: string): Promise<number> {
-        const [fbCount] = await db
+        const [result] = await db
             .select({ count: sql<number>`count(*)` })
             .from(pages)
-            .where(and(eq(pages.userId, userId), eq(pages.autoReplyEnabled, true)));
+            .where(and(
+                eq(pages.userId, userId),
+                or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true))
+            ));
 
-        const [igCount] = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(pages)
-            .where(and(eq(pages.userId, userId), eq(pages.instagramAutoReplyEnabled, true)));
-
-        return (Number(fbCount?.count) || 0) + (Number(igCount?.count) || 0);
+        return Number(result?.count) || 0;
     },
 
     /**
-     * Check if user can enable another page (counts enabled FB + IG slots separately).
-     * A page with FB auto-reply enabled = 1 slot. IG auto-reply enabled = 1 slot.
-     * A page with both = 2 slots. Used for: toggle, sync auto-enable decisions.
+     * Check if user can enable another page.
+     * 1 page = 1 slot (FB + IG on the same page share the slot).
+     * Pass pageId to allow enabling the other platform on an already-active page.
      */
-    async canEnablePage(userId: string): Promise<LimitCheckResult> {
+    async canEnablePage(userId: string, pageId?: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
 
         if (!subscription) {
@@ -522,6 +520,17 @@ export const subscriptionsService = {
         const limit = plan.maxPages;
 
         if (used >= limit) {
+            // If the page already has a slot (FB or IG already enabled), allow enabling the other platform
+            if (pageId) {
+                const [existing] = await db
+                    .select({ autoReplyEnabled: pages.autoReplyEnabled, instagramAutoReplyEnabled: pages.instagramAutoReplyEnabled })
+                    .from(pages)
+                    .where(and(eq(pages.id, pageId), eq(pages.userId, userId)));
+                if (existing?.autoReplyEnabled || existing?.instagramAutoReplyEnabled) {
+                    return { allowed: true, limit, used, remaining: 0 };
+                }
+            }
+
             return {
                 allowed: false,
                 reason: 'Enabled page limit reached. Disable another page or upgrade your plan.',
