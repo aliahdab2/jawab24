@@ -148,6 +148,13 @@
       "when": 1770881934016,
       "tag": "0020_flippant_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1770937167149,
+      "tag": "0021_keen_kulan_gath",
+      "breakpoints": true
     }
   ]
 }

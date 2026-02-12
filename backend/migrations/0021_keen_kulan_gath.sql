@@ -1,0 +1,1 @@
+ALTER TABLE "plans" ALTER COLUMN "max_ai_replies_per_month" SET DEFAULT 200;
