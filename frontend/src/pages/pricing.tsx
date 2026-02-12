@@ -93,8 +93,8 @@ function PlanCard({
         </div>
       )}
 
-      <div className="text-center mb-3 pt-4 px-3">
-        <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'bg-slate-100 text-slate-600' :
+      <div className="text-center mb-2 md:mb-3 pt-3 md:pt-4 px-3">
+        <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl hidden md:flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'bg-slate-100 text-slate-600' :
           plan.slug === 'starter' ? 'bg-blue-100 text-blue-600' :
             plan.slug === 'business' ? 'bg-brand-100 text-brand-600' :
               'bg-amber-100 text-amber-600'
@@ -109,12 +109,12 @@ function PlanCard({
         </div>
         <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight mb-1">{planName}</h3>
         {planDescription && (
-          <p className="text-xs md:text-sm text-surface-600 leading-relaxed min-h-[32px] px-2">{planDescription}</p>
+          <p className="text-xs md:text-sm text-surface-600 leading-relaxed min-h-[32px] px-2 hidden md:block">{planDescription}</p>
         )}
       </div>
 
       {/* Price */}
-      <div className="text-center mb-4 py-3 bg-surface-50/50 rounded-xl mx-3">
+      <div className="text-center mb-3 md:mb-4 py-2 md:py-3 bg-surface-50/50 rounded-xl mx-3">
         <div className="flex items-baseline justify-center gap-1">
           <span className="text-3xl md:text-4xl font-extrabold text-surface-900">
             {isFree ? '$0' : isAnnual ? formatPrice(monthlyEquivalent) : formatPrice(plan.price)}
@@ -182,7 +182,7 @@ function PlanCard({
       )}
 
       {/* CTA */}
-      <div className="mt-auto pt-3 px-3 pb-1">
+      <div className="mt-auto pt-2 md:pt-3 px-3 pb-1">
         {isSanctioned ? (
           <div className="text-center p-3 bg-slate-50 rounded-xl border border-slate-100">
             <p className="text-xs font-bold text-slate-500 mb-1">
@@ -248,7 +248,7 @@ function FeatureRow({
   highlight?: boolean;
 }) {
   return (
-    <div className={`flex items-start gap-2.5 py-1.5 px-1 rounded-lg transition-colors ${highlight ? 'bg-brand-50/30' : ''}`}>
+    <div className={`flex items-start gap-2.5 py-1 md:py-1.5 px-1 rounded-lg transition-colors ${highlight ? 'bg-brand-50/30' : ''}`}>
       <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${included ? 'bg-green-100 text-green-600' : 'bg-surface-100 text-surface-300'
         }`}>
         {included ? (
@@ -471,6 +471,16 @@ const PricingPage: NextPageWithLayout = () => {
           </div>
         )}
 
+        {/* Page title */}
+        <div className="text-center px-4 pt-6 sm:pt-10 md:pt-12">
+          <h1 className="text-2xl md:text-3xl font-bold text-surface-900 tracking-tight">
+            {t('pricing.choosePlan')}
+          </h1>
+          <p className="text-sm md:text-base text-surface-500 mt-2 max-w-lg mx-auto">
+            {t('pricing.tryFullService')}
+          </p>
+        </div>
+
         {/* Billing interval toggle */}
         <div className="flex items-center justify-center gap-3 pt-4 pb-2">
           <button
@@ -491,7 +501,7 @@ const PricingPage: NextPageWithLayout = () => {
         </div>
 
         {/* Plans Grid - Responsive grid based on count */}
-        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0 pt-6 sm:pt-10 md:pt-12`}>
+        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0 pt-4 md:pt-8`}>
           {activePlans.map((plan) => (
             <PlanCard
               key={plan.id}
