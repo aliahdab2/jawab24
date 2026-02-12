@@ -10,6 +10,7 @@ vi.mock('../../src/db', () => ({
         insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: vi.fn() })) })),
         update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn() })) })) })),
         select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ orderBy: vi.fn() })) })) })),
+        execute: vi.fn().mockResolvedValue([]),
     }
 }));
 

@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramMedia, instagramComments } from '../db/schema';
+import { pages } from '../db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import type { BusinessProfile } from '@jawab24/shared';
@@ -180,62 +180,54 @@ export class PagesService {
      * Get all pages for a user, with computed comment stats
      */
     async getPages(userId: string) {
-        const rows = await db
-            .select({
-                // All page columns
-                id: pages.id,
-                userId: pages.userId,
-                name: pages.name,
-                facebookPageId: pages.facebookPageId,
-                accessToken: pages.accessToken,
-                autoReplyEnabled: pages.autoReplyEnabled,
-                instagramAccountId: pages.instagramAccountId,
-                instagramUsername: pages.instagramUsername,
-                instagramAutoReplyEnabled: pages.instagramAutoReplyEnabled,
-                knowledgeBase: pages.knowledgeBase,
-                kbActiveVersion: pages.kbActiveVersion,
-                createdAt: pages.createdAt,
-                updatedAt: pages.updatedAt,
-                // Computed stats via subqueries
-                commentsCount: sql<number>`(
-                    SELECT COALESCE(COUNT(*)::int, 0)
-                    FROM ${comments}
-                    JOIN ${posts} ON ${comments.postId} = ${posts.id}
-                    WHERE ${posts.pageId} = ${pages.id}
-                ) + (
-                    SELECT COALESCE(COUNT(*)::int, 0)
-                    FROM ${instagramComments}
-                    JOIN ${instagramMedia} ON ${instagramComments.mediaId} = ${instagramMedia.id}
-                    WHERE ${instagramMedia.pageId} = ${pages.id}
-                )`.as('comments_count'),
-                repliesCount: sql<number>`(
-                    SELECT COALESCE(COUNT(*)::int, 0)
-                    FROM ${comments}
-                    JOIN ${posts} ON ${comments.postId} = ${posts.id}
-                    WHERE ${posts.pageId} = ${pages.id} AND ${comments.replied} = true
-                ) + (
-                    SELECT COALESCE(COUNT(*)::int, 0)
-                    FROM ${instagramComments}
-                    JOIN ${instagramMedia} ON ${instagramComments.mediaId} = ${instagramMedia.id}
-                    WHERE ${instagramMedia.pageId} = ${pages.id} AND ${instagramComments.replied} = true
-                )`.as('replies_count'),
-                lastActivity: sql<number>`EXTRACT(EPOCH FROM GREATEST(
-                    (SELECT MAX(${comments.repliedAt}) FROM ${comments} JOIN ${posts} ON ${comments.postId} = ${posts.id} WHERE ${posts.pageId} = ${pages.id}),
-                    (SELECT MAX(${instagramComments.repliedAt}) FROM ${instagramComments} JOIN ${instagramMedia} ON ${instagramComments.mediaId} = ${instagramMedia.id} WHERE ${instagramMedia.pageId} = ${pages.id})
-                ))`.as('last_activity'),
-            })
+        const userPages = await db
+            .select()
             .from(pages)
             .where(eq(pages.userId, userId))
             .orderBy(desc(pages.createdAt));
 
-        return rows.map(row => ({
-            ...row,
-            replyRate: row.commentsCount > 0
-                ? Math.round((row.repliesCount / row.commentsCount) * 100)
-                : 0,
-            // Convert epoch seconds to milliseconds for JS Date compatibility
-            lastActivity: row.lastActivity ? Math.round(row.lastActivity * 1000) : null,
-        }));
+        if (userPages.length === 0) return userPages.map(p => ({ ...p, commentsCount: 0, repliesCount: 0, replyRate: 0, lastActivity: null as number | null }));
+
+        // Fetch per-page stats with a single parameterized query
+        const statsRows = await db.execute(
+            sql`SELECT
+                p.id AS page_id,
+                (SELECT COUNT(*)::int FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id)
+                + (SELECT COUNT(*)::int FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
+                AS comments_count,
+                (SELECT COUNT(*)::int FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id AND c.replied = true)
+                + (SELECT COUNT(*)::int FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id AND ic.replied = true)
+                AS replies_count,
+                EXTRACT(EPOCH FROM GREATEST(
+                    (SELECT MAX(c.replied_at) FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id),
+                    (SELECT MAX(ic.replied_at) FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
+                )) AS last_activity
+            FROM pages p
+            WHERE p.user_id = ${userId}`
+        );
+
+        const statsMap = new Map<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>();
+        const rows = statsRows as unknown as Array<Record<string, unknown>>;
+        for (const row of rows) {
+            const cc = Number(row.comments_count) || 0;
+            const rc = Number(row.replies_count) || 0;
+            statsMap.set(row.page_id as string, {
+                commentsCount: cc,
+                repliesCount: rc,
+                lastActivity: row.last_activity ? Math.round(Number(row.last_activity) * 1000) : null,
+            });
+        }
+
+        return userPages.map(page => {
+            const stats = statsMap.get(page.id) || { commentsCount: 0, repliesCount: 0, lastActivity: null };
+            return {
+                ...page,
+                ...stats,
+                replyRate: stats.commentsCount > 0
+                    ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
+                    : 0,
+            };
+        });
     }
 
     /**
