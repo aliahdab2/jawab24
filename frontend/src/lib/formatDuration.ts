@@ -1,3 +1,5 @@
+import type { TranslationKey } from '@/i18n';
+
 /**
  * Format a duration in seconds to a human-readable short string.
  *
@@ -9,7 +11,7 @@
  */
 export function formatDuration(
   totalSeconds: number,
-  t: (key: string) => string,
+  t: (key: TranslationKey) => string,
 ): string {
   if (totalSeconds < 0 || !Number.isFinite(totalSeconds)) return '—';
 
