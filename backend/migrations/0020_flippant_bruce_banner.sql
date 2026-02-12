@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ALTER COLUMN "instagram_auto_reply_enabled" SET DEFAULT false;

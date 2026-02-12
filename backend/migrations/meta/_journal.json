@@ -141,6 +141,13 @@
       "when": 1770803124984,
       "tag": "0019_tense_cardiac",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1770881934016,
+      "tag": "0020_flippant_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

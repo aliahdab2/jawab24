@@ -241,7 +241,10 @@ const PagesPage: NextPageWithLayout = () => {
                     </p>
                   </div>
 
-                  <div className={`p-4 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-100 ring-1 ring-pink-100' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-50 opacity-60 cursor-not-allowed'}`}>
+                  <div
+                    className={`p-4 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-100 ring-1 ring-pink-100' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-50 opacity-60 cursor-not-allowed'}`}
+                    {...(!page.instagramUsername && { title: t('pages.instagramTooltip' as TranslationKey) })}
+                  >
                     <div className="flex items-center justify-between gap-3 mb-2">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
@@ -263,15 +266,8 @@ const PagesPage: NextPageWithLayout = () => {
                     <p className={`text-[10px] font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-600' : 'text-surface-400') : 'text-surface-300'}`}>
                       {page.instagramUsername
                         ? (page.instagramAutoReplyEnabled ? t('common.enabled') : t('common.disabled'))
-                        : (
-                          <>
-                            {t('pages.notLinked')}
-                            {' · '}
-                            <button onClick={handleSync} className="text-brand-600 hover:underline font-bold">
-                              {t('pages.linkNow' as TranslationKey)}
-                            </button>
-                          </>
-                        )
+                        : t('pages.notLinked')
+
                       }
                     </p>
                   </div>
