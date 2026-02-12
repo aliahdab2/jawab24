@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages } from '../db/schema';
+import { pages, posts, comments, instagramMedia, instagramComments } from '../db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import type { BusinessProfile } from '@jawab24/shared';
@@ -177,14 +177,65 @@ export class PagesService {
     }
 
     /**
-     * Get all pages for a user
+     * Get all pages for a user, with computed comment stats
      */
     async getPages(userId: string) {
-        return db
-            .select()
+        const rows = await db
+            .select({
+                // All page columns
+                id: pages.id,
+                userId: pages.userId,
+                name: pages.name,
+                facebookPageId: pages.facebookPageId,
+                accessToken: pages.accessToken,
+                autoReplyEnabled: pages.autoReplyEnabled,
+                instagramAccountId: pages.instagramAccountId,
+                instagramUsername: pages.instagramUsername,
+                instagramAutoReplyEnabled: pages.instagramAutoReplyEnabled,
+                knowledgeBase: pages.knowledgeBase,
+                kbActiveVersion: pages.kbActiveVersion,
+                createdAt: pages.createdAt,
+                updatedAt: pages.updatedAt,
+                // Computed stats via subqueries
+                commentsCount: sql<number>`(
+                    SELECT COALESCE(COUNT(*)::int, 0)
+                    FROM ${comments}
+                    JOIN ${posts} ON ${comments.postId} = ${posts.id}
+                    WHERE ${posts.pageId} = ${pages.id}
+                ) + (
+                    SELECT COALESCE(COUNT(*)::int, 0)
+                    FROM ${instagramComments}
+                    JOIN ${instagramMedia} ON ${instagramComments.mediaId} = ${instagramMedia.id}
+                    WHERE ${instagramMedia.pageId} = ${pages.id}
+                )`.as('comments_count'),
+                repliesCount: sql<number>`(
+                    SELECT COALESCE(COUNT(*)::int, 0)
+                    FROM ${comments}
+                    JOIN ${posts} ON ${comments.postId} = ${posts.id}
+                    WHERE ${posts.pageId} = ${pages.id} AND ${comments.replied} = true
+                ) + (
+                    SELECT COALESCE(COUNT(*)::int, 0)
+                    FROM ${instagramComments}
+                    JOIN ${instagramMedia} ON ${instagramComments.mediaId} = ${instagramMedia.id}
+                    WHERE ${instagramMedia.pageId} = ${pages.id} AND ${instagramComments.replied} = true
+                )`.as('replies_count'),
+                lastActivity: sql<number>`EXTRACT(EPOCH FROM GREATEST(
+                    (SELECT MAX(${comments.repliedAt}) FROM ${comments} JOIN ${posts} ON ${comments.postId} = ${posts.id} WHERE ${posts.pageId} = ${pages.id}),
+                    (SELECT MAX(${instagramComments.repliedAt}) FROM ${instagramComments} JOIN ${instagramMedia} ON ${instagramComments.mediaId} = ${instagramMedia.id} WHERE ${instagramMedia.pageId} = ${pages.id})
+                ))`.as('last_activity'),
+            })
             .from(pages)
             .where(eq(pages.userId, userId))
             .orderBy(desc(pages.createdAt));
+
+        return rows.map(row => ({
+            ...row,
+            replyRate: row.commentsCount > 0
+                ? Math.round((row.repliesCount / row.commentsCount) * 100)
+                : 0,
+            // Convert epoch seconds to milliseconds for JS Date compatibility
+            lastActivity: row.lastActivity ? Math.round(row.lastActivity * 1000) : null,
+        }));
     }
 
     /**

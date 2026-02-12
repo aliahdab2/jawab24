@@ -123,12 +123,24 @@ const PagesPage: NextPageWithLayout = () => {
     }
   };
 
-  const formatTime = (minutes: number) => {
-    if (!minutes) return t('common.noData');
-    if (minutes < 60) {
-      return t('time.minutesAgo').replace('{count}', String(minutes));
-    }
-    return t('time.hoursAgo').replace('{count}', String(Math.floor(minutes / 60)));
+  const formatTime = (epochMs: number) => {
+    if (!epochMs) return t('common.noData');
+    const diffMs = Date.now() - epochMs;
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return t('time.justNow' as TranslationKey);
+    if (minutes < 60) return t('time.minutesAgo').replace('{count}', String(minutes));
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t('time.hoursAgo').replace('{count}', String(hours));
+    const days = Math.floor(hours / 24);
+    return t('time.daysAgo' as TranslationKey).replace('{count}', String(days));
+  };
+
+  const formatConnectedDate = (dateStr: string | null) => {
+    if (!dateStr) return t('common.noData');
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const days = Math.floor(diffMs / 86400000);
+    if (days < 1) return t('pages.connectedToday' as TranslationKey);
+    return t('pages.connectedAgo' as TranslationKey).replace('{count}', String(days));
   };
 
   const openKnowledgeBase = (page: Page) => {
@@ -215,7 +227,7 @@ const PagesPage: NextPageWithLayout = () => {
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
                           <FileText className="w-4 h-4" />
                         </div>
-                        <span className={`text-sm font-bold truncate ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
+                        <span className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
                       </div>
                       <div className="flex-shrink-0">
                         <Toggle
@@ -235,7 +247,7 @@ const PagesPage: NextPageWithLayout = () => {
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
                           <Instagram className="w-4 h-4" />
                         </div>
-                        <span className={`text-sm font-bold truncate ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
+                        <span className={`text-sm font-bold ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
                       </div>
                       <div className="flex-shrink-0">
                         {page.instagramUsername ? (
@@ -251,7 +263,15 @@ const PagesPage: NextPageWithLayout = () => {
                     <p className={`text-[10px] font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-600' : 'text-surface-400') : 'text-surface-300'}`}>
                       {page.instagramUsername
                         ? (page.instagramAutoReplyEnabled ? t('common.enabled') : t('common.disabled'))
-                        : t('pages.notLinked')
+                        : (
+                          <>
+                            {t('pages.notLinked')}
+                            {' · '}
+                            <button onClick={handleSync} className="text-brand-600 hover:underline font-bold">
+                              {t('pages.linkNow' as TranslationKey)}
+                            </button>
+                          </>
+                        )
                       }
                     </p>
                   </div>
@@ -317,7 +337,7 @@ const PagesPage: NextPageWithLayout = () => {
                 <div className="flex items-center gap-1.5 text-surface-400">
                   <Clock className="w-3.5 h-3.5" />
                   <span className="text-[10px] font-bold uppercase tracking-tighter">
-                    {page.lastActivity ? formatTime(page.lastActivity) : t('common.noData')}
+                    {page.lastActivity ? formatTime(page.lastActivity) : formatConnectedDate(page.createdAt as unknown as string)}
                   </span>
                 </div>
               </div>
