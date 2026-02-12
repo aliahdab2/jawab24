@@ -67,7 +67,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
-          "fixed z-50 w-12 h-12 md:w-16 md:h-16 md:bottom-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl md:rounded-[2rem] transition-all duration-500 flex items-center justify-center group active:scale-90 overflow-hidden",
+          "fixed z-50 w-12 h-12 md:w-16 md:h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl md:rounded-[2rem] transition-all duration-500 flex items-center justify-center group active:scale-90 overflow-hidden",
           hidden || !isVisible || pathname === '/pricing' ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100',
           shouldPulse && "animate-bounce" // Fallback to bounce or custom pulse if defined
         )}
@@ -75,8 +75,8 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
           boxShadow: '0 8px 16px rgba(16, 185, 129, 0.25)',
           // Use CSS variable for safe area (same as bottom nav) + nav height + gap
           bottom: isLandscape
-            ? 'calc(64px + 24px)' // Landscape: no bottom safe area, just nav + gap
-            : 'calc(64px + var(--sai-bottom) + 24px)', // Portrait: nav + safe area + gap
+            ? 'calc(64px + 40px)' // Landscape: no bottom safe area, just nav + gap
+            : 'calc(64px + var(--sai-bottom) + 40px)', // Portrait: nav + safe area + gap
           // Account for side safe area (notch in landscape)
           right: isRTL ? 'auto' : isLandscape ? 'calc(1.5rem + var(--sai-side-landscape))' : 'calc(1.5rem + var(--sai-right))',
           left: isRTL ? (isLandscape ? 'calc(1.5rem + var(--sai-side-landscape))' : 'calc(1.5rem + var(--sai-left))') : 'auto'

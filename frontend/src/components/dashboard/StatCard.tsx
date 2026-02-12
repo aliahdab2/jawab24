@@ -18,37 +18,60 @@ interface StatCardProps {
 export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, href, isActive }: StatCardProps) {
   const { t } = useTranslation();
 
+  const iconColorClasses =
+    color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
+    color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
+    color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/10' :
+    color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/10' :
+    'bg-red-50 text-red-600 shadow-red-500/10';
+
+  const labelColorClasses = isActive
+    ? (color === 'brand' ? 'text-brand-700' :
+       color === 'emerald' ? 'text-emerald-700' :
+       color === 'amber' ? 'text-amber-700' :
+       color === 'violet' ? 'text-violet-700' : 'text-red-700')
+    : "text-surface-500 opacity-70";
+
   const content = (
-    <div className="relative z-10 px-3 py-3 sm:px-5 sm:py-4 flex items-center justify-between gap-2 pointer-events-none">
-      <div className="min-w-0">
-        <p className={clsx(
-          "text-[22px] sm:text-[32px] font-bold leading-none tracking-tight mb-1.5",
-          isActive ? "text-surface-900" : "text-surface-900"
+    <div className="relative z-10 px-3 py-3 sm:px-5 sm:py-4 pointer-events-none">
+      {/* Desktop/tablet: side-by-side layout */}
+      <div className="hidden sm:flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[32px] font-bold leading-none tracking-tight text-surface-900 mb-1.5">
+            {value}
+          </p>
+          <p className={clsx(
+            "text-xs font-bold uppercase tracking-widest line-clamp-2 leading-tight",
+            labelColorClasses
+          )}>
+            {t(nameKey)}
+          </p>
+        </div>
+        <div className={clsx(
+          "w-14 h-14 rounded-2xl flex-shrink-0 flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
+          iconColorClasses
         )}>
+          <Icon className="w-7 h-7" />
+        </div>
+      </div>
+
+      {/* Mobile: stacked layout — icon on top, then value, then label (all full width) */}
+      <div className="sm:hidden">
+        <div className={clsx(
+          "w-8 h-8 rounded-lg flex items-center justify-center shadow-sm mb-2",
+          iconColorClasses
+        )}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <p className="text-xl font-bold leading-none tracking-tight text-surface-900 mb-1">
           {value}
         </p>
         <p className={clsx(
-          "text-[11px] sm:text-xs font-bold uppercase tracking-widest line-clamp-2 leading-tight",
-          isActive 
-              ? (color === 'brand' ? 'text-brand-700' : 
-                 color === 'emerald' ? 'text-emerald-700' : 
-                 color === 'amber' ? 'text-amber-700' : 
-                 color === 'violet' ? 'text-violet-700' : 'text-red-700')
-              : "text-surface-500 opacity-70"
+          "text-[10px] font-bold uppercase tracking-wider line-clamp-2 leading-tight",
+          labelColorClasses
         )}>
           {t(nameKey)}
         </p>
-      </div>
-
-      <div className={clsx(
-        "w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex-shrink-0 flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110",
-        color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
-          color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
-          color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/10' :
-          color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/10' :
-          'bg-red-50 text-red-600 shadow-red-500/10'
-      )}>
-        <Icon className="w-5 h-5 sm:w-7 sm:h-7" />
       </div>
     </div>
   );

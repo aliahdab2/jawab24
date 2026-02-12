@@ -172,7 +172,7 @@ export function CommentCard({
       <div className="p-5 flex flex-col gap-6">
         
         {/* Customer Message Bubble (Start/Left) */}
-        <div className="flex items-start gap-3 me-8 sm:me-12">
+        <div className="flex items-start gap-3 me-4 sm:me-8 lg:me-12">
           {/* Avatar */}
           <div className="flex-shrink-0">
              <div className="w-10 h-10 rounded-full bg-surface-100 flex items-center justify-center text-surface-400 border-2 border-white shadow-sm">
@@ -215,7 +215,7 @@ export function CommentCard({
 
         {/* Reply Bubble (End/Right) */}
         {(comment.replied && comment.replyText) ? (
-           <div className="flex items-end justify-end gap-3 ms-8 sm:ms-12">
+           <div className="flex items-end justify-end gap-3 ms-4 sm:ms-8 lg:ms-12">
               <div className="flex flex-col items-end gap-1 min-w-0">
 
                  {/* Bubble */}

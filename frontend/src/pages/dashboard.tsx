@@ -445,7 +445,7 @@ const DashboardPage: NextPageWithLayout = () => {
               {t('dashboard.performance' as TranslationKey)}
             </h3>
           </div>
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
             <StatCard
               nameKey={'dashboard.replyRateValue' as TranslationKey}
               value={`${analytics.totals.replyRate}%`}
@@ -508,19 +508,19 @@ const DashboardPage: NextPageWithLayout = () => {
             <div className="hidden sm:block w-px h-10 bg-surface-200"></div>
 
             {/* AI vs Manual Breakdown */}
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center">
-                  <Bot className="w-5 h-5 text-brand-600" />
+            <div className="flex items-center gap-4 sm:gap-6">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-brand-100 flex items-center justify-center">
+                  <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
                 </div>
                 <div>
                   <p className="text-lg font-bold text-surface-900">{statsData.aiReplies}</p>
                   <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">{t('dashboard.aiReply' as TranslationKey)}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-emerald-600" />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-100 flex items-center justify-center">
+                  <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
                 </div>
                 <div>
                   <p className="text-lg font-bold text-surface-900">{statsData.templateReplies}</p>
@@ -605,13 +605,13 @@ const DashboardPage: NextPageWithLayout = () => {
 
                 return (
                   <>
-                    <div className="flex items-center gap-5 mb-8 relative z-10">
-                      <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20 transform transition-transform group-hover:rotate-6">
-                        <Crown className="w-8 h-8" />
+                    <div className="flex items-center gap-3 sm:gap-5 mb-6 sm:mb-8 relative z-10">
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20 transform transition-transform group-hover:rotate-6">
+                        <Crown className="w-6 h-6 sm:w-8 sm:h-8" />
                       </div>
                       <div className="min-w-0 flex-1 text-start">
                         <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                        <h4 className="text-2xl font-display font-bold text-surface-900 break-words tracking-tight">
+                        <h4 className="text-lg sm:text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
                           {PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}
                           {isTrialing && (
                             <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
