@@ -1,13 +1,13 @@
 import React, { Component, ErrorInfo, PropsWithChildren } from 'react';
 import * as Sentry from '@sentry/nextjs';
-import { useTranslation } from '../i18n';
+import { useTranslation, type TranslationKey } from '../i18n';
 
 // Props for the error boundary class component
 interface ErrorBoundaryClassProps extends PropsWithChildren {
   fallback?: React.ReactNode;
   name?: string;
   resetKeys?: string;
-  t: (key: string) => string;
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
   language: string;
 }
 
@@ -35,7 +35,9 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
     // Send to Sentry if configured
     if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
       Sentry.captureException(error, {
-        extra: errorInfo,
+        extra: {
+          componentStack: errorInfo.componentStack,
+        },
         tags: { errorBoundary: this.props.name || 'root' },
       });
     }
