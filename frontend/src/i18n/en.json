@@ -446,6 +446,7 @@
   "settings.dualReplyConfigDesc": "Full details will be sent automatically in a private message.",
   "settings.dualReplyConfigHelper": "Max 80 characters • No links • Keep it short",
   "settings.autoTranslated": "Auto-translated",
+  "settings.translating": "Translating...",
   "settings.publicReplyPlaceholder": "Details sent in a private message 📩",
   "settings.commentsAutoReply": "Reply to Comments",
   "settings.commentsAutoReplyDesc": "Auto reply to comments on your page",

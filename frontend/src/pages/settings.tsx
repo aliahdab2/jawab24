@@ -26,7 +26,7 @@ import {
   UserCheck,
   ShoppingBag,
   RefreshCw,
-  Unlink
+  Unlink,
 } from 'lucide-react';
 import { useTranslation, useLanguage, type TranslationKey } from '@/i18n';
 import type { NextPageWithLayout } from './_app';
@@ -331,11 +331,8 @@ const SettingsPage: NextPageWithLayout = () => {
     }
   };
 
-  // Dual reply nudge: show input in user's language, preview auto-translated other language
-  const dualNudgeInput = settings.dualReplyConfig?.[language] || settings.dualReplyConfig?.en || settings.dualReplyConfig?.ar || '';
-  const dualNudgeOtherLang = language === 'ar' ? 'en' : 'ar';
-  const dualNudgeTranslation = settings.dualReplyConfig?.[dualNudgeOtherLang] || '';
-  const dualNudgeHasTranslation = Boolean(dualNudgeTranslation && dualNudgeTranslation !== dualNudgeInput);
+  // Dual reply nudge: user types in one language, backend auto-translates on save
+  const dualNudgeInput = settings.dualReplyConfig?.en || settings.dualReplyConfig?.ar || '';
 
   if (loading) {
     return <PageSkeleton />;
@@ -498,16 +495,6 @@ const SettingsPage: NextPageWithLayout = () => {
                           {dualNudgeInput.length}/80
                         </span>
                       </div>
-                      {dualNudgeHasTranslation && (
-                        <div className="mt-1 p-3 rounded-xl bg-white/60 border border-brand-100">
-                          <p className="text-[10px] font-bold text-surface-400 uppercase tracking-wider mb-1">
-                            {t('settings.autoTranslated' as TranslationKey)}
-                          </p>
-                          <p className="text-sm text-surface-700 font-medium" dir="auto">
-                            {dualNudgeTranslation}
-                          </p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}

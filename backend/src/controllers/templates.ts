@@ -3,6 +3,7 @@ import { templatesService } from '../services/templates';
 import { subscriptionsService } from '../services/subscriptions';
 import { CreateTemplateDTO, UpdateTemplateDTO } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { autoTranslateTranslations } from '../utils/translate';
 
 export class TemplatesController {
     /**
@@ -27,6 +28,13 @@ export class TemplatesController {
                 });
             }
             
+            // Auto-translate missing language
+            if (request.body.translations) {
+                try {
+                    request.body.translations = await autoTranslateTranslations(request.body.translations);
+                } catch { /* graceful degradation */ }
+            }
+
             const template = await templatesService.createTemplate(userId, request.body);
             return reply.status(201).send(template);
         } catch (error) {
@@ -92,6 +100,13 @@ export class TemplatesController {
         const { id } = request.params;
         
         try {
+            // Auto-translate missing language
+            if (request.body.translations) {
+                try {
+                    request.body.translations = await autoTranslateTranslations(request.body.translations);
+                } catch { /* graceful degradation */ }
+            }
+
             const template = await templatesService.updateTemplate(userId, id, request.body);
             if (!template) {
                 return reply.status(404).send({ error: 'Template not found' });

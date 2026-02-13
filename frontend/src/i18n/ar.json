@@ -442,6 +442,7 @@
   "settings.dualReplyConfigDesc": "التفاصيل الكاملة تُرسل تلقائياً في رسالة خاصة.",
   "settings.dualReplyConfigHelper": "80 حرف كحد أقصى • بدون روابط • اجعله مختصراً",
   "settings.autoTranslated": "ترجمة تلقائية",
+  "settings.translating": "جاري الترجمة...",
   "settings.publicReplyPlaceholder": "تم إرسال التفاصيل برسالة خاصة 📩",
   "settings.commentsAutoReply": "الرد على التعليقات",
   "settings.commentsAutoReplyDesc": "الرد التلقائي على تعليقات صفحتك",
