@@ -16,13 +16,29 @@ const testClient = postgres(connectionString, { prepare: false, max: 3 });
 export const testDb = drizzle(testClient, { schema });
 
 beforeAll(async () => {
-    // Push schema to the test database using the non-strict test config.
-    // This avoids interactive prompts that would hang in CI.
+    // Run migrations on the test database instead of using push:pg.
+    // push:pg can hang on interactive prompts even with strict:false (known drizzle-kit v0.20 bug).
+    // Using migrations is more reliable and matches production deployment process.
     const { execSync } = await import('child_process');
-    execSync(
-        `DATABASE_URL="${connectionString}" npx drizzle-kit push:pg --config=drizzle.config.integration.ts`,
-        { cwd: process.cwd(), stdio: 'pipe' },
-    );
+    const { drizzle } = await import('drizzle-orm/postgres-js');
+    const { migrate } = await import('drizzle-orm/postgres-js/migrator');
+    const postgres = (await import('postgres')).default;
+    const path = await import('path');
+
+    // Apply migrations programmatically without calling process.exit
+    const migrationsFolder = path.resolve(__dirname, '../../migrations');
+    const migrationClient = postgres(connectionString, { max: 1 });
+    const db = drizzle(migrationClient);
+
+    try {
+        await migrate(db, { migrationsFolder });
+        console.log('✅ Test database migrations applied');
+    } catch (error) {
+        console.error('❌ Migration failed:', error);
+        throw error;
+    } finally {
+        await migrationClient.end();
+    }
 });
 
 beforeEach(async () => {

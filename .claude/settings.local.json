@@ -97,7 +97,8 @@
       "Bash(pkill:*)",
       "Bash(npm run db:generate:*)",
       "Bash(printf:*)",
-      "Bash(expect:*)"
+      "Bash(expect:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/autoreply_test\" timeout 60 npm run test:integration:*)"
     ]
   }
 }

@@ -382,11 +382,24 @@ if ! pg_isready -h "$PG_HOST" -p "$PG_PORT" -q 2>/dev/null; then
     echo -e "${GREEN}   ✅ Postgres started${NC}"
 fi
 
-# Ensure the autoreply_test database exists (dev compose creates 'autoreply', not 'autoreply_test')
-PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -tc \
-    "SELECT 1 FROM pg_database WHERE datname = 'autoreply_test'" 2>/dev/null | grep -q 1 \
-    || PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
-    "CREATE DATABASE autoreply_test" 2>/dev/null
+# Drop and recreate the test database for a clean slate.
+# This prevents schema drift issues from previous drizzle-kit push:pg runs.
+# Integration tests now use migrations (not push:pg) which match production.
+#
+# SAFETY: This only affects autoreply_test (test DB), never production.
+# Integration tests should always start with a fresh database to ensure reproducibility.
+echo "   Setting up clean test database (autoreply_test)..."
+if [[ "$DATABASE_URL" == *"autoreply_test"* ]] || [[ "$PG_HOST" == "localhost" ]] || [[ "$PG_HOST" == "127.0.0.1" ]]; then
+    PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
+        "DROP DATABASE IF EXISTS autoreply_test" > /dev/null 2>&1
+    PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
+        "CREATE DATABASE autoreply_test" > /dev/null 2>&1
+    echo -e "${GREEN}   ✅ Test database created${NC}"
+else
+    echo -e "${RED}   ❌ Safety check failed: Not running on localhost!${NC}"
+    echo -e "${RED}   Test database operations are only allowed locally.${NC}"
+    exit 1
+fi
 
 echo "   Testing Backend (Integration)..."
 if (cd backend && npm run test:integration) > /dev/null 2>&1; then
