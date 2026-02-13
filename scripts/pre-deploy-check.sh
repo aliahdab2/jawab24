@@ -214,29 +214,17 @@ else
     exit 1
 fi
 
-# Clean frontend cache to prevent conflicts with mobile build artifacts
-rm -rf frontend/.next
-
-# Build with retry logic to handle Next.js race conditions
-FRONTEND_BUILD_ATTEMPTS=0
-FRONTEND_BUILD_MAX_ATTEMPTS=3
-while [ $FRONTEND_BUILD_ATTEMPTS -lt $FRONTEND_BUILD_MAX_ATTEMPTS ]; do
-    if npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
-        echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
-        break
-    else
-        FRONTEND_BUILD_ATTEMPTS=$((FRONTEND_BUILD_ATTEMPTS + 1))
-        if [ $FRONTEND_BUILD_ATTEMPTS -lt $FRONTEND_BUILD_MAX_ATTEMPTS ]; then
-            echo -e "${YELLOW}   ⚠️  Frontend build failed, retrying ($FRONTEND_BUILD_ATTEMPTS/$FRONTEND_BUILD_MAX_ATTEMPTS)...${NC}"
-            rm -rf frontend/.next
-            sleep 2
-        else
-            echo -e "${RED}   ❌ Frontend build failed after $FRONTEND_BUILD_MAX_ATTEMPTS attempts!${NC}"
-            npm run build --workspace=jawab24-frontend
-            exit 1
-        fi
-    fi
-done
+# Let Next.js handle its own build cache - it's smart about incremental builds.
+# Only clean on actual failure to help with debugging.
+if npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
+else
+    echo -e "${RED}   ❌ Frontend build failed!${NC}"
+    # Clean cache and show full error output for debugging
+    rm -rf frontend/.next
+    npm run build --workspace=jawab24-frontend
+    exit 1
+fi
 
 # Verify CSS output is non-trivial (catches silent Tailwind/PostCSS failures)
 CSS_DIR="frontend/.next/static/css"
