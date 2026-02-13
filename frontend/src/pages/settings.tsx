@@ -334,6 +334,12 @@ const SettingsPage: NextPageWithLayout = () => {
     }
   };
 
+  // Dual reply nudge: show input in user's language, preview auto-translated other language
+  const dualNudgeInput = settings.dualReplyConfig?.[language] || settings.dualReplyConfig?.en || settings.dualReplyConfig?.ar || '';
+  const dualNudgeOtherLang = language === 'ar' ? 'en' : 'ar';
+  const dualNudgeTranslation = settings.dualReplyConfig?.[dualNudgeOtherLang] || '';
+  const dualNudgeHasTranslation = Boolean(dualNudgeTranslation && dualNudgeTranslation !== dualNudgeInput);
+
   if (loading) {
     return <PageSkeleton />;
   }
@@ -477,9 +483,9 @@ const SettingsPage: NextPageWithLayout = () => {
                     </div>
                     <div className="space-y-2">
                       <Input
-                        value={settings.dualReplyConfig?.en || ''}
+                        value={dualNudgeInput}
                         onChange={(e) => {
-                          const value = e.target.value.slice(0, 80); // Max 80 chars
+                          const value = e.target.value.slice(0, 80);
                           setSettings({
                             ...settings,
                             dualReplyConfig: { en: value, ar: value }
@@ -491,10 +497,20 @@ const SettingsPage: NextPageWithLayout = () => {
                       />
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-brand-600/60 font-medium">{t('settings.dualReplyConfigHelper')}</span>
-                        <span className={`font-bold ${(settings.dualReplyConfig?.en?.length || 0) > 70 ? 'text-amber-500' : 'text-surface-400'}`}>
-                          {settings.dualReplyConfig?.en?.length || 0}/80
+                        <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-400'}`}>
+                          {dualNudgeInput.length}/80
                         </span>
                       </div>
+                      {dualNudgeHasTranslation && (
+                        <div className="mt-1 p-3 rounded-xl bg-white/60 border border-brand-100">
+                          <p className="text-[10px] font-bold text-surface-400 uppercase tracking-wider mb-1">
+                            {t('settings.autoTranslated' as TranslationKey)}
+                          </p>
+                          <p className="text-sm text-surface-700 font-medium" dir="auto">
+                            {dualNudgeTranslation}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
