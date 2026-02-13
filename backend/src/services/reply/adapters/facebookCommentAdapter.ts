@@ -79,7 +79,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             accessToken: opts.accessToken,
             fromId: opts.fromId,
             replyMode,
-            dualReplyConfig: opts.userSettings.dualReplyConfig as Record<string, string> | undefined,
+            dualReplyNudge: opts.userSettings.dualReplyNudge as string | undefined,
             isDemo,
         });
     }

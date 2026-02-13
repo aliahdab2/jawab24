@@ -64,7 +64,7 @@ vi.mock('@/components/knowledge-base/KnowledgeBaseModal', () => ({
 }));
 
 const mockedPagesApi = vi.mocked(pagesApi);
-const mockedApi = vi.mocked(api);
+const mockedApi = vi.mocked(api, true);
 
 const MOCK_PAGES = [
     {

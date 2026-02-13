@@ -156,22 +156,19 @@ describe('Validation Schemas', () => {
         it('should validate a valid template', () => {
             const validTemplate = {
                 name: 'Thank You',
-                translations: {
-                    en: 'Thank you for your comment!',
-                    ar: 'شكرا لتعليقك!',
-                },
+                message: 'Thank you for your comment!',
             };
-            
+
             const result = CreateTemplateSchema.safeParse(validTemplate);
             expect(result.success).toBe(true);
         });
 
-        it('should require at least one translation', () => {
+        it('should require message field', () => {
             const invalidTemplate = {
                 name: 'Empty Template',
-                translations: {},
+                message: '',
             };
-            
+
             const result = CreateTemplateSchema.safeParse(invalidTemplate);
             expect(result.success).toBe(false);
         });
@@ -223,6 +220,28 @@ describe('Validation Schemas', () => {
                 messageEscalationMinutes: 15,
             });
             expect(result.success).toBe(true);
+        });
+
+        it('should accept notificationsEnabled as boolean', () => {
+            const resultTrue = UpdateSettingsSchema.safeParse({
+                notificationsEnabled: true,
+            });
+            const resultFalse = UpdateSettingsSchema.safeParse({
+                notificationsEnabled: false,
+            });
+            expect(resultTrue.success).toBe(true);
+            expect(resultFalse.success).toBe(true);
+        });
+
+        it('should reject notificationsEnabled with non-boolean value', () => {
+            const resultString = UpdateSettingsSchema.safeParse({
+                notificationsEnabled: 'true',
+            });
+            const resultNumber = UpdateSettingsSchema.safeParse({
+                notificationsEnabled: 1,
+            });
+            expect(resultString.success).toBe(false);
+            expect(resultNumber.success).toBe(false);
         });
     });
 

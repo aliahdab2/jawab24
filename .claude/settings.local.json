@@ -92,7 +92,12 @@
       "Bash(sort:*)",
       "Bash(npx drizzle-kit generate:*)",
       "Bash(bash:*)",
-      "Bash(cd /Users/aliahdab/Documents/AutoReply/frontend && npm run translation:validate:*)"
+      "Bash(cd /Users/aliahdab/Documents/AutoReply/frontend && npm run translation:validate:*)",
+      "Bash(timeout 120 npm run test:*)",
+      "Bash(pkill:*)",
+      "Bash(npm run db:generate:*)",
+      "Bash(printf:*)",
+      "Bash(expect:*)"
     ]
   }
 }

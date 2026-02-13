@@ -23,13 +23,9 @@ export const CreateTemplateSchema = z.object({
     name: z.string()
         .min(1, 'Template name is required')
         .max(100, 'Template name must be less than 100 characters'),
-    translations: z.object({
-        en: z.string().optional(),
-        ar: z.string().optional(),
-    }).refine(
-        (data) => data.en || data.ar,
-        'At least one translation (en or ar) is required'
-    ),
+    message: z.string()
+        .min(1, 'Template message is required')
+        .max(1000, 'Template message must be less than 1000 characters'),
     active: z.boolean().default(true),
 });
 
@@ -80,9 +76,11 @@ export const UpdateSettingsSchema = z.object({
     replyDelay: z.number().int().min(0).max(300, 'Reply delay must be between 0-300 seconds').optional(),
     greetingMessage: z.string().max(500, 'Greeting message must be less than 500 characters').optional(),
     commentReplyMode: z.enum(['public', 'private', 'dual']).optional(),
-    dualReplyConfig: z.record(z.string(), z.string()).optional(),
+    dualReplyNudge: z.string().max(80).optional(),
+    handoffPauseDurationMinutes: z.number().int().min(5).max(1440).optional(),
     commentEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     messageEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
+    notificationsEnabled: z.boolean().optional(),
 });
 
 // ==========================================

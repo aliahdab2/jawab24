@@ -29,17 +29,17 @@ describe('Templates Routes', () => {
     });
 
     it('should create a new template', async () => {
-        const newTemplateData = { 
+        const newTemplateData = {
             name: 'Welcome Template',
-            translations: { en: 'Welcome!', ar: 'أهلاً بك!' }
+            message: 'أهلاً بك!'
         };
-        const createdTemplate = { 
-            ...newTemplateData, 
-            id: 'template_1', 
-            userId: 'test_user_id', 
-            active: true, 
-            createdAt: new Date(), 
-            updatedAt: new Date() 
+        const createdTemplate = {
+            ...newTemplateData,
+            id: 'template_1',
+            userId: 'test_user_id',
+            active: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
         };
 
         vi.mocked(templatesService.createTemplate).mockResolvedValue(createdTemplate);

@@ -76,7 +76,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -122,7 +122,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -191,7 +191,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -240,7 +240,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -286,7 +286,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'private',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -320,10 +320,7 @@ describe('Settings Routes', () => {
                 facebookId: 'fb_123',
             });
 
-            const dualConfig = {
-                en: 'Sent you a DM 📥',
-                ar: 'تم الرد في رسالة خاصة 📥',
-            };
+            const dualNudge = 'تم الرد في رسالة خاصة 📥';
 
             vi.mocked(settingsService.updateSettings).mockResolvedValue({
                 id: 'settings_123',
@@ -337,7 +334,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'dual',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: dualConfig,
+                dualReplyNudge: dualNudge,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -354,14 +351,14 @@ describe('Settings Routes', () => {
                 },
                 payload: {
                     commentReplyMode: 'dual',
-                    dualReplyConfig: dualConfig,
+                    dualReplyNudge: dualNudge,
                 },
             });
 
             expect(response.statusCode).toBe(200);
             const body = JSON.parse(response.body);
             expect(body.commentReplyMode).toBe('dual');
-            expect(body.dualReplyConfig).toEqual(dualConfig);
+            expect(body.dualReplyNudge).toEqual(dualNudge);
         });
 
         it('should reject invalid comment reply mode', async () => {
@@ -409,7 +406,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: true,
                 businessHoursStart: '08:00',
                 businessHoursEnd: '20:00',
@@ -459,7 +456,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -505,7 +502,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'dual',
                 commentsAutoReply: false,
                 messagesAutoReply: false,
-                dualReplyConfig: { en: 'Check DM', ar: 'تحقق من الرسائل' },
+                dualReplyNudge: 'تحقق من الرسائل',
                 businessHoursOnly: true,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '17:00',
@@ -526,7 +523,7 @@ describe('Settings Routes', () => {
                     autoDetectLanguage: false,
                     aiEnabled: false,
                     commentReplyMode: 'dual',
-                    dualReplyConfig: { en: 'Check DM', ar: 'تحقق من الرسائل' },
+                    dualReplyNudge: 'تحقق من الرسائل',
                     commentsAutoReply: false,
                     messagesAutoReply: false,
                     businessHoursOnly: true,
@@ -629,7 +626,7 @@ describe('Settings Routes', () => {
     });
 
     describe('Settings - Edge Cases', () => {
-        it('should handle empty dual reply config', async () => {
+        it('should handle empty dual reply nudge', async () => {
             const { authService } = await import('../../src/services/auth');
             const { settingsService } = await import('../../src/services/settings');
 
@@ -650,7 +647,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'dual',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: '',
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -667,14 +664,14 @@ describe('Settings Routes', () => {
                 },
                 payload: {
                     commentReplyMode: 'dual',
-                    dualReplyConfig: {},
+                    dualReplyNudge: '',
                 },
             });
 
             expect(response.statusCode).toBe(200);
             const body = JSON.parse(response.body);
             expect(body.commentReplyMode).toBe('dual');
-            expect(body.dualReplyConfig).toEqual({});
+            expect(body.dualReplyNudge).toBe('');
         });
 
         it('should handle clearing away message', async () => {
@@ -698,7 +695,7 @@ describe('Settings Routes', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',

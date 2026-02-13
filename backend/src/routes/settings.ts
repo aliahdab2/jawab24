@@ -22,13 +22,5 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, settingsController.update);
-
-        protectedRoutes.post('/settings/translate-nudge', {
-            schema: {
-                tags: ['Settings'],
-                summary: 'Translate dual reply nudge text',
-                security: auth,
-            },
-        }, settingsController.translateNudge);
     });
 }

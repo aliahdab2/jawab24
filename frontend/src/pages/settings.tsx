@@ -155,11 +155,11 @@ function ShopifySection() {
             </div>
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
-                <RefreshCw className={`w-4 h-4 mr-1 ${syncing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 me-1 ${syncing ? 'animate-spin' : ''}`} />
                 {syncing ? t('shopify.syncing' as TranslationKey) : t('shopify.syncNow' as TranslationKey)}
               </Button>
               <Button variant="secondary" size="sm" onClick={handleDisconnect}>
-                <Unlink className="w-4 h-4 mr-1" />
+                <Unlink className="w-4 h-4 me-1" />
                 {t('shopify.disconnect' as TranslationKey)}
               </Button>
             </div>
@@ -183,7 +183,7 @@ function ShopifySection() {
                     )}
                   >
                     {page.name}
-                    {page.shopifyStoreId === store.id && <CheckCircle2 className="w-3 h-3 inline ml-1" />}
+                    {page.shopifyStoreId === store.id && <CheckCircle2 className="w-3 h-3 inline ms-1" />}
                   </button>
                 ))}
               </div>
@@ -225,7 +225,7 @@ const SettingsPage: NextPageWithLayout = () => {
     awayMessage: '',
     greetingMessage: '',
     replyDelay: 0,
-    dualReplyConfig: { en: '', ar: '' } as Record<string, string>,
+    dualReplyNudge: '',
     commentEscalationMinutes: 60,
     messageEscalationMinutes: 30,
     handoffPauseDurationMinutes: 30,
@@ -255,7 +255,7 @@ const SettingsPage: NextPageWithLayout = () => {
         awayMessage: data.awayMessage || '',
         greetingMessage: data.greetingMessage || '',
         replyDelay: data.replyDelay ?? prev.replyDelay,
-        dualReplyConfig: data.dualReplyConfig || { en: '', ar: '' },
+        dualReplyNudge: data.dualReplyNudge || '',
         commentEscalationMinutes: data.commentEscalationMinutes ?? prev.commentEscalationMinutes,
         messageEscalationMinutes: data.messageEscalationMinutes ?? prev.messageEscalationMinutes,
         handoffPauseDurationMinutes: data.handoffPauseDurationMinutes ?? prev.handoffPauseDurationMinutes,
@@ -331,8 +331,8 @@ const SettingsPage: NextPageWithLayout = () => {
     }
   };
 
-  // Dual reply nudge: user types in one language, backend auto-translates on save
-  const dualNudgeInput = settings.dualReplyConfig?.en || settings.dualReplyConfig?.ar || '';
+  // Dual reply nudge: single message for all customers
+  const dualNudgeInput = settings.dualReplyNudge || '';
 
   if (loading) {
     return <PageSkeleton />;
@@ -482,7 +482,7 @@ const SettingsPage: NextPageWithLayout = () => {
                           const value = e.target.value.slice(0, 80);
                           setSettings({
                             ...settings,
-                            dualReplyConfig: { en: value, ar: value }
+                            dualReplyNudge: value
                           });
                         }}
                         placeholder={t('settings.publicReplyPlaceholder')}

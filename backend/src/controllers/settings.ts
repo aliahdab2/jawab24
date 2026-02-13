@@ -2,7 +2,6 @@ import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
-import { translateText, autoTranslateTranslations } from '../utils/translate';
 
 export class SettingsController {
     /**
@@ -28,8 +27,6 @@ export class SettingsController {
     /**
      * Update user settings
      * PUT /settings
-     *
-     * Auto-translates dualReplyConfig (en↔ar) on save.
      */
     async update(request: AuthenticatedRequest, reply: FastifyReply) {
         try {
@@ -52,18 +49,6 @@ export class SettingsController {
 
             const updates = validation.data;
 
-            // Auto-translate dual reply nudge text
-            if (updates.dualReplyConfig) {
-                try {
-                    updates.dualReplyConfig = await autoTranslateTranslations(
-                        updates.dualReplyConfig as Record<string, string>,
-                        { maxLength: 80 },
-                    );
-                } catch {
-                    // Graceful degradation — save with original text
-                }
-            }
-
             const settings = await settingsService.updateSettings(userId, updates);
             return reply.send(settings);
         } catch (error) {
@@ -72,36 +57,6 @@ export class SettingsController {
         }
     }
 
-    /**
-     * Translate a dual reply nudge message.
-     * POST /settings/translate-nudge
-     *
-     * Detects the source language, translates to the other (en↔ar).
-     * Returns { en, ar, sourceLang } so the frontend can show the preview.
-     */
-    async translateNudge(request: AuthenticatedRequest, reply: FastifyReply) {
-        if (!request.user) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
-
-        const { text } = request.body as { text?: string };
-        if (!text || !text.trim()) {
-            return reply.send({ en: '', ar: '', sourceLang: 'en' });
-        }
-
-        const result = await translateText(text, { maxLength: 80 });
-        return reply.send({ en: result.en, ar: result.ar, sourceLang: result.sourceLang });
-    }
 }
 
 export const settingsController = new SettingsController();
-
-
-
-
-
-
-
-
-
-

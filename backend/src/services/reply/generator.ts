@@ -255,17 +255,9 @@ export class ReplyGenerator {
         if (matchingRule?.templateId) {
             const template = await templatesService.getTemplate(userId, matchingRule.templateId);
 
-            if (template?.translations) {
-                const translations = template.translations as Record<string, string>;
-                // Pick template translation matching comment language
-                let lang = detectLanguageCode(text);
-                if (lang === 'unknown') {
-                    // Mixed Arabic/English comments are common — check for Arabic chars
-                    lang = /[\u0600-\u06FF]/.test(text) ? 'ar' : 'en';
-                }
-                const replyText = translations[lang] || translations['en'] || translations['ar'] || Object.values(translations)[0];
-                this.logger.debug('[Generator] Using template', { templateName: template.name, lang });
-                return { replyText, replyMethod: 'template', templateId: template.id, needsAttention: false };
+            if (template?.message) {
+                this.logger.debug('[Generator] Using template', { templateName: template.name });
+                return { replyText: template.message, replyMethod: 'template', templateId: template.id, needsAttention: false };
             }
         }
 

@@ -615,7 +615,7 @@ const DashboardPage: NextPageWithLayout = () => {
                           {PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}
                           {isTrialing && (
                             <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
-                              TRIAL
+                              {t('subscription.trialBadge' as TranslationKey)}
                             </span>
                           )}
                         </h4>

@@ -47,7 +47,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -86,7 +86,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -124,7 +124,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -147,10 +147,7 @@ describe('Settings Service', () => {
         it('should return settings with dual mode configuration', async () => {
             const { db } = await import('../../src/db');
 
-            const dualConfig = {
-                en: 'Sent you a DM 📥',
-                ar: 'تم الرد في رسالة خاصة 📥',
-            };
+            const dualNudge = 'تم الرد في رسالة خاصة 📥';
 
             const mockSettings = {
                 id: 'settings_dual',
@@ -164,7 +161,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'dual',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: dualConfig,
+                dualReplyNudge: dualNudge,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -180,7 +177,7 @@ describe('Settings Service', () => {
             const result = await settingsService.getSettings('user_dual');
 
             expect(result.commentReplyMode).toBe('dual');
-            expect(result.dualReplyConfig).toEqual(dualConfig);
+            expect(result.dualReplyNudge).toEqual(dualNudge);
         });
     });
 
@@ -201,7 +198,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -248,7 +245,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -261,15 +258,12 @@ describe('Settings Service', () => {
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(existingSettings);
 
-            const dualConfig = {
-                en: 'Check DM',
-                ar: 'تحقق من الرسائل',
-            };
+            const dualNudge = 'تحقق من الرسائل';
 
             const updatedSettings = {
                 ...existingSettings,
                 commentReplyMode: 'dual',
-                dualReplyConfig: dualConfig,
+                dualReplyNudge: dualNudge,
                 updatedAt: new Date(),
             };
 
@@ -280,11 +274,11 @@ describe('Settings Service', () => {
 
             const result = await settingsService.updateSettings('user_123', {
                 commentReplyMode: 'dual',
-                dualReplyConfig: dualConfig,
+                dualReplyNudge: dualNudge,
             });
 
             expect(result.commentReplyMode).toBe('dual');
-            expect(result.dualReplyConfig).toEqual(dualConfig);
+            expect(result.dualReplyNudge).toEqual(dualNudge);
         });
     });
 
@@ -304,7 +298,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -337,7 +331,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: false,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -374,7 +368,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: true,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -411,7 +405,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: true,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -446,7 +440,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -479,7 +473,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: false,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -514,7 +508,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -547,7 +541,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -582,7 +576,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -617,7 +611,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',
@@ -650,7 +644,7 @@ describe('Settings Service', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '18:00',

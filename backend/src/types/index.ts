@@ -35,7 +35,7 @@ export interface Template {
     id: string;
     userId: string | null;
     name: string;
-    translations: Record<string, string>;
+    message: string;
     active: boolean | null;
     createdAt: Date | null;
     updatedAt: Date | null;
@@ -43,7 +43,7 @@ export interface Template {
 
 export interface CreateTemplateDTO {
     name: string;
-    translations: Record<string, string>;
+    message: string;
     active?: boolean;
 }
 

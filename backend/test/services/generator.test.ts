@@ -153,7 +153,7 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'Welcome',
-                translations: { en: 'Welcome to our page!' },
+                message: 'Welcome to our page!',
             } as any);
 
             const result = await generator.generateForComment(baseContext, true);
@@ -187,7 +187,7 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'Welcome AR',
-                translations: { ar: 'مرحباً بك!' },
+                message: 'مرحباً بك!',
             } as any);
 
             const result = await generator.generateForComment(baseContext, true);
@@ -207,7 +207,7 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'Welcome SV',
-                translations: { sv: 'Välkommen!' },
+                message: 'Välkommen!',
             } as any);
 
             const result = await generator.generateForComment(baseContext, true);
@@ -475,7 +475,7 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'Price Info',
-                translations: { en: 'Our prices start at $10.' },
+                message: 'Our prices start at $10.',
             } as any);
 
             const result = await generator.generateForMessage(baseContext, true);
@@ -508,7 +508,7 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'Price',
-                translations: { en: 'Our prices start at $10.', ar: 'أسعارنا تبدأ من ١٠ دولار.' },
+                message: 'أسعارنا تبدأ من ١٠ دولار.',
             } as any);
 
             const result = await generator.generateForComment(
@@ -531,7 +531,7 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'Price',
-                translations: { en: 'Our prices start at $10.', ar: 'أسعارنا تبدأ من ١٠ دولار.' },
+                message: 'Our prices start at $10.',
             } as any);
 
             const result = await generator.generateForComment(
@@ -554,14 +554,13 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'English Only',
-                translations: { en: 'Welcome!' },
+                message: 'Welcome!',
             } as any);
 
             const result = await generator.generateForComment(
                 { userId: 'u', text: 'مرحبا', pageName: 'Test' }, true,
             );
 
-            // No 'ar' translation, falls back to 'en'
             expect(result.replyText).toBe('Welcome!');
         });
 
@@ -578,7 +577,7 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'Mixed',
-                translations: { en: 'Welcome!', ar: 'أهلاً!' },
+                message: 'أهلاً!',
             } as any);
 
             // Mixed Arabic/English — "unknown" language but has Arabic chars
@@ -602,7 +601,7 @@ describe('ReplyGenerator - Flagging System', () => {
             vi.mocked(templatesService.getTemplate).mockResolvedValue({
                 id: 'template-1',
                 name: 'Mixed',
-                translations: { en: 'Welcome!', ar: 'أهلاً!' },
+                message: 'Welcome!',
             } as any);
 
             const result = await generator.generateForComment(

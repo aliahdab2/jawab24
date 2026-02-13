@@ -16,8 +16,7 @@ export interface UserSettings {
     commentReplyMode: 'public' | 'private' | 'dual';
     commentsAutoReply: boolean;
     messagesAutoReply: boolean;
-    // Dual reply configuration (language code -> message)
-    dualReplyConfig: Record<string, string>;
+    dualReplyNudge: string;
     businessHoursOnly: boolean;
     businessHoursStart: string;
     businessHoursEnd: string;
@@ -27,6 +26,7 @@ export interface UserSettings {
     commentEscalationMinutes: number;
     messageEscalationMinutes: number;
     handoffPauseDurationMinutes: number;
+    notificationsEnabled: boolean;
 }
 
 export interface UpdateSettingsDTO {
@@ -39,7 +39,7 @@ export interface UpdateSettingsDTO {
     commentReplyMode?: 'public' | 'private' | 'dual';
     commentsAutoReply?: boolean;
     messagesAutoReply?: boolean;
-    dualReplyConfig?: Record<string, string>;
+    dualReplyNudge?: string;
     businessHoursOnly?: boolean;
     businessHoursStart?: string;
     businessHoursEnd?: string;
@@ -49,4 +49,5 @@ export interface UpdateSettingsDTO {
     commentEscalationMinutes?: number;
     messageEscalationMinutes?: number;
     handoffPauseDurationMinutes?: number;
+    notificationsEnabled?: boolean;
 }

@@ -39,7 +39,7 @@ describe('ReplySender', () => {
         vi.clearAllMocks();
         sender = new ReplySender();
         sender.setLogger(mockLogger);
-        vi.mocked(detectLanguageCode).mockReturnValue('en');
+        vi.mocked(detectLanguageCode).mockReturnValue('ar');
         vi.mocked(axios.post).mockResolvedValue({ data: { id: 'reply_id' } });
         vi.mocked(facebookService.sendPrivateMessage).mockResolvedValue(undefined);
     });
@@ -157,7 +157,7 @@ describe('ReplySender', () => {
         const dualOptions = {
             ...baseOptions,
             replyMode: 'dual' as const,
-            dualReplyConfig: { en: 'Check your DMs!', ar: 'تحقق من رسائلك!' },
+            dualReplyNudge: 'تحقق من رسائلك!',
         };
 
         it('should send DM first, then post public nudge', async () => {
@@ -170,7 +170,7 @@ describe('ReplySender', () => {
             );
             expect(axios.post).toHaveBeenCalledWith(
                 `${GRAPH_API}/fb_comment_123/comments`,
-                { message: 'Check your DMs!' },
+                { message: 'تحقق من رسائلك!' },
                 { params: { access_token: 'access_token_abc' } }
             );
         });
@@ -179,7 +179,7 @@ describe('ReplySender', () => {
             await sender.sendCommentReply(dualOptions);
 
             const axiosCall = vi.mocked(axios.post).mock.calls[0];
-            expect(axiosCall[1]).toEqual({ message: 'Check your DMs!' });
+            expect(axiosCall[1]).toEqual({ message: 'تحقق من رسائلك!' });
         });
 
         it('should return success when both DM and public succeed', async () => {
@@ -234,33 +234,17 @@ describe('ReplySender', () => {
             replyMode: 'dual' as const,
         };
 
-        it('should use config nudge for detected language', async () => {
-            vi.mocked(detectLanguageCode).mockReturnValue('ar');
-
+        it('should use provided nudge text', async () => {
             await sender.sendCommentReply({
                 ...dualBase,
-                dualReplyConfig: { ar: 'راجع الرسائل', en: 'Check DMs' },
+                dualReplyNudge: 'راجع الرسائل',
             });
 
             const axiosCall = vi.mocked(axios.post).mock.calls[0];
             expect(axiosCall[1]).toEqual({ message: 'راجع الرسائل' });
         });
 
-        it('should fall back to en config when detected language has no entry', async () => {
-            vi.mocked(detectLanguageCode).mockReturnValue('fr');
-
-            await sender.sendCommentReply({
-                ...dualBase,
-                dualReplyConfig: { en: 'Check your inbox' },
-            });
-
-            const axiosCall = vi.mocked(axios.post).mock.calls[0];
-            expect(axiosCall[1]).toEqual({ message: 'Check your inbox' });
-        });
-
-        it('should use hardcoded Arabic default when no config provided and lang is ar', async () => {
-            vi.mocked(detectLanguageCode).mockReturnValue('ar');
-
+        it('should use hardcoded default when no nudge provided', async () => {
             await sender.sendCommentReply(dualBase);
 
             const axiosCall = vi.mocked(axios.post).mock.calls[0];
@@ -269,23 +253,12 @@ describe('ReplySender', () => {
             });
         });
 
-        it('should use hardcoded English default when no config provided and lang is en', async () => {
-            vi.mocked(detectLanguageCode).mockReturnValue('en');
-
-            await sender.sendCommentReply(dualBase);
-
-            const axiosCall = vi.mocked(axios.post).mock.calls[0];
-            expect(axiosCall[1]).toEqual({
-                message: 'Details sent in a private message 📩',
-            });
-        });
-
         it('should truncate nudge text to 80 characters', async () => {
             const longNudge = 'A'.repeat(100);
 
             await sender.sendCommentReply({
                 ...dualBase,
-                dualReplyConfig: { en: longNudge },
+                dualReplyNudge: longNudge,
             });
 
             const axiosCall = vi.mocked(axios.post).mock.calls[0];

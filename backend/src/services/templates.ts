@@ -13,7 +13,7 @@ export class TemplatesService {
             .values({
                 userId,
                 name: data.name,
-                translations: data.translations,
+                message: data.message,
 
                 active: data.active ?? true,
             })

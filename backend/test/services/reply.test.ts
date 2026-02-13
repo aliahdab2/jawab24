@@ -113,7 +113,7 @@ describe('Reply Service', () => {
             const mockRule = { id: 'rule_1', templateId: 'template_1' };
             const mockTemplate = {
                 id: 'template_1',
-                translations: { en: 'Thank you for your feedback!' },
+                message: 'Thank you for your feedback!',
             };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
@@ -282,7 +282,7 @@ describe('Reply Service', () => {
             const mockRule = { id: 'rule_1', templateId: 'template_1' };
             const mockTemplate = {
                 id: 'template_1',
-                translations: { en: 'Thank you!' },
+                message: 'Thank you!',
             };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
@@ -319,7 +319,7 @@ describe('Reply Service', () => {
             const mockRule = { id: 'rule_1', templateId: 'template_1' };
             const mockTemplate = {
                 id: 'template_1',
-                translations: { en: 'Thank you!' },
+                message: 'Thank you!',
             };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
@@ -471,7 +471,7 @@ describe('Reply Service', () => {
             const mockRule = { id: 'rule_1', templateId: 'template_1' };
             const mockTemplate = {
                 id: 'template_1',
-                translations: { en: 'Thank you for your feedback!' },
+                message: 'Thank you for your feedback!',
             };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
@@ -514,7 +514,7 @@ describe('Reply Service', () => {
             const mockRule = { id: 'rule_1', templateId: 'template_1' };
             const mockTemplate = {
                 id: 'template_1',
-                translations: { en: 'Thank you!' },
+                message: 'Thank you!',
             };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);

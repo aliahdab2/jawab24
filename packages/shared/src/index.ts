@@ -131,7 +131,7 @@ export interface InstagramComment {
 export interface Template {
   id: string;
   name: string;
-  translations: Record<string, string>;
+  message: string;
   active: boolean | null;
   usageCount?: number;
 }

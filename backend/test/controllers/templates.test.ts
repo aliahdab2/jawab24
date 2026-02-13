@@ -47,7 +47,7 @@ describe('TemplatesController', () => {
 
     describe('create()', () => {
         it('should return 201 with created template on success', async () => {
-            const templateData = { name: 'Greeting', translations: { en: 'Hello!' }, active: true };
+            const templateData = { name: 'Greeting', message: 'Hello!', active: true };
             const createdTemplate = { id: 'tpl-1', ...templateData, userId: 'user-123' };
 
             vi.mocked(subscriptionsService.canAddTemplate).mockResolvedValue({ allowed: true, limit: 20, used: 3 });
@@ -109,7 +109,7 @@ describe('TemplatesController', () => {
         });
 
         it('should return a single template on success', async () => {
-            const template = { id: 'tpl-uuid-1', name: 'Greeting', translations: { en: 'Hello!' } };
+            const template = { id: 'tpl-uuid-1', name: 'Greeting', message: 'Hello!' };
             vi.mocked(templatesService.getTemplate).mockResolvedValue(template as any);
 
             await templatesController.getOne(mockRequest as any, mockReply as any);

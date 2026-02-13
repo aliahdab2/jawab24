@@ -16,10 +16,7 @@ const DEMO_SETTINGS = {
     aiModel: 'gpt-4o-mini',
     // Dual mode: sends private message + short public nudge
     commentReplyMode: 'dual',
-    dualReplyConfig: {
-        ar: 'تم إرسال التفاصيل برسالة خاصة 📩',
-        en: 'Details sent via DM 📩'
-    },
+    dualReplyNudge: 'تم إرسال التفاصيل برسالة خاصة 📩',
     commentsAutoReply: true,
     messagesAutoReply: true,
     businessHoursOnly: false,
@@ -254,34 +251,22 @@ const DEMO_COMMENTS = [
 const DEMO_TEMPLATES = [
     {
         name: 'التسجيل',
-        translations: {
-            ar: 'التسجيل مفتوح! للتسجيل يرجى التواصل معنا أو زيارتنا في المقر 📝',
-            en: 'Registration is open! Please contact us or visit our location to register 📝',
-        },
+        message: 'التسجيل مفتوح! للتسجيل يرجى التواصل معنا أو زيارتنا في المقر 📝',
         active: true,
     },
     {
         name: 'الرسوم والأسعار',
-        translations: {
-            ar: 'للاطلاع على الرسوم والأسعار يرجى مراسلتنا على الخاص أو الاتصال بنا 💰',
-            en: 'For fees and pricing, please DM us or call us directly 💰',
-        },
+        message: 'للاطلاع على الرسوم والأسعار يرجى مراسلتنا على الخاص أو الاتصال بنا 💰',
         active: true,
     },
     {
         name: 'أوقات الدوام',
-        translations: {
-            ar: 'أوقات الدوام: الأحد - الخميس من 8 صباحاً حتى 9 مساءً ⏰',
-            en: 'Working hours: Sunday - Thursday, 8 AM to 9 PM ⏰',
-        },
+        message: 'أوقات الدوام: الأحد - الخميس من 8 صباحاً حتى 9 مساءً ⏰',
         active: true,
     },
     {
         name: 'شكراً',
-        translations: {
-            ar: 'شكراً لتواصلك معنا! نسعد بخدمتك دائماً 🙏❤️',
-            en: 'Thank you for reaching out! We are always happy to serve you 🙏❤️',
-        },
+        message: 'شكراً لتواصلك معنا! نسعد بخدمتك دائماً 🙏❤️',
         active: true,
     },
 ];
@@ -409,7 +394,7 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
         await db.update(settings)
             .set({
                 commentReplyMode: DEMO_SETTINGS.commentReplyMode,
-                dualReplyConfig: DEMO_SETTINGS.dualReplyConfig,
+                dualReplyNudge: DEMO_SETTINGS.dualReplyNudge,
                 aiEnabled: DEMO_SETTINGS.aiEnabled,
             })
             .where(eq(settings.userId, userId));
@@ -483,7 +468,7 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
         await db.insert(templates).values({
             userId,
             name: templateData.name,
-            translations: templateData.translations,
+            message: templateData.message,
             active: templateData.active,
         });
     }

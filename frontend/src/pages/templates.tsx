@@ -11,7 +11,6 @@ import {
   Edit,
   Trash2,
   Copy,
-  Globe,
   Zap,
   Link2
 } from 'lucide-react';
@@ -19,7 +18,7 @@ import type { Template, Rule } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 
 const TemplatesPage: NextPageWithLayout = () => {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -27,30 +26,17 @@ const TemplatesPage: NextPageWithLayout = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
 
-  // Available template languages - add new ones here for future expansion
-  const templateLanguages: ('en' | 'ar')[] = ['en', 'ar'];
-
-  // Default to interface language if supported
-  const getDefaultLang = (): 'en' | 'ar' => {
-    if (templateLanguages.includes(language as 'en' | 'ar')) {
-      return language as 'en' | 'ar';
-    }
-    return templateLanguages[0];
-  };
-
-  const [activeLang, setActiveLang] = useState<'en' | 'ar'>(getDefaultLang());
   const [formData, setFormData] = useState({
     name: '',
-    en: '',
-    ar: '',
+    message: '',
   });
 
   const [showFormErrors, setShowFormErrors] = useState(false);
 
-  // Form validation: name required + at least one translation
-  const isFormValid = formData.name.trim() !== '' && (formData.en.trim() !== '' || formData.ar.trim() !== '');
+  // Form validation: name required + message required
+  const isFormValid = formData.name.trim() !== '' && formData.message.trim() !== '';
   const nameError = showFormErrors && formData.name.trim() === '';
-  const translationError = showFormErrors && formData.en.trim() === '' && formData.ar.trim() === '';
+  const messageError = showFormErrors && formData.message.trim() === '';
 
   // Count how many rules reference each template
   const rulesCountMap = useMemo(() => {
@@ -97,14 +83,12 @@ const TemplatesPage: NextPageWithLayout = () => {
       setEditingTemplate(template);
       setFormData({
         name: template.name,
-        en: template.translations.en || '',
-        ar: template.translations.ar || '',
+        message: template.message || '',
       });
     } else {
       setEditingTemplate(null);
-      setFormData({ name: '', en: '', ar: '' });
+      setFormData({ name: '', message: '' });
     }
-    setActiveLang(getDefaultLang());
     setShowFormErrors(false);
     setIsModalOpen(true);
   };
@@ -114,14 +98,10 @@ const TemplatesPage: NextPageWithLayout = () => {
       setShowFormErrors(true);
       return;
     }
-    // Build translations object only with non-empty values
-    const translations: Record<string, string> = {};
-    if (formData.en) translations.en = formData.en;
-    if (formData.ar) translations.ar = formData.ar;
 
     const templateData = {
       name: formData.name,
-      translations,
+      message: formData.message,
     };
 
     try {
@@ -142,10 +122,8 @@ const TemplatesPage: NextPageWithLayout = () => {
     setEditingTemplate(null); // Create mode
     setFormData({
       name: `${template.name} (Copy)`,
-      en: template.translations.en || '',
-      ar: template.translations.ar || '',
+      message: template.message || '',
     });
-    setActiveLang(getDefaultLang());
     setIsModalOpen(true);
   };
 
@@ -234,32 +212,12 @@ const TemplatesPage: NextPageWithLayout = () => {
                 />
               </div>
 
-              {/* Translations */}
+              {/* Message */}
               <div className="p-5 space-y-4 flex-1">
-                {template.translations.ar && (
-                  <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative overflow-hidden group/ar">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-brand-600">
-                        <Globe className="w-3 h-3" />
-                        <span>{t('templates.arabic')}</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-surface-700 leading-relaxed text-start italic italic-arabic" dir="rtl">
-                      &ldquo;{template.translations.ar}&rdquo;
-                    </p>
-                  </div>
-                )}
-
-                {template.translations.en && (
-                  <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 relative overflow-hidden group/en">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-surface-400">
-                        <Globe className="w-3 h-3" />
-                        <span>{t('templates.english')}</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-surface-700 leading-relaxed text-start italic">
-                      &ldquo;{template.translations.en}&rdquo;
+                {template.message && (
+                  <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative overflow-hidden">
+                    <p className="text-sm text-surface-700 leading-relaxed text-start" dir="auto">
+                      &ldquo;{template.message}&rdquo;
                     </p>
                   </div>
                 )}
@@ -326,7 +284,7 @@ const TemplatesPage: NextPageWithLayout = () => {
         </Card>
       )}
 
-      {/* Create/Edit Modal - Compact with language tabs */}
+      {/* Create/Edit Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -347,59 +305,17 @@ const TemplatesPage: NextPageWithLayout = () => {
             )}
           </div>
 
-          {/* Language Tabs - Compact switcher */}
           <div>
-            <div className="flex gap-1 p-1 bg-surface-100 rounded-xl mb-3">
-              <button
-                type="button"
-                onClick={() => setActiveLang('ar')}
-                className={clsx(
-                  "flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2",
-                  activeLang === 'ar'
-                    ? "bg-white text-brand-600 shadow-sm"
-                    : "text-surface-500 hover:text-surface-700"
-                )}
-              >
-                <Globe className="w-4 h-4" />
-                {t('templates.arabic')}
-                {formData.ar && <span className="w-2 h-2 rounded-full bg-brand-500" />}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveLang('en')}
-                className={clsx(
-                  "flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2",
-                  activeLang === 'en'
-                    ? "bg-white text-brand-600 shadow-sm"
-                    : "text-surface-500 hover:text-surface-700"
-                )}
-              >
-                <Globe className="w-4 h-4" />
-                {t('templates.english')}
-                {formData.en && <span className="w-2 h-2 rounded-full bg-brand-500" />}
-              </button>
-            </div>
-
-            {activeLang === 'en' ? (
-              <Textarea
-                placeholder={t('templates.englishPlaceholder')}
-                value={formData.en}
-                onChange={(e) => setFormData({ ...formData, en: e.target.value })}
-                helperText={t('templates.variablesDesc')}
-                className="!py-2.5 min-h-[100px]"
-              />
-            ) : (
-              <Textarea
-                placeholder={t('templates.arabicPlaceholder')}
-                value={formData.ar}
-                onChange={(e) => setFormData({ ...formData, ar: e.target.value })}
-                helperText={t('templates.variablesDesc')}
-                className="text-right !py-2.5 min-h-[100px]"
-                dir="rtl"
-              />
-            )}
-            {translationError && (
-              <p className="text-xs text-red-500 mt-1">{t('templates.translationRequired')}</p>
+            <Textarea
+              placeholder={t('templates.messagePlaceholder')}
+              value={formData.message}
+              onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+              helperText={t('templates.variablesDesc')}
+              className="!py-2.5 min-h-[100px]"
+              dir="auto"
+            />
+            {messageError && (
+              <p className="text-xs text-red-500 mt-1">{t('templates.messageRequired')}</p>
             )}
           </div>
 

@@ -1,16 +1,11 @@
 import axios from 'axios';
 import { facebookService } from '../facebook';
-import { detectLanguageCode } from '../../utils/language';
 import { Logger, noopLogger } from '../../types';
 import { config } from '../../config';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
 export type ReplyMode = 'public' | 'private' | 'dual';
-
-export interface DualReplyConfig {
-    [lang: string]: string;
-}
 
 export interface SendCommentReplyOptions {
     facebookCommentId: string;
@@ -19,7 +14,7 @@ export interface SendCommentReplyOptions {
     accessToken: string;
     fromId?: string;
     replyMode: ReplyMode;
-    dualReplyConfig?: DualReplyConfig;
+    dualReplyNudge?: string;
     /** If true, skip Facebook API calls (for demo mode) */
     isDemo?: boolean;
 }
@@ -54,7 +49,7 @@ export class ReplySender {
             accessToken, 
             fromId, 
             replyMode, 
-            dualReplyConfig,
+            dualReplyNudge,
             isDemo = false
         } = options;
 
@@ -106,7 +101,7 @@ export class ReplySender {
 
             // For dual mode, use a short "nudge" instead of the full reply
             if (replyMode === 'dual') {
-                publicText = this.getDualModeNudge(commentMessage, dualReplyConfig);
+                publicText = this.getDualModeNudge(dualReplyNudge);
             }
 
             const pubSuccess = await this.postPublicReply(
@@ -134,16 +129,9 @@ export class ReplySender {
      * Get the public "nudge" text for dual mode
      * This is a short message that points to the private message
      */
-    private getDualModeNudge(commentMessage: string, config?: DualReplyConfig): string {
-        const detectedLang = detectLanguageCode(commentMessage);
-        const lang = detectedLang === 'unknown' ? 'en' : detectedLang;
-
-        const nudge = config?.[lang] ||
-            config?.['en'] ||
-            (lang === 'ar' ? 'تم إرسال التفاصيل برسالة خاصة 📩' : 'Details sent in a private message 📩');
-
-        // Enforce max length (80 chars) for public comments
-        return nudge.slice(0, 80);
+    private getDualModeNudge(nudge?: string): string {
+        const text = nudge || 'تم إرسال التفاصيل برسالة خاصة 📩';
+        return text.slice(0, 80);
     }
 
     /**

@@ -119,7 +119,7 @@ describe('Auth Routes - Login Flow', () => {
                 commentReplyMode: 'public',
                 commentsAutoReply: true,
                 messagesAutoReply: true,
-                dualReplyConfig: {},
+                dualReplyNudge: null,
                 businessHoursOnly: false,
                 businessHoursStart: '09:00',
                 businessHoursEnd: '17:00',

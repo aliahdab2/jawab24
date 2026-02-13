@@ -116,17 +116,9 @@ const RulesPage: NextPageWithLayout = () => {
     if (!quickTemplate.name.trim() || !quickTemplate.text.trim()) return;
     setSavingTemplate(true);
     try {
-      const translations: Record<string, string> = {};
-      // Auto-detect language: if mostly Arabic chars, save as ar; otherwise en
-      const arabicRegex = /[\u0600-\u06FF]/;
-      if (arabicRegex.test(quickTemplate.text)) {
-        translations.ar = quickTemplate.text;
-      } else {
-        translations.en = quickTemplate.text;
-      }
       const response = await templatesApi.create({
         name: quickTemplate.name,
-        translations,
+        message: quickTemplate.text,
       });
       const newTemplate = response.data;
       setTemplates(prev => [newTemplate, ...prev]);
@@ -220,7 +212,7 @@ const RulesPage: NextPageWithLayout = () => {
 
   // Build template options with preview text
   const getTemplatePreview = (template: Template) => {
-    const text = template.translations[language] || template.translations.en || template.translations.ar || '';
+    const text = template.message || '';
     if (!text) return template.name;
     const preview = text.length > 40 ? text.slice(0, 40) + '...' : text;
     return `${template.name} — ${preview}`;

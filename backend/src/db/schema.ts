@@ -111,7 +111,7 @@ export const templates = pgTable('templates', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }).notNull(),
-    translations: jsonb('translations').notNull().default({}),
+    message: text('message').notNull().default(''),
     active: boolean('active').default(true),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
@@ -213,7 +213,7 @@ export const settings = pgTable('settings', {
     aiModel: varchar('ai_model', { length: 100 }).default('gpt-4o-mini'),
     // Auto-reply settings
     commentReplyMode: varchar('comment_reply_mode', { length: 20 }).default('public'), // 'public', 'private', or 'dual'
-    dualReplyConfig: jsonb('dual_reply_config').default({}), // { "en": "Check DM", "ar": "تم الرد خاص" }
+    dualReplyNudge: text('dual_reply_nudge').default(''),
     commentsAutoReply: boolean('comments_auto_reply').default(true),
     messagesAutoReply: boolean('messages_auto_reply').default(true),
     businessHoursOnly: boolean('business_hours_only').default(false),
@@ -227,6 +227,8 @@ export const settings = pgTable('settings', {
     messageEscalationMinutes: integer('message_escalation_minutes').default(30),
     // Human handoff: default pause duration when user takes over a conversation
     handoffPauseDurationMinutes: integer('handoff_pause_duration_minutes').default(30),
+    // Push notification preferences
+    notificationsEnabled: boolean('notifications_enabled').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
