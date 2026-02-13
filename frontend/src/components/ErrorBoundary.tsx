@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, PropsWithChildren } from 'react';
 import * as Sentry from '@sentry/nextjs';
-import { useTranslation } from '../hooks/useTranslation';
+import { useTranslation } from '../i18n';
 
 // Props for the error boundary class component
 interface ErrorBoundaryClassProps extends PropsWithChildren {
