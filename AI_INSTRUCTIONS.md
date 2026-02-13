@@ -306,6 +306,77 @@ cd android && ./gradlew assembleDebug
 
 ---
 
+## ⚠️ Known Issues & Technical Debt
+
+This section documents known issues, technical debt, and production readiness gaps in the codebase. AI assistants should be aware of these when making changes.
+
+### Testing Gaps
+
+1. **Thin E2E test coverage**
+   - Status: Only `payment.spec.ts` and `dashboard.spec.ts` exist
+   - Missing: Settings, login, templates, comments, messages pages
+   - Files: `frontend/e2e/` directory
+   - Impact: Major features lack automated E2E testing
+
+2. **No visual regression testing**
+   - Status: No visual regression tests configured
+   - Impact: UI-heavy mobile app with RTL can easily have visual regressions
+   - Impact: Safe area, landscape mode, RTL layout issues may slip through
+
+### Production Readiness
+
+3. **No centralized error reporting**
+   - Status: Frontend uses `console.error()` throughout
+   - Examples: `'Failed to fetch settings:', error` in multiple places
+   - Impact: Production errors not tracked or monitored
+   - Recommendation: Add Sentry or similar error tracking service
+
+### Performance & Cost
+
+4. **No rate limiting on auto-translation**
+   - Status: Every settings save triggers OpenAI API call
+   - Impact: User spamming save button can rack up API costs
+   - Files: Settings page, translation API endpoint
+   - Risk: Cost abuse, API quota exhaustion
+
+### Code Quality
+
+5. **Remaining hardcoded strings (language conditionals)**
+   - Status: Violates Translation Rule #5
+   - Locations:
+     - Language toggle buttons: `{language === 'ar' ? 'English' : 'العربية'}` in DashboardLayout, PublicLayout, login, landing pages
+     - Checkmark symbols: `✓` in comments.tsx, messages.tsx, landing.tsx
+     - Separator: `&middot;` in Shopify section
+     - Default section title: `'قسم جديد' : 'New Section'` in KnowledgeBaseModal
+   - Files: See Section 5 violations list above
+   - Action Needed: Convert to `t('translation.key')` pattern
+
+### Security
+
+6. **No input sanitization on user textareas**
+   - Status: Raw user input rendered without XSS protection
+   - Locations: Away message, greeting message, knowledge base textareas
+   - Impact: Potential XSS vulnerabilities
+   - Files: Settings page, knowledge base components
+   - Action Needed: Sanitize before rendering or use safe rendering patterns
+
+### Minor Cleanup
+
+7. **Dead export: `translateText`**
+    - Status: Still exported but only used internally after recent cleanup
+    - Impact: Minor - just dead code
+    - Files: Translation utilities
+    - Action: Remove export or mark as internal
+
+---
+
+**Note to AI Assistants:**
+- When working on related features, consider fixing these issues if appropriate
+- Don't introduce new instances of these anti-patterns
+- Ask the user if they want you to address any of these issues when you're in the area
+
+---
+
 ## 📱 Mobile App Patterns
 
 ### Layout Pattern

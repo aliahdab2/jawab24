@@ -361,7 +361,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </Head>
       <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable}`}>
-        <ErrorBoundary>
+        <ErrorBoundary name="root" resetKeys={router.asPath}>
           {getLayout(<Component {...pageProps} />)}
           <Toaster richColors position="top-center" closeButton duration={4000} />
           {showPushPrompt && (

@@ -1,7 +1,14 @@
 import React, { Component, ErrorInfo, PropsWithChildren } from 'react';
+import * as Sentry from '@sentry/nextjs';
+import { useTranslation } from '../hooks/useTranslation';
 
-interface Props extends PropsWithChildren {
+// Props for the error boundary class component
+interface ErrorBoundaryClassProps extends PropsWithChildren {
   fallback?: React.ReactNode;
+  name?: string;
+  resetKeys?: string;
+  t: (key: string) => string;
+  language: string;
 }
 
 interface State {
@@ -9,9 +16,12 @@ interface State {
   error: Error | null;
 }
 
-class ErrorBoundary extends Component<Props, State> {
+/**
+ * Error Boundary Class Component
+ * Must be a class component because error boundaries can't be function components
+ */
+class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
   public state: State = { hasError: false, error: null };
-  public refs = {};
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
@@ -21,23 +31,26 @@ class ErrorBoundary extends Component<Props, State> {
     // Log error to console in development
     console.error('ErrorBoundary caught an error:', error);
     console.error('Component stack:', errorInfo.componentStack);
-    
-    // In production, you could send this to an error tracking service like Sentry
-    // if (process.env.NODE_ENV === 'production') {
-    //   Sentry.captureException(error, { extra: errorInfo });
-    // }
+
+    // Send to Sentry if configured
+    if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
+      Sentry.captureException(error, {
+        extra: errorInfo,
+        tags: { errorBoundary: this.props.name || 'root' },
+      });
+    }
   }
 
-  getLanguage = (): string => {
-    try {
-      const stored = localStorage.getItem('ui-storage');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return parsed?.state?.language || 'en';
-      }
-    } catch { /* fallback to en */ }
-    return 'en';
-  };
+  componentDidUpdate(prevProps: ErrorBoundaryClassProps): void {
+    // Reset error when route changes (via resetKeys prop)
+    if (
+      this.state.hasError &&
+      this.props.resetKeys &&
+      this.props.resetKeys !== prevProps.resetKeys
+    ) {
+      this.setState({ hasError: false, error: null });
+    }
+  }
 
   handleReload = (): void => {
     window.location.reload();
@@ -54,39 +67,48 @@ class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      const { t, language } = this.props;
+      const isRTL = language === 'ar';
+
       return (
-        <div className="min-h-screen bg-zinc-900 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-zinc-800 rounded-2xl p-8 text-center shadow-xl border border-zinc-700">
+        <div
+          className="flex-1 bg-zinc-900 flex items-center justify-center p-4"
+          style={{
+            minHeight: '100vh',
+            paddingTop: 'var(--sai-top)',
+            paddingBottom: 'var(--sai-bottom)',
+          }}
+        >
+          <div
+            dir={isRTL ? 'rtl' : 'ltr'}
+            className="max-w-md w-full bg-zinc-800 rounded-2xl p-8 text-center shadow-xl border border-zinc-700"
+          >
             {/* Error Icon */}
             <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-red-500/10 flex items-center justify-center">
-              <svg 
-                className="w-8 h-8 text-red-500" 
-                fill="none" 
-                stroke="currentColor" 
+              <svg
+                className="w-8 h-8 text-red-500"
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" 
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                 />
               </svg>
             </div>
 
             {/* Error Message */}
             <h1 className="text-xl font-semibold text-white mb-2">
-              {this.getLanguage() === 'ar' ? 'حدث خطأ ما' : 'Something went wrong'}
+              {t('errorBoundary.title')}
             </h1>
-            <p className="text-zinc-400 mb-6">
-              {this.getLanguage() === 'ar'
-                ? 'يرجى تحديث الصفحة والمحاولة مرة أخرى.'
-                : 'Please try refreshing the page.'}
-            </p>
+            <p className="text-zinc-400 mb-6">{t('errorBoundary.description')}</p>
 
             {/* Error Details (only in development) */}
             {process.env.NODE_ENV === 'development' && this.state.error && (
-              <div className="mb-6 p-3 bg-zinc-900 rounded-lg text-left overflow-auto max-h-32">
+              <div className="mb-6 p-3 bg-zinc-900 rounded-lg text-start overflow-auto max-h-32">
                 <code className="text-xs text-red-400 break-all">
                   {this.state.error.message}
                 </code>
@@ -99,13 +121,13 @@ class ErrorBoundary extends Component<Props, State> {
                 onClick={this.handleReload}
                 className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
               >
-                {this.getLanguage() === 'ar' ? 'تحديث الصفحة' : 'Refresh Page'}
+                {t('errorBoundary.refreshButton')}
               </button>
               <button
                 onClick={this.handleGoHome}
                 className="px-5 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg font-medium transition-colors"
               >
-                {this.getLanguage() === 'ar' ? 'الصفحة الرئيسية' : 'Go Home'}
+                {t('errorBoundary.homeButton')}
               </button>
             </div>
           </div>
@@ -115,6 +137,20 @@ class ErrorBoundary extends Component<Props, State> {
 
     return this.props.children;
   }
+}
+
+/**
+ * Error Boundary Wrapper (Function Component)
+ * Provides translation hook to the class component
+ */
+export function ErrorBoundary({ children, ...props }: Omit<ErrorBoundaryClassProps, 't' | 'language'>) {
+  const { t, language } = useTranslation();
+
+  return (
+    <ErrorBoundaryClass t={t} language={language} {...props}>
+      {children}
+    </ErrorBoundaryClass>
+  );
 }
 
 export default ErrorBoundary;
