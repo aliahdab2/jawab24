@@ -18,9 +18,7 @@ import {
   ChevronDown,
   ChevronUp,
   Settings2,
-  BookTemplate,
   Zap,
-  ChevronRight,
   MessagesSquare,
   Send,
   AlertTriangle,
@@ -30,7 +28,6 @@ import {
   RefreshCw,
   Unlink
 } from 'lucide-react';
-import Link from 'next/link';
 import { useTranslation, useLanguage, type TranslationKey } from '@/i18n';
 import type { NextPageWithLayout } from './_app';
 import type { Page, ShopifyStore } from '@jawab24/shared';
@@ -616,45 +613,6 @@ const SettingsPage: NextPageWithLayout = () => {
       {
         showAdvanced && (
           <div className="space-y-6 landscape:space-y-4 animate-slide-up pb-12">
-            {/* Templates & Rules Links - Prominent Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 landscape:grid-cols-2 gap-4">
-              <Link href="/templates" className="group">
-                <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 landscape:p-4 group-hover:bg-brand-50/10">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="w-16 h-16 landscape:w-12 landscape:h-12 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center mb-4 landscape:mb-2 group-hover:scale-110 transition-transform shadow-inner">
-                      <BookTemplate className="w-8 h-8 landscape:w-6 landscape:h-6" />
-                    </div>
-                    <h4 className="text-lg font-bold text-surface-900 mb-1 landscape:text-base">{t('nav.templates')}</h4>
-                    <p className="text-sm text-surface-500 mb-6 landscape:mb-3 landscape:text-xs">
-                      {t('settings.templatesCardDesc')}
-                    </p>
-                    <div className="mt-auto flex items-center gap-1 text-violet-600 font-bold text-sm uppercase tracking-widest">
-                      <span>{t('settings.viewTemplates')}</span>
-                      <ChevronRight className="w-4 h-4 rtl:rotate-180" />
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-
-              <Link href="/rules" className="group">
-                <Card className="h-full border-none shadow-lg shadow-surface-200/50 hover:shadow-xl hover:-translate-y-1 transition-all p-6 landscape:p-4 group-hover:bg-amber-50/10">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="w-16 h-16 landscape:w-12 landscape:h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-4 landscape:mb-2 group-hover:scale-110 transition-transform shadow-inner">
-                      <Zap className="w-8 h-8 landscape:w-6 landscape:h-6" />
-                    </div>
-                    <h4 className="text-lg font-bold text-surface-900 mb-1 landscape:text-base">{t('nav.rules')}</h4>
-                    <p className="text-sm text-surface-500 mb-6 landscape:mb-3 landscape:text-xs">
-                      {t('settings.rulesCardDesc')}
-                    </p>
-                    <div className="mt-auto flex items-center gap-1 text-amber-600 font-bold text-sm uppercase tracking-widest">
-                      <span>{t('settings.viewRules')}</span>
-                      <ChevronRight className="w-4 h-4 rtl:rotate-180" />
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-            </div>
-
             {/* Business Hours + Away Message (connected) */}
             <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 overflow-hidden">
               <div className="flex items-center justify-between mb-6 landscape:mb-3">

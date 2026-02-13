@@ -6,6 +6,66 @@ import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
 import { detectLanguageCode } from '../utils/language';
 import { config } from '../config';
 
+/**
+ * Auto-translate the dual reply nudge text.
+ * User writes in one language → we detect it and translate to the other.
+ * Falls back to same text for both if translation fails.
+ */
+async function translateDualReplyConfig(
+    cfg: Record<string, string>,
+    logger: { error: (obj: Record<string, unknown>, msg: string) => void },
+): Promise<Record<string, string>> {
+    // Find the user-provided text (en and ar are set to the same value by the frontend)
+    const text = cfg.en || cfg.ar || '';
+    if (!text.trim()) return cfg;
+
+    const sourceLang = detectLanguageCode(text);
+    const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
+    const targetLabel = targetLang === 'ar' ? 'Arabic' : 'English';
+
+    // If no OpenAI key, keep same text for both
+    if (!config.openai?.apiKey) return { en: text, ar: text };
+
+    try {
+        const response = await axios.post<{ choices: { message: { content: string } }[] }>(
+            'https://api.openai.com/v1/chat/completions',
+            {
+                model: 'gpt-4o-mini',
+                messages: [
+                    {
+                        role: 'system',
+                        content: `Translate the following short message to ${targetLabel}. Return ONLY the translation, nothing else. Keep emojis. Max 80 characters.`,
+                    },
+                    { role: 'user', content: text },
+                ],
+                max_tokens: 100,
+                temperature: 0.3,
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${config.openai.apiKey}`,
+                    'Content-Type': 'application/json',
+                },
+                timeout: 10000,
+            },
+        );
+
+        const translated = response.data.choices[0]?.message?.content?.trim().slice(0, 80);
+        if (!translated) return { en: text, ar: text };
+
+        return {
+            [sourceLang === 'ar' ? 'ar' : 'en']: text,
+            [targetLang]: translated,
+        };
+    } catch (error) {
+        logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            'Failed to translate dual reply nudge, using same text for both languages',
+        );
+        return { en: text, ar: text };
+    }
+}
+
 export class SettingsController {
     /**
      * Get user settings
@@ -54,7 +114,7 @@ export class SettingsController {
 
             // Auto-translate dual reply nudge if present
             if (updates.dualReplyConfig) {
-                updates.dualReplyConfig = await this.translateDualReplyConfig(
+                updates.dualReplyConfig = await translateDualReplyConfig(
                     updates.dualReplyConfig,
                     request.log,
                 );
@@ -65,66 +125,6 @@ export class SettingsController {
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error updating settings');
             return reply.status(500).send({ error: 'Failed to update settings' });
-        }
-    }
-
-    /**
-     * Auto-translate the dual reply nudge text.
-     * User writes in one language → we detect it and translate to the other.
-     * Falls back to same text for both if translation fails.
-     */
-    private async translateDualReplyConfig(
-        cfg: Record<string, string>,
-        logger: { error: (obj: Record<string, unknown>, msg: string) => void },
-    ): Promise<Record<string, string>> {
-        // Find the user-provided text (en and ar are set to the same value by the frontend)
-        const text = cfg.en || cfg.ar || '';
-        if (!text.trim()) return cfg;
-
-        const sourceLang = detectLanguageCode(text);
-        const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
-        const targetLabel = targetLang === 'ar' ? 'Arabic' : 'English';
-
-        // If no OpenAI key, keep same text for both
-        if (!config.openai?.apiKey) return { en: text, ar: text };
-
-        try {
-            const response = await axios.post<{ choices: { message: { content: string } }[] }>(
-                'https://api.openai.com/v1/chat/completions',
-                {
-                    model: 'gpt-4o-mini',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: `Translate the following short message to ${targetLabel}. Return ONLY the translation, nothing else. Keep emojis. Max 80 characters.`,
-                        },
-                        { role: 'user', content: text },
-                    ],
-                    max_tokens: 100,
-                    temperature: 0.3,
-                },
-                {
-                    headers: {
-                        Authorization: `Bearer ${config.openai.apiKey}`,
-                        'Content-Type': 'application/json',
-                    },
-                    timeout: 10000,
-                },
-            );
-
-            const translated = response.data.choices[0]?.message?.content?.trim().slice(0, 80);
-            if (!translated) return { en: text, ar: text };
-
-            return {
-                [sourceLang === 'ar' ? 'ar' : 'en']: text,
-                [targetLang]: translated,
-            };
-        } catch (error) {
-            logger.error(
-                { error: error instanceof Error ? error.message : String(error) },
-                'Failed to translate dual reply nudge, using same text for both languages',
-            );
-            return { en: text, ar: text };
         }
     }
 }
