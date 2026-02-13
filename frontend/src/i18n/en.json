@@ -334,6 +334,7 @@
   "templates.translationRequired": "Please fill in at least one language",
   "templates.templateNamePlaceholder": "e.g., Price Inquiry",
   "templates.templateContent": "Template Content",
+  "templates.messagePlaceholder": "Thank you for your interest! ...",
   "templates.usageCount": "Usage",
   "templates.lastUsed": "Last Used",
   "templates.noTemplates": "No templates yet",

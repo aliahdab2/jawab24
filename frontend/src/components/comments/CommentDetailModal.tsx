@@ -263,8 +263,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 <span>{formatFullTime(comment.createdAt)}</span>
                 {comment.detectedLanguage && (
                   <Badge size="sm" variant="default">
-                    {comment.detectedLanguage === 'ar' ? t('templates.arabic') :
-                      comment.detectedLanguage === 'en' ? t('templates.english') : comment.detectedLanguage}
+                    {comment.detectedLanguage.toUpperCase()}
                   </Badge>
                 )}
               </div>

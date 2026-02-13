@@ -20,7 +20,7 @@ import type { Rule, Template } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 
 const RulesPage: NextPageWithLayout = () => {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -450,7 +450,7 @@ const RulesPage: NextPageWithLayout = () => {
                   className="!py-2"
                 />
                 <Textarea
-                  placeholder={language === 'ar' ? t('templates.arabicPlaceholder' as TranslationKey) : t('templates.englishPlaceholder' as TranslationKey)}
+                  placeholder={t('templates.templateContent')}
                   value={quickTemplate.text}
                   onChange={(e) => setQuickTemplate({ ...quickTemplate, text: e.target.value })}
                   className="!py-2 min-h-[60px]"

@@ -67,16 +67,59 @@
 - ✅ Use `landscape:px-6` for consistent side padding
 - ✅ Use `flex-1 overflow-y-auto` for scrollable content
 
-### 2. RTL Support (Arabic)
+### 2. RTL Support & Tailwind for Translations
 
-**Always use logical properties, never physical left/right.**
+**Always use Tailwind CSS logical properties for ALL styling - never use physical left/right directions.**
+
+This ensures the UI works correctly in both English (LTR) and Arabic (RTL).
 
 ```tsx
 // ❌ WRONG - breaks Arabic
-className="pl-4 pr-2 ml-auto text-left"
+className="pl-4 pr-2 ml-auto text-left float-left"
 
 // ✅ CORRECT - works for both RTL and LTR
-className="ps-4 pe-2 ms-auto text-start"
+className="ps-4 pe-2 ms-auto text-start float-start"
+```
+
+**Tailwind Logical Property Mapping:**
+
+| ❌ Physical (Don't Use) | ✅ Logical (Always Use) | Description |
+|------------------------|------------------------|-------------|
+| `pl-*` | `ps-*` | Padding start (left in LTR, right in RTL) |
+| `pr-*` | `pe-*` | Padding end (right in LTR, left in RTL) |
+| `ml-*` | `ms-*` | Margin start |
+| `mr-*` | `me-*` | Margin end |
+| `left-*` | `start-*` | Positioning start |
+| `right-*` | `end-*` | Positioning end |
+| `text-left` | `text-start` | Text alignment start |
+| `text-right` | `text-end` | Text alignment end |
+| `float-left` | `float-start` | Float start |
+| `float-right` | `float-end` | Float end |
+| `rounded-l-*` | `rounded-s-*` | Border radius start |
+| `rounded-r-*` | `rounded-e-*` | Border radius end |
+| `border-l-*` | `border-s-*` | Border start |
+| `border-r-*` | `border-e-*` | Border end |
+
+**Critical Rules:**
+1. **NEVER** use physical directional properties (`left`, `right`, `pl-*`, `pr-*`, etc.)
+2. **ALWAYS** use Tailwind's logical properties (`start`, `end`, `ps-*`, `pe-*`, etc.)
+3. **Set `dir` attribute** on containers when switching languages
+4. **Use Tailwind classes** for all styling - avoid inline styles that use left/right
+5. **Test in both languages** before committing
+
+```tsx
+// ✅ CORRECT - Complete example
+const { t, language } = useTranslation();
+const isRTL = language === 'ar';
+
+return (
+  <div dir={isRTL ? 'rtl' : 'ltr'} className="ps-4 pe-6">
+    <div className="flex items-center gap-3">
+      <Icon className="me-2" />
+      <span className="text-start">{t('title')}</span>
+    </div>
+  </div>
+);
 ```
 
 ### 3. Responsive & Landscape Mode
@@ -136,20 +179,43 @@ This check must happen:
 - On backend before ANY Stripe API call
 - Never bypass or delay this check
 
-### 5. Translations
+### 5. Translations - NEVER Use Conditionals
 
-**Never hardcode user-facing strings.**
+**Never hardcode user-facing strings OR use language conditionals.**
 
 ```tsx
-// ❌ WRONG
+// ❌ WRONG - Hardcoded string
 <button>Save</button>
 
-// ✅ CORRECT
+// ❌ WRONG - Language conditional (anti-pattern!)
+{language === 'ar' ? 'حفظ' : 'Save'}
+{language === 'ar' ? 'New Section' : 'قسم جديد'}
+const title = language === 'ar' ? 'عنوان' : 'Title';
+
+// ✅ CORRECT - Use translation function
 <button>{t('common.save')}</button>
+{t('sections.defaultTitle')}
+const title = t('common.title');
 ```
 
-- Always add new keys to **both** `en.json` and `ar.json`
-- Run `npm run translation:validate` before committing translation changes
+**Critical Rules:**
+1. **NEVER** use `language === 'ar' ? ... : ...` conditionals for strings
+2. **ALWAYS** use `t('translation.key')` function for all user-facing text
+3. **ALWAYS** add new keys to **both** `en.json` and `ar.json`
+4. The ONLY acceptable use of `language === 'ar'` is for the `dir` attribute:
+   ```tsx
+   // ✅ OK - dir attribute is a technical necessity
+   <div dir={language === 'ar' ? 'rtl' : 'ltr'}>
+   ```
+
+**Why this matters:**
+- Language conditionals bypass translation validation
+- They break when adding new languages
+- They make translation management impossible
+- They violate single-source-of-truth principle
+
+**Before committing:**
+- Run `npm run translation:validate` to check for missing keys
 - See `frontend/docs/TRANSLATION_GUIDE.md` for full rules (key naming, RTL, interpolation, brand terms)
 
 ### 6. Product Terminology
@@ -288,6 +354,7 @@ return (
 | Using `pl-*`/`pr-*` | Use `ps-*`/`pe-*` for RTL |
 | Using `ml-*`/`mr-*` | Use `ms-*`/`me-*` for RTL |
 | Hardcoded strings | Use `t('key')` |
+| **Language conditionals for text** | **Use `t('key')` NOT `language === 'ar' ? ... : ...`** |
 | Missing `dir` attribute | Add `dir={isRTL ? 'rtl' : 'ltr'}` |
 | Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
 | Ignoring landscape mode | Test both orientations, use `landscape:` |
@@ -345,6 +412,8 @@ refactor(css): consolidate safe areas
 - [ ] Ran `npm run lint` - no errors AND no warnings
 - [ ] Used logical properties for RTL (`ps-*`, `pe-*`)
 - [ ] No hardcoded strings (used `t('key')`)
+- [ ] **No language conditionals** (`language === 'ar' ? ... : ...`) - use `t('key')` instead
+- [ ] Ran `npm run translation:validate` if translation files changed
 - [ ] Safe areas use `var(--sai-*)` or CSS classes (no hardcoded values)
 - [ ] No `min-h-screen` in page content (use `flex-1 overflow-y-auto`)
 - [ ] Bottom nav uses `bottom-nav-position` class

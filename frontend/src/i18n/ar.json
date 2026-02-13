@@ -330,6 +330,7 @@
   "templates.translationRequired": "يرجى تعبئة لغة واحدة على الأقل",
   "templates.templateNamePlaceholder": "مثال: استفسار السعر",
   "templates.templateContent": "محتوى الرد",
+  "templates.messagePlaceholder": "شكراً لاهتمامك! ...",
   "templates.usageCount": "مرات الاستخدام",
   "templates.lastUsed": "آخر استخدام",
   "templates.noTemplates": "لا توجد قوالب",
