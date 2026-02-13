@@ -327,6 +327,7 @@
   "templates.addTemplate": "إضافة قالب جديد",
   "templates.templateName": "اسم القالب",
   "templates.templateNameRequired": "اسم القالب مطلوب",
+  "templates.messageRequired": "نص القالب مطلوب",
   "templates.translationRequired": "يرجى تعبئة لغة واحدة على الأقل",
   "templates.templateNamePlaceholder": "مثال: استفسار السعر",
   "templates.templateContent": "محتوى الرد",

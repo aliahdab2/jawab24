@@ -331,6 +331,7 @@
   "templates.addTemplate": "Add Template",
   "templates.templateName": "Template Name",
   "templates.templateNameRequired": "Template name is required",
+  "templates.messageRequired": "Template message is required",
   "templates.translationRequired": "Please fill in at least one language",
   "templates.templateNamePlaceholder": "e.g., Price Inquiry",
   "templates.templateContent": "Template Content",
