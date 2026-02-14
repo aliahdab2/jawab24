@@ -680,39 +680,42 @@ const SettingsPage: NextPageWithLayout = () => {
                   </div>
 
                   {/* Time pickers */}
-                  <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
-                    <div>
-                      <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
-                      <div className="relative">
-                        <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-500" />
-                        <Input
-                          type="time"
-                          value={settings.businessHoursStart}
-                          onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
-                          disabled={!settings.businessHoursOnly}
-                          className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
-                        />
+                  {(() => {
+                    const timeSlots = Array.from({ length: 48 }, (_, i) => {
+                      const h = String(Math.floor(i / 2)).padStart(2, '0');
+                      const m = i % 2 === 0 ? '00' : '30';
+                      return { value: `${h}:${m}`, label: `${h}:${m}` };
+                    });
+                    return (
+                      <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
+                        <div>
+                          <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
+                          <Select
+                            value={settings.businessHoursStart}
+                            onChange={(val) => setSettings({ ...settings, businessHoursStart: val })}
+                            options={timeSlots}
+                            disabled={!settings.businessHoursOnly}
+                            className="!py-3 font-bold border-none bg-white shadow-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
+                          <Select
+                            value={settings.businessHoursEnd}
+                            onChange={(val) => setSettings({ ...settings, businessHoursEnd: val })}
+                            options={timeSlots}
+                            disabled={!settings.businessHoursOnly}
+                            className="!py-3 font-bold border-none bg-white shadow-sm"
+                          />
+                        </div>
+                        {settings.businessHoursEnd <= settings.businessHoursStart && (
+                          <p className="col-span-2 text-xs text-red-500 font-medium mt-1">
+                            {t('settings.businessHoursError' as TranslationKey)}
+                          </p>
+                        )}
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
-                      <div className="relative">
-                        <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-500" />
-                        <Input
-                          type="time"
-                          value={settings.businessHoursEnd}
-                          onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
-                          disabled={!settings.businessHoursOnly}
-                          className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
-                        />
-                      </div>
-                    </div>
-                    {settings.businessHoursEnd <= settings.businessHoursStart && (
-                      <p className="col-span-2 text-xs text-red-500 font-medium mt-1">
-                        {t('settings.businessHoursError' as TranslationKey)}
-                      </p>
-                    )}
-                  </div>
+                    );
+                  })()}
 
                   {/* Away Message — nested inside business hours */}
                   <div className="p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
