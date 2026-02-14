@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { translateText } from '../services/translation';
 import { authenticate } from '../middleware/auth';
 import { z } from 'zod';
+import { validateSchema } from '../utils/validation';
 
 const TranslateRequestSchema = z.object({
   text: z.string().min(1).max(1000),
@@ -13,11 +14,16 @@ export const translationRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/translation/translate
   fastify.post('/translate', {
     preHandler: [authenticate],
-    schema: {
-      body: TranslateRequestSchema
-    }
   }, async (request, reply) => {
-    const { text, sourceLanguage, targetLanguage } = request.body as z.infer<typeof TranslateRequestSchema>;
+    const validation = validateSchema(TranslateRequestSchema, request.body);
+    if (!validation.success) {
+      return reply.status(400).send({
+        error: 'Invalid request',
+        details: validation.errors
+      });
+    }
+
+    const { text, sourceLanguage, targetLanguage } = validation.data;
 
     try {
       const result = await translateText({

@@ -203,7 +203,12 @@ const start = async () => {
     await server.register(notificationRoutes, { prefix: "/notifications" });
     await server.register(adminRoutes, { prefix: "/admin" });
     await server.register(analyticsRoutes, { prefix: "/analytics" });
-    await server.register(translationRoutes, { prefix: "/api/translation" });
+    // Translation route — non-critical, guarded so it can't crash the server
+    try {
+      await server.register(translationRoutes, { prefix: "/api/translation" });
+    } catch (err) {
+      server.log.error(err, 'Failed to register translation routes — skipping');
+    }
 
     // Register e-commerce integration routes (Shopify, future WooCommerce, etc.)
     for (const integration of integrationRegistry.getEnabled()) {
