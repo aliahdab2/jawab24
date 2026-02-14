@@ -21,7 +21,6 @@ import {
   Zap,
   AlertTriangle,
   CheckCircle2,
-  UserCheck,
   ShoppingBag,
   RefreshCw,
   Unlink,
@@ -827,35 +826,63 @@ const SettingsPage: NextPageWithLayout = () => {
                   )}
                 >
                 <p className="text-xs text-surface-600 font-medium mb-3">{t('settings.reminders.helpText')}</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-4">
+                  {/* Comment reminder presets */}
                   <div>
-                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.commentLabel')}</label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={5}
-                        max={1440}
-                        value={settings.commentEscalationMinutes}
-                        onChange={(e) => setSettings({ ...settings, commentEscalationMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value) || 60)) })}
-                        disabled={!settings.notificationsEnabled}
-                        className="w-full py-2.5 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
-                      />
-                      <span className="text-sm font-bold text-surface-500 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
+                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.commentPresets' as TranslationKey)}</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: 15, label: t('settings.reminders.15min' as TranslationKey) },
+                        { value: 30, label: t('settings.reminders.30min' as TranslationKey) },
+                        { value: 60, label: t('settings.reminders.1hr' as TranslationKey) },
+                        { value: 120, label: t('settings.reminders.2hr' as TranslationKey) },
+                        { value: 240, label: t('settings.reminders.4hr' as TranslationKey) },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setSettings({ ...settings, commentEscalationMinutes: opt.value })}
+                          disabled={!settings.notificationsEnabled}
+                          className={clsx(
+                            'px-3 py-2.5 rounded-xl text-xs font-bold transition-all border min-h-[40px] flex items-center gap-1.5',
+                            'active:scale-[0.98]',
+                            settings.commentEscalationMinutes === opt.value
+                              ? 'bg-brand-500 text-white border-brand-600 shadow-md'
+                              : 'bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100'
+                          )}
+                        >
+                          {settings.commentEscalationMinutes === opt.value ? <Check className="w-3 h-3" /> : <Clock className="w-3 h-3 text-surface-400" />}
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
+                  {/* Message reminder presets */}
                   <div>
-                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.messageLabel')}</label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={5}
-                        max={1440}
-                        value={settings.messageEscalationMinutes}
-                        onChange={(e) => setSettings({ ...settings, messageEscalationMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value) || 30)) })}
-                        disabled={!settings.notificationsEnabled}
-                        className="w-full py-2.5 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
-                      />
-                      <span className="text-sm font-bold text-surface-500 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
+                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.messagePresets' as TranslationKey)}</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: 15, label: t('settings.reminders.15min' as TranslationKey) },
+                        { value: 30, label: t('settings.reminders.30min' as TranslationKey) },
+                        { value: 60, label: t('settings.reminders.1hr' as TranslationKey) },
+                        { value: 120, label: t('settings.reminders.2hr' as TranslationKey) },
+                        { value: 240, label: t('settings.reminders.4hr' as TranslationKey) },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setSettings({ ...settings, messageEscalationMinutes: opt.value })}
+                          disabled={!settings.notificationsEnabled}
+                          className={clsx(
+                            'px-3 py-2.5 rounded-xl text-xs font-bold transition-all border min-h-[40px] flex items-center gap-1.5',
+                            'active:scale-[0.98]',
+                            settings.messageEscalationMinutes === opt.value
+                              ? 'bg-brand-500 text-white border-brand-600 shadow-md'
+                              : 'bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100'
+                          )}
+                        >
+                          {settings.messageEscalationMinutes === opt.value ? <Check className="w-3 h-3" /> : <Clock className="w-3 h-3 text-surface-400" />}
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -863,17 +890,18 @@ const SettingsPage: NextPageWithLayout = () => {
               </Card>
             </div>
 
-            {/* Human Takeover Pause Duration */}
-            <Card className="border-none shadow-md shadow-surface-200/30 p-5 landscape:p-3">
+            {/* Human Takeover Pause Duration — Step 10: Amber warning style */}
+            <div className="rounded-2xl border-s-4 border-amber-400 bg-amber-50 p-5 landscape:p-3 shadow-md">
               <div className="flex items-center gap-4 mb-4 landscape:mb-3">
-                <div className="w-12 h-12 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
-                  <UserCheck className="w-6 h-6 landscape:w-5 landscape:h-5" />
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
+                  <AlertTriangle className="w-6 h-6 landscape:w-5 landscape:h-5" />
                 </div>
                 <div className="text-start">
                   <h3 className="font-bold text-surface-900 text-base landscape:text-sm">{t('settings.handoffPause.title')}</h3>
-                  <p className="text-xs text-surface-500 font-medium">{t('settings.handoffPause.desc')}</p>
+                  <p className="text-xs text-amber-700 font-bold">{t('settings.handoffPause.warning' as TranslationKey)}</p>
                 </div>
               </div>
+              <p className="text-xs text-surface-600 font-medium mb-3">{t('settings.handoffPause.desc')}</p>
               <div className="flex flex-wrap gap-2">
                 {[
                   { value: 15, label: t('settings.duration15min' as TranslationKey) },
@@ -889,8 +917,8 @@ const SettingsPage: NextPageWithLayout = () => {
                       'px-4 py-3 rounded-xl text-sm font-bold transition-all border min-h-[44px] flex items-center gap-1.5',
                       'active:scale-[0.98] hover:shadow-md',
                       settings.handoffPauseDurationMinutes === opt.value
-                        ? 'bg-brand-500 text-white border-brand-600 shadow-lg hover:bg-brand-600'
-                        : 'bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100 hover:border-surface-300'
+                        ? 'bg-amber-500 text-white border-amber-600 shadow-lg hover:bg-amber-600'
+                        : 'bg-white text-surface-600 border-surface-200 hover:bg-surface-50 hover:border-surface-300'
                     )}
                   >
                     {settings.handoffPauseDurationMinutes === opt.value && <Check className="w-3.5 h-3.5" />}
@@ -898,7 +926,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   </button>
                 ))}
               </div>
-            </Card>
+            </div>
 
             {/* Greeting Message (standalone — separate concept from away message) */}
             <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
