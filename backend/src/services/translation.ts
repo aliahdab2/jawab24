@@ -2,7 +2,18 @@ import OpenAI from 'openai';
 import { config } from '../config';
 import { detectLanguage } from '../utils/language';
 
-const openai = new OpenAI({ apiKey: config.openai.apiKey });
+/** Lazy-initialized OpenAI client — only created when actually needed */
+let _openai: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!config.openai.apiKey) {
+    throw new Error('OPENAI_API_KEY is not configured — cannot perform translation');
+  }
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: config.openai.apiKey });
+  }
+  return _openai;
+}
 
 interface TranslateRequest {
   text: string;
@@ -51,7 +62,7 @@ export async function translateText(request: TranslateRequest): Promise<Translat
   // Call OpenAI for translation
   const systemPrompt = `You are a professional translator. Translate the following text from ${detectedLang === 'ar' ? 'Arabic' : 'English'} to ${targetLanguage === 'ar' ? 'Arabic' : 'English'}. Maintain the tone, style, and any emojis. Return ONLY the translated text without any explanations.`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAIClient().chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       { role: 'system', content: systemPrompt },

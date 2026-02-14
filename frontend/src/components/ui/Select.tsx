@@ -14,13 +14,14 @@ interface SelectProps {
   placeholder?: string;
   label?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 /**
  * Custom Select component that works correctly on iOS
  * Native selects have issues inside modals on iOS Safari
  */
-export function Select({ value, onChange, options, placeholder, label, className }: SelectProps) {
+export function Select({ value, onChange, options, placeholder, label, className, disabled = false }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -76,10 +77,12 @@ export function Select({ value, onChange, options, placeholder, label, className
       {/* Trigger Button */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
         className={clsx(
           "input !py-2.5 sm:!py-3 w-full text-start flex items-center justify-between gap-2",
           !selectedOption && "text-surface-400",
+          disabled && "opacity-50 cursor-not-allowed",
           className
         )}
       >
@@ -95,7 +98,7 @@ export function Select({ value, onChange, options, placeholder, label, className
       </button>
 
       {/* Dropdown */}
-      {isOpen && (
+      {isOpen && !disabled && (
         <div
           ref={dropdownRef}
           className="absolute left-0 right-0 z-[100] bg-white rounded-xl border border-surface-200 shadow-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150"

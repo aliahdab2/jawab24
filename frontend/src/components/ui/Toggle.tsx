@@ -48,15 +48,16 @@ export function Toggle({ enabled, onChange, disabled = false, size = 'md' }: Tog
       disabled={disabled}
       onClick={() => onChange(!enabled)}
       className={clsx(
-        'relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-brand-500/10',
+        'relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-brand-500/10',
         sizeClasses[size].track,
+        size === 'md' && 'py-[9px]', // Expand tap target to ~42px height (24px + 18px padding)
         enabled ? 'bg-brand-600 shadow-lg shadow-brand-600/20' : 'bg-surface-200',
         disabled && 'opacity-50 cursor-not-allowed'
       )}
     >
       <span
         className={clsx(
-          'pointer-events-none inline-block rounded-full bg-white shadow-md ring-0 transition-all duration-300 ease-in-out',
+          'pointer-events-none inline-block rounded-full bg-white shadow-md ring-0 transition-all duration-200 ease-in-out',
           sizeClasses[size].thumb
         )}
         style={{ transform: getTransform() }}

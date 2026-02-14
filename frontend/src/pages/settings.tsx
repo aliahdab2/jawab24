@@ -428,9 +428,13 @@ const SettingsPage: NextPageWithLayout = () => {
             />
           </div>
 
-          {/* Nested Reply Mode Options - Only visible if Comments Auto-Reply is ON */}
-          {settings.commentsAutoReply && (
-            <div className="mt-6 pt-6 landscape:mt-4 landscape:pt-4 border-t border-surface-100 animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* Nested Reply Mode Options - Grayed out when Comments Auto-Reply is OFF */}
+          <div
+            className={clsx(
+              "mt-6 pt-6 landscape:mt-4 landscape:pt-4 border-t border-surface-100 transition-opacity duration-300",
+              !settings.commentsAutoReply && "opacity-50 pointer-events-none"
+            )}
+          >
               <h4 className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-3 landscape:mb-2 flex items-center gap-2">
                 <Settings2 className="w-4 h-4" />
                 {t('settings.commentReplyMode.question')}
@@ -447,6 +451,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   { value: 'public', label: t('settings.commentReplyMode.publicOnly') },
                   { value: 'private', label: t('settings.commentReplyMode.privateOnly') },
                 ]}
+                disabled={!settings.commentsAutoReply}
               />
 
               {/* Dynamic description based on selected mode */}
@@ -542,8 +547,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   </div>
                 </div>
               )}
-            </div>
-          )}
+          </div>
         </Card>
 
         {/* Messages & AI Toggles - Lighter Visual Weight */}
@@ -618,8 +622,12 @@ const SettingsPage: NextPageWithLayout = () => {
                 }} />
               </div>
 
-              {settings.businessHoursOnly && (
-                <div className="space-y-4 animate-slide-up">
+              <div
+                className={clsx(
+                  "space-y-4 transition-opacity duration-300",
+                  !settings.businessHoursOnly && "opacity-50 pointer-events-none"
+                )}
+              >
                   {/* Visual Flow - Business Hours - Two Scenarios */}
                   <div className="mt-3 mb-4 space-y-2 p-3 rounded-xl bg-surface-50 border border-surface-100">
                     {/* Scenario 1: During Hours → Auto-Reply Active */}
@@ -679,6 +687,7 @@ const SettingsPage: NextPageWithLayout = () => {
                           type="time"
                           value={settings.businessHoursStart}
                           onChange={(e) => setSettings({ ...settings, businessHoursStart: e.target.value })}
+                          disabled={!settings.businessHoursOnly}
                           className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
                         />
                       </div>
@@ -691,6 +700,7 @@ const SettingsPage: NextPageWithLayout = () => {
                           type="time"
                           value={settings.businessHoursEnd}
                           onChange={(e) => setSettings({ ...settings, businessHoursEnd: e.target.value })}
+                          disabled={!settings.businessHoursOnly}
                           className="ps-10 py-4 landscape:py-2.5 font-bold border-none bg-white shadow-sm focus:ring-2 focus:ring-brand-500"
                         />
                       </div>
@@ -714,6 +724,7 @@ const SettingsPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     <textarea
+                      disabled={!settings.businessHoursOnly}
                       className="input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl italic italic-arabic text-sm"
                       placeholder={t('settings.awayMessagePlaceholder')}
                       value={settings.awayMessage}
@@ -721,8 +732,7 @@ const SettingsPage: NextPageWithLayout = () => {
                     />
                   </div>
                 </div>
-              )}
-            </Card>
+              </Card>
 
             {/* Compact Row: Reply Speed + Notifications */}
             <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4">
@@ -788,8 +798,12 @@ const SettingsPage: NextPageWithLayout = () => {
                   </div>
                   <Toggle enabled={settings.notificationsEnabled} onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })} />
                 </div>
-                {settings.notificationsEnabled && (
-                <>
+                <div
+                  className={clsx(
+                    "transition-opacity duration-300",
+                    !settings.notificationsEnabled && "opacity-50 pointer-events-none"
+                  )}
+                >
                 <p className="text-xs text-surface-400 font-medium mb-3">{t('settings.reminders.helpText')}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -801,6 +815,7 @@ const SettingsPage: NextPageWithLayout = () => {
                         max={1440}
                         value={settings.commentEscalationMinutes}
                         onChange={(e) => setSettings({ ...settings, commentEscalationMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value) || 60)) })}
+                        disabled={!settings.notificationsEnabled}
                         className="w-full py-2.5 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
                       />
                       <span className="text-sm font-bold text-surface-400 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
@@ -815,14 +830,14 @@ const SettingsPage: NextPageWithLayout = () => {
                         max={1440}
                         value={settings.messageEscalationMinutes}
                         onChange={(e) => setSettings({ ...settings, messageEscalationMinutes: Math.max(5, Math.min(1440, parseInt(e.target.value) || 30)) })}
+                        disabled={!settings.notificationsEnabled}
                         className="w-full py-2.5 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
                       />
                       <span className="text-sm font-bold text-surface-400 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
                     </div>
                   </div>
                 </div>
-                </>
-                )}
+                </div>
               </Card>
             </div>
 
