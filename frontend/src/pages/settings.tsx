@@ -221,7 +221,11 @@ const SettingsPage: NextPageWithLayout = () => {
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
     awayMessage: '',
+    awayMessageAr: '',
+    awayMessageEn: '',
     greetingMessage: '',
+    greetingMessageAr: '',
+    greetingMessageEn: '',
     replyDelay: 0,
     dualReplyNudge: '',
     commentEscalationMinutes: 60,
@@ -260,7 +264,11 @@ const SettingsPage: NextPageWithLayout = () => {
         businessHoursStart: data.businessHoursStart || prev.businessHoursStart,
         businessHoursEnd: data.businessHoursEnd || prev.businessHoursEnd,
         awayMessage: data.awayMessage || '',
+        awayMessageAr: data.awayMessageAr || '',
+        awayMessageEn: data.awayMessageEn || '',
         greetingMessage: data.greetingMessage || '',
+        greetingMessageAr: data.greetingMessageAr || '',
+        greetingMessageEn: data.greetingMessageEn || '',
         replyDelay: data.replyDelay ?? prev.replyDelay,
         dualReplyNudge: data.dualReplyNudge || '',
         commentEscalationMinutes: data.commentEscalationMinutes ?? prev.commentEscalationMinutes,
@@ -626,8 +634,13 @@ const SettingsPage: NextPageWithLayout = () => {
                           <button
                             onClick={() => {
                               const updates: Record<string, unknown> = { businessHoursOnly: !settings.businessHoursOnly };
-                              if (!settings.businessHoursOnly && !settings.awayMessage) {
-                                updates.awayMessage = t('settings.awayMessageDefault' as TranslationKey);
+                              if (!settings.businessHoursOnly) {
+                                const defaultMsg = t('settings.awayMessageDefault' as TranslationKey);
+                                if (settings.dashboardLanguage === 'ar' && !settings.awayMessageAr) {
+                                  updates.awayMessageAr = defaultMsg;
+                                } else if (settings.dashboardLanguage !== 'ar' && !settings.awayMessageEn) {
+                                  updates.awayMessageEn = defaultMsg;
+                                }
                               }
                               setSettings({ ...settings, ...updates });
                             }}
@@ -649,8 +662,13 @@ const SettingsPage: NextPageWithLayout = () => {
                 <Toggle enabled={settings.businessHoursOnly} onChange={(enabled) => {
                   const updates: Record<string, unknown> = { businessHoursOnly: enabled };
                   // Auto-fill default away message when enabling business hours for the first time
-                  if (enabled && !settings.awayMessage) {
-                    updates.awayMessage = t('settings.awayMessageDefault' as TranslationKey);
+                  if (enabled) {
+                    const defaultMsg = t('settings.awayMessageDefault' as TranslationKey);
+                    if (settings.dashboardLanguage === 'ar' && !settings.awayMessageAr) {
+                      updates.awayMessageAr = defaultMsg;
+                    } else if (settings.dashboardLanguage !== 'ar' && !settings.awayMessageEn) {
+                      updates.awayMessageEn = defaultMsg;
+                    }
                   }
                   setSettings({ ...settings, ...updates });
                 }} />
@@ -756,17 +774,35 @@ const SettingsPage: NextPageWithLayout = () => {
                         <MessageCircle className="w-4 h-4" />
                       </div>
                       <div className="text-start">
-                        <h5 className="font-bold text-surface-800 text-sm">{t('settings.awayMessage.title')}</h5>
+                          <h5 className="font-bold text-surface-800 text-sm">{t('settings.awayMessage.title')}</h5>
                         <p className="text-[11px] text-surface-600 font-medium">{t('settings.awayMessage.desc')}</p>
                       </div>
                     </div>
-                    <textarea
-                      disabled={!settings.businessHoursOnly}
-                      className="input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl italic italic-arabic text-sm"
-                      placeholder={t('settings.awayMessagePlaceholder')}
-                      value={settings.awayMessage}
-                      onChange={(e) => setSettings({ ...settings, awayMessage: e.target.value })}
-                    />
+                    
+                    {/* Multilingual Textarea */}
+                    {settings.dashboardLanguage === 'ar' ? (
+                      <textarea
+                        disabled={!settings.businessHoursOnly}
+                        className="input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm rtl"
+                        placeholder="رسالة خارج أوقات العمل بالعربية..."
+                        dir="rtl"
+                        value={settings.awayMessageAr || ''}
+                        onChange={(e) => setSettings({ ...settings, awayMessageAr: e.target.value })}
+                      />
+                    ) : (
+                      <textarea
+                        disabled={!settings.businessHoursOnly}
+                        className="input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm ltr"
+                        placeholder="Away message in English..."
+                        dir="ltr"
+                        value={settings.awayMessageEn || ''}
+                        onChange={(e) => setSettings({ ...settings, awayMessageEn: e.target.value })}
+                      />
+                    )}
+                    
+                    <p className="text-[10px] text-surface-400 mt-2 text-center">
+                       {t('settings.awayMessage.autoTranslateHint')}
+                    </p>
                   </div>
                 </div>
               </Card>

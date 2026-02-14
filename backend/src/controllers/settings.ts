@@ -53,63 +53,97 @@ export class SettingsController {
             const updates = validation.data as UpdateSettingsDTO;
 
             // Auto-translate greeting message if provided
-            if (updates.greetingMessage !== undefined && updates.greetingMessage) {
-                const sourceText = updates.greetingMessage;
-                const detectionResult = detectLanguage(sourceText);
-                const sourceLang = detectionResult.language === 'ar' ? 'ar' : 'en';
-                const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
+            if (updates.greetingMessage) {
+                // If both AR and EN are provided explicitly, skip auto-translation
+                const explicitBoth = updates.greetingMessageAr && updates.greetingMessageEn;
+                
+                if (!explicitBoth) {
+                    const sourceText = updates.greetingMessage;
+                    const detectionResult = detectLanguage(sourceText);
+                    const sourceLang = detectionResult.language === 'ar' ? 'ar' : 'en';
+                    const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
 
-                try {
-                    const translation = await translateText({
-                        text: sourceText,
-                        sourceLanguage: sourceLang,
-                        targetLanguage: targetLang
-                    });
+                    try {
+                        // Only translate if the TARGET language is missing
+                        // e.g. if source is AR, and EN is missing -> translate
+                        const targetMissing = targetLang === 'ar' ? !updates.greetingMessageAr : !updates.greetingMessageEn;
 
-                    // Store both versions
-                    updates.greetingMessageAr = sourceLang === 'ar' ? sourceText : translation.translatedText;
-                    updates.greetingMessageEn = sourceLang === 'en' ? sourceText : translation.translatedText;
-                    updates.greetingMessageSourceLang = sourceLang;
-                } catch (error) {
-                    // Fallback: store original in detected language only
-                    if (sourceLang === 'ar') {
-                        updates.greetingMessageAr = sourceText;
-                    } else {
-                        updates.greetingMessageEn = sourceText;
+                        if (targetMissing) {
+                            const translation = await translateText({
+                                text: sourceText,
+                                sourceLanguage: sourceLang,
+                                targetLanguage: targetLang
+                            });
+
+                            // Fill missing fields
+                            if (targetLang === 'ar') updates.greetingMessageAr = translation.translatedText;
+                            if (targetLang === 'en') updates.greetingMessageEn = translation.translatedText;
+                        }
+
+                        // Always ensure source is set if missing
+                        if (sourceLang === 'ar' && !updates.greetingMessageAr) updates.greetingMessageAr = sourceText;
+                        if (sourceLang === 'en' && !updates.greetingMessageEn) updates.greetingMessageEn = sourceText;
+                        
+                        updates.greetingMessageSourceLang = sourceLang;
+                    } catch (error) {
+                        // Fallback: store original in detected language only
+                        if (sourceLang === 'ar' && !updates.greetingMessageAr) updates.greetingMessageAr = sourceText;
+                        if (sourceLang === 'en' && !updates.greetingMessageEn) updates.greetingMessageEn = sourceText;
+                        updates.greetingMessageSourceLang = sourceLang;
+                        request.log.error({ error: String(error) }, 'Translation failed for greeting message');
                     }
-                    updates.greetingMessageSourceLang = sourceLang;
-                    request.log.error({ error: String(error) }, 'Translation failed for greeting message');
                 }
             }
 
             // Auto-translate away message if provided
-            if (updates.awayMessage !== undefined && updates.awayMessage) {
-                const sourceText = updates.awayMessage;
-                const detectionResult = detectLanguage(sourceText);
-                const sourceLang = detectionResult.language === 'ar' ? 'ar' : 'en';
-                const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
+            if (updates.awayMessage) {
+                // If both AR and EN are provided explicitly, skip auto-translation
+                const explicitBoth = updates.awayMessageAr && updates.awayMessageEn;
 
-                try {
-                    const translation = await translateText({
-                        text: sourceText,
-                        sourceLanguage: sourceLang,
-                        targetLanguage: targetLang
-                    });
+                if (!explicitBoth) {
+                    const sourceText = updates.awayMessage;
+                    const detectionResult = detectLanguage(sourceText);
+                    const sourceLang = detectionResult.language === 'ar' ? 'ar' : 'en';
+                    const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
 
-                    // Store both versions
-                    updates.awayMessageAr = sourceLang === 'ar' ? sourceText : translation.translatedText;
-                    updates.awayMessageEn = sourceLang === 'en' ? sourceText : translation.translatedText;
-                    updates.awayMessageSourceLang = sourceLang;
-                } catch (error) {
-                    // Fallback: store original in detected language only
-                    if (sourceLang === 'ar') {
-                        updates.awayMessageAr = sourceText;
-                    } else {
-                        updates.awayMessageEn = sourceText;
+                    try {
+                        // Only translate if the TARGET language is missing
+                        const targetMissing = targetLang === 'ar' ? !updates.awayMessageAr : !updates.awayMessageEn;
+
+                        if (targetMissing) {
+                            const translation = await translateText({
+                                text: sourceText,
+                                sourceLanguage: sourceLang,
+                                targetLanguage: targetLang
+                            });
+
+                            // Fill missing fields
+                            if (targetLang === 'ar') updates.awayMessageAr = translation.translatedText;
+                            if (targetLang === 'en') updates.awayMessageEn = translation.translatedText;
+                        }
+
+                        // Always ensure source is set if missing
+                        if (sourceLang === 'ar' && !updates.awayMessageAr) updates.awayMessageAr = sourceText;
+                        if (sourceLang === 'en' && !updates.awayMessageEn) updates.awayMessageEn = sourceText;
+
+                        updates.awayMessageSourceLang = sourceLang;
+                    } catch (error) {
+                        // Fallback
+                        if (sourceLang === 'ar' && !updates.awayMessageAr) updates.awayMessageAr = sourceText;
+                        if (sourceLang === 'en' && !updates.awayMessageEn) updates.awayMessageEn = sourceText;
+                        updates.awayMessageSourceLang = sourceLang;
+                        request.log.error({ error: String(error) }, 'Translation failed for away message');
                     }
-                    updates.awayMessageSourceLang = sourceLang;
-                    request.log.error({ error: String(error) }, 'Translation failed for away message');
                 }
+            }
+
+            // If specific fields are provided but legacy `awayMessage` is missing/empty, 
+            // backfill it for compatibility (prefer EN, then AR)
+            if (!updates.awayMessage && (updates.awayMessageEn || updates.awayMessageAr)) {
+                updates.awayMessage = updates.awayMessageEn || updates.awayMessageAr;
+            }
+            if (!updates.greetingMessage && (updates.greetingMessageEn || updates.greetingMessageAr)) {
+                updates.greetingMessage = updates.greetingMessageEn || updates.greetingMessageAr;
             }
 
             const settings = await settingsService.updateSettings(userId, updates);
