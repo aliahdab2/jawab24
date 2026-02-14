@@ -50,7 +50,7 @@ export function Toggle({ enabled, onChange, disabled = false, size = 'md' }: Tog
       className={clsx(
         'relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-200 ease-in-out focus:outline-none focus:ring-4 focus:ring-brand-500/10',
         sizeClasses[size].track,
-        size === 'md' && 'py-[9px]', // Expand tap target to ~42px height (24px + 18px padding)
+        size === 'md' && 'py-[9px] my-[-9px]', // Expand tap target to ~42px height with negative margin to maintain visual position
         enabled ? 'bg-brand-600 shadow-lg shadow-brand-600/20' : 'bg-surface-200',
         disabled && 'opacity-50 cursor-not-allowed'
       )}
