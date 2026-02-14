@@ -136,32 +136,28 @@ echo "🔒 Running dependency security audit..."
 
 AUDIT_FAILED=false
 
-# Backend audit
-if npm audit --workspace=jawab24-backend --audit-level=high --omit=dev > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ Backend: no high/critical vulnerabilities${NC}"
-else
-    echo -e "${RED}   ❌ Backend: high/critical vulnerabilities found!${NC}"
-    npm audit --workspace=jawab24-backend --audit-level=high --omit=dev 2>&1 | tail -20
-    AUDIT_FAILED=true
-fi
+# Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
+run_audit() {
+    local workspace_name="$1"
+    local workspace_label="$2"
+    local output
+    output=$(npm audit --workspace="$workspace_name" --audit-level=high --omit=dev 2>&1)
+    local exit_code=$?
 
-# Frontend audit
-if npm audit --workspace=jawab24-frontend --audit-level=high --omit=dev > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ Frontend: no high/critical vulnerabilities${NC}"
-else
-    echo -e "${RED}   ❌ Frontend: high/critical vulnerabilities found!${NC}"
-    npm audit --workspace=jawab24-frontend --audit-level=high --omit=dev 2>&1 | tail -20
-    AUDIT_FAILED=true
-fi
+    if [ $exit_code -eq 0 ]; then
+        echo -e "${GREEN}   ✅ ${workspace_label}: no high/critical vulnerabilities${NC}"
+    elif echo "$output" | grep -q "ENOTFOUND\|ECONNREFUSED\|ETIMEDOUT\|EAI_AGAIN\|audit endpoint"; then
+        echo -e "${YELLOW}   ⚠️  ${workspace_label}: audit skipped (npm registry unreachable)${NC}"
+    else
+        echo -e "${RED}   ❌ ${workspace_label}: high/critical vulnerabilities found!${NC}"
+        echo "$output" | tail -20
+        AUDIT_FAILED=true
+    fi
+}
 
-# AI Worker audit
-if npm audit --workspace=jawab24-ai-worker --audit-level=high --omit=dev > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ AI Worker: no high/critical vulnerabilities${NC}"
-else
-    echo -e "${RED}   ❌ AI Worker: high/critical vulnerabilities found!${NC}"
-    npm audit --workspace=jawab24-ai-worker --audit-level=high --omit=dev 2>&1 | tail -20
-    AUDIT_FAILED=true
-fi
+run_audit "jawab24-backend" "Backend"
+run_audit "jawab24-frontend" "Frontend"
+run_audit "jawab24-ai-worker" "AI Worker"
 
 if [ "$AUDIT_FAILED" = true ]; then
     echo ""
