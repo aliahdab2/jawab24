@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactElement } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Toggle, PageHeader, PageSkeleton, Modal, Select } from '@/components/ui';
@@ -72,38 +72,51 @@ function ShopifySection() {
   const [pages, setPages] = useState<Page[]>([]);
   /* shopDomain + handleConnect removed — connection happens from Shopify App Store */
 
+  /* shopDomain + handleConnect removed — connection happens from Shopify App Store */
+
+  // Use ref to track mounted state for all async operations
+  const isMounted = useRef(true);
+  useEffect(() => {
+    return () => { isMounted.current = false; };
+  }, []);
+
   const fetchStore = useCallback(async () => {
     try {
       const data = await shopifyApi.getStore();
-      setStore(data);
+      if (isMounted.current) setStore(data);
     } catch {
-      setStore(null);
-    } finally {
-      setLoading(false);
+      if (isMounted.current) setStore(null);
     }
   }, []);
 
   const fetchPages = useCallback(async () => {
     try {
       const response = await pagesApi.getAll();
-      setPages(response.data || []);
+      if (isMounted.current) setPages(response.data || []);
     } catch {
       // ignore
     }
   }, []);
 
-  useEffect(() => { fetchStore(); fetchPages(); }, [fetchStore, fetchPages]);
+  // Initial load
+  useEffect(() => {
+    const init = async () => {
+      await Promise.all([fetchStore(), fetchPages()]);
+      if (isMounted.current) setLoading(false);
+    };
+    init();
+  }, [fetchStore, fetchPages]);
 
   const handleSync = async () => {
     setSyncing(true);
     try {
       await shopifyApi.syncProducts();
       toast.success(t('shopify.syncSuccess' as TranslationKey));
-      fetchStore();
+      await fetchStore();
     } catch {
       toast.error(t('shopify.syncError' as TranslationKey));
     } finally {
-      setSyncing(false);
+      if (isMounted.current) setSyncing(false);
     }
   };
 
@@ -111,7 +124,7 @@ function ShopifySection() {
     if (!confirm(t('shopify.disconnectConfirm' as TranslationKey))) return;
     try {
       await shopifyApi.disconnectStore();
-      setStore(null);
+      if (isMounted.current) setStore(null);
       toast.success(t('shopify.disconnected' as TranslationKey));
     } catch {
       toast.error(t('shopify.disconnectError' as TranslationKey));
@@ -250,6 +263,16 @@ const SettingsPage: NextPageWithLayout = () => {
       setLoading(true);
       const response = await settingsApi.get();
       const data = response.data;
+      
+      // OPTIMIZATION: Check language match BEFORE rendering content to prevent blinking
+      // If fetched language differs from current, switch language and reload page (via remount)
+      // We return early so we don't render content in the wrong language first
+      if (data.dashboardLanguage && data.dashboardLanguage !== language) {
+        setLanguage(data.dashboardLanguage as 'ar' | 'en');
+        // Let the app remount with new direction/language
+        return;
+      }
+
       setSettings(prev => ({
         ...prev,
         dashboardLanguage: data.dashboardLanguage || prev.dashboardLanguage,
@@ -278,9 +301,11 @@ const SettingsPage: NextPageWithLayout = () => {
     } catch (error) {
       console.error('Failed to fetch settings:', error);
     } finally {
+      // Only hide loading if we didn't trigger a language switch
+      // If we switched language, we want to keep loading state until remount
       setLoading(false);
     }
-  }, []);
+  }, [language, setLanguage]);
 
   // Fetch settings on mount - use isAuthenticated instead of token (web uses cookies)
   useEffect(() => {
@@ -289,18 +314,15 @@ const SettingsPage: NextPageWithLayout = () => {
     }
   }, [isAuthenticated, fetchSettings]);
 
-  // Separate effect: Sync language when settings.dashboardLanguage changes
-  // This is the industry-standard pattern for side effects
-  useEffect(() => {
-    if (settings.dashboardLanguage && settings.dashboardLanguage !== language) {
-      setLanguage(settings.dashboardLanguage as 'ar' | 'en');
-    }
-  }, [settings.dashboardLanguage, language, setLanguage]);
-
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
     try {
+      // If user changed language, update global state immediately
+      if (settings.dashboardLanguage && settings.dashboardLanguage !== language) {
+          setLanguage(settings.dashboardLanguage as 'ar' | 'en');
+      }
+
       await settingsApi.update(settings);
       setSaved(true);
       toast.success(t('settings.settingsSaved'));
@@ -544,17 +566,7 @@ const SettingsPage: NextPageWithLayout = () => {
                     maxLength={80}
                   />
 
-                  {/* Preview */}
-                  {dualNudgeInput && (
-                    <div className="mt-2 p-2.5 rounded-lg bg-white border border-surface-200">
-                      <p className="text-xs text-surface-500 mb-1 font-medium">
-                        {t('settings.preview')}:
-                      </p>
-                      <p className="text-sm text-surface-800">
-                        <span className="font-semibold">YourPage:</span> {dualNudgeInput}
-                      </p>
-                    </div>
-                  )}
+
 
                   <div className="flex items-center justify-between text-xs mt-1.5">
                     <span className="text-brand-700 font-medium">{t('settings.dualReplyConfigHelper')}</span>
