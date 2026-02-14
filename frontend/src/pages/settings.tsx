@@ -232,6 +232,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [showDelayInfo, setShowDelayInfo] = useState(false);
   const [diagramKey, setDiagramKey] = useState(0);
 
   const fetchSettings = useCallback(async () => {
@@ -514,7 +515,7 @@ const SettingsPage: NextPageWithLayout = () => {
               {settings.commentReplyMode === 'dual' && (
                 <div className="mt-4 p-4 landscape:p-3 rounded-xl bg-brand-50/20 border border-brand-200/50 animate-slide-up">
                   <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
-                  <p className="text-xs text-brand-700/70 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
+                  <p className="text-xs text-brand-700 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
                   <Input
                     value={dualNudgeInput}
                     onChange={(e) => {
@@ -542,7 +543,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   )}
 
                   <div className="flex items-center justify-between text-xs mt-1.5">
-                    <span className="text-brand-600/60 font-medium">{t('settings.dualReplyConfigHelper')}</span>
+                    <span className="text-brand-700 font-medium">{t('settings.dualReplyConfigHelper')}</span>
                     <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-500'}`}>
                       {dualNudgeInput.length}/80
                     </span>
@@ -742,7 +743,7 @@ const SettingsPage: NextPageWithLayout = () => {
               <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3">
                 <div className="flex items-center gap-4 mb-4 landscape:mb-3">
                   <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
-                    <Zap className="w-4 h-4" />
+                    <Clock className="w-5 h-5" />
                   </div>
                   <div className="text-start">
                     <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.replyDelay.title')}</h4>
@@ -762,43 +763,47 @@ const SettingsPage: NextPageWithLayout = () => {
                 </div>
                 {/* Examples */}
                 <div className="mt-2 flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => setSettings({ ...settings, replyDelay: 0 })}
-                    className={clsx(
-                      "px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98]",
-                      settings.replyDelay === 0
-                        ? "bg-brand-500 text-white shadow-lg hover:bg-brand-600"
-                        : "bg-surface-100 text-surface-600 hover:bg-surface-200 hover:shadow-md"
-                    )}
-                  >
-                    0 = {t('settings.replyDelay.instant')}
-                  </button>
-                  <button
-                    onClick={() => setSettings({ ...settings, replyDelay: 3 })}
-                    className={clsx(
-                      "px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98]",
-                      settings.replyDelay === 3
-                        ? "bg-brand-500 text-white shadow-lg hover:bg-brand-600"
-                        : "bg-surface-100 text-surface-600 hover:bg-surface-200 hover:shadow-md"
-                    )}
-                  >
-                    3 = {t('settings.replyDelay.natural')}
-                  </button>
-                  <button
-                    onClick={() => setSettings({ ...settings, replyDelay: 10 })}
-                    className={clsx(
-                      "px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98]",
-                      settings.replyDelay === 10
-                        ? "bg-brand-500 text-white shadow-lg hover:bg-brand-600"
-                        : "bg-surface-100 text-surface-600 hover:bg-surface-200 hover:shadow-md"
-                    )}
-                  >
-                    10 = {t('settings.replyDelay.slower')}
-                  </button>
+                  {[
+                    { value: 0, label: t('settings.replyDelay.instant') },
+                    { value: 3, label: t('settings.replyDelay.natural') },
+                    { value: 10, label: t('settings.replyDelay.slower') },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setSettings({ ...settings, replyDelay: opt.value })}
+                      className={clsx(
+                        "px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98] flex items-center gap-1.5",
+                        settings.replyDelay === opt.value
+                          ? "bg-brand-500 text-white shadow-lg hover:bg-brand-600"
+                          : "bg-surface-100 text-surface-600 border border-surface-200 hover:bg-surface-200 hover:shadow-md"
+                      )}
+                    >
+                      {settings.replyDelay === opt.value && <Check className="w-3.5 h-3.5" />}
+                      {opt.value} = {opt.label}
+                    </button>
+                  ))}
                 </div>
-                <p className="text-xs text-surface-600 mt-2">
-                  {t('settings.replyDelay.tip')}
+                {/* Step 8: Practical example + collapsible formula */}
+                <p className="text-xs text-surface-500 mt-3">
+                  {t('settings.replyDelay.example' as TranslationKey)}
                 </p>
+                <button
+                  onClick={() => setShowDelayInfo(!showDelayInfo)}
+                  className="flex items-center gap-1 text-xs text-brand-600 font-medium mt-1 hover:text-brand-700 transition-colors"
+                >
+                  {t('settings.replyDelay.learnMore' as TranslationKey)}
+                  {showDelayInfo ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {showDelayInfo && (
+                  <div className="mt-2 p-3 rounded-lg bg-surface-50 border border-surface-200 animate-slide-up">
+                    <p className="text-xs text-surface-500">
+                      {t('settings.replyDelay.tip')}
+                    </p>
+                    <p className="text-xs text-surface-400 mt-1 font-mono">
+                      {t('settings.replyDelay.formula' as TranslationKey)}
+                    </p>
+                  </div>
+                )}
               </Card>
 
               {/* Notifications & Reminders */}
@@ -824,7 +829,7 @@ const SettingsPage: NextPageWithLayout = () => {
                 <p className="text-xs text-surface-600 font-medium mb-3">{t('settings.reminders.helpText')}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.reminders.commentLabel')}</label>
+                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.commentLabel')}</label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -839,7 +844,7 @@ const SettingsPage: NextPageWithLayout = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.reminders.messageLabel')}</label>
+                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.messageLabel')}</label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
@@ -881,13 +886,14 @@ const SettingsPage: NextPageWithLayout = () => {
                     key={opt.value}
                     onClick={() => setSettings({ ...settings, handoffPauseDurationMinutes: opt.value })}
                     className={clsx(
-                      'px-4 py-3 rounded-xl text-sm font-bold transition-all border min-h-[44px]',
+                      'px-4 py-3 rounded-xl text-sm font-bold transition-all border min-h-[44px] flex items-center gap-1.5',
                       'active:scale-[0.98] hover:shadow-md',
                       settings.handoffPauseDurationMinutes === opt.value
-                        ? 'bg-violet-500 text-white border-violet-600 shadow-lg hover:bg-violet-600'
+                        ? 'bg-brand-500 text-white border-brand-600 shadow-lg hover:bg-brand-600'
                         : 'bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100 hover:border-surface-300'
                     )}
                   >
+                    {settings.handoffPauseDurationMinutes === opt.value && <Check className="w-3.5 h-3.5" />}
                     {opt.label}
                   </button>
                 ))}
