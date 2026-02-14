@@ -54,6 +54,11 @@ vi.mock('@/components/ui', () => ({
     Modal: ({ children, isOpen }: { children: React.ReactNode; isOpen: boolean }) => (
         isOpen ? <div data-testid="modal">{children}</div> : null
     ),
+    Select: ({ value, onChange, options }: { value: string; onChange: (val: string) => void; options: { value: string; label: string }[] }) => (
+        <select value={value} onChange={(e) => onChange(e.target.value)}>
+            {options.map((o: { value: string; label: string }) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+    ),
 }));
 
 const mockedSettingsApi = vi.mocked(settingsApi);
