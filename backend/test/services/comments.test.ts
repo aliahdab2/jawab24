@@ -8,28 +8,24 @@ vi.mock('../../src/db', () => ({
     }
 }));
 
-/** Helper: build a chainable mock for select().from().innerJoin().innerJoin().where() */
-function mockCountQuery(count: number) {
+/**
+ * Helper: build a chainable mock for select().from().innerJoin().innerJoin().where()
+ * Now returns a single row with all FILTER aggregation fields.
+ */
+function mockStatsQuery(stats: {
+    total: number;
+    replied: number;
+    needsAttention: number;
+    repliedToday: number;
+    ai: number;
+    template: number;
+    manual: number;
+}) {
     return {
         from: vi.fn().mockReturnValue({
             innerJoin: vi.fn().mockReturnValue({
                 innerJoin: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ count }])
-                })
-            })
-        })
-    };
-}
-
-/** Helper: build a chainable mock that also chains .groupBy() */
-function mockGroupByQuery(rows: { method: string; count: number }[]) {
-    return {
-        from: vi.fn().mockReturnValue({
-            innerJoin: vi.fn().mockReturnValue({
-                innerJoin: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        groupBy: vi.fn().mockResolvedValue(rows)
-                    })
+                    where: vi.fn().mockResolvedValue([stats])
                 })
             })
         })
@@ -43,28 +39,28 @@ describe('CommentsService', () => {
 
     describe('getStats', () => {
         it('should return correct stats from aggregated query', async () => {
-            // getStats() runs 10 parallel queries: 5 FB + 5 IG
+            // getStats() now runs 2 parallel queries (FB + IG), each returning all counts
             vi.mocked(db.select)
-                // --- Facebook queries ---
-                .mockReturnValueOnce(mockCountQuery(100) as any)   // fbTotal
-                .mockReturnValueOnce(mockCountQuery(60) as any)    // fbReplied
-                .mockReturnValueOnce(mockGroupByQuery([            // fbByMethod
-                    { method: 'template', count: 30 },
-                    { method: 'ai', count: 20 },
-                    { method: 'manual', count: 10 },
-                ]) as any)
-                .mockReturnValueOnce(mockCountQuery(2) as any)     // fbNeedsAttention
-                .mockReturnValueOnce(mockCountQuery(3) as any)     // fbRepliedToday
-                // --- Instagram queries ---
-                .mockReturnValueOnce(mockCountQuery(50) as any)    // igTotal
-                .mockReturnValueOnce(mockCountQuery(30) as any)    // igReplied
-                .mockReturnValueOnce(mockGroupByQuery([            // igByMethod
-                    { method: 'ai', count: 15 },
-                    { method: 'template', count: 10 },
-                    { method: 'manual', count: 5 },
-                ]) as any)
-                .mockReturnValueOnce(mockCountQuery(1) as any)     // igNeedsAttention
-                .mockReturnValueOnce(mockCountQuery(2) as any);    // igRepliedToday
+                // Facebook stats — single row with all FILTER counts
+                .mockReturnValueOnce(mockStatsQuery({
+                    total: 100,
+                    replied: 60,
+                    needsAttention: 2,
+                    repliedToday: 3,
+                    ai: 20,
+                    template: 30,
+                    manual: 10,
+                }) as any)
+                // Instagram stats — single row with all FILTER counts
+                .mockReturnValueOnce(mockStatsQuery({
+                    total: 50,
+                    replied: 30,
+                    needsAttention: 1,
+                    repliedToday: 2,
+                    ai: 15,
+                    template: 10,
+                    manual: 5,
+                }) as any);
 
             const stats = await commentsService.getStats('user-123');
 
@@ -84,18 +80,16 @@ describe('CommentsService', () => {
         });
 
         it('should handle zero comments', async () => {
-            // All 10 queries return 0
+            // Both queries return zeros
             vi.mocked(db.select)
-                .mockReturnValueOnce(mockCountQuery(0) as any)    // fbTotal
-                .mockReturnValueOnce(mockCountQuery(0) as any)    // fbReplied
-                .mockReturnValueOnce(mockGroupByQuery([]) as any) // fbByMethod
-                .mockReturnValueOnce(mockCountQuery(0) as any)    // fbNeedsAttention
-                .mockReturnValueOnce(mockCountQuery(0) as any)    // fbRepliedToday
-                .mockReturnValueOnce(mockCountQuery(0) as any)    // igTotal
-                .mockReturnValueOnce(mockCountQuery(0) as any)    // igReplied
-                .mockReturnValueOnce(mockGroupByQuery([]) as any) // igByMethod
-                .mockReturnValueOnce(mockCountQuery(0) as any)    // igNeedsAttention
-                .mockReturnValueOnce(mockCountQuery(0) as any);   // igRepliedToday
+                .mockReturnValueOnce(mockStatsQuery({
+                    total: 0, replied: 0, needsAttention: 0,
+                    repliedToday: 0, ai: 0, template: 0, manual: 0,
+                }) as any)
+                .mockReturnValueOnce(mockStatsQuery({
+                    total: 0, replied: 0, needsAttention: 0,
+                    repliedToday: 0, ai: 0, template: 0, manual: 0,
+                }) as any);
 
             const stats = await commentsService.getStats('user-empty');
 

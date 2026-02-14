@@ -526,50 +526,27 @@ describe('MessagesService', () => {
     });
 
     // ───────────────────────────────────────────
-    // getStats (existing 2 tests preserved)
+    // getStats — now uses a single query with FILTER
     // ───────────────────────────────────────────
     describe('getStats', () => {
         it('should return correct stats from aggregated query', async () => {
-            const mockTotalQuery = {
+            // Single query returns all counts via FILTER (WHERE ...)
+            const mockStatsQuery = {
                 from: vi.fn().mockReturnValue({
                     innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([{ count: 50 }])
-                    })
-                })
-            };
-            const mockRepliedQuery = {
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([{ count: 30 }])
-                    })
-                })
-            };
-            const mockNeedsAttentionQuery = {
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([{ count: 3 }])
-                    })
-                })
-            };
-            const mockByMethodQuery = {
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockReturnValue({
-                            groupBy: vi.fn().mockResolvedValue([
-                                { method: 'ai', count: 15 },
-                                { method: 'template', count: 10 },
-                                { method: 'manual', count: 5 },
-                            ])
-                        })
+                        where: vi.fn().mockResolvedValue([{
+                            total: 50,
+                            replied: 30,
+                            needsAttention: 3,
+                            ai: 15,
+                            template: 10,
+                            manual: 5,
+                        }])
                     })
                 })
             };
 
-            vi.mocked(db.select)
-                .mockReturnValueOnce(mockTotalQuery as any)
-                .mockReturnValueOnce(mockRepliedQuery as any)
-                .mockReturnValueOnce(mockNeedsAttentionQuery as any)
-                .mockReturnValueOnce(mockByMethodQuery as any);
+            vi.mocked(db.select).mockReturnValueOnce(mockStatsQuery as any);
 
             const stats = await messagesService.getStats('user-123');
 
@@ -583,15 +560,22 @@ describe('MessagesService', () => {
         });
 
         it('should handle zero messages', async () => {
-            const mockTotalQuery = {
+            const mockStatsQuery = {
                 from: vi.fn().mockReturnValue({
                     innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([{ count: 0 }])
+                        where: vi.fn().mockResolvedValue([{
+                            total: 0,
+                            replied: 0,
+                            needsAttention: 0,
+                            ai: 0,
+                            template: 0,
+                            manual: 0,
+                        }])
                     })
                 })
             };
 
-            vi.mocked(db.select).mockReturnValue(mockTotalQuery as any);
+            vi.mocked(db.select).mockReturnValue(mockStatsQuery as any);
 
             const stats = await messagesService.getStats('user-empty');
 
