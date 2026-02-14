@@ -415,9 +415,15 @@ const SettingsPage: NextPageWithLayout = () => {
             {/* Segmented Control */}
             <div className="flex gap-1 p-1 bg-surface-100 rounded-xl">
               <button
-                onClick={() => {
-                  setSettings({ ...settings, dashboardLanguage: 'ar' });
-                  setLanguage('ar');
+                onClick={async () => {
+                  const newSettings = { ...settings, dashboardLanguage: 'ar' as const };
+                  setSettings(newSettings);
+                  try {
+                     await settingsApi.update(newSettings);
+                     setLanguage('ar');
+                  } catch {
+                     toast.error(t('common.error'));
+                  }
                 }}
                 className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'ar'
                   ? 'bg-white text-brand-600 shadow-sm'
@@ -427,9 +433,15 @@ const SettingsPage: NextPageWithLayout = () => {
                 العربية
               </button>
               <button
-                onClick={() => {
-                  setSettings({ ...settings, dashboardLanguage: 'en' });
-                  setLanguage('en');
+                onClick={async () => {
+                  const newSettings = { ...settings, dashboardLanguage: 'en' as const };
+                  setSettings(newSettings);
+                  try {
+                     await settingsApi.update(newSettings);
+                     setLanguage('en');
+                  } catch {
+                     toast.error(t('common.error'));
+                  }
                 }}
                 className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'en'
                   ? 'bg-white text-brand-600 shadow-sm'
