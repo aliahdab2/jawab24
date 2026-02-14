@@ -25,6 +25,8 @@ import {
   ShoppingBag,
   RefreshCw,
   Unlink,
+  ArrowRight,
+  Mail,
 } from 'lucide-react';
 import { useTranslation, useLanguage, type TranslationKey } from '@/i18n';
 import type { NextPageWithLayout } from './_app';
@@ -443,11 +445,49 @@ const SettingsPage: NextPageWithLayout = () => {
                 ]}
               />
 
-              <p className="mt-2 text-xs text-surface-500">
-                {settings.commentReplyMode === 'dual' && t('settings.dualReplyDesc')}
-                {settings.commentReplyMode === 'public' && t('settings.publicReplyDesc')}
-                {settings.commentReplyMode === 'private' && t('settings.privateReplyDesc')}
-              </p>
+              {/* Flow Diagram */}
+              <div className="mt-3 flex items-center justify-center gap-2 py-3 px-2 rounded-xl bg-surface-50 border border-surface-100">
+                {/* New Comment */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <MessageSquare className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <span className="text-[10px] font-semibold text-surface-600 text-center leading-tight max-w-[60px]">
+                    {t('settings.flowNewComment')}
+                  </span>
+                </div>
+
+                <ArrowRight className="w-4 h-4 text-surface-300 flex-shrink-0 rtl:rotate-180" />
+
+                {/* Public Reply - shown for dual and public modes */}
+                {(settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'public') && (
+                  <>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
+                        <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <span className="text-[10px] font-semibold text-surface-600 text-center leading-tight max-w-[60px]">
+                        {t('settings.flowPublicReply')}
+                      </span>
+                    </div>
+                    {settings.commentReplyMode === 'dual' && (
+                      <ArrowRight className="w-4 h-4 text-surface-300 flex-shrink-0 rtl:rotate-180" />
+                    )}
+                  </>
+                )}
+
+                {/* AI Private Message - shown for dual and private modes */}
+                {(settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'private') && (
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
+                      <Mail className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-surface-600 text-center leading-tight max-w-[60px]">
+                      {t('settings.flowPrivateMessage')}
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Dual Reply Configuration */}
               {settings.commentReplyMode === 'dual' && (
