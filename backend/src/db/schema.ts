@@ -152,6 +152,8 @@ export const comments = pgTable('comments', {
         repliedIdx: index('idx_comments_replied').on(table.replied),
         detectedLanguageIdx: index('idx_comments_detected_language').on(table.detectedLanguage),
         needsAttentionIdx: index('idx_comments_needs_attention').on(table.needsAttention),
+        createdAtIdx: index('idx_comments_created_at').on(table.createdAt),
+        createdTimeIdx: index('idx_comments_created_time').on(table.createdTime),
     };
 });
 
@@ -181,6 +183,8 @@ export const instagramComments = pgTable('instagram_comments', {
         instagramCommentIdIdx: index('idx_instagram_comments_id').on(table.instagramCommentId),
         repliedIdx: index('idx_instagram_comments_replied').on(table.replied),
         needsAttentionIdx: index('idx_instagram_comments_needs_attention').on(table.needsAttention),
+        createdAtIdx: index('idx_instagram_comments_created_at').on(table.createdAt),
+        createdTimeIdx: index('idx_instagram_comments_created_time').on(table.createdTime),
     };
 });
 
@@ -274,6 +278,9 @@ export const messages = pgTable('messages', {
         directionIdx: index('idx_messages_direction').on(table.direction),
         platformIdx: index('idx_messages_platform').on(table.platform),
         needsAttentionIdx: index('idx_messages_needs_attention').on(table.needsAttention),
+        repliedIdx: index('idx_messages_replied').on(table.replied),
+        createdAtIdx: index('idx_messages_created_at').on(table.createdAt),
+        createdTimeIdx: index('idx_messages_created_time').on(table.createdTime),
     };
 });
 

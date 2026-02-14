@@ -169,6 +169,13 @@
       "when": 1771075359745,
       "tag": "0023_zippy_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1771104254882,
+      "tag": "0024_happy_harry_osborn",
+      "breakpoints": true
     }
   ]
 }
