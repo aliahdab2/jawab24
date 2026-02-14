@@ -219,8 +219,16 @@ export const settings = pgTable('settings', {
     businessHoursOnly: boolean('business_hours_only').default(false),
     businessHoursStart: varchar('business_hours_start', { length: 5 }).default('09:00'),
     businessHoursEnd: varchar('business_hours_end', { length: 5 }).default('18:00'),
+    // DEPRECATED - kept for backward compatibility (use language-specific fields below)
     awayMessage: text('away_message'),
     greetingMessage: text('greeting_message'),
+    // Multilingual messages (added 2026-02-14)
+    awayMessageAr: text('away_message_ar'),
+    awayMessageEn: text('away_message_en'),
+    greetingMessageAr: text('greeting_message_ar'),
+    greetingMessageEn: text('greeting_message_en'),
+    awayMessageSourceLang: varchar('away_message_source_lang', { length: 10 }).$type<'ar' | 'en' | null>(),
+    greetingMessageSourceLang: varchar('greeting_message_source_lang', { length: 10 }).$type<'ar' | 'en' | null>(),
     replyDelay: integer('reply_delay').default(0), // seconds
     // SLA escalation thresholds (minutes) - auto-flag unreplied items as needsAttention
     commentEscalationMinutes: integer('comment_escalation_minutes').default(60),

@@ -620,40 +620,52 @@ const SettingsPage: NextPageWithLayout = () => {
 
               {settings.businessHoursOnly && (
                 <div className="space-y-4 animate-slide-up">
-                  {/* Visual Flow - Business Hours */}
-                  <div className="mt-3 mb-4 flex items-center justify-center gap-2 py-3 px-2 rounded-xl bg-surface-50 border border-surface-100">
-                    {/* During Hours */}
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-11 h-11 rounded-lg bg-green-100 flex items-center justify-center">
-                        <Clock className="w-5 h-5 text-green-600" />
+                  {/* Visual Flow - Business Hours - Two Scenarios */}
+                  <div className="mt-3 mb-4 space-y-2 p-3 rounded-xl bg-surface-50 border border-surface-100">
+                    {/* Scenario 1: During Hours → Auto-Reply Active */}
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                          <Clock className="w-5 h-5 text-green-600" />
+                        </div>
+                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                          {t('settings.businessHours.duringLabel')}
+                        </span>
                       </div>
-                      <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
-                        {t('settings.businessHours.duringLabel')}
-                      </span>
+
+                      <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
+
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
+                          <Zap className="w-5 h-5 text-brand-600" />
+                        </div>
+                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                          {t('settings.businessHours.autoReplyActive')}
+                        </span>
+                      </div>
                     </div>
 
-                    <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
-
-                    {/* Auto-Reply Active */}
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-11 h-11 rounded-lg bg-brand-100 flex items-center justify-center">
-                        <Zap className="w-5 h-5 text-brand-600" />
+                    {/* Scenario 2: Outside Hours → Away Message */}
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                          <Clock className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                          {t('settings.businessHours.outsideLabel')}
+                        </span>
                       </div>
-                      <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
-                        {t('settings.businessHours.autoReplyActive')}
-                      </span>
-                    </div>
 
-                    <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
+                      <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
 
-                    {/* Outside Hours */}
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-11 h-11 rounded-lg bg-purple-100 flex items-center justify-center">
-                        <Mail className="w-5 h-5 text-purple-600" />
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                          <Mail className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                          {t('settings.businessHours.awayMessage')}
+                        </span>
                       </div>
-                      <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
-                        {t('settings.businessHours.awayMessage')}
-                      </span>
                     </div>
                   </div>
 

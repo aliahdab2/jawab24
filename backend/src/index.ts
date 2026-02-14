@@ -32,6 +32,7 @@ import geoRoutes from "./routes/geo";
 import notificationRoutes from "./routes/notifications";
 import adminRoutes from "./routes/admin";
 import analyticsRoutes from "./routes/analytics";
+import { translationRoutes } from "./routes/translation";
 import { integrationRegistry } from "./integrations";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
@@ -202,6 +203,7 @@ const start = async () => {
     await server.register(notificationRoutes, { prefix: "/notifications" });
     await server.register(adminRoutes, { prefix: "/admin" });
     await server.register(analyticsRoutes, { prefix: "/analytics" });
+    await server.register(translationRoutes, { prefix: "/api/translation" });
 
     // Register e-commerce integration routes (Shopify, future WooCommerce, etc.)
     for (const integration of integrationRegistry.getEnabled()) {

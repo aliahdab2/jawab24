@@ -133,7 +133,8 @@ export class MessageProcessor {
             const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(userId);
             lap('8-settingsCheck');
             if (!isMessagesEnabled) {
-                const awayMessage = await settingsService.getAwayMessage(userId);
+                const customerLang = detectLanguageCode(messageText);
+                const awayMessage = await settingsService.getAwayMessage(userId, customerLang);
                 if (awayMessage && isNew) {
                     try {
                         await adapter.sendAwayMessage(page, senderId, awayMessage);

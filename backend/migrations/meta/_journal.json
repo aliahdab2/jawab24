@@ -162,6 +162,13 @@
       "when": 1770961442179,
       "tag": "0022_adorable_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1771075359745,
+      "tag": "0023_zippy_molten_man",
+      "breakpoints": true
     }
   ]
 }

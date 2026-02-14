@@ -234,7 +234,63 @@ Use these terms consistently in UI text, code comments, and translations:
 - Never say "AI reply" in user-facing text — use "Smart Reply"
 - Business Hours controls when auto-reply is active; Away Message is what's sent during the off period
 
-### 7. Linting
+### 7. Multi-Language Translation Service
+
+Jawab24 automatically translates user-generated content (greeting messages, away messages) to support bilingual businesses.
+
+**How It Works:**
+1. User writes message in any language (Arabic or English) in settings
+2. Backend automatically detects language when saving
+3. Backend translates to the other language using OpenAI
+4. Both versions stored in database (`*_ar` and `*_en` fields)
+5. When replying to customers, system sends the appropriate language version
+
+**Implementation Details:**
+- **Translation happens**: When user clicks Save in settings (not on every message sent)
+- **Service**: `/backend/src/services/translation.ts` using OpenAI GPT-4o-mini
+- **API endpoint**: `POST /api/translation/translate` (authenticated, for manual use if needed)
+- **Language detection**: `/backend/src/utils/language.ts` `detectLanguage()` function
+- **Auto-translation**: `/backend/src/controllers/settings.ts` lines 52-110
+
+**Database Schema:**
+```typescript
+// settings table (backend/src/db/schema.ts)
+awayMessage: text('away_message'),        // DEPRECATED - legacy field
+greetingMessage: text('greeting_message'), // DEPRECATED - legacy field
+awayMessageAr: text('away_message_ar'),
+awayMessageEn: text('away_message_en'),
+greetingMessageAr: text('greeting_message_ar'),
+greetingMessageEn: text('greeting_message_en'),
+awayMessageSourceLang: varchar('away_message_source_lang'),
+greetingMessageSourceLang: varchar('greeting_message_source_lang'),
+```
+
+**Reply Logic:**
+- Message processors detect customer's language from their comment/message
+- Call `settingsService.getAwayMessage(userId, language)` or `getGreetingMessage(userId, language)`
+- Service returns appropriate language version
+- Falls back to any available version if specific language not found
+
+**Cost Optimization:**
+- Translation only happens when user saves settings (one-time cost)
+- No translation on every message sent to customers (would be expensive!)
+- Uses cost-effective `gpt-4o-mini` model
+- System prompt enforces consistent, emoji-preserving translations
+
+**User Experience:**
+- User sees simple textarea (no language tabs - too confusing!)
+- Types in any language they prefer
+- Backend handles translation transparently
+- Users don't need to know translation is happening
+
+**Supported Languages:** Arabic (ar) and English (en)
+
+**Future Extensions:**
+- Templates (high value - used frequently)
+- Knowledge Base (highest value - enables multilingual AI replies)
+- Additional languages (French, Spanish, German, Swedish)
+
+### 8. Linting
 
 **Always check for lint errors AND warnings after editing files. The codebase must have zero warnings and zero errors.**
 

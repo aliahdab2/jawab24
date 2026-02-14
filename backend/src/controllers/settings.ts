@@ -2,6 +2,9 @@ import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
+import { translateText } from '../services/translation';
+import { detectLanguage } from '../utils/language';
+import type { UpdateSettingsDTO } from '../types/settings';
 
 export class SettingsController {
     /**
@@ -47,7 +50,67 @@ export class SettingsController {
                 });
             }
 
-            const updates = validation.data;
+            const updates = validation.data as UpdateSettingsDTO;
+
+            // Auto-translate greeting message if provided
+            if (updates.greetingMessage !== undefined && updates.greetingMessage) {
+                const sourceText = updates.greetingMessage;
+                const detectionResult = detectLanguage(sourceText);
+                const sourceLang = detectionResult.language === 'ar' ? 'ar' : 'en';
+                const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
+
+                try {
+                    const translation = await translateText({
+                        text: sourceText,
+                        sourceLanguage: sourceLang,
+                        targetLanguage: targetLang
+                    });
+
+                    // Store both versions
+                    updates.greetingMessageAr = sourceLang === 'ar' ? sourceText : translation.translatedText;
+                    updates.greetingMessageEn = sourceLang === 'en' ? sourceText : translation.translatedText;
+                    updates.greetingMessageSourceLang = sourceLang;
+                } catch (error) {
+                    // Fallback: store original in detected language only
+                    if (sourceLang === 'ar') {
+                        updates.greetingMessageAr = sourceText;
+                    } else {
+                        updates.greetingMessageEn = sourceText;
+                    }
+                    updates.greetingMessageSourceLang = sourceLang;
+                    request.log.error({ error: String(error) }, 'Translation failed for greeting message');
+                }
+            }
+
+            // Auto-translate away message if provided
+            if (updates.awayMessage !== undefined && updates.awayMessage) {
+                const sourceText = updates.awayMessage;
+                const detectionResult = detectLanguage(sourceText);
+                const sourceLang = detectionResult.language === 'ar' ? 'ar' : 'en';
+                const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
+
+                try {
+                    const translation = await translateText({
+                        text: sourceText,
+                        sourceLanguage: sourceLang,
+                        targetLanguage: targetLang
+                    });
+
+                    // Store both versions
+                    updates.awayMessageAr = sourceLang === 'ar' ? sourceText : translation.translatedText;
+                    updates.awayMessageEn = sourceLang === 'en' ? sourceText : translation.translatedText;
+                    updates.awayMessageSourceLang = sourceLang;
+                } catch (error) {
+                    // Fallback: store original in detected language only
+                    if (sourceLang === 'ar') {
+                        updates.awayMessageAr = sourceText;
+                    } else {
+                        updates.awayMessageEn = sourceText;
+                    }
+                    updates.awayMessageSourceLang = sourceLang;
+                    request.log.error({ error: String(error) }, 'Translation failed for away message');
+                }
+            }
 
             const settings = await settingsService.updateSettings(userId, updates);
             return reply.send(settings);

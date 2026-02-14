@@ -88,19 +88,36 @@ export class SettingsService {
     }
 
     /**
-     * Get the away message if auto-reply is disabled or outside business hours
+     * Get the away message if auto-reply is disabled or outside business hours.
+     * Respects user's autoDetectLanguage and defaultReplyLanguage settings.
+     *
+     * @param userId - User ID
+     * @param detectedLanguage - The customer's detected language (raw from detector)
      */
-    async getAwayMessage(userId: string): Promise<string | null> {
+    async getAwayMessage(userId: string, detectedLanguage?: string): Promise<string | null> {
         const userSettings = await this.getSettings(userId);
-        return userSettings.awayMessage;
+        const preferred = this.resolveLanguage(userSettings, detectedLanguage);
+
+        // Try the preferred language first, then fall back to the other
+        const primary = preferred === 'ar' ? userSettings.awayMessageAr : userSettings.awayMessageEn;
+        const fallback = preferred === 'ar' ? userSettings.awayMessageEn : userSettings.awayMessageAr;
+        return primary || fallback || userSettings.awayMessage || null;
     }
 
     /**
-     * Get the greeting message for new conversations
+     * Get the greeting message for new conversations.
+     * Respects user's autoDetectLanguage and defaultReplyLanguage settings.
+     *
+     * @param userId - User ID
+     * @param detectedLanguage - The customer's detected language (raw from detector)
      */
-    async getGreetingMessage(userId: string): Promise<string | null> {
+    async getGreetingMessage(userId: string, detectedLanguage?: string): Promise<string | null> {
         const userSettings = await this.getSettings(userId);
-        return userSettings.greetingMessage;
+        const preferred = this.resolveLanguage(userSettings, detectedLanguage);
+
+        const primary = preferred === 'ar' ? userSettings.greetingMessageAr : userSettings.greetingMessageEn;
+        const fallback = preferred === 'ar' ? userSettings.greetingMessageEn : userSettings.greetingMessageAr;
+        return primary || fallback || userSettings.greetingMessage || null;
     }
 
     /**
@@ -120,6 +137,24 @@ export class SettingsService {
 
         // Simple string comparison works for HH:MM format
         return currentTime >= start && currentTime <= end;
+    }
+
+    /**
+     * Resolves which stored language version to use.
+     *
+     * - If autoDetectLanguage is ON and a detected language was provided:
+     *     Arabic → 'ar', anything else → defaultReplyLanguage
+     * - If autoDetectLanguage is OFF or no detection provided:
+     *     Uses dashboardLanguage from user settings as the fallback
+     */
+    private resolveLanguage(userSettings: UserSettings, detectedLanguage?: string): 'ar' | 'en' {
+        const fallback = (userSettings.dashboardLanguage === 'ar' ? 'ar' : 'en') as 'ar' | 'en';
+
+        if (!userSettings.autoDetectLanguage || !detectedLanguage || detectedLanguage === 'unknown') {
+            return fallback;
+        }
+
+        return detectedLanguage === 'ar' ? 'ar' : fallback;
     }
 
     /**
@@ -144,6 +179,13 @@ export class SettingsService {
             businessHoursEnd: record.businessHoursEnd || '18:00',
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
+            // Multilingual messages
+            awayMessageAr: record.awayMessageAr ?? null,
+            awayMessageEn: record.awayMessageEn ?? null,
+            greetingMessageAr: record.greetingMessageAr ?? null,
+            greetingMessageEn: record.greetingMessageEn ?? null,
+            awayMessageSourceLang: record.awayMessageSourceLang ?? null,
+            greetingMessageSourceLang: record.greetingMessageSourceLang ?? null,
             replyDelay: record.replyDelay ?? 0,
             commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,

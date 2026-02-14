@@ -20,8 +20,15 @@ export interface UserSettings {
     businessHoursOnly: boolean;
     businessHoursStart: string;
     businessHoursEnd: string;
-    awayMessage: string | null;
-    greetingMessage: string | null;
+    awayMessage: string | null; // DEPRECATED - use awayMessageAr/awayMessageEn
+    greetingMessage: string | null; // DEPRECATED - use greetingMessageAr/greetingMessageEn
+    // Multilingual messages
+    awayMessageAr?: string | null;
+    awayMessageEn?: string | null;
+    greetingMessageAr?: string | null;
+    greetingMessageEn?: string | null;
+    awayMessageSourceLang?: 'ar' | 'en' | null;
+    greetingMessageSourceLang?: 'ar' | 'en' | null;
     replyDelay: number;
     commentEscalationMinutes: number;
     messageEscalationMinutes: number;
@@ -43,8 +50,15 @@ export interface UpdateSettingsDTO {
     businessHoursOnly?: boolean;
     businessHoursStart?: string;
     businessHoursEnd?: string;
-    awayMessage?: string | null;
-    greetingMessage?: string | null;
+    awayMessage?: string | null; // DEPRECATED - use awayMessageAr/awayMessageEn
+    greetingMessage?: string | null; // DEPRECATED - use greetingMessageAr/greetingMessageEn
+    // Multilingual messages
+    awayMessageAr?: string | null;
+    awayMessageEn?: string | null;
+    greetingMessageAr?: string | null;
+    greetingMessageEn?: string | null;
+    awayMessageSourceLang?: 'ar' | 'en' | null;
+    greetingMessageSourceLang?: 'ar' | 'en' | null;
     replyDelay?: number;
     commentEscalationMinutes?: number;
     messageEscalationMinutes?: number;
