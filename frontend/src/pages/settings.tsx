@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Toggle, PageHeader, PageSkeleton, Modal } from '@/components/ui';
+import { Card, Button, Input, Toggle, PageHeader, PageSkeleton, Modal, Select } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { useRouter } from 'next/router';
@@ -19,8 +19,6 @@ import {
   ChevronUp,
   Settings2,
   Zap,
-  MessagesSquare,
-  Send,
   AlertTriangle,
   CheckCircle2,
   UserCheck,
@@ -430,122 +428,53 @@ const SettingsPage: NextPageWithLayout = () => {
           {/* Nested Reply Mode Options - Only visible if Comments Auto-Reply is ON */}
           {settings.commentsAutoReply && (
             <div className="mt-6 pt-6 landscape:mt-4 landscape:pt-4 border-t border-surface-100 animate-in fade-in slide-in-from-top-2 duration-300">
-              <h4 className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-4 landscape:mb-2 flex items-center gap-2">
+              <h4 className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-3 landscape:mb-2 flex items-center gap-2">
                 <Settings2 className="w-4 h-4" />
                 {t('settings.commentReplyMode')}
               </h4>
-              <div className="space-y-3 landscape:space-y-2">
-                {/* Comment Reply + Message - FIRST (Recommended) */}
-                <button
-                  onClick={() => setSettings({ ...settings, commentReplyMode: 'dual' })}
-                  className={`w-full relative flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'dual'
-                    ? 'border-brand-500 bg-brand-50/20 shadow-sm'
-                    : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
-                    }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'dual' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                      <MessagesSquare className="w-6 h-6 landscape:w-5 landscape:h-5" />
-                    </div>
-                    <div className="text-start">
-                      <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'dual' ? 'text-brand-900' : 'text-surface-700'}`}>
-                        {t('settings.dualReply')}
-                      </span>
-                      <span className="text-xs text-surface-500 landscape:hidden lg:landscape:block">{t('settings.dualReplyDesc')}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {/* Recommended Badge */}
-                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-brand-100 text-brand-600 rounded-full">
-                      {t('settings.recommended')}
+
+              <Select
+                value={settings.commentReplyMode}
+                onChange={(value) => setSettings({ ...settings, commentReplyMode: value })}
+                options={[
+                  { value: 'dual', label: `${t('settings.dualReply')} (${t('settings.recommended')})` },
+                  { value: 'public', label: t('settings.publicReply') },
+                  { value: 'private', label: t('settings.privateReply') },
+                ]}
+              />
+
+              <p className="mt-2 text-xs text-surface-500">
+                {settings.commentReplyMode === 'dual' && t('settings.dualReplyDesc')}
+                {settings.commentReplyMode === 'public' && t('settings.publicReplyDesc')}
+                {settings.commentReplyMode === 'private' && t('settings.privateReplyDesc')}
+              </p>
+
+              {/* Dual Reply Configuration */}
+              {settings.commentReplyMode === 'dual' && (
+                <div className="mt-4 p-4 landscape:p-3 rounded-xl bg-brand-50/20 border border-brand-200/50 animate-slide-up">
+                  <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle')}</h4>
+                  <p className="text-xs text-brand-700/70 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
+                  <Input
+                    value={dualNudgeInput}
+                    onChange={(e) => {
+                      const value = e.target.value.slice(0, 80);
+                      setSettings({
+                        ...settings,
+                        dualReplyNudge: value
+                      });
+                    }}
+                    placeholder={t('settings.publicReplyPlaceholder')}
+                    className="bg-white !py-2.5"
+                    maxLength={80}
+                  />
+                  <div className="flex items-center justify-between text-xs mt-1.5">
+                    <span className="text-brand-600/60 font-medium">{t('settings.dualReplyConfigHelper')}</span>
+                    <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-400'}`}>
+                      {dualNudgeInput.length}/80
                     </span>
-                    {settings.commentReplyMode === 'dual' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
                   </div>
-                </button>
-
-                {/* Dual Reply Configuration - Directly under the dual option */}
-                {settings.commentReplyMode === 'dual' && (
-                  <div className="p-5 landscape:p-4 rounded-2xl bg-brand-50/20 border border-brand-200/50 animate-slide-up shadow-sm">
-                    <div className="flex items-center gap-4 mb-4 landscape:mb-2">
-                      <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center shadow-inner landscape:w-10 landscape:h-10">
-                        <MessageSquare className="w-6 h-6 landscape:w-5 landscape:h-5" />
-                      </div>
-                      <div className="text-start">
-                        <h4 className="font-bold text-brand-900 text-base landscape:text-sm">{t('settings.dualReplyConfigTitle')}</h4>
-                        <p className="text-xs text-brand-700/70 font-medium">{t('settings.dualReplyConfigDesc')}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Input
-                        value={dualNudgeInput}
-                        onChange={(e) => {
-                          const value = e.target.value.slice(0, 80);
-                          setSettings({
-                            ...settings,
-                            dualReplyNudge: value
-                          });
-                        }}
-                        placeholder={t('settings.publicReplyPlaceholder')}
-                        className="bg-white !py-3 landscape:!py-2"
-                        maxLength={80}
-                      />
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-brand-600/60 font-medium">{t('settings.dualReplyConfigHelper')}</span>
-                        <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-400'}`}>
-                          {dualNudgeInput.length}/80
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Comment Reply & Private Message - side by side */}
-                <div className="grid grid-cols-2 gap-3 landscape:gap-2">
-                  {/* Comment Reply */}
-                  <button
-                    onClick={() => setSettings({ ...settings, commentReplyMode: 'public' })}
-                    className={`flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'public'
-                      ? 'border-brand-500 bg-brand-50/20 shadow-sm'
-                      : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
-                      }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'public' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                        <MessageSquare className="w-6 h-6 landscape:w-5 landscape:h-5" />
-                      </div>
-                      <div className="text-start">
-                        <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'public' ? 'text-brand-900' : 'text-surface-700'}`}>
-                          {t('settings.publicReply')}
-                        </span>
-                        <span className="text-xs text-surface-500 landscape:hidden lg:landscape:block">{t('settings.publicReplyDesc')}</span>
-                      </div>
-                    </div>
-                    {settings.commentReplyMode === 'public' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
-                  </button>
-
-                  {/* Private Message */}
-                  <button
-                    onClick={() => setSettings({ ...settings, commentReplyMode: 'private' })}
-                    className={`flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all ${settings.commentReplyMode === 'private'
-                      ? 'border-brand-500 bg-brand-50/20 shadow-sm'
-                      : 'border-surface-200 bg-white hover:border-brand-200 hover:bg-brand-50/10'
-                      }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${settings.commentReplyMode === 'private' ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
-                        <Send className="w-6 h-6 landscape:w-5 landscape:h-5" />
-                      </div>
-                      <div className="text-start">
-                        <span className={`block font-bold landscape:text-sm ${settings.commentReplyMode === 'private' ? 'text-brand-900' : 'text-surface-700'}`}>
-                          {t('settings.privateReply')}
-                        </span>
-                        <span className="text-xs text-surface-500 landscape:hidden lg:landscape:block">{t('settings.privateReplyDesc')}</span>
-                      </div>
-                    </div>
-                    {settings.commentReplyMode === 'private' && <Check className="w-5 h-5 text-brand-500 landscape:w-4 landscape:h-4" />}
-                  </button>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </Card>
