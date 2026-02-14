@@ -232,6 +232,13 @@ const SettingsPage: NextPageWithLayout = () => {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [showDelayInfo, setShowDelayInfo] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time every minute for real-time status badge
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
   const [diagramKey, setDiagramKey] = useState(0);
 
   const fetchSettings = useCallback(async () => {
@@ -610,7 +617,32 @@ const SettingsPage: NextPageWithLayout = () => {
                     <Clock className="w-4 h-4" />
                   </div>
                   <div className="text-start">
-                    <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.businessHours')}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.businessHours')}</h4>
+                      {settings.businessHoursOnly && (() => {
+                        const now = `${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+                        const isActive = now >= settings.businessHoursStart && now < settings.businessHoursEnd;
+                        return (
+                          <button
+                            onClick={() => {
+                              const updates: Record<string, unknown> = { businessHoursOnly: !settings.businessHoursOnly };
+                              if (!settings.businessHoursOnly && !settings.awayMessage) {
+                                updates.awayMessage = t('settings.awayMessageDefault' as TranslationKey);
+                              }
+                              setSettings({ ...settings, ...updates });
+                            }}
+                            className={clsx(
+                              'px-2 py-0.5 rounded-full text-[10px] font-bold transition-all animate-in fade-in',
+                              isActive
+                                ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                : 'bg-red-100 text-red-700 hover:bg-red-200'
+                            )}
+                          >
+                            {isActive ? '🟢' : '🔴'} {isActive ? t('settings.businessHours.statusActive' as TranslationKey) : t('settings.businessHours.statusInactive' as TranslationKey)}
+                          </button>
+                        );
+                      })()}
+                    </div>
                     <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.businessHoursDesc')}</p>
                   </div>
                 </div>
@@ -631,48 +663,48 @@ const SettingsPage: NextPageWithLayout = () => {
                 )}
               >
                   {/* Visual Flow - Business Hours - Two Scenarios */}
-                  <div className="mt-3 mb-4 space-y-2 p-3 rounded-xl bg-surface-50 border border-surface-100">
+                  <div className="mt-3 mb-4 space-y-3 p-4 rounded-xl bg-surface-50 border border-surface-100">
                     {/* Scenario 1: During Hours → Auto-Reply Active */}
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                          <Clock className="w-5 h-5 text-green-600" />
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center">
+                          <Clock className="w-7 h-7 text-green-600" />
                         </div>
-                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[80px]">
                           {t('settings.businessHours.duringLabel')}
                         </span>
                       </div>
 
-                      <ArrowRight className="w-5 h-5 text-surface-500 flex-shrink-0 rtl:rotate-180" />
+                      <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
 
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
-                          <Zap className="w-5 h-5 text-brand-600" />
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-14 h-14 rounded-2xl bg-brand-100 flex items-center justify-center">
+                          <Zap className="w-7 h-7 text-brand-600" />
                         </div>
-                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[80px]">
                           {t('settings.businessHours.autoReplyActive')}
                         </span>
                       </div>
                     </div>
 
                     {/* Scenario 2: Outside Hours → Away Message */}
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                          <Clock className="w-5 h-5 text-purple-600" />
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-14 h-14 rounded-2xl bg-purple-100 flex items-center justify-center">
+                          <Clock className="w-7 h-7 text-purple-600" />
                         </div>
-                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[80px]">
                           {t('settings.businessHours.outsideLabel')}
                         </span>
                       </div>
 
-                      <ArrowRight className="w-5 h-5 text-surface-500 flex-shrink-0 rtl:rotate-180" />
+                      <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
 
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                          <Mail className="w-5 h-5 text-orange-600" />
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className="w-14 h-14 rounded-2xl bg-orange-100 flex items-center justify-center">
+                          <Mail className="w-7 h-7 text-orange-600" />
                         </div>
-                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                        <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[80px]">
                           {t('settings.businessHours.awayMessage')}
                         </span>
                       </div>
@@ -835,11 +867,11 @@ const SettingsPage: NextPageWithLayout = () => {
                     <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.commentLabel')}</label>
                     <div className="flex flex-wrap gap-2">
                       {[
-                        { value: 15, label: t('settings.reminders.15min' as TranslationKey) },
-                        { value: 30, label: t('settings.reminders.30min' as TranslationKey) },
-                        { value: 60, label: t('settings.reminders.1hr' as TranslationKey) },
-                        { value: 120, label: t('settings.reminders.2hr' as TranslationKey) },
-                        { value: 240, label: t('settings.reminders.4hr' as TranslationKey) },
+                        { value: 15, label: t('settings.duration15min' as TranslationKey) },
+                        { value: 30, label: t('settings.duration30min' as TranslationKey) },
+                        { value: 60, label: t('settings.duration1hr' as TranslationKey) },
+                        { value: 120, label: t('settings.duration2hr' as TranslationKey) },
+                        { value: 240, label: t('settings.duration4hr' as TranslationKey) },
                       ].map((opt) => (
                         <button
                           key={opt.value}
@@ -864,11 +896,11 @@ const SettingsPage: NextPageWithLayout = () => {
                     <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.messageLabel')}</label>
                     <div className="flex flex-wrap gap-2">
                       {[
-                        { value: 15, label: t('settings.reminders.15min' as TranslationKey) },
-                        { value: 30, label: t('settings.reminders.30min' as TranslationKey) },
-                        { value: 60, label: t('settings.reminders.1hr' as TranslationKey) },
-                        { value: 120, label: t('settings.reminders.2hr' as TranslationKey) },
-                        { value: 240, label: t('settings.reminders.4hr' as TranslationKey) },
+                        { value: 15, label: t('settings.duration15min' as TranslationKey) },
+                        { value: 30, label: t('settings.duration30min' as TranslationKey) },
+                        { value: 60, label: t('settings.duration1hr' as TranslationKey) },
+                        { value: 120, label: t('settings.duration2hr' as TranslationKey) },
+                        { value: 240, label: t('settings.duration4hr' as TranslationKey) },
                       ].map((opt) => (
                         <button
                           key={opt.value}

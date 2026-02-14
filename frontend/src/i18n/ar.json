@@ -461,6 +461,8 @@
   "settings.messagesAutoReplyDesc": "تفعيل الرد التلقائي على الرسائل في صندوق الوارد",
   "settings.businessHours": "ساعات العمل ووضع الغياب",
   "settings.businessHoursDesc": "تفعيل الردود خلال الدوام فقط، ورسالة غياب خارج أوقات العمل",
+  "settings.businessHours.statusActive": "نشط",
+  "settings.businessHours.statusInactive": "خارج الدوام",
   "settings.businessHoursStart": "بداية الدوام",
   "settings.businessHoursEnd": "نهاية الدوام",
   "settings.awayMessage": "رسالة الغياب",
