@@ -317,7 +317,7 @@ export default function LoginPage() {
               onClick={toggleLanguage}
               className="px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
             >
-              {language === 'ar' ? 'English' : 'العربية'}
+              {t('common.switchLanguage')}
             </button>
           </div>
 

@@ -168,7 +168,7 @@ export default function LandingPage() {
                   onClick={toggleLanguage}
                   className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-surface-600 hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
                 >
-                  {language === 'ar' ? 'English' : 'العربية'}
+                  {t('common.switchLanguage')}
                 </button>
                 {isAuthenticated ? (
                   <Link href="/dashboard">

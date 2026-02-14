@@ -21,7 +21,7 @@ interface KnowledgeBaseModalProps {
 }
 
 export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: KnowledgeBaseModalProps) {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
 
   const [sections, setSections] = useState<KnowledgeSection[]>([]);
   const [expandedId, setExpandedId] = useState<SectionId | null>(null);
@@ -69,11 +69,11 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     if (customCount >= MAX_CUSTOM_SECTIONS) return;
 
     const newId = `custom:${Date.now()}` as CustomSectionId;
-    const defaultTitle = language === 'ar' ? 'قسم جديد' : 'New Section';
+    const defaultTitle = t('kb.defaultSectionTitle');
 
     setSections((prev) => [...prev, { id: newId, content: '', title: defaultTitle }]);
     setExpandedId(newId);
-  }, [sections, language]);
+  }, [sections, t]);
 
   // Delete a custom section
   const handleDeleteCustomSection = useCallback((sectionId: CustomSectionId) => {

@@ -117,10 +117,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
               {/* Close button */}
               <button
                 onClick={() => setIsOpen(false)}
-                className={clsx(
-                  "absolute top-4 p-2 rounded-full bg-surface-100 hover:bg-surface-200 text-surface-500 transition-colors",
-                  isRTL ? "left-4" : "right-4"
-                )}
+                className="absolute top-4 end-4 p-2 rounded-full bg-surface-100 hover:bg-surface-200 text-surface-500 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>

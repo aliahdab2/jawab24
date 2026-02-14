@@ -20,10 +20,8 @@ type TFunc = (key: TranslationKey | string, params?: Record<string, string | num
 
 export default function ShopifyOnboarding() {
   const router = useRouter();
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const isRTL = language === 'ar';
-
   const [step, setStep] = useState(0);
   const [store, setStore] = useState<ShopifyStore | null>(null);
   const [storeLoading, setStoreLoading] = useState(true);
@@ -184,7 +182,7 @@ export default function ShopifyOnboarding() {
                   >
                     <div className="flex items-center justify-center gap-2">
                       <span>{(t as TFunc)('shopify.onboarding.connectPage')}</span>
-                      <ArrowRight className={`w-4 h-4 ${isRTL ? 'rotate-180' : ''}`} />
+                      <ArrowRight className="w-4 h-4 rtl:rotate-180" />
                     </div>
                   </Button>
                 </div>

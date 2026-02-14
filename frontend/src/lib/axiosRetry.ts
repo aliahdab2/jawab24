@@ -1,4 +1,5 @@
 import { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import { createT, type Language } from '../i18n';
 
 /**
  * Configuration for retry logic
@@ -109,33 +110,25 @@ export function isTimeoutError(error: unknown): boolean {
 /**
  * Get user-friendly error message
  */
-export function getErrorMessage(error: unknown, language: 'en' | 'ar' = 'en'): string {
+export function getErrorMessage(error: unknown, language: Language = 'en'): string {
+    const t = createT(language);
+
     if (isTimeoutError(error)) {
-        return language === 'ar'
-            ? 'انتهت مهلة الطلب. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.'
-            : 'Request timed out. Please check your internet connection and try again.';
+        return t('errors.timeout');
     }
 
     if (isNetworkError(error)) {
-        return language === 'ar'
-            ? 'لا يمكن الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.'
-            : 'Cannot connect to server. Please check your internet connection.';
+        return t('errors.cannotConnect');
     }
 
     const e = error as AxiosError;
     if (e?.response?.status === 429) {
-        return language === 'ar'
-            ? 'تم تجاوز الحد المسموح من الطلبات. يرجى المحاولة لاحقاً.'
-            : 'Too many requests. Please try again later.';
+        return t('errors.tooManyRequests');
     }
 
     if (e?.response?.status && e.response.status >= 500) {
-        return language === 'ar'
-            ? 'حدث خطأ في الخادم. يرجى المحاولة لاحقاً.'
-            : 'Server error. Please try again later.';
+        return t('errors.serverErrorRetry');
     }
 
-    return language === 'ar'
-        ? 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.'
-        : 'An unexpected error occurred. Please try again.';
+    return t('errors.unexpectedError');
 }

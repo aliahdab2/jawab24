@@ -186,7 +186,7 @@ export default function CompleteProfilePage() {
             <div>
               <label 
                 htmlFor="email" 
-                className={`block text-sm font-medium text-surface-700 mb-2 ${isRTL ? 'text-right' : 'text-left'}`}
+                className="block text-sm font-medium text-surface-700 mb-2 text-start"
               >
                 {t('profile.emailAddress')}
               </label>
@@ -217,7 +217,7 @@ export default function CompleteProfilePage() {
                 />
                 
                 {/* Validation icon */}
-                <div className={`absolute top-1/2 -translate-y-1/2 ${isRTL ? 'left-4' : 'right-4'}`}>
+                <div className="absolute top-1/2 -translate-y-1/2 end-4">
                   {showEmailSuccess && (
                     <CheckCircle2 className="w-5 h-5 text-green-500 animate-fade-in" aria-hidden="true" />
                   )}
