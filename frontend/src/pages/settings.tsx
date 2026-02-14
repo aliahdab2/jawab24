@@ -832,7 +832,7 @@ const SettingsPage: NextPageWithLayout = () => {
                 <div className="space-y-4">
                   {/* Comment reminder presets */}
                   <div>
-                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.commentPresets' as TranslationKey)}</label>
+                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.commentLabel')}</label>
                     <div className="flex flex-wrap gap-2">
                       {[
                         { value: 15, label: t('settings.reminders.15min' as TranslationKey) },
@@ -861,7 +861,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   </div>
                   {/* Message reminder presets */}
                   <div>
-                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.messagePresets' as TranslationKey)}</label>
+                    <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.reminders.messageLabel')}</label>
                     <div className="flex flex-wrap gap-2">
                       {[
                         { value: 15, label: t('settings.reminders.15min' as TranslationKey) },
