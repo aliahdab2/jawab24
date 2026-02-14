@@ -16,4 +16,10 @@ export const client = postgres(connectionString, {
     idle_timeout: 20, // Close idle connections after 20 seconds
     connect_timeout: 10, // Timeout for new connections
 });
-export const db = drizzle(client, { schema });
+
+// Enable query logging in development
+// Note: For detailed performance analysis, use EXPLAIN ANALYZE on specific queries
+export const db = drizzle(client, { 
+    schema, 
+    logger: !isProduction 
+});

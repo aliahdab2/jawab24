@@ -22,7 +22,7 @@
     "test": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:coverage": "vitest run --coverage",
-    "precommit": "npm run lint && npm run type-check"
+    "precommit": "npm run lint && npm run type-check && npm run db:check"
   },
   "dependencies": {
     "@fastify/compress": "^8.3.1",
