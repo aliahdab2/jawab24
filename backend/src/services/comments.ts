@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { comments, posts, pages, logs, instagramComments, instagramMedia } from '../db/schema';
-import { eq, desc, sql, and, gte } from 'drizzle-orm';
+import { eq, desc, sql, and } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 
 export class CommentsService {
@@ -313,73 +313,49 @@ export class CommentsService {
 
     /**
      * Get comment statistics for a user
-     * Optimized to use SQL aggregation instead of in-memory counting
+     * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query per table
      */
     async getStats(userId: string) {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
-        // Query Facebook comments and Instagram comments in parallel
-        const [fbTotal, fbReplied, fbByMethod, fbNeedsAttention, fbRepliedToday,
-               igTotal, igReplied, igByMethod, igNeedsAttention, igRepliedToday] = await Promise.all([
-            // --- Facebook comments ---
-            db.select({ count: sql<number>`count(*)` })
+        // 2 queries (FB + IG) instead of 10, run in parallel
+        const [fbStats, igStats] = await Promise.all([
+            // Facebook comments — single query with FILTER
+            db.select({
+                total:          sql<number>`count(*)`,
+                replied:        sql<number>`count(*) FILTER (WHERE ${comments.replied} = true)`,
+                needsAttention: sql<number>`count(*) FILTER (WHERE ${comments.needsAttention} = true)`,
+                repliedToday:   sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.repliedAt} >= ${todayStart})`,
+                ai:             sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'ai')`,
+                template:       sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'template')`,
+                manual:         sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'manual')`,
+            })
                 .from(comments)
                 .innerJoin(posts, eq(comments.postId, posts.id))
                 .innerJoin(pages, eq(posts.pageId, pages.id))
                 .where(eq(pages.userId, userId)),
-            db.select({ count: sql<number>`count(*)` })
-                .from(comments)
-                .innerJoin(posts, eq(comments.postId, posts.id))
-                .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(and(eq(pages.userId, userId), eq(comments.replied, true))),
-            db.select({ method: comments.replyMethod, count: sql<number>`count(*)` })
-                .from(comments)
-                .innerJoin(posts, eq(comments.postId, posts.id))
-                .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(and(eq(pages.userId, userId), eq(comments.replied, true)))
-                .groupBy(comments.replyMethod),
-            db.select({ count: sql<number>`count(*)` })
-                .from(comments)
-                .innerJoin(posts, eq(comments.postId, posts.id))
-                .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(and(eq(pages.userId, userId), eq(comments.needsAttention, true))),
-            db.select({ count: sql<number>`count(*)` })
-                .from(comments)
-                .innerJoin(posts, eq(comments.postId, posts.id))
-                .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(and(eq(pages.userId, userId), eq(comments.replied, true), gte(comments.repliedAt, todayStart))),
-            // --- Instagram comments ---
-            db.select({ count: sql<number>`count(*)` })
+
+            // Instagram comments — single query with FILTER
+            db.select({
+                total:          sql<number>`count(*)`,
+                replied:        sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true)`,
+                needsAttention: sql<number>`count(*) FILTER (WHERE ${instagramComments.needsAttention} = true)`,
+                repliedToday:   sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.repliedAt} >= ${todayStart})`,
+                ai:             sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'ai')`,
+                template:       sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'template')`,
+                manual:         sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'manual')`,
+            })
                 .from(instagramComments)
                 .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
                 .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
                 .where(eq(pages.userId, userId)),
-            db.select({ count: sql<number>`count(*)` })
-                .from(instagramComments)
-                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
-                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(and(eq(pages.userId, userId), eq(instagramComments.replied, true))),
-            db.select({ method: instagramComments.replyMethod, count: sql<number>`count(*)` })
-                .from(instagramComments)
-                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
-                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(and(eq(pages.userId, userId), eq(instagramComments.replied, true)))
-                .groupBy(instagramComments.replyMethod),
-            db.select({ count: sql<number>`count(*)` })
-                .from(instagramComments)
-                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
-                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(and(eq(pages.userId, userId), eq(instagramComments.needsAttention, true))),
-            db.select({ count: sql<number>`count(*)` })
-                .from(instagramComments)
-                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
-                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(and(eq(pages.userId, userId), eq(instagramComments.replied, true), gte(instagramComments.repliedAt, todayStart))),
         ]);
 
-        // Sum Facebook + Instagram counts
-        const total = Number(fbTotal[0]?.count || 0) + Number(igTotal[0]?.count || 0);
+        const fb = fbStats[0];
+        const ig = igStats[0];
+
+        const total = Number(fb?.total || 0) + Number(ig?.total || 0);
 
         if (total === 0) {
             return {
@@ -389,16 +365,15 @@ export class CommentsService {
             };
         }
 
-        const replied = Number(fbReplied[0]?.count || 0) + Number(igReplied[0]?.count || 0);
-        const needsAttention = Number(fbNeedsAttention[0]?.count || 0) + Number(igNeedsAttention[0]?.count || 0);
-        const repliedToday = Number(fbRepliedToday[0]?.count || 0) + Number(igRepliedToday[0]?.count || 0);
+        const replied = Number(fb?.replied || 0) + Number(ig?.replied || 0);
+        const needsAttention = Number(fb?.needsAttention || 0) + Number(ig?.needsAttention || 0);
+        const repliedToday = Number(fb?.repliedToday || 0) + Number(ig?.repliedToday || 0);
 
-        const byMethod = { template: 0, ai: 0, manual: 0 };
-        [...fbByMethod, ...igByMethod].forEach((row) => {
-            if (row.method === 'template') byMethod.template += Number(row.count);
-            else if (row.method === 'ai') byMethod.ai += Number(row.count);
-            else if (row.method === 'manual') byMethod.manual += Number(row.count);
-        });
+        const byMethod = {
+            template: Number(fb?.template || 0) + Number(ig?.template || 0),
+            ai:       Number(fb?.ai || 0)       + Number(ig?.ai || 0),
+            manual:   Number(fb?.manual || 0)   + Number(ig?.manual || 0),
+        };
 
         return {
             total,

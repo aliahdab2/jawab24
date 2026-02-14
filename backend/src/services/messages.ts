@@ -390,6 +390,7 @@ export class MessagesService {
 
     /**
      * Get message statistics
+     * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query
      */
     async getStats(userId: string): Promise<{
         total: number;
@@ -398,8 +399,15 @@ export class MessagesService {
         needsAttention: number;
         byMethod: { template: number; ai: number; manual: number };
     }> {
-        const totalResult = await db
-            .select({ count: sql<number>`count(*)` })
+        const result = await db
+            .select({
+                total:          sql<number>`count(*)`,
+                replied:        sql<number>`count(*) FILTER (WHERE ${messages.replied} = true)`,
+                needsAttention: sql<number>`count(*) FILTER (WHERE ${messages.needsAttention} = true)`,
+                ai:             sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'ai')`,
+                template:       sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'template')`,
+                manual:         sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'manual')`,
+            })
             .from(messages)
             .innerJoin(pages, eq(messages.pageId, pages.id))
             .where(and(
@@ -407,65 +415,25 @@ export class MessagesService {
                 eq(messages.direction, 'incoming')
             ));
 
-        const total = Number(totalResult[0]?.count || 0);
+        const row = result[0];
+        const total = Number(row?.total || 0);
 
         if (total === 0) {
             return { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
         }
 
-        const repliedResult = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(messages)
-            .innerJoin(pages, eq(messages.pageId, pages.id))
-            .where(and(
-                eq(pages.userId, userId),
-                eq(messages.direction, 'incoming'),
-                eq(messages.replied, true)
-            ));
-
-        const replied = Number(repliedResult[0]?.count || 0);
-
-        // Get needs attention count (all flagged items, including already-replied ones)
-        const needsAttentionResult = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(messages)
-            .innerJoin(pages, eq(messages.pageId, pages.id))
-            .where(and(
-                eq(pages.userId, userId),
-                eq(messages.direction, 'incoming'),
-                eq(messages.needsAttention, true),
-            ));
-
-        const needsAttention = Number(needsAttentionResult[0]?.count || 0);
-
-        // Get counts by reply method
-        const byMethodResult = await db
-            .select({
-                method: messages.replyMethod,
-                count: sql<number>`count(*)`,
-            })
-            .from(messages)
-            .innerJoin(pages, eq(messages.pageId, pages.id))
-            .where(and(
-                eq(pages.userId, userId),
-                eq(messages.direction, 'incoming'),
-                eq(messages.replied, true)
-            ))
-            .groupBy(messages.replyMethod);
-
-        const byMethod = { template: 0, ai: 0, manual: 0 };
-        byMethodResult.forEach((row) => {
-            if (row.method === 'template') byMethod.template = Number(row.count);
-            else if (row.method === 'ai') byMethod.ai = Number(row.count);
-            else if (row.method === 'manual') byMethod.manual = Number(row.count);
-        });
+        const replied = Number(row?.replied || 0);
 
         return {
             total,
             replied,
             pending: total - replied,
-            needsAttention,
-            byMethod,
+            needsAttention: Number(row?.needsAttention || 0),
+            byMethod: {
+                template: Number(row?.template || 0),
+                ai:       Number(row?.ai || 0),
+                manual:   Number(row?.manual || 0),
+            },
         };
     }
 
