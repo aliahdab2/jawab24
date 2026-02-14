@@ -50,7 +50,7 @@ function SimpleToggle({
     <div className={`flex items-center justify-between gap-4 p-4 rounded-2xl border transition-all duration-300 ${enabled ? 'bg-brand-50/30 border-brand-100 shadow-sm' : 'bg-white border-surface-200'
       }`}>
       <div className="flex items-center gap-4 min-w-0 flex-1">
-        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${enabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'
+        <div className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${enabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'
           }`}>
           {icon}
         </div>
@@ -288,9 +288,11 @@ const SettingsPage: NextPageWithLayout = () => {
     try {
       await settingsApi.update(settings);
       setSaved(true);
+      toast.success(t('settings.settingsSaved'));
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Failed to save settings:', error);
+      toast.error(t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -413,13 +415,13 @@ const SettingsPage: NextPageWithLayout = () => {
         )}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors landscape:w-10 landscape:h-10 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
-                <MessageSquare className="w-4 h-4 opacity-50" />
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors landscape:w-10 landscape:h-10 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+                <MessageSquare className="w-4 h-4" />
               </div>
               <div className="text-start">
                 <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900' : 'text-surface-900'}`}>{t('settings.commentsAutoReply')}</h3>
                 <p className="text-sm text-surface-500 font-medium landscape:text-xs">{t('settings.commentsAutoReplyDesc')}</p>
-                <p className="text-xs text-surface-400 mt-1 landscape:hidden">{t('settings.commentsAutoReplyHelper')}</p>
+                <p className="text-xs text-surface-600 mt-1 landscape:hidden">{t('settings.commentsAutoReplyHelper')}</p>
               </div>
             </div>
             <Toggle
@@ -476,7 +478,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   </span>
                 </div>
 
-                <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
+                <ArrowRight className="w-5 h-5 text-surface-500 flex-shrink-0 rtl:rotate-180" />
 
                 {/* Public Reply - shown for dual and public modes */}
                 {(settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'public') && (
@@ -490,7 +492,7 @@ const SettingsPage: NextPageWithLayout = () => {
                       </span>
                     </div>
                     {settings.commentReplyMode === 'dual' && (
-                      <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
+                      <ArrowRight className="w-5 h-5 text-surface-500 flex-shrink-0 rtl:rotate-180" />
                     )}
                   </>
                 )}
@@ -541,7 +543,7 @@ const SettingsPage: NextPageWithLayout = () => {
 
                   <div className="flex items-center justify-between text-xs mt-1.5">
                     <span className="text-brand-600/60 font-medium">{t('settings.dualReplyConfigHelper')}</span>
-                    <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-400'}`}>
+                    <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-500'}`}>
                       {dualNudgeInput.length}/80
                     </span>
                   </div>
@@ -584,7 +586,7 @@ const SettingsPage: NextPageWithLayout = () => {
             <span className={`block font-bold landscape:text-sm ${showAdvanced ? 'text-surface-900' : 'text-surface-700'}`}>
               {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
             </span>
-            <p className={`text-xs landscape:hidden ${showAdvanced ? 'text-surface-500' : 'text-surface-400'}`}>
+            <p className={`text-xs landscape:hidden ${showAdvanced ? 'text-surface-500' : 'text-surface-600'}`}>
               {t('settings.advancedDescription')}
             </p>
           </div>
@@ -592,7 +594,7 @@ const SettingsPage: NextPageWithLayout = () => {
         {showAdvanced ? (
           <ChevronUp className="w-5 h-5 text-surface-600" />
         ) : (
-          <ChevronDown className="w-5 h-5 text-surface-400" />
+          <ChevronDown className="w-5 h-5 text-surface-500" />
         )}
       </button>
 
@@ -604,8 +606,8 @@ const SettingsPage: NextPageWithLayout = () => {
             <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 overflow-hidden">
               <div className="flex items-center justify-between mb-6 landscape:mb-3">
                 <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
-                    <Clock className="w-4 h-4 opacity-50" />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+                    <Clock className="w-4 h-4" />
                   </div>
                   <div className="text-start">
                     <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.businessHours')}</h4>
@@ -641,7 +643,7 @@ const SettingsPage: NextPageWithLayout = () => {
                         </span>
                       </div>
 
-                      <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
+                      <ArrowRight className="w-5 h-5 text-surface-500 flex-shrink-0 rtl:rotate-180" />
 
                       <div className="flex flex-col items-center gap-1">
                         <div className="w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center">
@@ -664,7 +666,7 @@ const SettingsPage: NextPageWithLayout = () => {
                         </span>
                       </div>
 
-                      <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
+                      <ArrowRight className="w-5 h-5 text-surface-500 flex-shrink-0 rtl:rotate-180" />
 
                       <div className="flex flex-col items-center gap-1">
                         <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
@@ -680,9 +682,9 @@ const SettingsPage: NextPageWithLayout = () => {
                   {/* Time pickers */}
                   <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
                     <div>
-                      <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
+                      <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
                       <div className="relative">
-                        <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-400" />
+                        <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-500" />
                         <Input
                           type="time"
                           value={settings.businessHoursStart}
@@ -693,9 +695,9 @@ const SettingsPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
+                      <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
                       <div className="relative">
-                        <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-400" />
+                        <Clock className="absolute top-1/2 -translate-y-1/2 start-4 w-4 h-4 text-surface-500" />
                         <Input
                           type="time"
                           value={settings.businessHoursEnd}
@@ -720,7 +722,7 @@ const SettingsPage: NextPageWithLayout = () => {
                       </div>
                       <div className="text-start">
                         <h5 className="font-bold text-surface-800 text-sm">{t('settings.awayMessage.title')}</h5>
-                        <p className="text-[11px] text-surface-400 font-medium">{t('settings.awayMessage.desc')}</p>
+                        <p className="text-[11px] text-surface-600 font-medium">{t('settings.awayMessage.desc')}</p>
                       </div>
                     </div>
                     <textarea
@@ -740,7 +742,7 @@ const SettingsPage: NextPageWithLayout = () => {
               <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3">
                 <div className="flex items-center gap-4 mb-4 landscape:mb-3">
                   <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
-                    <Zap className="w-4 h-4 opacity-50" />
+                    <Zap className="w-4 h-4" />
                   </div>
                   <div className="text-start">
                     <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.replyDelay.title')}</h4>
@@ -756,30 +758,45 @@ const SettingsPage: NextPageWithLayout = () => {
                     onChange={(e) => setSettings({ ...settings, replyDelay: Math.min(60, Math.max(0, parseInt(e.target.value) || 0)) })}
                     className="w-full py-4 landscape:py-2.5 text-center font-bold text-lg border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
                   />
-                  <span className="text-sm font-bold text-surface-400 uppercase tracking-widest">{t('settings.seconds')}</span>
+                  <span className="text-sm font-bold text-surface-500 uppercase tracking-widest">{t('settings.seconds')}</span>
                 </div>
                 {/* Examples */}
                 <div className="mt-2 flex gap-2 flex-wrap">
                   <button
                     onClick={() => setSettings({ ...settings, replyDelay: 0 })}
-                    className="px-2 py-1 text-xs rounded bg-surface-100 text-surface-600 hover:bg-surface-200"
+                    className={clsx(
+                      "px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98]",
+                      settings.replyDelay === 0
+                        ? "bg-brand-500 text-white shadow-lg hover:bg-brand-600"
+                        : "bg-surface-100 text-surface-600 hover:bg-surface-200 hover:shadow-md"
+                    )}
                   >
                     0 = {t('settings.replyDelay.instant')}
                   </button>
                   <button
                     onClick={() => setSettings({ ...settings, replyDelay: 3 })}
-                    className="px-2 py-1 text-xs rounded bg-surface-100 text-surface-600 hover:bg-surface-200"
+                    className={clsx(
+                      "px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98]",
+                      settings.replyDelay === 3
+                        ? "bg-brand-500 text-white shadow-lg hover:bg-brand-600"
+                        : "bg-surface-100 text-surface-600 hover:bg-surface-200 hover:shadow-md"
+                    )}
                   >
                     3 = {t('settings.replyDelay.natural')}
                   </button>
                   <button
                     onClick={() => setSettings({ ...settings, replyDelay: 10 })}
-                    className="px-2 py-1 text-xs rounded bg-surface-100 text-surface-600 hover:bg-surface-200"
+                    className={clsx(
+                      "px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98]",
+                      settings.replyDelay === 10
+                        ? "bg-brand-500 text-white shadow-lg hover:bg-brand-600"
+                        : "bg-surface-100 text-surface-600 hover:bg-surface-200 hover:shadow-md"
+                    )}
                   >
                     10 = {t('settings.replyDelay.slower')}
                   </button>
                 </div>
-                <p className="text-xs text-surface-400 mt-2">
+                <p className="text-xs text-surface-600 mt-2">
                   {t('settings.replyDelay.tip')}
                 </p>
               </Card>
@@ -788,8 +805,8 @@ const SettingsPage: NextPageWithLayout = () => {
               <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3">
                 <div className="flex items-center justify-between mb-4 landscape:mb-3">
                   <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-400'}`}>
-                      <Bell className="w-4 h-4 opacity-50" />
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+                      <Bell className="w-4 h-4" />
                     </div>
                     <div className="text-start">
                       <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.reminders.title')}</h4>
@@ -804,7 +821,7 @@ const SettingsPage: NextPageWithLayout = () => {
                     !settings.notificationsEnabled && "opacity-50 pointer-events-none"
                   )}
                 >
-                <p className="text-xs text-surface-400 font-medium mb-3">{t('settings.reminders.helpText')}</p>
+                <p className="text-xs text-surface-600 font-medium mb-3">{t('settings.reminders.helpText')}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-2">{t('settings.reminders.commentLabel')}</label>
@@ -818,7 +835,7 @@ const SettingsPage: NextPageWithLayout = () => {
                         disabled={!settings.notificationsEnabled}
                         className="w-full py-2.5 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
                       />
-                      <span className="text-sm font-bold text-surface-400 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
+                      <span className="text-sm font-bold text-surface-500 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
                     </div>
                   </div>
                   <div>
@@ -833,7 +850,7 @@ const SettingsPage: NextPageWithLayout = () => {
                         disabled={!settings.notificationsEnabled}
                         className="w-full py-2.5 landscape:py-2 text-center font-bold border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
                       />
-                      <span className="text-sm font-bold text-surface-400 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
+                      <span className="text-sm font-bold text-surface-500 whitespace-nowrap">{t('settings.minutes' as TranslationKey)}</span>
                     </div>
                   </div>
                 </div>
@@ -864,10 +881,11 @@ const SettingsPage: NextPageWithLayout = () => {
                     key={opt.value}
                     onClick={() => setSettings({ ...settings, handoffPauseDurationMinutes: opt.value })}
                     className={clsx(
-                      'px-4 py-2 rounded-xl text-sm font-bold transition-all border',
+                      'px-4 py-3 rounded-xl text-sm font-bold transition-all border min-h-[44px]',
+                      'active:scale-[0.98] hover:shadow-md',
                       settings.handoffPauseDurationMinutes === opt.value
-                        ? 'bg-violet-100 text-violet-700 border-violet-300 shadow-sm'
-                        : 'bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100'
+                        ? 'bg-violet-500 text-white border-violet-600 shadow-lg hover:bg-violet-600'
+                        : 'bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100 hover:border-surface-300'
                     )}
                   >
                     {opt.label}
@@ -880,7 +898,7 @@ const SettingsPage: NextPageWithLayout = () => {
             <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">
               <div className="flex items-center gap-4 mb-4 landscape:mb-2">
                 <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
-                  <MessageCircle className="w-4 h-4 opacity-50" />
+                  <MessageCircle className="w-4 h-4" />
                 </div>
                 <div className="text-start">
                   <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.greetingMessage.title')}</h4>
