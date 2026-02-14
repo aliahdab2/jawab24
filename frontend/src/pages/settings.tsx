@@ -233,6 +233,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [diagramKey, setDiagramKey] = useState(0);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -432,46 +433,59 @@ const SettingsPage: NextPageWithLayout = () => {
             <div className="mt-6 pt-6 landscape:mt-4 landscape:pt-4 border-t border-surface-100 animate-in fade-in slide-in-from-top-2 duration-300">
               <h4 className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-3 landscape:mb-2 flex items-center gap-2">
                 <Settings2 className="w-4 h-4" />
-                {t('settings.commentReplyMode')}
+                {t('settings.commentReplyMode.question')}
               </h4>
 
               <Select
                 value={settings.commentReplyMode}
-                onChange={(value) => setSettings({ ...settings, commentReplyMode: value })}
+                onChange={(value) => {
+                  setSettings({ ...settings, commentReplyMode: value });
+                  setDiagramKey(prev => prev + 1); // Trigger diagram animation
+                }}
                 options={[
-                  { value: 'dual', label: `${t('settings.dualReply')} (${t('settings.recommended')})` },
-                  { value: 'public', label: t('settings.publicReply') },
-                  { value: 'private', label: t('settings.privateReply') },
+                  { value: 'dual', label: `${t('settings.commentReplyMode.dual')} (${t('settings.recommended')})` },
+                  { value: 'public', label: t('settings.commentReplyMode.publicOnly') },
+                  { value: 'private', label: t('settings.commentReplyMode.privateOnly') },
                 ]}
               />
 
+              {/* Dynamic description based on selected mode */}
+              <p className="mt-2 text-sm text-surface-600 animate-in fade-in">
+                {settings.commentReplyMode === 'dual' && t('settings.commentReplyMode.dualDesc')}
+                {settings.commentReplyMode === 'public' && t('settings.commentReplyMode.publicDesc')}
+                {settings.commentReplyMode === 'private' && t('settings.commentReplyMode.privateDesc')}
+              </p>
+
               {/* Flow Diagram */}
-              <div className="mt-3 flex items-center justify-center gap-2 py-3 px-2 rounded-xl bg-surface-50 border border-surface-100">
+              <div
+                key={diagramKey}
+                className="mt-3 flex items-center justify-center gap-2 py-3 px-2 rounded-xl bg-surface-50 border border-surface-100 animate-in fade-in slide-in-from-top-2 duration-300"
+              >
                 {/* New Comment */}
                 <div className="flex flex-col items-center gap-1">
-                  <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <MessageSquare className="w-4 h-4 text-blue-600" />
+                  <div className="w-11 h-11 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-blue-600" />
                   </div>
-                  <span className="text-[10px] font-semibold text-surface-600 text-center leading-tight max-w-[60px]">
+                  <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
                     {t('settings.flowNewComment')}
                   </span>
                 </div>
 
-                <ArrowRight className="w-4 h-4 text-surface-300 flex-shrink-0 rtl:rotate-180" />
+                <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
 
                 {/* Public Reply - shown for dual and public modes */}
                 {(settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'public') && (
                   <>
                     <div className="flex flex-col items-center gap-1">
-                      <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
-                        <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      <div className="w-11 h-11 rounded-lg bg-emerald-100 flex items-center justify-center">
+                        <MessageCircle className="w-5 h-5 text-emerald-600" />
                       </div>
-                      <span className="text-[10px] font-semibold text-surface-600 text-center leading-tight max-w-[60px]">
+                      <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
                         {t('settings.flowPublicReply')}
                       </span>
                     </div>
                     {settings.commentReplyMode === 'dual' && (
-                      <ArrowRight className="w-4 h-4 text-surface-300 flex-shrink-0 rtl:rotate-180" />
+                      <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
                     )}
                   </>
                 )}
@@ -479,10 +493,10 @@ const SettingsPage: NextPageWithLayout = () => {
                 {/* AI Private Message - shown for dual and private modes */}
                 {(settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'private') && (
                   <div className="flex flex-col items-center gap-1">
-                    <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <Mail className="w-4 h-4 text-purple-600" />
+                    <div className="w-11 h-11 rounded-lg bg-purple-100 flex items-center justify-center">
+                      <Mail className="w-5 h-5 text-purple-600" />
                     </div>
-                    <span className="text-[10px] font-semibold text-surface-600 text-center leading-tight max-w-[60px]">
+                    <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
                       {t('settings.flowPrivateMessage')}
                     </span>
                   </div>
@@ -492,7 +506,7 @@ const SettingsPage: NextPageWithLayout = () => {
               {/* Dual Reply Configuration */}
               {settings.commentReplyMode === 'dual' && (
                 <div className="mt-4 p-4 landscape:p-3 rounded-xl bg-brand-50/20 border border-brand-200/50 animate-slide-up">
-                  <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle')}</h4>
+                  <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
                   <p className="text-xs text-brand-700/70 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
                   <Input
                     value={dualNudgeInput}
@@ -507,6 +521,19 @@ const SettingsPage: NextPageWithLayout = () => {
                     className="bg-white !py-2.5"
                     maxLength={80}
                   />
+
+                  {/* Preview */}
+                  {dualNudgeInput && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-white border border-surface-200">
+                      <p className="text-xs text-surface-500 mb-1 font-medium">
+                        {t('settings.preview')}:
+                      </p>
+                      <p className="text-sm text-surface-800">
+                        <span className="font-semibold">YourPage:</span> {dualNudgeInput}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between text-xs mt-1.5">
                     <span className="text-brand-600/60 font-medium">{t('settings.dualReplyConfigHelper')}</span>
                     <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-400'}`}>
