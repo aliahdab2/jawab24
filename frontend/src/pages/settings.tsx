@@ -325,7 +325,6 @@ const SettingsPage: NextPageWithLayout = () => {
 
       await settingsApi.update(settings);
       setSaved(true);
-      toast.success(t('settings.settingsSaved'));
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Failed to save settings:', error);
