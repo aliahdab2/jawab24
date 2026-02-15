@@ -932,10 +932,6 @@ const SettingsPage: NextPageWithLayout = () => {
                         />
                       );
                     })()}
-                    
-                    <p className="text-[10px] text-surface-400 mt-2 text-center">
-                       {t('settings.awayMessage.autoTranslateHint')}
-                    </p>
                   </div>
                 </div>
               </Card>
@@ -1173,10 +1169,6 @@ const SettingsPage: NextPageWithLayout = () => {
                   />
                 );
             })()}
-            
-            <p className="text-[10px] text-surface-400 mt-2 text-center">
-               {t('settings.awayMessage.autoTranslateHint')}
-            </p>
             </Card>
 
           </div>
