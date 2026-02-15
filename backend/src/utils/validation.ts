@@ -72,6 +72,10 @@ export const UpdateSettingsSchema = z.object({
     businessHoursOnly: z.boolean().optional(),
     businessHoursStart: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)').optional(),
     businessHoursEnd: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)').optional(),
+    timezone: z.string().max(100).refine(
+        (tz) => { try { Intl.DateTimeFormat(undefined, { timeZone: tz }); return true; } catch { return false; } },
+        { message: 'Invalid IANA timezone' }
+    ).optional(),
     awayMessage: z.string().max(500, 'Away message must be less than 500 characters').optional(),
     awayMessageMulti: z.record(z.string()).optional(),
     replyDelay: z.number().int().min(0).max(300, 'Reply delay must be between 0-300 seconds').optional(),

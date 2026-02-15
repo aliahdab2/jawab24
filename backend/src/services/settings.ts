@@ -65,7 +65,8 @@ export class SettingsService {
         if (userSettings.businessHoursOnly) {
             return this.isWithinBusinessHours(
                 userSettings.businessHoursStart,
-                userSettings.businessHoursEnd
+                userSettings.businessHoursEnd,
+                userSettings.timezone
             );
         }
 
@@ -86,7 +87,8 @@ export class SettingsService {
         if (userSettings.businessHoursOnly) {
             return this.isWithinBusinessHours(
                 userSettings.businessHoursStart,
-                userSettings.businessHoursEnd
+                userSettings.businessHoursEnd,
+                userSettings.timezone
             );
         }
 
@@ -141,11 +143,25 @@ export class SettingsService {
     }
 
     /**
-     * Check if current time is within business hours
+     * Check if current time is within business hours in the user's timezone
      */
-    private isWithinBusinessHours(start: string, end: string): boolean {
-        const now = new Date();
-        const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    private isWithinBusinessHours(start: string, end: string, timezone: string): boolean {
+        let currentTime: string;
+        try {
+            const parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            }).formatToParts(new Date());
+            const hour = parts.find(p => p.type === 'hour')?.value || '00';
+            const minute = parts.find(p => p.type === 'minute')?.value || '00';
+            currentTime = `${hour}:${minute}`;
+        } catch {
+            // Fallback to server time if timezone is invalid
+            const now = new Date();
+            currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        }
 
         // Simple string comparison works for HH:MM format
         return currentTime >= start && currentTime <= end;
@@ -189,6 +205,7 @@ export class SettingsService {
             businessHoursOnly: record.businessHoursOnly ?? false,
             businessHoursStart: record.businessHoursStart || '09:00',
             businessHoursEnd: record.businessHoursEnd || '18:00',
+            timezone: record.timezone || 'Asia/Riyadh',
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
             // Multilingual messages (JSONB)

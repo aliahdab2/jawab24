@@ -223,6 +223,7 @@ export const settings = pgTable('settings', {
     businessHoursOnly: boolean('business_hours_only').default(false),
     businessHoursStart: varchar('business_hours_start', { length: 5 }).default('09:00'),
     businessHoursEnd: varchar('business_hours_end', { length: 5 }).default('18:00'),
+    timezone: varchar('timezone', { length: 100 }).default('Asia/Riyadh'),
     // DEPRECATED - kept for backward compatibility (use language-specific fields below)
     awayMessage: text('away_message'),
     greetingMessage: text('greeting_message'),

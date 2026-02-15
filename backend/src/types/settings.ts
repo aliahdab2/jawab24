@@ -20,6 +20,7 @@ export interface UserSettings {
     businessHoursOnly: boolean;
     businessHoursStart: string;
     businessHoursEnd: string;
+    timezone: string;
     awayMessage: string | null;
     greetingMessage: string | null;
     // Multilingual messages (JSONB)
@@ -47,6 +48,7 @@ export interface UpdateSettingsDTO {
     businessHoursOnly?: boolean;
     businessHoursStart?: string;
     businessHoursEnd?: string;
+    timezone?: string;
     awayMessage?: string | null;
     greetingMessage?: string | null;
     // Multilingual messages

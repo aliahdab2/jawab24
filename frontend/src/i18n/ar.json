@@ -469,6 +469,8 @@
   "settings.businessHours.statusInactive": "خارج الدوام",
   "settings.businessHoursStart": "بداية الدوام",
   "settings.businessHoursEnd": "نهاية الدوام",
+  "settings.timezone": "المنطقة الزمنية",
+  "settings.timezoneDesc": "منطقتك الزمنية لتحديد ساعات العمل",
   "settings.awayMessage": "رسالة الغياب",
   "settings.awayMessageDesc": "الرد الذي يتم إرساله للعملاء خارج ساعات العمل المحددة",
   "settings.awayMessageConnectedDesc": "تُرسل للعملاء خارج ساعات العمل أو عند إيقاف الرد التلقائي",

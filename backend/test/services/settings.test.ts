@@ -42,6 +42,7 @@ const baseSettings = {
     businessHoursOnly: false,
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
+    timezone: 'Asia/Riyadh',
     awayMessage: null,
     greetingMessage: null,
     awayMessageMulti: {},
@@ -234,12 +235,15 @@ describe('Settings Service', () => {
             expect(result).toBe(false);
         });
 
-        it('should check business hours when enabled', async () => {
+        it('should check business hours when enabled (within hours)', async () => {
             const { db } = await import('../../src/db');
 
-            // Mock current time to be within business hours (10:00)
-            vi.spyOn(Date.prototype, 'getHours').mockReturnValue(10);
-            vi.spyOn(Date.prototype, 'getMinutes').mockReturnValue(0);
+            // Mock current time: 07:00 UTC = 10:00 Asia/Riyadh (UTC+3) → within 09:00-18:00
+            const RealDate = Date;
+            vi.spyOn(globalThis, 'Date').mockImplementation((...args: unknown[]) => {
+                if (args.length === 0) return new RealDate('2026-02-15T07:00:00Z');
+                return new (RealDate as any)(...args);
+            });
 
             const mockSettings = {
                 ...baseSettings,
@@ -256,9 +260,12 @@ describe('Settings Service', () => {
         it('should return false outside business hours', async () => {
             const { db } = await import('../../src/db');
 
-            // Mock current time to be outside business hours (22:00)
-            vi.spyOn(Date.prototype, 'getHours').mockReturnValue(22);
-            vi.spyOn(Date.prototype, 'getMinutes').mockReturnValue(0);
+            // Mock current time: 20:00 UTC = 23:00 Asia/Riyadh (UTC+3) → outside 09:00-18:00
+            const RealDate = Date;
+            vi.spyOn(globalThis, 'Date').mockImplementation((...args: unknown[]) => {
+                if (args.length === 0) return new RealDate('2026-02-15T20:00:00Z');
+                return new (RealDate as any)(...args);
+            });
 
             const mockSettings = {
                 ...baseSettings,
@@ -270,6 +277,55 @@ describe('Settings Service', () => {
             const result = await settingsService.isCommentsAutoReplyEnabled('user_123');
 
             expect(result).toBe(false);
+        });
+
+        it('should respect user timezone for business hours check', async () => {
+            const { db } = await import('../../src/db');
+
+            // 14:00 UTC = 09:00 America/New_York (UTC-5) → within 09:00-18:00
+            const RealDate = Date;
+            vi.spyOn(globalThis, 'Date').mockImplementation((...args: unknown[]) => {
+                if (args.length === 0) return new RealDate('2026-02-15T14:00:00Z');
+                return new (RealDate as any)(...args);
+            });
+
+            const mockSettings = {
+                ...baseSettings,
+                businessHoursOnly: true,
+                timezone: 'America/New_York',
+            };
+
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
+
+            const result = await settingsService.isCommentsAutoReplyEnabled('user_123');
+
+            expect(result).toBe(true);
+        });
+
+        it('should fallback to server time on invalid timezone', async () => {
+            const { db } = await import('../../src/db');
+
+            // Use a time that would be within business hours in server time
+            const RealDate = Date;
+            vi.spyOn(globalThis, 'Date').mockImplementation((...args: unknown[]) => {
+                if (args.length === 0) return new RealDate('2026-02-15T10:00:00Z');
+                return new (RealDate as any)(...args);
+            });
+            // Fallback uses getHours/getMinutes on the mocked date
+            vi.spyOn(RealDate.prototype, 'getHours').mockReturnValue(10);
+            vi.spyOn(RealDate.prototype, 'getMinutes').mockReturnValue(0);
+
+            const mockSettings = {
+                ...baseSettings,
+                businessHoursOnly: true,
+                timezone: 'Invalid/Timezone',
+            };
+
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
+
+            const result = await settingsService.isCommentsAutoReplyEnabled('user_123');
+
+            expect(result).toBe(true); // Falls back to server time 10:00, within 09:00-18:00
         });
     });
 

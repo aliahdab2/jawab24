@@ -473,6 +473,8 @@
   "settings.businessHours.statusInactive": "Outside Hours",
   "settings.businessHoursStart": "From",
   "settings.businessHoursEnd": "To",
+  "settings.timezone": "Timezone",
+  "settings.timezoneDesc": "Your local timezone for business hours",
   "settings.awayMessage": "Away Message",
   "settings.awayMessageDesc": "Message shown outside work hours",
   "settings.awayMessageConnectedDesc": "Sent to customers outside work hours or when auto-reply is off",

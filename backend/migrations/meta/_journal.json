@@ -183,6 +183,13 @@
       "when": 1771114442135,
       "tag": "0025_dark_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1771170779523,
+      "tag": "0026_wise_betty_brant",
+      "breakpoints": true
     }
   ]
 }
