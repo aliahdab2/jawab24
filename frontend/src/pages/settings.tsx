@@ -624,7 +624,13 @@ const SettingsPage: NextPageWithLayout = () => {
                   <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
                   <p className="text-xs text-brand-700 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
                   <Input
-                    value={settings.dualReplyNudgeMulti?.[settings.dashboardLanguage] || ''}
+                    value={(() => {
+                      const currentLang = settings.dashboardLanguage;
+                      const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
+                      const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
+                      const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+                      return isAutoTranslated ? '' : value;
+                    })()}
                     onChange={(e) => {
                       const value = e.target.value.slice(0, 80);
                       const currentLang = settings.dashboardLanguage;
@@ -638,7 +644,13 @@ const SettingsPage: NextPageWithLayout = () => {
                         dualReplyNudge: value
                       });
                     }}
-                    placeholder={t('settings.publicReplyPlaceholder')}
+                    placeholder={(() => {
+                      const currentLang = settings.dashboardLanguage;
+                      const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
+                      const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
+                      const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+                      return isAutoTranslated ? value : t('settings.publicReplyPlaceholder');
+                    })()}
                     className="bg-white !py-2.5"
                     maxLength={80}
                   />
@@ -893,7 +905,12 @@ const SettingsPage: NextPageWithLayout = () => {
                     {(() => {
                       const currentLang = settings.dashboardLanguage;
                       const value = settings.awayMessageMulti?.[currentLang] || '';
-                      const placeholder = t('settings.awayMessagePlaceholder');
+                      const sourceLang = settings.awayMessageMulti?.sourceLang;
+
+                      // Show auto-translated text as placeholder when viewing non-source language
+                      const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+                      const displayValue = isAutoTranslated ? '' : value;
+                      const placeholder = isAutoTranslated ? value : t('settings.awayMessagePlaceholder');
 
                       return (
                         <textarea
@@ -901,7 +918,7 @@ const SettingsPage: NextPageWithLayout = () => {
                           className={`input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm ${currentLang === 'ar' ? 'rtl' : 'ltr'}`}
                           placeholder={placeholder}
                           dir={currentLang === 'ar' ? "rtl" : "ltr"}
-                          value={value}
+                          value={displayValue}
                           onChange={(e) => {
                             const newValue = e.target.value;
                             setSettings({
@@ -1130,14 +1147,19 @@ const SettingsPage: NextPageWithLayout = () => {
             {(() => {
                 const currentLang = settings.dashboardLanguage;
                 const value = settings.greetingMessageMulti?.[currentLang] || '';
-                const placeholder = t('settings.greetingMessagePlaceholder');
+                const sourceLang = settings.greetingMessageMulti?.sourceLang;
+
+                // Show auto-translated text as placeholder when viewing non-source language
+                const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+                const displayValue = isAutoTranslated ? '' : value;
+                const placeholder = isAutoTranslated ? value : t('settings.greetingMessagePlaceholder');
 
                 return (
                   <textarea
                     className={`input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl ${currentLang === 'ar' ? 'italic italic-arabic rtl' : 'ltr'}`}
                     placeholder={placeholder}
                     dir={currentLang === 'ar' ? "rtl" : "ltr"}
-                    value={value}
+                    value={displayValue}
                     onChange={(e) => {
                         const newValue = e.target.value;
                         setSettings({
