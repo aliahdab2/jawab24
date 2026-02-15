@@ -18,7 +18,8 @@ import {
   Crown,
   Smartphone,
   Mail,
-  Check
+  Check,
+  ShoppingBag
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
@@ -248,6 +249,13 @@ export default function LandingPage() {
                   <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 font-bold text-sm sm:text-base hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white transition-all cursor-default">
                     <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{t('landing.platforms.instagram')}</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-600 font-bold text-sm sm:text-base cursor-default opacity-80">
+                    <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>{t('landing.platforms.shopify')}</span>
+                    <span className="text-[10px] sm:text-xs font-semibold bg-emerald-500/20 text-emerald-700 px-1.5 py-0.5 rounded-full leading-none">
+                      {t('landing.platforms.comingSoon')}
+                    </span>
                   </div>
                 </div>
               </div>
