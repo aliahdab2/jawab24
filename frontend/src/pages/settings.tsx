@@ -520,47 +520,72 @@ const SettingsPage: NextPageWithLayout = () => {
                 {settings.commentReplyMode === 'private' && t('settings.commentReplyMode.privateDesc')}
               </p>
 
-              {/* Flow Diagram */}
+              {/* Flow Diagram - Neumorphism Design */}
               <div
                 key={diagramKey}
-                className="mt-3 flex items-center justify-center gap-2 py-3 px-2 rounded-xl bg-surface-50 border border-surface-100 animate-in fade-in slide-in-from-top-2 duration-300"
+                className="mt-3 flex items-center justify-center gap-3 py-6 px-4 rounded-2xl bg-gradient-to-br from-surface-50 to-surface-100/50 backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300 landscape:py-4 landscape:gap-2"
+                style={{
+                  boxShadow: '8px 8px 16px rgba(0, 0, 0, 0.06), -8px -8px 16px rgba(255, 255, 255, 0.8)'
+                }}
               >
-                {/* New Comment */}
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-11 h-11 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <MessageSquare className="w-5 h-5 text-blue-600" />
+                {/* New Comment - Blue Card */}
+                <div className="flex flex-col items-center gap-2 landscape:gap-1">
+                  <div
+                    className="w-14 h-14 landscape:w-12 landscape:h-12 rounded-2xl flex items-center justify-center relative overflow-hidden transition-transform hover:scale-105 active:scale-95"
+                    style={{
+                      background: 'linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%)',
+                      boxShadow: '0 8px 16px rgba(59, 130, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                    }}
+                  >
+                    <MessageSquare className="w-6 h-6 landscape:w-5 landscape:h-5 text-white relative z-10" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
                   </div>
-                  <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                  <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[75px]">
                     {t('settings.flowNewComment')}
                   </span>
                 </div>
 
-                <ArrowRight className="w-5 h-5 text-surface-500 flex-shrink-0 rtl:rotate-180" />
+                {/* Arrow */}
+                <ArrowRight className="w-6 h-6 landscape:w-5 landscape:h-5 text-surface-400 flex-shrink-0 rtl:rotate-180 opacity-60" />
 
-                {/* Public Reply - shown for dual and public modes */}
+                {/* Public Reply - Green Card - shown for dual and public modes */}
                 {(settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'public') && (
                   <>
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-11 h-11 rounded-lg bg-emerald-100 flex items-center justify-center">
-                        <MessageCircle className="w-5 h-5 text-emerald-600" />
+                    <div className="flex flex-col items-center gap-2 landscape:gap-1">
+                      <div
+                        className="w-14 h-14 landscape:w-12 landscape:h-12 rounded-2xl flex items-center justify-center relative overflow-hidden transition-transform hover:scale-105 active:scale-95"
+                        style={{
+                          background: 'linear-gradient(135deg, #34D399 0%, #10B981 100%)',
+                          boxShadow: '0 8px 16px rgba(16, 185, 129, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                        }}
+                      >
+                        <MessageCircle className="w-6 h-6 landscape:w-5 landscape:h-5 text-white relative z-10" />
+                        <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
                       </div>
-                      <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                      <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[75px]">
                         {t('settings.flowPublicReply')}
                       </span>
                     </div>
                     {settings.commentReplyMode === 'dual' && (
-                      <ArrowRight className="w-5 h-5 text-surface-500 flex-shrink-0 rtl:rotate-180" />
+                      <ArrowRight className="w-6 h-6 landscape:w-5 landscape:h-5 text-surface-400 flex-shrink-0 rtl:rotate-180 opacity-60" />
                     )}
                   </>
                 )}
 
-                {/* AI Private Message - shown for dual and private modes */}
+                {/* AI Private Message - Purple Card - shown for dual and private modes */}
                 {(settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'private') && (
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-11 h-11 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <Mail className="w-5 h-5 text-purple-600" />
+                  <div className="flex flex-col items-center gap-2 landscape:gap-1">
+                    <div
+                      className="w-14 h-14 landscape:w-12 landscape:h-12 rounded-2xl flex items-center justify-center relative overflow-hidden transition-transform hover:scale-105 active:scale-95"
+                      style={{
+                        background: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)',
+                        boxShadow: '0 8px 16px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                      }}
+                    >
+                      <Mail className="w-6 h-6 landscape:w-5 landscape:h-5 text-white relative z-10" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
                     </div>
-                    <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[70px]">
+                    <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[75px]">
                       {t('settings.flowPrivateMessage')}
                     </span>
                   </div>
