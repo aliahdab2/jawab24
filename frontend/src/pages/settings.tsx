@@ -796,6 +796,67 @@ const SettingsPage: NextPageWithLayout = () => {
                     </div>
                   </div>
 
+                  {/* Quick Time Presets */}
+                  {(() => {
+                    const presets = [
+                      { label: '9-5', start: '09:00', end: '17:00' },
+                      { label: '8-6', start: '08:00', end: '18:00' },
+                      { label: '24/7', start: '00:00', end: '23:59' },
+                    ];
+                    const isCustom = !presets.some(p => p.start === settings.businessHoursStart && p.end === settings.businessHoursEnd);
+
+                    return (
+                      <div className="space-y-3">
+                        {/* Preset Buttons */}
+                        <div className="flex flex-wrap gap-2 justify-center">
+                          {presets.map((preset) => {
+                            const isActive = preset.start === settings.businessHoursStart && preset.end === settings.businessHoursEnd;
+                            return (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                onClick={() => {
+                                  if (settings.businessHoursOnly) {
+                                    setSettings({
+                                      ...settings,
+                                      businessHoursStart: preset.start,
+                                      businessHoursEnd: preset.end
+                                    });
+                                  }
+                                }}
+                                disabled={!settings.businessHoursOnly}
+                                className={clsx(
+                                  'px-4 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px]',
+                                  'active:scale-[0.98] hover:shadow-md',
+                                  isActive
+                                    ? 'bg-brand-500 text-white shadow-lg hover:bg-brand-600'
+                                    : 'bg-surface-100 text-surface-700 hover:bg-surface-200 hover:border-surface-300',
+                                  !settings.businessHoursOnly && 'opacity-50 cursor-not-allowed'
+                                )}
+                              >
+                                {preset.label}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            className={clsx(
+                              'px-4 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px]',
+                              'active:scale-[0.98] hover:shadow-md',
+                              isCustom
+                                ? 'bg-violet-500 text-white shadow-lg hover:bg-violet-600'
+                                : 'bg-surface-100 text-surface-700 hover:bg-surface-200',
+                              !settings.businessHoursOnly && 'opacity-50 cursor-not-allowed'
+                            )}
+                            disabled
+                          >
+                            {t('settings.businessHours.custom' as TranslationKey)}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Time pickers */}
                   {(() => {
                     const timeSlots = Array.from({ length: 48 }, (_, i) => {
@@ -803,32 +864,48 @@ const SettingsPage: NextPageWithLayout = () => {
                       const m = i % 2 === 0 ? '00' : '30';
                       return { value: `${h}:${m}`, label: `${h}:${m}` };
                     });
+                    const hasError = settings.businessHoursEnd <= settings.businessHoursStart;
+
                     return (
-                      <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
-                        <div>
-                          <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
-                          <Select
-                            value={settings.businessHoursStart}
-                            onChange={(val) => setSettings({ ...settings, businessHoursStart: val })}
-                            options={timeSlots}
-                            disabled={!settings.businessHoursOnly}
-                            className="!py-3 font-bold border-none bg-white shadow-sm"
-                          />
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
+                          <div>
+                            <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
+                            <Select
+                              value={settings.businessHoursStart}
+                              onChange={(val) => setSettings({ ...settings, businessHoursStart: val })}
+                              options={timeSlots}
+                              disabled={!settings.businessHoursOnly}
+                              className={clsx(
+                                "!py-3 font-bold border-none bg-white shadow-sm",
+                                hasError && settings.businessHoursOnly && "!border-2 !border-red-300"
+                              )}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
+                            <Select
+                              value={settings.businessHoursEnd}
+                              onChange={(val) => setSettings({ ...settings, businessHoursEnd: val })}
+                              options={timeSlots}
+                              disabled={!settings.businessHoursOnly}
+                              className={clsx(
+                                "!py-3 font-bold border-none bg-white shadow-sm",
+                                hasError && settings.businessHoursOnly && "!border-2 !border-red-300"
+                              )}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
-                          <Select
-                            value={settings.businessHoursEnd}
-                            onChange={(val) => setSettings({ ...settings, businessHoursEnd: val })}
-                            options={timeSlots}
-                            disabled={!settings.businessHoursOnly}
-                            className="!py-3 font-bold border-none bg-white shadow-sm"
-                          />
-                        </div>
-                        {settings.businessHoursEnd <= settings.businessHoursStart && (
-                          <p className="col-span-2 text-xs text-red-500 font-medium mt-1">
-                            {t('settings.businessHoursError' as TranslationKey)}
-                          </p>
+
+                        {/* Enhanced Error Message */}
+                        {hasError && settings.businessHoursOnly && (
+                          <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200 animate-in fade-in slide-in-from-top-1">
+                            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="text-sm font-bold text-red-700">{t('settings.businessHoursError' as TranslationKey)}</p>
+                              <p className="text-xs text-red-600 mt-0.5">{t('settings.businessHoursError.hint' as TranslationKey)}</p>
+                            </div>
+                          </div>
                         )}
                       </div>
                     );
