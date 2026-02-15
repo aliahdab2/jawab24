@@ -389,7 +389,7 @@ const SettingsPage: NextPageWithLayout = () => {
   };
 
   // Dual reply nudge: single message for all customers
-  const dualNudgeInput = settings.dualReplyNudge || '';
+  const dualNudgeInput = settings.dualReplyNudgeMulti?.[settings.dashboardLanguage] || '';
 
   if (loading) {
     return <PageSkeleton />;
@@ -651,7 +651,7 @@ const SettingsPage: NextPageWithLayout = () => {
                       const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
                       return isAutoTranslated ? value : t('settings.publicReplyPlaceholder');
                     })()}
-                    className="bg-white !py-2.5"
+                    className="bg-white !py-2.5 placeholder:text-surface-400 placeholder:italic"
                     maxLength={80}
                   />
 
@@ -915,7 +915,7 @@ const SettingsPage: NextPageWithLayout = () => {
                       return (
                         <textarea
                           disabled={!settings.businessHoursOnly}
-                          className={`input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm ${currentLang === 'ar' ? 'rtl' : 'ltr'}`}
+                          className={`input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'rtl' : 'ltr'}`}
                           placeholder={placeholder}
                           dir={currentLang === 'ar' ? "rtl" : "ltr"}
                           value={displayValue}
@@ -1156,7 +1156,7 @@ const SettingsPage: NextPageWithLayout = () => {
 
                 return (
                   <textarea
-                    className={`input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl ${currentLang === 'ar' ? 'italic italic-arabic rtl' : 'ltr'}`}
+                    className={`input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'italic italic-arabic rtl' : 'ltr'}`}
                     placeholder={placeholder}
                     dir={currentLang === 'ar' ? "rtl" : "ltr"}
                     value={displayValue}
