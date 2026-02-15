@@ -288,8 +288,8 @@ const SettingsPage: NextPageWithLayout = () => {
         commentsAutoReply: data.commentsAutoReply ?? true,
         messagesAutoReply: data.messagesAutoReply ?? true,
         businessHoursOnly: data.businessHoursOnly ?? false,
-        businessHoursStart: data.businessHoursStart || '09:00',
-        businessHoursEnd: data.businessHoursEnd || '18:00',
+        businessHoursStart: (data.businessHoursStart && data.businessHoursStart !== '00:00') ? data.businessHoursStart : '09:00',
+        businessHoursEnd: (data.businessHoursEnd && data.businessHoursEnd !== '00:00') ? data.businessHoursEnd : '18:00',
         // JSONB fields
         awayMessageMulti: data.awayMessageMulti || {},
         greetingMessageMulti: data.greetingMessageMulti || {},
@@ -345,10 +345,7 @@ const SettingsPage: NextPageWithLayout = () => {
 
       // Show language change confirmation
       if (settings.dashboardLanguage && settings.dashboardLanguage !== initialSettings.dashboardLanguage) {
-        const langKey = settings.dashboardLanguage === 'ar'
-          ? 'settings.languageChangedToArabic'
-          : 'settings.languageChangedToEnglish';
-        toast.success(t(langKey as TranslationKey));
+        toast.success(t('settings.languageChanged'));
       }
 
       setSaved(true);
@@ -462,7 +459,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   try {
                      await settingsApi.update(newSettings);
                      setLanguage('ar');
-                     toast.success(t('settings.languageChangedToArabic'));
+                     toast.success(t('settings.languageChanged'));
                   } catch {
                      toast.error(t('common.error'));
                   }
@@ -482,7 +479,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   try {
                      await settingsApi.update(newSettings);
                      setLanguage('en');
-                     toast.success(t('settings.languageChangedToEnglish'));
+                     toast.success(t('settings.languageChanged'));
                   } catch {
                      toast.error(t('common.error'));
                   }
