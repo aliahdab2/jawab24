@@ -376,7 +376,7 @@
   "rules.actions.notify": "إرسال إشعار",
   "settings.title": "الإعدادات",
   "settings.description": "تحكم في إعدادات حسابك وتفضيلات الرد",
-  "settings.pageContext": "قم بتهيئة كيفية استجابة جواب24 لنشاط صفحتك.",
+  "settings.pageContext": "قم بإعداد كيفية استجابة جواب24 لنشاط صفحتك.",
   "settings.advancedDescription": "تخصيص ساعات العمل والردود والمزيد",
   "settings.templatesCardDesc": "إنشاء ردود جاهزة لاستخدامها في القواعد",
   "settings.viewTemplates": "عرض القوالب",

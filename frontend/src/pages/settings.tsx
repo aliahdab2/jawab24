@@ -343,11 +343,6 @@ const SettingsPage: NextPageWithLayout = () => {
         setInitialSettings(updatedSettings);
       }
 
-      // Show language change confirmation
-      if (settings.dashboardLanguage && settings.dashboardLanguage !== initialSettings.dashboardLanguage) {
-        toast.success(t('settings.languageChanged'));
-      }
-
       setSaved(true);
       toast.success(t('settings.settingsSaved'));
       setTimeout(() => setSaved(false), 2000);
