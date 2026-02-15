@@ -13,6 +13,7 @@ import {
   Search,
   Bot,
   Clock,
+  Check,
   CheckCircle,
   User,
   X,
@@ -590,7 +591,7 @@ const MessagesPage: NextPageWithLayout = () => {
               </div>
             ) : conversations.length > 0 ? (
               <div className="text-center py-8 text-sm text-surface-400">
-                ✓ {t('common.allLoaded')}
+                <Check className="w-3.5 h-3.5 inline-block" /> {t('common.allLoaded')}
               </div>
             ) : null}
           </div>

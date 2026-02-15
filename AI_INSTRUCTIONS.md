@@ -397,28 +397,24 @@ This section documents known issues, technical debt, and production readiness ga
 
 ### Code Quality
 
-5. **Remaining hardcoded strings (language conditionals)**
-   - Status: Mostly fixed — language toggle buttons, settings tabs, multilingual textarea, and WhatsApp messages now use `t()` keys
-   - Remaining minor items:
-     - Checkmark symbols: `✓` in comments.tsx, messages.tsx, landing.tsx (decorative, not language-dependent)
-     - Separator: `&middot;` in Shopify section (punctuation, not language-dependent)
+5. **~~Remaining hardcoded strings~~ — RESOLVED**
+   - All language conditionals fixed — using `t()` keys
+   - Checkmark symbols replaced with `<Check>` lucide icon
+   - No `&middot;` separator found in codebase
 
 ### Security
 
-6. **No input sanitization on user textareas**
-   - Status: Raw user input rendered without XSS protection
-   - Locations: Away message, greeting message, knowledge base textareas
-   - Impact: Potential XSS vulnerabilities
-   - Files: Settings page, knowledge base components
-   - Action Needed: Sanitize before rendering or use safe rendering patterns
+6. **~~No input sanitization on user textareas~~ — NOT AN ISSUE**
+   - Audit confirmed: all user content rendered as **plain text in JSX** (not HTML)
+   - No `dangerouslySetInnerHTML` with user input anywhere
+   - Backend is JSON-only API, no server-side HTML rendering
+   - Existing sanitization in `packages/shared/src/utils/sanitize.ts` handles AI prompt injection
 
 ### Minor Cleanup
 
-7. **Dead export: `translateText`**
-    - Status: Still exported but only used internally after recent cleanup
-    - Impact: Minor - just dead code
-    - Files: Translation utilities
-    - Action: Remove export or mark as internal
+7. **~~Dead export: `translateText`~~ — NOT DEAD**
+    - Actively used in `controllers/settings.ts` and `routes/translation.ts`
+    - No action needed
 
 ---
 

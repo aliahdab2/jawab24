@@ -17,7 +17,8 @@ import {
   Instagram,
   Crown,
   Smartphone,
-  Mail
+  Mail,
+  Check
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
@@ -480,9 +481,9 @@ export default function LandingPage() {
                   {t('pricing.starterDesc')}
                 </p>
                 <ul className="text-[10px] sm:text-sm text-surface-600 space-y-0.5 sm:space-y-1">
-                  <li>✓ {t('pricing.starterFeature1')}</li>
-                  <li className="hidden sm:block">✓ {t('pricing.starterFeature2')}</li>
-                  <li>✓ {t('pricing.starterFeature3')}</li>
+                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.starterFeature1')}</li>
+                  <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {t('pricing.starterFeature2')}</li>
+                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.starterFeature3')}</li>
                 </ul>
               </div>
 
@@ -499,9 +500,9 @@ export default function LandingPage() {
                   {t('pricing.businessDesc')}
                 </p>
                 <ul className="text-[10px] sm:text-sm text-surface-600 space-y-0.5 sm:space-y-1">
-                  <li>✓ {t('pricing.businessFeature1')}</li>
-                  <li className="hidden sm:block">✓ {t('pricing.businessFeature2')}</li>
-                  <li>✓ {t('pricing.businessFeature3')}</li>
+                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.businessFeature1')}</li>
+                  <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {t('pricing.businessFeature2')}</li>
+                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.businessFeature3')}</li>
                 </ul>
               </div>
 
@@ -515,9 +516,9 @@ export default function LandingPage() {
                   {t('pricing.proDesc')}
                 </p>
                 <ul className="text-[10px] sm:text-sm text-surface-600 space-y-0.5 sm:space-y-1">
-                  <li>✓ {t('pricing.proFeature1')}</li>
-                  <li className="hidden sm:block">✓ {t('pricing.proFeature2')}</li>
-                  <li>✓ {t('pricing.proFeature3')}</li>
+                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.proFeature1')}</li>
+                  <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {t('pricing.proFeature2')}</li>
+                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.proFeature3')}</li>
                 </ul>
               </div>
             </div>

@@ -15,6 +15,7 @@ import {
   Search,
   Bot,
   Clock,
+  Check,
   CheckCircle,
   Download,
   AlertTriangle,
@@ -511,7 +512,7 @@ const CommentsPage: NextPageWithLayout = () => {
               </div>
             ) : allComments.length > COMMENTS_PER_PAGE ? (
               <div className="text-center py-8 text-sm text-surface-400">
-                ✓ {t('common.allLoaded')}
+                <Check className="w-3.5 h-3.5 inline-block" /> {t('common.allLoaded')}
               </div>
             ) : null}
           </div>
