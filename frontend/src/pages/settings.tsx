@@ -638,11 +638,7 @@ const SettingsPage: NextPageWithLayout = () => {
                         dualReplyNudge: value
                       });
                     }}
-                    placeholder={(() => {
-                      const otherLang = settings.dashboardLanguage === 'ar' ? 'en' : 'ar';
-                      const otherValue = settings.dualReplyNudgeMulti?.[otherLang] || '';
-                      return otherValue || t('settings.publicReplyPlaceholder');
-                    })()}
+                    placeholder={t('settings.publicReplyPlaceholder')}
                     className="bg-white !py-2.5"
                     maxLength={80}
                   />
@@ -896,12 +892,8 @@ const SettingsPage: NextPageWithLayout = () => {
                     {/* Multilingual Textarea */}
                     {(() => {
                       const currentLang = settings.dashboardLanguage;
-                      const otherLang = currentLang === 'ar' ? 'en' : 'ar';
                       const value = settings.awayMessageMulti?.[currentLang] || '';
-                      const otherValue = settings.awayMessageMulti?.[otherLang] || '';
-
-                      // Smart placeholder: show other language translation if exists, otherwise show default
-                      const placeholder = otherValue || t('settings.awayMessagePlaceholder');
+                      const placeholder = t('settings.awayMessagePlaceholder');
 
                       return (
                         <textarea
@@ -1137,12 +1129,8 @@ const SettingsPage: NextPageWithLayout = () => {
             {/* Multilingual Textarea */}
             {(() => {
                 const currentLang = settings.dashboardLanguage;
-                const otherLang = currentLang === 'ar' ? 'en' : 'ar';
                 const value = settings.greetingMessageMulti?.[currentLang] || '';
-                const otherValue = settings.greetingMessageMulti?.[otherLang] || '';
-
-                // Smart placeholder: show other language translation if exists, otherwise show default
-                const placeholder = otherValue || t('settings.greetingMessagePlaceholder');
+                const placeholder = t('settings.greetingMessagePlaceholder');
 
                 return (
                   <textarea
