@@ -101,7 +101,8 @@
       "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/autoreply_test\" timeout 60 npm run test:integration:*)",
       "Bash(npx jest --testPathPattern=\"axiosRetry\" --no-coverage)",
       "Bash(npm run dev:*)",
-      "Bash(ssh root@137.184.208.182 \"docker ps --format ''table {{.Names}}\\\\t{{.Status}}'' | grep backend\")"
+      "Bash(ssh root@137.184.208.182 \"docker ps --format ''table {{.Names}}\\\\t{{.Status}}'' | grep backend\")",
+      "Bash(cd /Users/aliahdab/Documents/AutoReply/backend && npm test:*)"
     ]
   }
 }
