@@ -866,13 +866,20 @@ const SettingsPage: NextPageWithLayout = () => {
                     {/* Multilingual Textarea */}
                     {(() => {
                       const currentLang = settings.dashboardLanguage;
+                      const otherLang = currentLang === 'ar' ? 'en' : 'ar';
                       const value = settings.awayMessageMulti?.[currentLang] || '';
-                      
+                      const otherValue = settings.awayMessageMulti?.[otherLang] || '';
+
+                      // Smart placeholder: show other language translation if exists, otherwise show default
+                      const placeholder = otherValue
+                        ? (currentLang === 'ar' ? `English: ${otherValue}` : `العربية: ${otherValue}`)
+                        : (currentLang === 'ar' ? "رسالة خارج أوقات العمل بالعربية..." : "Away message...");
+
                       return (
                         <textarea
                           disabled={!settings.businessHoursOnly}
                           className={`input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm ${currentLang === 'ar' ? 'rtl' : 'ltr'}`}
-                          placeholder={currentLang === 'ar' ? "رسالة خارج أوقات العمل بالعربية..." : "Away message..."}
+                          placeholder={placeholder}
                           dir={currentLang === 'ar' ? "rtl" : "ltr"}
                           value={value}
                           onChange={(e) => {
@@ -1102,12 +1109,19 @@ const SettingsPage: NextPageWithLayout = () => {
             {/* Multilingual Textarea */}
             {(() => {
                 const currentLang = settings.dashboardLanguage;
+                const otherLang = currentLang === 'ar' ? 'en' : 'ar';
                 const value = settings.greetingMessageMulti?.[currentLang] || '';
-                
+                const otherValue = settings.greetingMessageMulti?.[otherLang] || '';
+
+                // Smart placeholder: show other language translation if exists, otherwise show default
+                const placeholder = otherValue
+                  ? (currentLang === 'ar' ? `English: ${otherValue}` : `العربية: ${otherValue}`)
+                  : (currentLang === 'ar' ? "رسالة الترحيب بالعربية..." : "Greeting message...");
+
                 return (
                   <textarea
                     className={`input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl ${currentLang === 'ar' ? 'italic italic-arabic rtl' : 'ltr'}`}
-                    placeholder={currentLang === 'ar' ? "رسالة الترحيب بالعربية..." : "Greeting message..."}
+                    placeholder={placeholder}
                     dir={currentLang === 'ar' ? "rtl" : "ltr"}
                     value={value}
                     onChange={(e) => {
