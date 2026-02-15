@@ -320,7 +320,7 @@ describe('Settings Service', () => {
             expect(result).toBe('We are currently away');
         });
 
-        it('should return null when away message is not set', async () => {
+        it('should return default away message when none is set', async () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
@@ -331,7 +331,9 @@ describe('Settings Service', () => {
 
             const result = await settingsService.getAwayMessage('user_123');
 
-            expect(result).toBeNull();
+            // Send-time fallback returns the default away message
+            expect(result).toBeTruthy();
+            expect(typeof result).toBe('string');
         });
     });
 

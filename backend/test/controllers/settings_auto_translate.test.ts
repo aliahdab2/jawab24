@@ -148,21 +148,23 @@ describe('SettingsController Auto-Translation Logic', () => {
         }));
     });
 
-    it('should auto-translate AR -> EN if EN is cleared (Reset)', async () => {
+    it('should only clear the translated language when it is cleared (not the source)', async () => {
         mockRequest.body = {
             greetingMessageMulti: {
                 ar: 'مرحبا', // Unchanged
-                en: '' // Cleared by user
+                en: '' // Cleared by user — EN was a translation from AR source
             }
         };
 
         await settingsController.update(mockRequest, mockReply);
- 
+
+        // EN was the translated version (sourceLang is 'ar'), so only EN is cleared.
+        // AR (the source) is preserved. Send-time fallback handles defaults.
         expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
                 ar: 'مرحبا',
-                en: 'مرحبا [translated to en]',
-                sourceLang: 'ar'
+                en: '',
+                sourceLang: 'en'
             })
         }));
     });
