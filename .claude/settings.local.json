@@ -99,7 +99,8 @@
       "Bash(printf:*)",
       "Bash(expect:*)",
       "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/autoreply_test\" timeout 60 npm run test:integration:*)",
-      "Bash(npx jest --testPathPattern=\"axiosRetry\" --no-coverage)"
+      "Bash(npx jest --testPathPattern=\"axiosRetry\" --no-coverage)",
+      "Bash(npm run dev:*)"
     ]
   }
 }

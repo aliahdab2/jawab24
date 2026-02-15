@@ -826,13 +826,18 @@ const SettingsPage: NextPageWithLayout = () => {
                                 }}
                                 disabled={!settings.businessHoursOnly}
                                 className={clsx(
-                                  'px-4 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px]',
+                                  'px-4 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px] border',
                                   'active:scale-[0.98] hover:shadow-md',
                                   isActive
-                                    ? 'bg-brand-500 text-white shadow-lg hover:bg-brand-600'
-                                    : 'bg-surface-100 text-surface-700 hover:bg-surface-200 hover:border-surface-300',
+                                    ? 'text-white shadow-lg'
+                                    : 'bg-surface-100 text-surface-700 hover:bg-surface-200 border-surface-200',
                                   !settings.businessHoursOnly && 'opacity-50 cursor-not-allowed'
                                 )}
+                                style={isActive ? {
+                                  background: 'linear-gradient(135deg, #2dd4bf 0%, #0d9488 100%)',
+                                  boxShadow: '0 10px 15px -3px rgba(13, 148, 136, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+                                  borderColor: '#0d9488'
+                                } : undefined}
                               >
                                 {preset.label}
                               </button>
@@ -841,13 +846,18 @@ const SettingsPage: NextPageWithLayout = () => {
                           <button
                             type="button"
                             className={clsx(
-                              'px-4 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px]',
+                              'px-4 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px] border',
                               'active:scale-[0.98] hover:shadow-md',
                               isCustom
-                                ? 'bg-violet-500 text-white shadow-lg hover:bg-violet-600'
-                                : 'bg-surface-100 text-surface-700 hover:bg-surface-200',
+                                ? 'text-white shadow-lg'
+                                : 'bg-surface-100 text-surface-700 hover:bg-surface-200 border-surface-200',
                               !settings.businessHoursOnly && 'opacity-50 cursor-not-allowed'
                             )}
+                            style={isCustom ? {
+                              background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)',
+                              boxShadow: '0 10px 15px -3px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+                              borderColor: '#8b5cf6'
+                            } : undefined}
                             disabled
                           >
                             {t('settings.businessHours.custom' as TranslationKey)}
