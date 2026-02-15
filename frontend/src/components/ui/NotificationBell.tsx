@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
 import { Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, Clock } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
@@ -76,6 +77,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const bellRef = useRef<HTMLButtonElement>(null);
 
     // Lock background scroll when dropdown is open
     useBodyScrollLock(isOpen);
@@ -111,10 +113,14 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         fetchNotifications();
     }, [isOpen, isAuthenticated]);
 
-    // Close dropdown when clicking outside
+    // Close dropdown when clicking outside (dropdown is portaled, so check both refs)
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            const target = event.target as Node;
+            if (
+                dropdownRef.current && !dropdownRef.current.contains(target) &&
+                bellRef.current && !bellRef.current.contains(target)
+            ) {
                 setIsOpen(false);
             }
         };
@@ -167,9 +173,10 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     };
 
     return (
-        <div className="relative" ref={dropdownRef}>
+        <div className="relative">
             {/* Bell Button */}
             <button
+                ref={bellRef}
                 onClick={() => setIsOpen(!isOpen)}
                 className={`relative p-2 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center ${
                     isDark
@@ -190,14 +197,15 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                 )}
             </button>
 
-            {/* Backdrop + Dropdown */}
-            {isOpen && (
+            {/* Backdrop + Dropdown — portaled to body to escape sidebar stacking context */}
+            {isOpen && typeof document !== 'undefined' && createPortal(
                 <>
                 <div
                     className="fixed inset-0 bg-black/30 z-[99] animate-fade-in"
                     onClick={() => setIsOpen(false)}
                 />
                 <div
+                    ref={dropdownRef}
                     className={`fixed start-4 end-4 bg-white rounded-2xl shadow-2xl shadow-surface-900/10 border border-surface-100 overflow-hidden z-[100] animate-fade-in ${
                         isDark
                             ? 'max-h-[60vh]'
@@ -339,7 +347,8 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         )}
                     </div>
                 </div>
-                </>
+                </>,
+                document.body
             )}
         </div>
     );
