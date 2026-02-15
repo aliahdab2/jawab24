@@ -36,8 +36,8 @@ const EnvSchema = z.object({
     AI_ENABLED: z.string().transform(val => val === 'true').default('false'),
     AI_CACHE_ENABLED: z.string().transform(val => val !== 'false').default('true'),
 
-    // OpenAI (required for auto-translation, KB embedding, and RAG)
-    OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required for auto-translation features'),
+    // OpenAI (optional — required for auto-translation, KB embedding, and RAG)
+    OPENAI_API_KEY: z.string().optional(),
 
     // RAG mode: off = static KB, shadow = run RAG but log only, on = full RAG
     RAG_MODE: z.enum(['off', 'shadow', 'on']).default('off'),

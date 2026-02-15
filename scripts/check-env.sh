@@ -51,7 +51,6 @@ else
         "FACEBOOK_APP_SECRET"
         "FACEBOOK_REDIRECT_URI"
         "FACEBOOK_WEBHOOK_VERIFY_TOKEN"
-        "OPENAI_API_KEY"
     )
     
     # Optional but recommended

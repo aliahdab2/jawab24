@@ -23,7 +23,7 @@ describe('validateEnv', () => {
         JWT_SECRET: 'b'.repeat(32),
         AI_SERVICE_URL: 'http://localhost:3002',
         FRONTEND_URL: 'http://localhost:3001',
-        OPENAI_API_KEY: 'sk-test-' + 'x'.repeat(40), // Required for auto-translation
+        // OPENAI_API_KEY is now optional - translation uses AI worker
     };
 
     beforeEach(() => {

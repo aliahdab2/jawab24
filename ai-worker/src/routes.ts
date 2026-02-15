@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { openaiService, GenerateRequest } from './services/openai';
+import { translationService, type TranslateRequest } from './services/translation';
 import { Sentry } from './lib/sentry';
 import { config } from './config';
 
@@ -45,6 +46,43 @@ async function routes(server: FastifyInstance) {
             request.log.error(error, 'Failed to generate reply');
             Sentry.captureException(error, { extra: { comment, language } });
             return reply.status(500).send({ error: 'Failed to generate reply' });
+        }
+    });
+
+    // Translate text endpoint
+    server.post<{ Body: TranslateRequest }>('/translate', async (request, reply) => {
+        const { text, sourceLanguage, targetLanguage } = request.body;
+
+        // Validation
+        if (!text || text.trim().length === 0) {
+            return reply.status(400).send({ error: 'Text is required' });
+        }
+        if (!targetLanguage || !['ar', 'en'].includes(targetLanguage)) {
+            return reply.status(400).send({ error: 'targetLanguage must be "ar" or "en"' });
+        }
+        if (sourceLanguage && !['ar', 'en', 'auto'].includes(sourceLanguage)) {
+            return reply.status(400).send({ error: 'sourceLanguage must be "ar", "en", or "auto"' });
+        }
+
+        if (!translationService.isConfigured()) {
+            return reply.status(503).send({ error: 'Translation service not configured' });
+        }
+
+        try {
+            const result = await translationService.translate({
+                text,
+                sourceLanguage: sourceLanguage || 'auto',
+                targetLanguage
+            });
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error, 'Failed to translate');
+            Sentry.captureException(error, {
+                extra: { sourceLanguage, targetLanguage, textLength: text.length }
+            });
+            return reply.status(500).send({
+                error: error instanceof Error ? error.message : 'Failed to translate'
+            });
         }
     });
 

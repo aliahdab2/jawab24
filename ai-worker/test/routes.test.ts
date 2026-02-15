@@ -9,6 +9,13 @@ vi.mock('../src/services/openai', () => ({
     },
 }));
 
+vi.mock('../src/services/translation', () => ({
+    translationService: {
+        translate: vi.fn(),
+        isConfigured: vi.fn(),
+    },
+}));
+
 vi.mock('../src/lib/sentry', () => ({
     Sentry: {
         captureException: vi.fn(),
@@ -27,11 +34,14 @@ vi.mock('../src/config', () => ({
 
 // Import after mocks — these are now the mocked versions
 import { openaiService } from '../src/services/openai';
+import { translationService } from '../src/services/translation';
 import { Sentry } from '../src/lib/sentry';
 import routes from '../src/routes';
 
 const mockGenerateReply = vi.mocked(openaiService.generateReply);
 const mockIsConfigured = vi.mocked(openaiService.isConfigured);
+const mockTranslate = vi.mocked(translationService.translate);
+const mockTranslationIsConfigured = vi.mocked(translationService.isConfigured);
 const mockCaptureException = vi.mocked(Sentry.captureException);
 
 describe('Routes', () => {
@@ -302,6 +312,191 @@ describe('Routes', () => {
             });
 
             expect(mockCaptureException).toHaveBeenCalled();
+        });
+    });
+
+    // --- POST /translate ---
+    describe('POST /translate', () => {
+        beforeEach(() => {
+            vi.clearAllMocks();
+        });
+
+        it('should return 400 when text is missing', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: { targetLanguage: 'en' }
+            });
+            expect(res.statusCode).toBe(400);
+            expect(res.json().error).toBe('Text is required');
+        });
+
+        it('should return 400 when text is empty string', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: { text: '', targetLanguage: 'en' }
+            });
+            expect(res.statusCode).toBe(400);
+            expect(res.json().error).toBe('Text is required');
+        });
+
+        it('should return 400 when text is whitespace only', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: { text: '   ', targetLanguage: 'en' }
+            });
+            expect(res.statusCode).toBe(400);
+            expect(res.json().error).toBe('Text is required');
+        });
+
+        it('should return 400 when targetLanguage is invalid', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: { text: 'test', targetLanguage: 'fr' }
+            });
+            expect(res.statusCode).toBe(400);
+            expect(res.json().error).toBe('targetLanguage must be "ar" or "en"');
+        });
+
+        it('should return 400 when targetLanguage is missing', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: { text: 'test' }
+            });
+            expect(res.statusCode).toBe(400);
+            expect(res.json().error).toBe('targetLanguage must be "ar" or "en"');
+        });
+
+        it('should return 400 when sourceLanguage is invalid', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: { text: 'test', sourceLanguage: 'fr', targetLanguage: 'en' }
+            });
+            expect(res.statusCode).toBe(400);
+            expect(res.json().error).toBe('sourceLanguage must be "ar", "en", or "auto"');
+        });
+
+        it('should return 503 when translation service not configured', async () => {
+            mockTranslationIsConfigured.mockReturnValue(false);
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: { text: 'Hello', targetLanguage: 'ar' }
+            });
+            expect(res.statusCode).toBe(503);
+            expect(res.json().error).toBe('Translation service not configured');
+        });
+
+        it('should translate successfully', async () => {
+            mockTranslationIsConfigured.mockReturnValue(true);
+            mockTranslate.mockResolvedValue({
+                translatedText: 'Hello!',
+                detectedLanguage: 'ar',
+                tokensUsed: 20
+            });
+
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: {
+                    text: 'مرحبا!',
+                    targetLanguage: 'en'
+                }
+            });
+
+            expect(res.statusCode).toBe(200);
+            expect(res.json()).toEqual({
+                translatedText: 'Hello!',
+                detectedLanguage: 'ar',
+                tokensUsed: 20
+            });
+        });
+
+        it('should use auto as default sourceLanguage', async () => {
+            mockTranslationIsConfigured.mockReturnValue(true);
+            mockTranslate.mockResolvedValue({
+                translatedText: 'مرحبا',
+                detectedLanguage: 'en',
+                tokensUsed: 18
+            });
+
+            await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: {
+                    text: 'Hello',
+                    targetLanguage: 'ar'
+                }
+            });
+
+            expect(mockTranslate).toHaveBeenCalledWith({
+                text: 'Hello',
+                sourceLanguage: 'auto',
+                targetLanguage: 'ar'
+            });
+        });
+
+        it('should pass sourceLanguage when provided', async () => {
+            mockTranslationIsConfigured.mockReturnValue(true);
+            mockTranslate.mockResolvedValue({
+                translatedText: 'Hello',
+                tokensUsed: 15
+            });
+
+            await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: {
+                    text: 'مرحبا',
+                    sourceLanguage: 'ar',
+                    targetLanguage: 'en'
+                }
+            });
+
+            expect(mockTranslate).toHaveBeenCalledWith({
+                text: 'مرحبا',
+                sourceLanguage: 'ar',
+                targetLanguage: 'en'
+            });
+        });
+
+        it('should return 500 when service throws', async () => {
+            mockTranslationIsConfigured.mockReturnValue(true);
+            mockTranslate.mockRejectedValue(new Error('OpenAI timeout'));
+
+            const res = await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: { text: 'Hello', targetLanguage: 'ar' }
+            });
+
+            expect(res.statusCode).toBe(500);
+            expect(res.json().error).toBe('OpenAI timeout');
+        });
+
+        it('should call Sentry.captureException on error', async () => {
+            mockTranslationIsConfigured.mockReturnValue(true);
+            const error = new Error('API error');
+            mockTranslate.mockRejectedValue(error);
+
+            await app.inject({
+                method: 'POST',
+                url: '/translate',
+                payload: {
+                    text: 'Test',
+                    sourceLanguage: 'en',
+                    targetLanguage: 'ar'
+                }
+            });
+
+            expect(mockCaptureException).toHaveBeenCalledWith(error, {
+                extra: { sourceLanguage: 'en', targetLanguage: 'ar', textLength: 4 }
+            });
         });
     });
 });
