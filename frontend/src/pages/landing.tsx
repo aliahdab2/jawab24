@@ -459,13 +459,8 @@ export default function LandingPage() {
               "{t('landing.testimonials.quote1')}"
             </h2>
             <div className="flex flex-col items-center">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 sm:border-4 border-white/30 overflow-hidden mb-2 sm:mb-4 shadow-xl relative">
-                <Image 
-                  src="https://ui-avatars.com/api/?name=Ahmed+S&background=white&color=0EA5E9" 
-                  alt={t('landing.images.user' as TranslationKey) as string}
-                  width={64}
-                  height={64}
-                />
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 sm:border-4 border-white/30 mb-2 sm:mb-4 shadow-xl bg-white flex items-center justify-center">
+                <span className="text-brand-500 font-bold text-sm sm:text-xl select-none">AS</span>
               </div>
               <div className="text-white font-bold text-base sm:text-xl">{t('landing.testimonials.author1')}</div>
             </div>
