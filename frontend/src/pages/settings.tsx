@@ -344,7 +344,6 @@ const SettingsPage: NextPageWithLayout = () => {
       }
 
       setSaved(true);
-      toast.success(t('settings.settingsSaved'));
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -406,27 +405,25 @@ const SettingsPage: NextPageWithLayout = () => {
       />
 
       {/* Sticky Save Button - Sticks below title when scrolling */}
-      <div className="lg:sticky lg:top-0 lg:z-50 -mx-4 px-4 pt-4 pb-3 mb-4 bg-surface-50/95 backdrop-blur-md border-b border-surface-200/50 md:-mx-8 md:px-8 md:pt-4 lg:-mx-16 lg:px-16 lg:pt-4 xl:-mx-20 xl:px-20">
-        <div className="max-w-[1600px] mx-auto">
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            variant={hasChanges ? 'primary' : 'secondary'}
-            size="lg"
-            className={clsx(
-              'w-full shadow-2xl hover:shadow-2xl hover:translate-y-0 landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
-              saved && '!bg-green-500 !text-white hover:!bg-green-600'
-            )}
-          >
-            {saving
-              ? t('common.saving')
-              : saved
-                ? `✓ ${t('settings.settingsSaved')}`
-                : t('settings.saveSettings')
-            }
-          </Button>
-        </div>
+      <div className="lg:sticky lg:top-0 lg:z-50 mb-6 landscape:mb-4">
+        <Button
+          onClick={handleSave}
+          disabled={!hasChanges || saving}
+          icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+          variant={hasChanges ? 'primary' : 'secondary'}
+          size="lg"
+          className={clsx(
+            'w-full shadow-2xl hover:shadow-2xl hover:translate-y-0 landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
+            saved && '!bg-green-500 !text-white hover:!bg-green-600'
+          )}
+        >
+          {saving
+            ? t('common.saving')
+            : saved
+              ? `✓ ${t('settings.settingsSaved')}`
+              : t('settings.saveSettings')
+          }
+        </Button>
       </div>
 
       {/* Main Settings - Simplified */}
