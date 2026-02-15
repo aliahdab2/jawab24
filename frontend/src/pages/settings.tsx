@@ -405,7 +405,7 @@ const SettingsPage: NextPageWithLayout = () => {
       />
 
       {/* Sticky Save Button - Sticks below title when scrolling */}
-      <div className="lg:sticky lg:top-0 lg:z-50 mb-6 landscape:mb-4">
+      <div className="lg:sticky lg:top-0 lg:z-40 mb-6 landscape:mb-4">
         <Button
           onClick={handleSave}
           disabled={!hasChanges || saving}
