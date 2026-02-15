@@ -243,6 +243,42 @@ describe('Validation Schemas', () => {
             expect(resultString.success).toBe(false);
             expect(resultNumber.success).toBe(false);
         });
+
+        it('should accept valid IANA timezone', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                timezone: 'Asia/Riyadh',
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('should accept various valid timezones', () => {
+            const validTimezones = ['America/New_York', 'Europe/London', 'Asia/Dubai', 'UTC', 'Pacific/Auckland'];
+            for (const tz of validTimezones) {
+                const result = UpdateSettingsSchema.safeParse({ timezone: tz });
+                expect(result.success).toBe(true);
+            }
+        });
+
+        it('should reject invalid timezone string', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                timezone: 'Invalid/Timezone',
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should reject empty timezone string', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                timezone: '',
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should reject timezone exceeding max length', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                timezone: 'A'.repeat(101),
+            });
+            expect(result.success).toBe(false);
+        });
     });
 
     describe('PaginationSchema', () => {

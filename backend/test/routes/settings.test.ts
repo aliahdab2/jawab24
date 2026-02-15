@@ -574,6 +574,77 @@ describe('Settings Routes', () => {
             expect(response.statusCode).toBe(401);
         });
 
+        it('should update timezone with valid IANA timezone', async () => {
+            const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
+
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_123',
+                facebookId: 'fb_123',
+            });
+
+            vi.mocked(settingsService.updateSettings).mockResolvedValue({
+                id: 'settings_123',
+                userId: 'user_123',
+                dashboardLanguage: 'ar',
+                defaultReplyLanguage: 'ar',
+                supportedLanguages: ['en', 'ar'],
+                autoDetectLanguage: true,
+                aiEnabled: true,
+                aiModel: 'gpt-4o-mini',
+                commentReplyMode: 'public',
+                commentsAutoReply: true,
+                messagesAutoReply: true,
+                dualReplyNudge: null,
+                businessHoursOnly: true,
+                businessHoursStart: '09:00',
+                businessHoursEnd: '18:00',
+                timezone: 'America/New_York',
+                awayMessage: null,
+                greetingMessage: null,
+                replyDelay: 0,
+            });
+
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: {
+                    authorization: 'Bearer valid_token',
+                },
+                payload: {
+                    timezone: 'America/New_York',
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            expect(body.timezone).toBe('America/New_York');
+        });
+
+        it('should reject invalid timezone', async () => {
+            const { authService } = await import('../../src/services/auth');
+
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_123',
+                facebookId: 'fb_123',
+            });
+
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: {
+                    authorization: 'Bearer valid_token',
+                },
+                payload: {
+                    timezone: 'Not/A/Real/Timezone',
+                },
+            });
+
+            expect(response.statusCode).toBe(400);
+            const body = JSON.parse(response.body);
+            expect(body.error).toBe('Invalid request');
+        });
+
         it('should validate reply delay range', async () => {
             const { authService } = await import('../../src/services/auth');
 
