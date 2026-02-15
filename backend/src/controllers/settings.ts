@@ -116,7 +116,8 @@ export class SettingsController {
                     // C. AND we are in 'auto' mode (single changed sourceLang)
                     
                     const isTargetEmpty = !result[targetLang];
-                    const isTargetUnchanged = updateMulti[targetLang] === current[targetLang];
+                    // If target is not in updateMulti at all, consider it unchanged (so it's a candidate for auto-sync)
+                    const isTargetUnchanged = updateMulti[targetLang] === undefined || updateMulti[targetLang] === current[targetLang];
 
                     if (isTargetEmpty || isTargetUnchanged) {
                         try {

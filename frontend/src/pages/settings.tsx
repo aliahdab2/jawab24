@@ -325,7 +325,14 @@ const SettingsPage: NextPageWithLayout = () => {
           setLanguage(settings.dashboardLanguage as 'ar' | 'en');
       }
 
-      await settingsApi.update(settings);
+      const response = await settingsApi.update(settings);
+      const data = response.data;
+      if (data) {
+        setSettings(prev => ({
+          ...prev,
+          ...data
+        }));
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
