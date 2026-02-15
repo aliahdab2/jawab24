@@ -6,6 +6,17 @@ import { UserSettings, UpdateSettingsDTO } from '../types';
 // Re-export for backward compatibility
 export type { UserSettings, UpdateSettingsDTO };
 
+/** Default messages used as send-time fallback when all stored values are empty */
+const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
+    ar: 'شكراً لتواصلك معنا! نحن حالياً خارج أوقات العمل، وسنرد عليك في أقرب وقت ممكن.',
+    en: 'Thanks for your message! We\'re currently away and will get back to you as soon as possible.',
+};
+
+const DEFAULT_GREETING_MESSAGE: Record<string, string> = {
+    ar: 'أهلاً بك! كيف يمكنني مساعدتك؟',
+    en: 'Welcome! How can I help you?',
+};
+
 export class SettingsService {
     /**
      * Get user settings, creating default settings if they don't exist
@@ -98,12 +109,12 @@ export class SettingsService {
         const userSettings = await this.getSettings(userId);
         const preferred = this.resolveLanguage(userSettings, detectedLanguage);
 
-        // Try the preferred language from JSONB first, then fall back
+        // Try the preferred language from JSONB first, then other language, then default
         const multi = userSettings.awayMessageMulti || {};
         const primary = multi[preferred];
         const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
-        
-        return primary || fallback || userSettings.awayMessage || null;
+
+        return primary || fallback || userSettings.awayMessage || DEFAULT_AWAY_MESSAGE[preferred] || DEFAULT_AWAY_MESSAGE['en'];
     }
 
     /**
@@ -117,11 +128,12 @@ export class SettingsService {
         const userSettings = await this.getSettings(userId);
         const preferred = this.resolveLanguage(userSettings, detectedLanguage);
 
+        // Try the preferred language from JSONB first, then other language, then default
         const multi = userSettings.greetingMessageMulti || {};
         const primary = multi[preferred];
         const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
 
-        return primary || fallback || userSettings.greetingMessage || null;
+        return primary || fallback || userSettings.greetingMessage || DEFAULT_GREETING_MESSAGE[preferred] || DEFAULT_GREETING_MESSAGE['en'];
     }
 
     /**

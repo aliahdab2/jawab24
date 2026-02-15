@@ -85,23 +85,26 @@ export class SettingsController {
                 }
 
                 // 2. If 1 language changed
-                let sourceLang = changedKeys[0];
-                let sourceText = result[sourceLang];
+                const sourceLang = changedKeys[0];
+                const sourceText = result[sourceLang];
 
-                // --- Special Case: Reset to Auto ---
-                // If the user cleared a field, they might want to "reset" it to auto-translation
-                // from the remaining language.
+                // --- Special Case: Field Cleared ---
+                // Clear the language the user emptied. If that language was the
+                // source for auto-translations, also clear those translations
+                // (they derived from it and no longer make sense).
+                // Manually-set languages are preserved.
+                // Send-time fallback in settingsService handles defaults.
                 if (!sourceText) {
-                    const otherLangs = contentKeys.filter(lang => lang !== sourceLang && result[lang]);
-                    if (otherLangs.length === 1) {
-                        // Found exactly one candidate to translate FROM
-                        sourceLang = otherLangs[0];
-                        sourceText = result[sourceLang];
-                    } else {
-                        // No clear source to translate from after reset
-                        result.sourceLang = sourceLang;
-                        return result;
+                    const currentSourceLang = current.sourceLang;
+                    if (currentSourceLang === sourceLang) {
+                        // Cleared language was the translation source → clear derived translations too
+                        for (const lang of contentKeys) {
+                            result[lang] = '';
+                        }
                     }
+                    // Otherwise: only the cleared language is emptied (already in result via merge)
+                    result.sourceLang = sourceLang;
+                    return result;
                 }
                 
                 result.sourceLang = sourceLang;
