@@ -389,11 +389,9 @@ This section documents known issues, technical debt, and production readiness ga
 
 ### Performance & Cost
 
-4. **No rate limiting on auto-translation**
-   - Status: Every settings save triggers OpenAI API call
-   - Impact: User spamming save button can rack up API costs
-   - Files: Settings page, translation API endpoint
-   - Risk: Cost abuse, API quota exhaustion
+4. **~~No rate limiting on auto-translation~~ — ALREADY PROTECTED**
+   - Backend `handleSmartTranslation()` compares update vs current DB values — only translates when text actually changed
+   - Frontend save button is disabled during save (`disabled={!hasChanges || saving}`) — prevents double-clicks
 
 ### Code Quality
 
