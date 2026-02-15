@@ -398,8 +398,15 @@ const SettingsPage: NextPageWithLayout = () => {
 
   return (
     <>
-      {/* Sticky Save Button - Always Visible */}
-      <div className="lg:sticky lg:top-0 lg:z-50 -mx-4 px-4 -mt-4 pt-4 pb-3 mb-4 bg-surface-50/95 backdrop-blur-md border-b border-surface-200/50 md:-mx-8 md:px-8 md:-mt-8 md:pt-8 lg:-mx-16 lg:px-16 lg:-mt-10 lg:pt-10 xl:-mx-20 xl:px-20">
+      {/* Header with Global Context */}
+      <PageHeader
+        title={t('settings.title')}
+        description={t('settings.pageContext')}
+        className="landscape:mb-4 landscape:py-2"
+      />
+
+      {/* Sticky Save Button - Sticks below title when scrolling */}
+      <div className="lg:sticky lg:top-0 lg:z-50 -mx-4 px-4 pt-4 pb-3 mb-4 bg-surface-50/95 backdrop-blur-md border-b border-surface-200/50 md:-mx-8 md:px-8 md:pt-4 lg:-mx-16 lg:px-16 lg:pt-4 xl:-mx-20 xl:px-20">
         <div className="max-w-[1600px] mx-auto">
           <Button
             onClick={handleSave}
@@ -421,13 +428,6 @@ const SettingsPage: NextPageWithLayout = () => {
           </Button>
         </div>
       </div>
-
-      {/* Header with Global Context */}
-      <PageHeader
-        title={t('settings.title')}
-        description={t('settings.pageContext')}
-        className="landscape:mb-4 landscape:py-2"
-      />
 
       {/* Main Settings - Simplified */}
       <div className="space-y-6 landscape:space-y-4 mb-8 landscape:mb-4">
