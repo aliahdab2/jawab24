@@ -246,11 +246,15 @@ const SettingsPage: NextPageWithLayout = () => {
     messageEscalationMinutes: 30,
     handoffPauseDurationMinutes: 30,
   });
+  const [initialSettings, setInitialSettings] = useState(settings);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [showDelayInfo, setShowDelayInfo] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Check if settings have changed
+  const hasChanges = JSON.stringify(settings) !== JSON.stringify(initialSettings);
 
   // Update current time every minute for real-time status badge
   useEffect(() => {
@@ -274,32 +278,35 @@ const SettingsPage: NextPageWithLayout = () => {
         return;
       }
 
-      setSettings(prev => ({
-        ...prev,
-        dashboardLanguage: data.dashboardLanguage || prev.dashboardLanguage,
-        defaultReplyLanguage: data.defaultReplyLanguage || prev.defaultReplyLanguage,
-        autoDetectLanguage: data.autoDetectLanguage ?? prev.autoDetectLanguage,
-        aiEnabled: data.aiEnabled ?? prev.aiEnabled,
-        aiModel: data.aiModel || prev.aiModel,
-        commentReplyMode: data.commentReplyMode || prev.commentReplyMode,
-        commentsAutoReply: data.commentsAutoReply ?? prev.commentsAutoReply,
-        messagesAutoReply: data.messagesAutoReply ?? prev.messagesAutoReply,
-        businessHoursOnly: data.businessHoursOnly ?? prev.businessHoursOnly,
-        businessHoursStart: data.businessHoursStart || prev.businessHoursStart,
-        businessHoursEnd: data.businessHoursEnd || prev.businessHoursEnd,
+      const newSettings = {
+        dashboardLanguage: data.dashboardLanguage || language,
+        defaultReplyLanguage: data.defaultReplyLanguage || 'ar',
+        autoDetectLanguage: data.autoDetectLanguage ?? true,
+        aiEnabled: data.aiEnabled ?? true,
+        aiModel: data.aiModel || 'gpt-4o-mini',
+        commentReplyMode: data.commentReplyMode || 'public',
+        commentsAutoReply: data.commentsAutoReply ?? true,
+        messagesAutoReply: data.messagesAutoReply ?? true,
+        businessHoursOnly: data.businessHoursOnly ?? false,
+        businessHoursStart: data.businessHoursStart || '09:00',
+        businessHoursEnd: data.businessHoursEnd || '18:00',
         // JSONB fields
-        awayMessageMulti: data.awayMessageMulti || prev.awayMessageMulti || {},
-        greetingMessageMulti: data.greetingMessageMulti || prev.greetingMessageMulti || {},
-        dualReplyNudgeMulti: data.dualReplyNudgeMulti || prev.dualReplyNudgeMulti || {},
+        awayMessageMulti: data.awayMessageMulti || {},
+        greetingMessageMulti: data.greetingMessageMulti || {},
+        dualReplyNudgeMulti: data.dualReplyNudgeMulti || {},
         // Legacy
         awayMessage: data.awayMessage || '',
         greetingMessage: data.greetingMessage || '',
-        replyDelay: data.replyDelay ?? prev.replyDelay,
+        replyDelay: data.replyDelay ?? 0,
         dualReplyNudge: data.dualReplyNudge || '',
-        commentEscalationMinutes: data.commentEscalationMinutes ?? prev.commentEscalationMinutes,
-        messageEscalationMinutes: data.messageEscalationMinutes ?? prev.messageEscalationMinutes,
-        handoffPauseDurationMinutes: data.handoffPauseDurationMinutes ?? prev.handoffPauseDurationMinutes,
-      }));
+        commentEscalationMinutes: data.commentEscalationMinutes ?? 60,
+        messageEscalationMinutes: data.messageEscalationMinutes ?? 30,
+        handoffPauseDurationMinutes: data.handoffPauseDurationMinutes ?? 30,
+        notificationsEnabled: data.notificationsEnabled ?? true,
+        pushNotifications: data.pushNotifications ?? true,
+      };
+      setSettings(newSettings);
+      setInitialSettings(newSettings);
     } catch (error) {
       console.error('Failed to fetch settings:', error);
     } finally {
@@ -328,13 +335,25 @@ const SettingsPage: NextPageWithLayout = () => {
       const response = await settingsApi.update(settings);
       const data = response.data;
       if (data) {
-        setSettings(prev => ({
-          ...prev,
+        const updatedSettings = {
+          ...settings,
           ...data
-        }));
+        };
+        setSettings(updatedSettings);
+        setInitialSettings(updatedSettings);
       }
+
+      // Show language change confirmation
+      if (settings.dashboardLanguage && settings.dashboardLanguage !== initialSettings.dashboardLanguage) {
+        const langKey = settings.dashboardLanguage === 'ar'
+          ? 'settings.languageChangedToArabic'
+          : 'settings.languageChangedToEnglish';
+        toast.success(t(langKey as TranslationKey));
+      }
+
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      toast.success(t('settings.settingsSaved'));
+      setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       console.error('Failed to save settings:', error);
       toast.error(t('common.error'));
@@ -387,23 +406,35 @@ const SettingsPage: NextPageWithLayout = () => {
 
   return (
     <>
+      {/* Sticky Save Button - Always Visible */}
+      <div className="sticky top-0 z-50 -mx-4 px-4 -mt-4 pt-4 pb-3 mb-4 bg-surface-50/95 backdrop-blur-md border-b border-surface-200/50 md:-mx-8 md:px-8 md:-mt-8 md:pt-8 lg:-mx-16 lg:px-16 lg:-mt-10 lg:pt-10 xl:-mx-20 xl:px-20">
+        <div className="max-w-[1600px] mx-auto">
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            variant={hasChanges ? 'primary' : 'secondary'}
+            size="lg"
+            className={clsx(
+              'w-full shadow-2xl hover:shadow-2xl hover:translate-y-0 landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
+              saved && '!bg-green-500 !text-white hover:!bg-green-600'
+            )}
+          >
+            {saving
+              ? t('common.saving')
+              : saved
+                ? `✓ ${t('settings.settingsSaved')}`
+                : t('settings.saveSettings')
+            }
+          </Button>
+        </div>
+      </div>
+
       {/* Header with Global Context */}
       <PageHeader
         title={t('settings.title')}
         description={t('settings.pageContext')}
         className="landscape:mb-4 landscape:py-2"
-        action={
-          <Button
-            onClick={handleSave}
-            loading={saving}
-            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            variant={saved ? 'secondary' : 'primary'}
-            size="lg"
-            className="shadow-md hover:shadow-md hover:translate-y-0 landscape:py-2 landscape:text-sm landscape:h-10"
-          >
-            {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
-          </Button>
-        }
       />
 
       {/* Main Settings - Simplified */}
@@ -427,9 +458,11 @@ const SettingsPage: NextPageWithLayout = () => {
                 onClick={async () => {
                   const newSettings = { ...settings, dashboardLanguage: 'ar' as const };
                   setSettings(newSettings);
+                  setInitialSettings(newSettings);
                   try {
                      await settingsApi.update(newSettings);
                      setLanguage('ar');
+                     toast.success(t('settings.languageChangedToArabic'));
                   } catch {
                      toast.error(t('common.error'));
                   }
@@ -439,15 +472,17 @@ const SettingsPage: NextPageWithLayout = () => {
                   : 'text-surface-600 hover:text-surface-900'
                   }`}
               >
-                العربية
+                🇸🇦 العربية
               </button>
               <button
                 onClick={async () => {
                   const newSettings = { ...settings, dashboardLanguage: 'en' as const };
                   setSettings(newSettings);
+                  setInitialSettings(newSettings);
                   try {
                      await settingsApi.update(newSettings);
                      setLanguage('en');
+                     toast.success(t('settings.languageChangedToEnglish'));
                   } catch {
                      toast.error(t('common.error'));
                   }
@@ -457,7 +492,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   : 'text-surface-600 hover:text-surface-900'
                   }`}
               >
-                English
+                🇬🇧 English
               </button>
             </div>
           </div>

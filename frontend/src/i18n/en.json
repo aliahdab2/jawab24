@@ -521,6 +521,8 @@
   "settings.translationSuccess": "Translation completed!",
   "settings.translationFailed": "Translation failed. Please try again.",
   "settings.bilingualTip": "💡 Tip: Write in one language, then auto-translate to reach all customers",
+  "settings.languageChangedToArabic": "تم التغيير إلى 🇸🇦 العربية",
+  "settings.languageChangedToEnglish": "Language changed to 🇬🇧 English",
   "time.dShort": "d",
   "time.hShort": "h",
   "time.mShort": "m",

@@ -517,6 +517,8 @@
   "settings.translationSuccess": "تمت الترجمة بنجاح!",
   "settings.translationFailed": "فشلت الترجمة. يرجى المحاولة مرة أخرى.",
   "settings.bilingualTip": "💡 نصيحة: اكتب بلغة واحدة، ثم ترجم تلقائيًا للوصول إلى جميع العملاء",
+  "settings.languageChangedToArabic": "تم التغيير إلى 🇸🇦 العربية",
+  "settings.languageChangedToEnglish": "Language changed to 🇬🇧 English",
   "time.dShort": "ي",
   "time.hShort": "س",
   "time.mShort": "د",
