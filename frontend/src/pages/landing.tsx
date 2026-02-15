@@ -334,6 +334,15 @@ export default function LandingPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Shopify Floating Icon - Circular SVG matching others */}
+                  <div className="absolute -start-4 sm:-start-8 top-2/3 animate-float-rotate z-10">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-emerald-500/20 border-b-2 border-emerald-100">
+                      <div className="w-full h-full rounded-full bg-[#96bf48] flex items-center justify-center relative">
+                        <ShoppingBag className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -425,6 +434,7 @@ export default function LandingPage() {
                     className="w-full h-auto"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-brand-900/20 to-transparent"></div>
+                  
                 </div>
                 {/* Decorative Elements */}
                 <div className="absolute -top-5 sm:-top-10 -end-5 sm:-end-10 w-16 sm:w-32 h-16 sm:h-32 bg-accent-100 rounded-full -z-10 blur-xl sm:blur-2xl"></div>
