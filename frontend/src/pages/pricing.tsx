@@ -473,10 +473,10 @@ const PricingPage: NextPageWithLayout = () => {
 
         {/* Page title */}
         <div className="text-center px-4 pt-6 sm:pt-10 md:pt-12">
-          <h1 className="text-2xl md:text-3xl font-bold text-surface-900 tracking-tight">
+          <h1 className="text-3xl sm:text-5xl font-display font-bold text-surface-900 leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
-          <p className="text-sm md:text-base text-surface-500 mt-2 max-w-lg mx-auto">
+          <p className="text-base sm:text-xl text-surface-500 leading-relaxed mt-4 mb-8 max-w-xl mx-auto">
             {t('pricing.tryFullService')}
           </p>
         </div>

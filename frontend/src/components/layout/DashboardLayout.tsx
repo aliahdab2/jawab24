@@ -115,14 +115,14 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
         {isCleanLayout ? (
           <nav className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe px-safe-landscape">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex items-center justify-between h-16 sm:h-20">
+              <div className="flex items-center justify-between h-16">
                 {/* Logo - matches landing page */}
                 <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
                   <BrandLogo
                     variant="main"
-                    className="w-10 h-10 sm:w-12 sm:h-12 transition-transform group-hover:rotate-6 flex-shrink-0"
+                    className="w-10 h-10 transition-transform group-hover:rotate-6 flex-shrink-0"
                   />
-                  <span className="font-display font-bold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+                  <span className="font-display font-bold text-xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
                 </Link>
 
                 {/* Actions - matches landing page */}
@@ -145,7 +145,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                     </Link>
                   ) : (
                     <Link href="/login?redirect=%2Fdashboard">
-                      <button className="font-bold border-none bg-surface-100 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 text-surface-700 rounded-xl hover:bg-surface-200 transition-all">
+                      <button className="font-bold border-none px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 text-brand-600 rounded-lg hover:bg-brand-50 transition-all">
                         {t('landing.nav.login' as TranslationKey)}
                       </button>
                     </Link>
