@@ -12,11 +12,6 @@ const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
     en: 'Thanks for your message! We\'re currently away and will get back to you as soon as possible.',
 };
 
-const DEFAULT_GREETING_MESSAGE: Record<string, string> = {
-    ar: 'أهلاً بك! كيف يمكنني مساعدتك؟',
-    en: 'Welcome! How can I help you?',
-};
-
 export class SettingsService {
     /**
      * Get user settings, creating default settings if they don't exist
@@ -128,12 +123,13 @@ export class SettingsService {
         const userSettings = await this.getSettings(userId);
         const preferred = this.resolveLanguage(userSettings, detectedLanguage);
 
-        // Try the preferred language from JSONB first, then other language, then default
+        // Greeting is only sent if the user explicitly set one — no default fallback.
+        // (Unlike away message, greeting is optional and shouldn't be unsolicited.)
         const multi = userSettings.greetingMessageMulti || {};
         const primary = multi[preferred];
         const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
 
-        return primary || fallback || userSettings.greetingMessage || DEFAULT_GREETING_MESSAGE[preferred] || DEFAULT_GREETING_MESSAGE['en'];
+        return primary || fallback || userSettings.greetingMessage || null;
     }
 
     /**

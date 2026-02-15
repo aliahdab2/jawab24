@@ -169,6 +169,30 @@ describe('SettingsController Auto-Translation Logic', () => {
         }));
     });
 
+    it('should clear ALL translations when the SOURCE language is cleared', async () => {
+        // Scenario: AR was the source, EN was auto-translated from AR.
+        // User clears AR → both AR and EN should be cleared (EN derived from AR).
+        mockRequest.body = {
+            greetingMessageMulti: {
+                ar: '', // Cleared by user — AR is the source
+                en: 'Hello' // Unchanged (was auto-translated from AR)
+            }
+        };
+
+        await settingsController.update(mockRequest, mockReply);
+
+        // Since AR was the sourceLang and AR was cleared, all derived translations
+        // (EN) must also be cleared. Otherwise the old EN translation would persist
+        // and look like it was manually typed.
+        expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+            greetingMessageMulti: expect.objectContaining({
+                ar: '',
+                en: '',
+                sourceLang: 'ar'
+            })
+        }));
+    });
+
     it('should handle Away Message similarly', async () => {
         mockRequest.body = {
             awayMessageMulti: {
