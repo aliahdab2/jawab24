@@ -227,12 +227,11 @@ export const settings = pgTable('settings', {
     awayMessage: text('away_message'),
     greetingMessage: text('greeting_message'),
     // Multilingual messages (added 2026-02-14)
-    awayMessageAr: text('away_message_ar'),
-    awayMessageEn: text('away_message_en'),
-    greetingMessageAr: text('greeting_message_ar'),
-    greetingMessageEn: text('greeting_message_en'),
-    awayMessageSourceLang: varchar('away_message_source_lang', { length: 10 }).$type<'ar' | 'en' | null>(),
-    greetingMessageSourceLang: varchar('greeting_message_source_lang', { length: 10 }).$type<'ar' | 'en' | null>(),
+    // Multilingual Messages (JSONB)
+    // Structure: { [lang: string]: string, sourceLang: string }
+    greetingMessageMulti: jsonb('greeting_message_multi').default({}),
+    awayMessageMulti: jsonb('away_message_multi').default({}),
+    dualReplyNudgeMulti: jsonb('dual_reply_nudge_multi').default({}),
     replyDelay: integer('reply_delay').default(0), // seconds
     // SLA escalation thresholds (minutes) - auto-flag unreplied items as needsAttention
     commentEscalationMinutes: integer('comment_escalation_minutes').default(60),

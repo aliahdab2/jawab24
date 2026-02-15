@@ -98,9 +98,11 @@ export class SettingsService {
         const userSettings = await this.getSettings(userId);
         const preferred = this.resolveLanguage(userSettings, detectedLanguage);
 
-        // Try the preferred language first, then fall back to the other
-        const primary = preferred === 'ar' ? userSettings.awayMessageAr : userSettings.awayMessageEn;
-        const fallback = preferred === 'ar' ? userSettings.awayMessageEn : userSettings.awayMessageAr;
+        // Try the preferred language from JSONB first, then fall back
+        const multi = userSettings.awayMessageMulti || {};
+        const primary = multi[preferred];
+        const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
+        
         return primary || fallback || userSettings.awayMessage || null;
     }
 
@@ -115,8 +117,10 @@ export class SettingsService {
         const userSettings = await this.getSettings(userId);
         const preferred = this.resolveLanguage(userSettings, detectedLanguage);
 
-        const primary = preferred === 'ar' ? userSettings.greetingMessageAr : userSettings.greetingMessageEn;
-        const fallback = preferred === 'ar' ? userSettings.greetingMessageEn : userSettings.greetingMessageAr;
+        const multi = userSettings.greetingMessageMulti || {};
+        const primary = multi[preferred];
+        const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
+
         return primary || fallback || userSettings.greetingMessage || null;
     }
 
@@ -179,13 +183,10 @@ export class SettingsService {
             businessHoursEnd: record.businessHoursEnd || '18:00',
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
-            // Multilingual messages
-            awayMessageAr: record.awayMessageAr ?? null,
-            awayMessageEn: record.awayMessageEn ?? null,
-            greetingMessageAr: record.greetingMessageAr ?? null,
-            greetingMessageEn: record.greetingMessageEn ?? null,
-            awayMessageSourceLang: record.awayMessageSourceLang ?? null,
-            greetingMessageSourceLang: record.greetingMessageSourceLang ?? null,
+            // Multilingual messages (JSONB)
+            awayMessageMulti: record.awayMessageMulti as Record<string, string> || {},
+            greetingMessageMulti: record.greetingMessageMulti as Record<string, string> || {},
+            dualReplyNudgeMulti: record.dualReplyNudgeMulti as Record<string, string> || {},
             replyDelay: record.replyDelay ?? 0,
             commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,

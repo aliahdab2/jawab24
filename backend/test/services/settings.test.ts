@@ -26,6 +26,36 @@ vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
 }));
 
+const baseSettings = {
+    id: 'settings_123',
+    userId: 'user_123',
+    dashboardLanguage: 'ar',
+    defaultReplyLanguage: 'ar',
+    supportedLanguages: ['en', 'ar'],
+    autoDetectLanguage: true,
+    aiEnabled: true,
+    aiModel: 'gpt-4o-mini',
+    commentReplyMode: 'public' as const,
+    commentsAutoReply: true,
+    messagesAutoReply: true,
+    dualReplyNudge: '',
+    businessHoursOnly: false,
+    businessHoursStart: '09:00',
+    businessHoursEnd: '18:00',
+    awayMessage: null,
+    greetingMessage: null,
+    awayMessageMulti: {},
+    greetingMessageMulti: {},
+    dualReplyNudgeMulti: {},
+    replyDelay: 0,
+    commentEscalationMinutes: 60,
+    messageEscalationMinutes: 30,
+    handoffPauseDurationMinutes: 30,
+    notificationsEnabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+};
+
 describe('Settings Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -36,28 +66,9 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
+                ...baseSettings,
                 commentEscalationMinutes: 90,
                 messageEscalationMinutes: 15,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -75,31 +86,13 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_456',
+                ...baseSettings,
                 userId: 'user_456',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
                 commentEscalationMinutes: null,
                 messageEscalationMinutes: null,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
-            vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings as any);
 
             const result = await settingsService.getSettings('user_456');
 
@@ -113,26 +106,8 @@ describe('Settings Service', () => {
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(null as any);
 
             const mockReturning = vi.fn().mockResolvedValue([{
-                id: 'new_settings',
+                ...baseSettings,
                 userId: 'new_user',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             }]);
 
             const mockValues = vi.fn().mockReturnValue({ returning: mockReturning });
@@ -150,26 +125,11 @@ describe('Settings Service', () => {
             const dualNudge = 'تم الرد في رسالة خاصة 📥';
 
             const mockSettings = {
-                id: 'settings_dual',
+                ...baseSettings,
                 userId: 'user_dual',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'dual',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
+                commentReplyMode: 'dual' as const,
                 dualReplyNudge: dualNudge,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                dualReplyNudgeMulti: { ar: dualNudge },
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -187,26 +147,7 @@ describe('Settings Service', () => {
 
             // Mock getSettings to return existing settings
             const existingSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                ...baseSettings,
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(existingSettings);
@@ -234,26 +175,7 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const existingSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                ...baseSettings,
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(existingSettings);
@@ -287,26 +209,7 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                ...baseSettings,
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -320,26 +223,8 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
+                ...baseSettings,
                 commentsAutoReply: false,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -357,26 +242,8 @@ describe('Settings Service', () => {
             vi.spyOn(Date.prototype, 'getMinutes').mockReturnValue(0);
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
+                ...baseSettings,
                 businessHoursOnly: true,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -394,26 +261,8 @@ describe('Settings Service', () => {
             vi.spyOn(Date.prototype, 'getMinutes').mockReturnValue(0);
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
+                ...baseSettings,
                 businessHoursOnly: true,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -429,26 +278,7 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                ...baseSettings,
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -462,26 +292,8 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
+                ...baseSettings,
                 messagesAutoReply: false,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -497,26 +309,8 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
+                ...baseSettings,
                 awayMessage: 'We are currently away',
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -530,26 +324,7 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                ...baseSettings,
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -565,26 +340,8 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
+                ...baseSettings,
                 greetingMessage: 'Welcome! How can we help?',
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -600,26 +357,8 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
+                ...baseSettings,
                 replyDelay: 30,
-                createdAt: new Date(),
-                updatedAt: new Date(),
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
@@ -633,26 +372,7 @@ describe('Settings Service', () => {
             const { db } = await import('../../src/db');
 
             const mockSettings = {
-                id: 'settings_123',
-                userId: 'user_123',
-                dashboardLanguage: 'ar',
-                defaultReplyLanguage: 'ar',
-                supportedLanguages: ['en', 'ar'],
-                autoDetectLanguage: true,
-                aiEnabled: true,
-                aiModel: 'gpt-4o-mini',
-                commentReplyMode: 'public',
-                commentsAutoReply: true,
-                messagesAutoReply: true,
-                dualReplyNudge: null,
-                businessHoursOnly: false,
-                businessHoursStart: '09:00',
-                businessHoursEnd: '18:00',
-                awayMessage: null,
-                greetingMessage: null,
-                replyDelay: 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                ...baseSettings,
             };
 
             vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);

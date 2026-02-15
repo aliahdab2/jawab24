@@ -79,6 +79,7 @@ vi.mock('../../src/services/settings', () => ({
         getReplyDelay: vi.fn(),
         getSettings: vi.fn(),
         getAwayMessage: vi.fn(),
+        getGreetingMessage: vi.fn(),
     },
 }));
 

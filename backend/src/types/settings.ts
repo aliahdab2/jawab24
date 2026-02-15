@@ -20,15 +20,12 @@ export interface UserSettings {
     businessHoursOnly: boolean;
     businessHoursStart: string;
     businessHoursEnd: string;
-    awayMessage: string | null; // DEPRECATED - use awayMessageAr/awayMessageEn
-    greetingMessage: string | null; // DEPRECATED - use greetingMessageAr/greetingMessageEn
-    // Multilingual messages
-    awayMessageAr?: string | null;
-    awayMessageEn?: string | null;
-    greetingMessageAr?: string | null;
-    greetingMessageEn?: string | null;
-    awayMessageSourceLang?: 'ar' | 'en' | null;
-    greetingMessageSourceLang?: 'ar' | 'en' | null;
+    awayMessage: string | null;
+    greetingMessage: string | null;
+    // Multilingual messages (JSONB)
+    greetingMessageMulti?: Record<string, string> | null;
+    awayMessageMulti?: Record<string, string> | null;
+    dualReplyNudgeMulti?: Record<string, string> | null;
     replyDelay: number;
     commentEscalationMinutes: number;
     messageEscalationMinutes: number;
@@ -50,15 +47,12 @@ export interface UpdateSettingsDTO {
     businessHoursOnly?: boolean;
     businessHoursStart?: string;
     businessHoursEnd?: string;
-    awayMessage?: string | null; // DEPRECATED - use awayMessageAr/awayMessageEn
-    greetingMessage?: string | null; // DEPRECATED - use greetingMessageAr/greetingMessageEn
+    awayMessage?: string | null;
+    greetingMessage?: string | null;
     // Multilingual messages
-    awayMessageAr?: string | null;
-    awayMessageEn?: string | null;
-    greetingMessageAr?: string | null;
-    greetingMessageEn?: string | null;
-    awayMessageSourceLang?: 'ar' | 'en' | null;
-    greetingMessageSourceLang?: 'ar' | 'en' | null;
+    greetingMessageMulti?: Record<string, string> | null;
+    awayMessageMulti?: Record<string, string> | null;
+    dualReplyNudgeMulti?: Record<string, string> | null;
     replyDelay?: number;
     commentEscalationMinutes?: number;
     messageEscalationMinutes?: number;

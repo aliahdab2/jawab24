@@ -3,7 +3,6 @@ import { settingsService } from '../services/settings';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
 import { translateText } from '../services/translation';
-import { detectLanguage } from '../utils/language';
 import type { UpdateSettingsDTO } from '../types/settings';
 
 export class SettingsController {
@@ -52,98 +51,129 @@ export class SettingsController {
 
             const updates = validation.data as UpdateSettingsDTO;
 
-            // Auto-translate greeting message if provided
-            if (updates.greetingMessage) {
-                // If both AR and EN are provided explicitly, skip auto-translation
-                const explicitBoth = updates.greetingMessageAr && updates.greetingMessageEn;
+            // Fetch current settings for comparison
+            const currentSettings = await settingsService.getSettings(userId);
+
+            // --- Smart Auto-Translation Logic (JSONB) ---
+            const supportedLanguages = currentSettings.supportedLanguages || ['ar', 'en'];
+
+            const handleSmartTranslation = async (
+                updateMulti: Record<string, string> | undefined | null,
+                currentMulti: Record<string, string> | undefined | null,
+                fieldName: string
+            ): Promise<Record<string, string>> => {
+                if (!updateMulti) return currentMulti || {};
+
+                // Merge updates into result
+                // We start with current state, but we only apply UPDATES that are actually present
+                const current = currentMulti || {};
+                const result = { ...current, ...updateMulti };
                 
-                if (!explicitBoth) {
-                    const sourceText = updates.greetingMessage;
-                    const detectionResult = detectLanguage(sourceText);
-                    const sourceLang = detectionResult.language === 'ar' ? 'ar' : 'en';
-                    const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
+                // Identify which content keys changed
+                const contentKeys = supportedLanguages;
+                const changedKeys = contentKeys.filter(lang => 
+                    updateMulti[lang] !== undefined && updateMulti[lang] !== current[lang]
+                );
 
-                    try {
-                        // Only translate if the TARGET language is missing
-                        // e.g. if source is AR, and EN is missing -> translate
-                        const targetMissing = targetLang === 'ar' ? !updates.greetingMessageAr : !updates.greetingMessageEn;
+                if (changedKeys.length === 0) return result; // No content changes
 
-                        if (targetMissing) {
-                            const translation = await translateText({
-                                text: sourceText,
-                                sourceLanguage: sourceLang,
-                                targetLanguage: targetLang
-                            });
+                // Logic:
+                // 1. If > 1 language changed simultaneously -> Manual (don't overwrite anything)
+                if (changedKeys.length > 1) {
+                    result.sourceLang = 'manual';
+                    return result;
+                }
 
-                            // Fill missing fields
-                            if (targetLang === 'ar') updates.greetingMessageAr = translation.translatedText;
-                            if (targetLang === 'en') updates.greetingMessageEn = translation.translatedText;
-                        }
+                // 2. If 1 language changed
+                let sourceLang = changedKeys[0];
+                let sourceText = result[sourceLang];
 
-                        // Always ensure source is set if missing
-                        if (sourceLang === 'ar' && !updates.greetingMessageAr) updates.greetingMessageAr = sourceText;
-                        if (sourceLang === 'en' && !updates.greetingMessageEn) updates.greetingMessageEn = sourceText;
-                        
-                        updates.greetingMessageSourceLang = sourceLang;
-                    } catch (error) {
-                        // Fallback: store original in detected language only
-                        if (sourceLang === 'ar' && !updates.greetingMessageAr) updates.greetingMessageAr = sourceText;
-                        if (sourceLang === 'en' && !updates.greetingMessageEn) updates.greetingMessageEn = sourceText;
-                        updates.greetingMessageSourceLang = sourceLang;
-                        request.log.error({ error: String(error) }, 'Translation failed for greeting message');
+                // --- Special Case: Reset to Auto ---
+                // If the user cleared a field, they might want to "reset" it to auto-translation
+                // from the remaining language.
+                if (!sourceText) {
+                    const otherLangs = contentKeys.filter(lang => lang !== sourceLang && result[lang]);
+                    if (otherLangs.length === 1) {
+                        // Found exactly one candidate to translate FROM
+                        sourceLang = otherLangs[0];
+                        sourceText = result[sourceLang];
+                    } else {
+                        // No clear source to translate from after reset
+                        result.sourceLang = sourceLang;
+                        return result;
                     }
                 }
+                
+                result.sourceLang = sourceLang;
+
+                // Iterate over other languages and translate
+                for (const targetLang of supportedLanguages) {
+                    if (targetLang === sourceLang) continue;
+
+                    // We translate if:
+                    // A. Target is empty in result
+                    // B. OR Target is unchanged from current state (frontend sent old value)
+                    // C. AND we are in 'auto' mode (single changed sourceLang)
+                    
+                    const isTargetEmpty = !result[targetLang];
+                    const isTargetUnchanged = updateMulti[targetLang] === current[targetLang];
+
+                    if (isTargetEmpty || isTargetUnchanged) {
+                        try {
+                            const translation = await translateText({
+                                text: sourceText,
+                                sourceLanguage: sourceLang as 'ar' | 'en',
+                                targetLanguage: targetLang as 'ar' | 'en'
+                            });
+                            result[targetLang] = translation.translatedText;
+                        } catch (e) {
+                            request.log.error({ error: String(e) }, `Translation failed for ${fieldName} (${sourceLang}->${targetLang})`);
+                        }
+                    }
+                }
+                
+                return result;
+            };
+
+            // Apply logic for Greeting Message
+            if (updates.greetingMessageMulti) {
+                updates.greetingMessageMulti = await handleSmartTranslation(
+                    updates.greetingMessageMulti,
+                    currentSettings.greetingMessageMulti,
+                    'greetingMessage'
+                );
             }
 
-            // Auto-translate away message if provided
-            if (updates.awayMessage) {
-                // If both AR and EN are provided explicitly, skip auto-translation
-                const explicitBoth = updates.awayMessageAr && updates.awayMessageEn;
-
-                if (!explicitBoth) {
-                    const sourceText = updates.awayMessage;
-                    const detectionResult = detectLanguage(sourceText);
-                    const sourceLang = detectionResult.language === 'ar' ? 'ar' : 'en';
-                    const targetLang = sourceLang === 'ar' ? 'en' : 'ar';
-
-                    try {
-                        // Only translate if the TARGET language is missing
-                        const targetMissing = targetLang === 'ar' ? !updates.awayMessageAr : !updates.awayMessageEn;
-
-                        if (targetMissing) {
-                            const translation = await translateText({
-                                text: sourceText,
-                                sourceLanguage: sourceLang,
-                                targetLanguage: targetLang
-                            });
-
-                            // Fill missing fields
-                            if (targetLang === 'ar') updates.awayMessageAr = translation.translatedText;
-                            if (targetLang === 'en') updates.awayMessageEn = translation.translatedText;
-                        }
-
-                        // Always ensure source is set if missing
-                        if (sourceLang === 'ar' && !updates.awayMessageAr) updates.awayMessageAr = sourceText;
-                        if (sourceLang === 'en' && !updates.awayMessageEn) updates.awayMessageEn = sourceText;
-
-                        updates.awayMessageSourceLang = sourceLang;
-                    } catch (error) {
-                        // Fallback
-                        if (sourceLang === 'ar' && !updates.awayMessageAr) updates.awayMessageAr = sourceText;
-                        if (sourceLang === 'en' && !updates.awayMessageEn) updates.awayMessageEn = sourceText;
-                        updates.awayMessageSourceLang = sourceLang;
-                        request.log.error({ error: String(error) }, 'Translation failed for away message');
-                    }
-                }
+            // Apply logic for Away Message
+            if (updates.awayMessageMulti) {
+                updates.awayMessageMulti = await handleSmartTranslation(
+                    updates.awayMessageMulti,
+                    currentSettings.awayMessageMulti,
+                    'awayMessage'
+                );
+            }
+            
+            // Apply logic for Dual Reply Nudge
+            if (updates.dualReplyNudgeMulti) {
+                updates.dualReplyNudgeMulti = await handleSmartTranslation(
+                    updates.dualReplyNudgeMulti,
+                    currentSettings.dualReplyNudgeMulti,
+                    'dualReplyNudge'
+                );
             }
 
             // If specific fields are provided but legacy `awayMessage` is missing/empty, 
-            // backfill it for compatibility (prefer EN, then AR)
-            if (!updates.awayMessage && (updates.awayMessageEn || updates.awayMessageAr)) {
-                updates.awayMessage = updates.awayMessageEn || updates.awayMessageAr;
+            // backfill it for compatibility (prefer EN, then AR from Multi)
+            if (!updates.awayMessage && updates.awayMessageMulti) {
+                updates.awayMessage = updates.awayMessageMulti['en'] || updates.awayMessageMulti['ar'];
             }
-            if (!updates.greetingMessage && (updates.greetingMessageEn || updates.greetingMessageAr)) {
-                updates.greetingMessage = updates.greetingMessageEn || updates.greetingMessageAr;
+            if (!updates.greetingMessage && updates.greetingMessageMulti) {
+                updates.greetingMessage = updates.greetingMessageMulti['en'] || updates.greetingMessageMulti['ar'];
+            }
+            
+            // Legacy dualReplyNudge compatibility
+            if (!updates.dualReplyNudge && updates.dualReplyNudgeMulti) {
+                updates.dualReplyNudge = updates.dualReplyNudgeMulti['en'] || updates.dualReplyNudgeMulti['ar'];
             }
 
             const settings = await settingsService.updateSettings(userId, updates);

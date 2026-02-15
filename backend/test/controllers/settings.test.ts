@@ -19,6 +19,13 @@ import { settingsController } from '../../src/controllers/settings';
 import { settingsService } from '../../src/services/settings';
 import { validateSchema } from '../../src/utils/validation';
 
+// Mock translation service
+vi.mock('../../src/services/translation', () => ({
+    translateText: vi.fn(),
+}));
+
+import { translateText } from '../../src/services/translation';
+
 describe('SettingsController', () => {
     let mockRequest: Partial<FastifyRequest>;
     let mockReply: Partial<FastifyReply>;
@@ -84,6 +91,7 @@ describe('SettingsController', () => {
             const updatedSettings = { dashboardLanguage: 'en', aiEnabled: false, replyDelay: 10 };
 
             vi.mocked(validateSchema).mockReturnValue({ success: true, data: updates });
+            vi.mocked(settingsService.getSettings).mockResolvedValue({ supportedLanguages: ['ar', 'en'] } as any);
             vi.mocked(settingsService.updateSettings).mockResolvedValue(updatedSettings as any);
 
             (mockRequest as any).body = updates;
@@ -91,6 +99,41 @@ describe('SettingsController', () => {
 
             expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', updates);
             expect(mockReply.send).toHaveBeenCalledWith(updatedSettings);
+        });
+
+        it('should auto-translate when updating single language in JSONB field', async () => {
+            // Setup: Current settings have empty greeting. User updates 'ar'.
+            const currentSettings = { 
+                greetingMessageMulti: { ar: "", en: "" },
+                supportedLanguages: ['ar', 'en'] 
+            };
+            const updates = { 
+                greetingMessageMulti: { ar: "مرحبا", en: "" } // User types in Arabic
+            };
+            
+            vi.mocked(validateSchema).mockReturnValue({ success: true, data: updates });
+            vi.mocked(settingsService.getSettings).mockResolvedValue(currentSettings as any);
+            vi.mocked(translateText).mockResolvedValue({ translatedText: "Hello", detectedLanguage: "ar", tokensUsed: 10 });
+            vi.mocked(settingsService.updateSettings).mockImplementation(async (id, data) => data as any); // Return what was passed
+
+            (mockRequest as any).body = updates;
+            await settingsController.update(mockRequest as any, mockReply as any);
+
+            // Expect translateText to be called
+            expect(translateText).toHaveBeenCalledWith({
+                text: "مرحبا",
+                sourceLanguage: "ar",
+                targetLanguage: "en"
+            });
+
+            // Expect updateSettings to be called with enriched data
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                greetingMessageMulti: expect.objectContaining({
+                    ar: "مرحبا",
+                    en: "Hello", // Auto-translated!
+                    sourceLang: "ar"
+                })
+            }));
         });
 
         it('should return 400 when validation fails', async () => {
@@ -118,6 +161,7 @@ describe('SettingsController', () => {
 
         it('should return 500 when service throws during update', async () => {
             vi.mocked(validateSchema).mockReturnValue({ success: true, data: { aiEnabled: false } });
+            vi.mocked(settingsService.getSettings).mockResolvedValue({} as any);
             vi.mocked(settingsService.updateSettings).mockRejectedValue(new Error('DB write failed'));
 
             await settingsController.update(mockRequest as any, mockReply as any);

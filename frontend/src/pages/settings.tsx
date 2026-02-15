@@ -233,12 +233,13 @@ const SettingsPage: NextPageWithLayout = () => {
     businessHoursOnly: false,
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
+    // Multilingual support
+    awayMessageMulti: {} as Record<string, string>,
+    greetingMessageMulti: {} as Record<string, string>,
+    dualReplyNudgeMulti: {} as Record<string, string>,
+    // Legacy fallbacks (to be removed eventually)
     awayMessage: '',
-    awayMessageAr: '',
-    awayMessageEn: '',
     greetingMessage: '',
-    greetingMessageAr: '',
-    greetingMessageEn: '',
     replyDelay: 0,
     dualReplyNudge: '',
     commentEscalationMinutes: 60,
@@ -286,12 +287,13 @@ const SettingsPage: NextPageWithLayout = () => {
         businessHoursOnly: data.businessHoursOnly ?? prev.businessHoursOnly,
         businessHoursStart: data.businessHoursStart || prev.businessHoursStart,
         businessHoursEnd: data.businessHoursEnd || prev.businessHoursEnd,
+        // JSONB fields
+        awayMessageMulti: data.awayMessageMulti || prev.awayMessageMulti || {},
+        greetingMessageMulti: data.greetingMessageMulti || prev.greetingMessageMulti || {},
+        dualReplyNudgeMulti: data.dualReplyNudgeMulti || prev.dualReplyNudgeMulti || {},
+        // Legacy
         awayMessage: data.awayMessage || '',
-        awayMessageAr: data.awayMessageAr || '',
-        awayMessageEn: data.awayMessageEn || '',
         greetingMessage: data.greetingMessage || '',
-        greetingMessageAr: data.greetingMessageAr || '',
-        greetingMessageEn: data.greetingMessageEn || '',
         replyDelay: data.replyDelay ?? prev.replyDelay,
         dualReplyNudge: data.dualReplyNudge || '',
         commentEscalationMinutes: data.commentEscalationMinutes ?? prev.commentEscalationMinutes,
@@ -564,11 +566,17 @@ const SettingsPage: NextPageWithLayout = () => {
                   <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
                   <p className="text-xs text-brand-700 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
                   <Input
-                    value={dualNudgeInput}
+                    value={settings.dualReplyNudgeMulti?.[settings.dashboardLanguage] || ''}
                     onChange={(e) => {
                       const value = e.target.value.slice(0, 80);
+                      const currentLang = settings.dashboardLanguage;
                       setSettings({
                         ...settings,
+                        dualReplyNudgeMulti: {
+                            ...settings.dualReplyNudgeMulti,
+                            [currentLang]: value
+                        },
+                        // Keep legacy field updated for now
                         dualReplyNudge: value
                       });
                     }}
@@ -659,10 +667,12 @@ const SettingsPage: NextPageWithLayout = () => {
                               const updates: Record<string, unknown> = { businessHoursOnly: !settings.businessHoursOnly };
                               if (!settings.businessHoursOnly) {
                                 const defaultMsg = t('settings.awayMessageDefault' as TranslationKey);
-                                if (settings.dashboardLanguage === 'ar' && !settings.awayMessageAr) {
-                                  updates.awayMessageAr = defaultMsg;
-                                } else if (settings.dashboardLanguage !== 'ar' && !settings.awayMessageEn) {
-                                  updates.awayMessageEn = defaultMsg;
+                                const currentLang = settings.dashboardLanguage;
+                                if (!settings.awayMessageMulti?.[currentLang]) {
+                                  updates.awayMessageMulti = {
+                                    ...settings.awayMessageMulti,
+                                    [currentLang]: defaultMsg
+                                  };
                                 }
                               }
                               setSettings({ ...settings, ...updates });
@@ -687,10 +697,12 @@ const SettingsPage: NextPageWithLayout = () => {
                   // Auto-fill default away message when enabling business hours for the first time
                   if (enabled) {
                     const defaultMsg = t('settings.awayMessageDefault' as TranslationKey);
-                    if (settings.dashboardLanguage === 'ar' && !settings.awayMessageAr) {
-                      updates.awayMessageAr = defaultMsg;
-                    } else if (settings.dashboardLanguage !== 'ar' && !settings.awayMessageEn) {
-                      updates.awayMessageEn = defaultMsg;
+                    const currentLang = settings.dashboardLanguage;
+                    if (!settings.awayMessageMulti?.[currentLang]) {
+                        updates.awayMessageMulti = {
+                            ...settings.awayMessageMulti,
+                            [currentLang]: defaultMsg
+                        };
                     }
                   }
                   setSettings({ ...settings, ...updates });
@@ -803,25 +815,30 @@ const SettingsPage: NextPageWithLayout = () => {
                     </div>
                     
                     {/* Multilingual Textarea */}
-                    {settings.dashboardLanguage === 'ar' ? (
-                      <textarea
-                        disabled={!settings.businessHoursOnly}
-                        className="input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm rtl"
-                        placeholder="رسالة خارج أوقات العمل بالعربية..."
-                        dir="rtl"
-                        value={settings.awayMessageAr || ''}
-                        onChange={(e) => setSettings({ ...settings, awayMessageAr: e.target.value })}
-                      />
-                    ) : (
-                      <textarea
-                        disabled={!settings.businessHoursOnly}
-                        className="input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm ltr"
-                        placeholder="Away message in English..."
-                        dir="ltr"
-                        value={settings.awayMessageEn || ''}
-                        onChange={(e) => setSettings({ ...settings, awayMessageEn: e.target.value })}
-                      />
-                    )}
+                    {(() => {
+                      const currentLang = settings.dashboardLanguage;
+                      const value = settings.awayMessageMulti?.[currentLang] || '';
+                      
+                      return (
+                        <textarea
+                          disabled={!settings.businessHoursOnly}
+                          className={`input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm ${currentLang === 'ar' ? 'rtl' : 'ltr'}`}
+                          placeholder={currentLang === 'ar' ? "رسالة خارج أوقات العمل بالعربية..." : "Away message..."}
+                          dir={currentLang === 'ar' ? "rtl" : "ltr"}
+                          value={value}
+                          onChange={(e) => {
+                            const newValue = e.target.value;
+                            setSettings({
+                              ...settings,
+                              awayMessageMulti: {
+                                ...settings.awayMessageMulti,
+                                [currentLang]: newValue
+                              }
+                            });
+                          }}
+                        />
+                      );
+                    })()}
                     
                     <p className="text-[10px] text-surface-400 mt-2 text-center">
                        {t('settings.awayMessage.autoTranslateHint')}
@@ -1033,12 +1050,34 @@ const SettingsPage: NextPageWithLayout = () => {
                   <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.greetingMessage.desc')}</p>
                 </div>
               </div>
-              <textarea
-                className="input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl italic italic-arabic"
-                placeholder={t('settings.greetingMessagePlaceholder')}
-                value={settings.greetingMessage}
-                onChange={(e) => setSettings({ ...settings, greetingMessage: e.target.value })}
-              />
+            {/* Multilingual Textarea */}
+            {(() => {
+                const currentLang = settings.dashboardLanguage;
+                const value = settings.greetingMessageMulti?.[currentLang] || '';
+                
+                return (
+                  <textarea
+                    className={`input min-h-[100px] landscape:min-h-[60px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-4 rounded-2xl ${currentLang === 'ar' ? 'italic italic-arabic rtl' : 'ltr'}`}
+                    placeholder={currentLang === 'ar' ? "رسالة الترحيب بالعربية..." : "Greeting message..."}
+                    dir={currentLang === 'ar' ? "rtl" : "ltr"}
+                    value={value}
+                    onChange={(e) => {
+                        const newValue = e.target.value;
+                        setSettings({
+                            ...settings,
+                            greetingMessageMulti: {
+                                ...settings.greetingMessageMulti,
+                                [currentLang]: newValue
+                            }
+                        });
+                    }}
+                  />
+                );
+            })()}
+            
+            <p className="text-[10px] text-surface-400 mt-2 text-center">
+               {t('settings.awayMessage.autoTranslateHint')}
+            </p>
             </Card>
 
           </div>

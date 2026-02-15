@@ -153,6 +153,24 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Message already replied' };
             }
 
+            // 9b. Send Greeting Message (if new conversation)
+            if (isNew) {
+                const detectedLang = detectLanguageCode(messageText);
+                const greeting = await settingsService.getGreetingMessage(userId, detectedLang);
+                if (greeting) {
+                    try {
+                        await adapter.sendReply(page, senderId, greeting);
+                        // We store this as an outgoing message but don't mark the incoming message as replied
+                        // because we want the AI to still process the user's actual question/intent.
+                        await messagesService.storeOutgoingMessage(page.id, senderId, greeting, 'template');
+                        this.logger.info(`[${platform}] Sent greeting message`, { senderId });
+                    } catch (error) {
+                        this.logger.error(`[${platform}] Failed to send greeting message`, { error: String(error) });
+                        // Continue to AI reply even if greeting fails
+                    }
+                }
+            }
+
             // 10. Reply delay
             const replyDelay = await settingsService.getReplyDelay(userId);
             if (replyDelay > 0) {
