@@ -169,9 +169,9 @@ describe('SettingsController Auto-Translation Logic', () => {
         }));
     });
 
-    it('should clear ALL translations when the SOURCE language is cleared', async () => {
+    it('should reset ALL languages to defaults when the SOURCE language is cleared', async () => {
         // Scenario: AR was the source, EN was auto-translated from AR.
-        // User clears AR → both AR and EN should be cleared (EN derived from AR).
+        // User clears AR → both AR and EN should reset to defaults.
         mockRequest.body = {
             greetingMessageMulti: {
                 ar: '', // Cleared by user — AR is the source
@@ -181,14 +181,13 @@ describe('SettingsController Auto-Translation Logic', () => {
 
         await settingsController.update(mockRequest, mockReply);
 
-        // Since AR was the sourceLang and AR was cleared, all derived translations
-        // (EN) must also be cleared. Otherwise the old EN translation would persist
-        // and look like it was manually typed.
+        // Since AR was the sourceLang and AR was cleared, all languages
+        // reset to their defaults (not empty strings).
         expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
-                ar: '',
-                en: '',
-                sourceLang: 'ar'
+                ar: 'أهلاً بك! كيف يمكنني مساعدتك؟',
+                en: 'Welcome! How can I help you?',
+                sourceLang: 'default'
             })
         }));
     });
@@ -210,5 +209,160 @@ describe('SettingsController Auto-Translation Logic', () => {
                 sourceLang: 'ar'
             })
         }));
+    });
+
+    // =========================================================
+    // Clear-field scenarios (user removes message text)
+    // =========================================================
+
+    describe('Clear-field behavior', () => {
+        it('should reset source AR away message AND its EN translation to defaults', async () => {
+            // Setup: AR was source, EN was auto-translated
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                awayMessageMulti: {
+                    ar: 'نحن مغلقون الآن',
+                    en: 'We are closed now',
+                    sourceLang: 'ar'
+                }
+            });
+
+            // User clears AR (the source)
+            mockRequest.body = {
+                awayMessageMulti: {
+                    ar: '',
+                    en: 'We are closed now' // Unchanged
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            // Both reset to defaults — EN was derived from AR
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                awayMessageMulti: expect.objectContaining({
+                    ar: 'شكراً لتواصلك معنا! نحن حالياً خارج أوقات العمل، وسنرد عليك في أقرب وقت ممكن.',
+                    en: 'Thanks for your message! We\'re currently away and will get back to you as soon as possible.',
+                    sourceLang: 'default'
+                })
+            }));
+            // No translation API call needed
+            expect(translationService.translateText).not.toHaveBeenCalled();
+        });
+
+        it('should NOT clear source AR when translated EN is cleared', async () => {
+            // Setup: AR was source, EN was auto-translated
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                awayMessageMulti: {
+                    ar: 'نحن مغلقون الآن',
+                    en: 'We are closed now',
+                    sourceLang: 'ar'
+                }
+            });
+
+            // User clears EN (the translation, not the source)
+            mockRequest.body = {
+                awayMessageMulti: {
+                    ar: 'نحن مغلقون الآن', // Unchanged
+                    en: ''
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            // Only EN cleared, AR (source) preserved
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                awayMessageMulti: expect.objectContaining({
+                    ar: 'نحن مغلقون الآن',
+                    en: '',
+                    sourceLang: 'en'
+                })
+            }));
+            expect(translationService.translateText).not.toHaveBeenCalled();
+        });
+
+        it('should reset dualReplyNudge source and translation to defaults', async () => {
+            // Setup: AR nudge was source, EN was auto-translated
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                dualReplyNudgeMulti: {
+                    ar: 'تم إرسال التفاصيل برسالة خاصة 📩',
+                    en: 'Details sent via private message 📩',
+                    sourceLang: 'ar'
+                }
+            });
+
+            // User clears AR (the source)
+            mockRequest.body = {
+                dualReplyNudgeMulti: {
+                    ar: '',
+                    en: 'Details sent via private message 📩' // Unchanged
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            // Both reset to defaults
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                dualReplyNudgeMulti: expect.objectContaining({
+                    ar: 'تم إرسال التفاصيل برسالة خاصة 📩',
+                    en: 'Details sent in a private message 📩',
+                    sourceLang: 'default'
+                })
+            }));
+        });
+
+        it('should clear both when sourceLang is undefined (legacy data)', async () => {
+            // Old data before multi-language: no sourceLang set
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                awayMessageMulti: {
+                    ar: 'رسالة قديمة',
+                    en: 'Old message'
+                    // sourceLang is undefined
+                }
+            });
+
+            // User clears AR
+            mockRequest.body = {
+                awayMessageMulti: {
+                    ar: '',
+                    en: 'Old message' // Unchanged
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            // sourceLang is undefined, so currentSourceLang !== sourceLang ('ar')
+            // Only AR is cleared, EN preserved (conservative — don't delete data)
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                awayMessageMulti: expect.objectContaining({
+                    ar: '',
+                    en: 'Old message',
+                    sourceLang: 'ar'
+                })
+            }));
+        });
+
+        it('should not call translation API when clearing source (resets to defaults)', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحبا',
+                    en: 'Hello',
+                    sourceLang: 'ar'
+                }
+            });
+
+            // Clear the source
+            mockRequest.body = {
+                greetingMessageMulti: { ar: '', en: 'Hello' }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            // Must NOT call translation API — defaults are used, no translation needed
+            expect(translationService.translateText).not.toHaveBeenCalled();
+        });
     });
 });

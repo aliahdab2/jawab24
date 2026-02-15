@@ -5,6 +5,22 @@ import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
 import { translateText } from '../services/translation';
 import type { UpdateSettingsDTO } from '../types/settings';
 
+/** Default messages restored when the source language is cleared (matches frontend i18n) */
+const DEFAULT_MESSAGES: Record<string, Record<string, string>> = {
+    awayMessage: {
+        ar: 'شكراً لتواصلك معنا! نحن حالياً خارج أوقات العمل، وسنرد عليك في أقرب وقت ممكن.',
+        en: 'Thanks for your message! We\'re currently away and will get back to you as soon as possible.',
+    },
+    greetingMessage: {
+        ar: 'أهلاً بك! كيف يمكنني مساعدتك؟',
+        en: 'Welcome! How can I help you?',
+    },
+    dualReplyNudge: {
+        ar: 'تم إرسال التفاصيل برسالة خاصة 📩',
+        en: 'Details sent in a private message 📩',
+    },
+};
+
 export class SettingsController {
     /**
      * Get user settings
@@ -89,21 +105,22 @@ export class SettingsController {
                 const sourceText = result[sourceLang];
 
                 // --- Special Case: Field Cleared ---
-                // Clear the language the user emptied. If that language was the
-                // source for auto-translations, also clear those translations
-                // (they derived from it and no longer make sense).
-                // Manually-set languages are preserved.
-                // Send-time fallback in settingsService handles defaults.
+                // If the source language is cleared, reset ALL languages to defaults
+                // (the translations derived from it and no longer make sense).
+                // If a non-source (translated) language is cleared, only clear that one.
                 if (!sourceText) {
                     const currentSourceLang = current.sourceLang;
                     if (currentSourceLang === sourceLang) {
-                        // Cleared language was the translation source → clear derived translations too
+                        // Cleared language was the translation source → reset to defaults
+                        const defaults = DEFAULT_MESSAGES[fieldName];
                         for (const lang of contentKeys) {
-                            result[lang] = '';
+                            result[lang] = defaults?.[lang] || '';
                         }
+                        result.sourceLang = 'default';
+                    } else {
+                        // Non-source cleared → only that language emptied (already in result via merge)
+                        result.sourceLang = sourceLang;
                     }
-                    // Otherwise: only the cleared language is emptied (already in result via merge)
-                    result.sourceLang = sourceLang;
                     return result;
                 }
                 
