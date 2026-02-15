@@ -462,7 +462,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   : 'text-surface-600 hover:text-surface-900'
                   }`}
               >
-                🇸🇦 العربية
+                🇸🇦 {t('common.langArabic')}
               </button>
               <button
                 onClick={async () => {
@@ -483,7 +483,7 @@ const SettingsPage: NextPageWithLayout = () => {
                   : 'text-surface-600 hover:text-surface-900'
                   }`}
               >
-                🇬🇧 English
+                🇬🇧 {t('common.langEnglish')}
               </button>
             </div>
           </div>

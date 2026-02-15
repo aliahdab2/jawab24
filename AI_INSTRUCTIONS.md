@@ -398,14 +398,10 @@ This section documents known issues, technical debt, and production readiness ga
 ### Code Quality
 
 5. **Remaining hardcoded strings (language conditionals)**
-   - Status: Violates Translation Rule #5
-   - Locations:
-     - Language toggle buttons: `{language === 'ar' ? 'English' : 'العربية'}` in DashboardLayout, PublicLayout, login, landing pages
-     - Checkmark symbols: `✓` in comments.tsx, messages.tsx, landing.tsx
-     - Separator: `&middot;` in Shopify section
-     - Default section title: `'قسم جديد' : 'New Section'` in KnowledgeBaseModal
-   - Files: See Section 5 violations list above
-   - Action Needed: Convert to `t('translation.key')` pattern
+   - Status: Mostly fixed — language toggle buttons, settings tabs, multilingual textarea, and WhatsApp messages now use `t()` keys
+   - Remaining minor items:
+     - Checkmark symbols: `✓` in comments.tsx, messages.tsx, landing.tsx (decorative, not language-dependent)
+     - Separator: `&middot;` in Shopify section (punctuation, not language-dependent)
 
 ### Security
 

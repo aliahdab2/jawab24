@@ -7,8 +7,6 @@ import { useLandscape } from '@/hooks/useLandscape';
 
 // Configure your WhatsApp number here (with country code, no + or spaces)
 const WHATSAPP_NUMBER = '46700224720'; // Sweden +46
-const DEFAULT_MESSAGE_AR = 'مرحباً، أحتاج مساعدة في استخدام Jawab24';
-const DEFAULT_MESSAGE_EN = 'Hello, I need help using Jawab24';
 
 export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const { t, language } = useTranslation();
@@ -53,7 +51,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
 
   const handleWhatsAppClick = () => {
     const message = encodeURIComponent(
-      language === 'ar' ? DEFAULT_MESSAGE_AR : DEFAULT_MESSAGE_EN
+      t('common.whatsappDefaultMessage')
     );
     window.open(
       `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`,

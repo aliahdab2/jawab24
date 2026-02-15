@@ -74,6 +74,9 @@ const missingInEN = arKeys.filter(k => !enSet.has(k));
 const BILINGUAL_KEYS = new Set([
   // Language switch button shows the OTHER language's name
   'common.switchLanguage',
+  // Language labels always display in their native script
+  'common.langArabic',
+  'common.langEnglish',
   // Arabic placeholder examples shown in EN UI
   'templates.arabicPlaceholder',
   // Mixed-language keyword examples

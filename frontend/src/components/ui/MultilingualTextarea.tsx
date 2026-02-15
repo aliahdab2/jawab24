@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import { useTranslation } from '@/i18n/hooks';
+import { useTranslation, type TranslationKey } from '@/i18n';
+
+const LANG_LABEL_KEY: Record<'ar' | 'en', TranslationKey> = {
+  ar: 'common.langArabic',
+  en: 'common.langEnglish',
+};
 
 interface MultilingualTextareaProps {
   valueAr: string;
@@ -45,7 +50,7 @@ export function MultilingualTextarea({
                 : 'text-surface-600 hover:text-surface-900'
             )}
           >
-            العربية
+            {t('common.langArabic')}
           </button>
           <button
             type="button"
@@ -57,7 +62,7 @@ export function MultilingualTextarea({
                 : 'text-surface-600 hover:text-surface-900'
             )}
           >
-            English
+            {t('common.langEnglish')}
           </button>
         </div>
 
@@ -69,7 +74,7 @@ export function MultilingualTextarea({
             disabled={translating}
             className="text-xs text-brand-600 hover:text-brand-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
           >
-            {translating ? t('common.loading') : `↗ ${t('settings.autoTranslateTo')} ${otherLang === 'ar' ? 'العربية' : 'English'}`}
+            {translating ? t('common.loading') : `↗ ${t('settings.autoTranslateTo')} ${t(LANG_LABEL_KEY[otherLang])}`}
           </button>
         )}
       </div>
