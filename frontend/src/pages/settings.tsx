@@ -978,7 +978,7 @@ const SettingsPage: NextPageWithLayout = () => {
                       )}
                     >
                       {settings.replyDelay === opt.value && <Check className="w-3.5 h-3.5" />}
-                      {opt.value} = {opt.label}
+                      {opt.label} {opt.value > 0 && <span className="opacity-60">({opt.value}{t('settings.seconds')})</span>}
                     </button>
                   ))}
                 </div>
