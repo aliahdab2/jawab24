@@ -229,9 +229,9 @@ export const settings = pgTable('settings', {
     // Multilingual messages (added 2026-02-14)
     // Multilingual Messages (JSONB)
     // Structure: { [lang: string]: string, sourceLang: string }
-    greetingMessageMulti: jsonb('greeting_message_multi').default({}),
-    awayMessageMulti: jsonb('away_message_multi').default({}),
-    dualReplyNudgeMulti: jsonb('dual_reply_nudge_multi').default({}),
+    greetingMessageMulti: jsonb('greeting_message_multi').$type<Record<string, string>>().default({}),
+    awayMessageMulti: jsonb('away_message_multi').$type<Record<string, string>>().default({}),
+    dualReplyNudgeMulti: jsonb('dual_reply_nudge_multi').$type<Record<string, string>>().default({}),
     replyDelay: integer('reply_delay').default(0), // seconds
     // SLA escalation thresholds (minutes) - auto-flag unreplied items as needsAttention
     commentEscalationMinutes: integer('comment_escalation_minutes').default(60),

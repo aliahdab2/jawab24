@@ -184,9 +184,9 @@ export class SettingsService {
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
             // Multilingual messages (JSONB)
-            awayMessageMulti: record.awayMessageMulti as Record<string, string> || {},
-            greetingMessageMulti: record.greetingMessageMulti as Record<string, string> || {},
-            dualReplyNudgeMulti: record.dualReplyNudgeMulti as Record<string, string> || {},
+            awayMessageMulti: record.awayMessageMulti || {},
+            greetingMessageMulti: record.greetingMessageMulti || {},
+            dualReplyNudgeMulti: record.dualReplyNudgeMulti || {},
             replyDelay: record.replyDelay ?? 0,
             commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,
