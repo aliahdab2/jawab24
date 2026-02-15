@@ -415,6 +415,13 @@ echo "7️⃣  E2E tests..."
 # Clean frontend build (E2E rebuilds via Playwright webServer)
 rm -rf frontend/.next
 
+# Kill any existing process on port 3001 so Playwright can start its own server
+if lsof -ti:3001 > /dev/null 2>&1; then
+    echo "   Stopping existing process on port 3001..."
+    kill $(lsof -ti:3001) 2>/dev/null || true
+    sleep 1
+fi
+
 # Ensure Playwright browsers are installed
 echo "   Ensuring Playwright browsers are available..."
 if [ "$CI" = "true" ]; then
