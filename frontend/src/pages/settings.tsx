@@ -404,7 +404,7 @@ const SettingsPage: NextPageWithLayout = () => {
   return (
     <>
       {/* Sticky Save Button - Always Visible */}
-      <div className="sticky top-0 z-50 -mx-4 px-4 -mt-4 pt-4 pb-3 mb-4 bg-surface-50/95 backdrop-blur-md border-b border-surface-200/50 md:-mx-8 md:px-8 md:-mt-8 md:pt-8 lg:-mx-16 lg:px-16 lg:-mt-10 lg:pt-10 xl:-mx-20 xl:px-20">
+      <div className="lg:sticky lg:top-0 lg:z-50 -mx-4 px-4 -mt-4 pt-4 pb-3 mb-4 bg-surface-50/95 backdrop-blur-md border-b border-surface-200/50 md:-mx-8 md:px-8 md:-mt-8 md:pt-8 lg:-mx-16 lg:px-16 lg:-mt-10 lg:pt-10 xl:-mx-20 xl:px-20">
         <div className="max-w-[1600px] mx-auto">
           <Button
             onClick={handleSave}
@@ -455,11 +455,12 @@ const SettingsPage: NextPageWithLayout = () => {
                 onClick={async () => {
                   const newSettings = { ...settings, dashboardLanguage: 'ar' as const };
                   setSettings(newSettings);
-                  setInitialSettings(newSettings);
+                  // Update only the language field in initialSettings to mark it as saved
+                  // without losing track of other pending changes
+                  setInitialSettings({ ...initialSettings, dashboardLanguage: 'ar' });
                   try {
                      await settingsApi.update(newSettings);
                      setLanguage('ar');
-                     toast.success(t('settings.languageChanged'));
                   } catch {
                      toast.error(t('common.error'));
                   }
@@ -475,11 +476,12 @@ const SettingsPage: NextPageWithLayout = () => {
                 onClick={async () => {
                   const newSettings = { ...settings, dashboardLanguage: 'en' as const };
                   setSettings(newSettings);
-                  setInitialSettings(newSettings);
+                  // Update only the language field in initialSettings to mark it as saved
+                  // without losing track of other pending changes
+                  setInitialSettings({ ...initialSettings, dashboardLanguage: 'en' });
                   try {
                      await settingsApi.update(newSettings);
                      setLanguage('en');
-                     toast.success(t('settings.languageChanged'));
                   } catch {
                      toast.error(t('common.error'));
                   }
