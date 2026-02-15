@@ -639,13 +639,9 @@ const SettingsPage: NextPageWithLayout = () => {
                       });
                     }}
                     placeholder={(() => {
-                      const currentLang = settings.dashboardLanguage;
-                      const otherLang = currentLang === 'ar' ? 'en' : 'ar';
+                      const otherLang = settings.dashboardLanguage === 'ar' ? 'en' : 'ar';
                       const otherValue = settings.dualReplyNudgeMulti?.[otherLang] || '';
-
-                      return otherValue
-                        ? (currentLang === 'ar' ? `English: ${otherValue}` : `العربية: ${otherValue}`)
-                        : t('settings.publicReplyPlaceholder');
+                      return otherValue || t('settings.publicReplyPlaceholder');
                     })()}
                     className="bg-white !py-2.5"
                     maxLength={80}
@@ -905,9 +901,7 @@ const SettingsPage: NextPageWithLayout = () => {
                       const otherValue = settings.awayMessageMulti?.[otherLang] || '';
 
                       // Smart placeholder: show other language translation if exists, otherwise show default
-                      const placeholder = otherValue
-                        ? (currentLang === 'ar' ? `English: ${otherValue}` : `العربية: ${otherValue}`)
-                        : (currentLang === 'ar' ? "رسالة خارج أوقات العمل بالعربية..." : "Away message...");
+                      const placeholder = otherValue || t('settings.awayMessagePlaceholder');
 
                       return (
                         <textarea
@@ -1148,9 +1142,7 @@ const SettingsPage: NextPageWithLayout = () => {
                 const otherValue = settings.greetingMessageMulti?.[otherLang] || '';
 
                 // Smart placeholder: show other language translation if exists, otherwise show default
-                const placeholder = otherValue
-                  ? (currentLang === 'ar' ? `English: ${otherValue}` : `العربية: ${otherValue}`)
-                  : (currentLang === 'ar' ? "رسالة الترحيب بالعربية..." : "Greeting message...");
+                const placeholder = otherValue || t('settings.greetingMessagePlaceholder');
 
                 return (
                   <textarea
