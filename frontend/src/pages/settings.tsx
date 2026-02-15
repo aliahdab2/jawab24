@@ -638,7 +638,15 @@ const SettingsPage: NextPageWithLayout = () => {
                         dualReplyNudge: value
                       });
                     }}
-                    placeholder={t('settings.publicReplyPlaceholder')}
+                    placeholder={(() => {
+                      const currentLang = settings.dashboardLanguage;
+                      const otherLang = currentLang === 'ar' ? 'en' : 'ar';
+                      const otherValue = settings.dualReplyNudgeMulti?.[otherLang] || '';
+
+                      return otherValue
+                        ? (currentLang === 'ar' ? `English: ${otherValue}` : `العربية: ${otherValue}`)
+                        : t('settings.publicReplyPlaceholder');
+                    })()}
                     className="bg-white !py-2.5"
                     maxLength={80}
                   />
