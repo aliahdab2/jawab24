@@ -420,7 +420,7 @@ const SettingsPage: NextPageWithLayout = () => {
           {saving
             ? t('common.saving')
             : saved
-              ? `✓ ${t('settings.settingsSaved')}`
+              ? t('settings.settingsSaved')
               : t('settings.saveSettings')
           }
         </Button>
