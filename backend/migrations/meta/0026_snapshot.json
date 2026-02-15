@@ -2576,7 +2576,7 @@
           "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false,
-          "default": "'Asia/Riyadh'"
+          "default": "'Asia/Damascus'"
         },
         "away_message": {
           "name": "away_message",

@@ -103,7 +103,8 @@
       "Bash(npm run dev:*)",
       "Bash(ssh root@137.184.208.182 \"docker ps --format ''table {{.Names}}\\\\t{{.Status}}'' | grep backend\")",
       "Bash(cd /Users/aliahdab/Documents/AutoReply/backend && npm test:*)",
-      "Bash(npx jest --passWithNoTests)"
+      "Bash(npx jest --passWithNoTests)",
+      "WebFetch(domain:medium.com)"
     ]
   }
 }

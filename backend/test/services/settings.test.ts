@@ -42,7 +42,7 @@ const baseSettings = {
     businessHoursOnly: false,
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
-    timezone: 'Asia/Riyadh',
+    timezone: 'Asia/Damascus',
     awayMessage: null,
     greetingMessage: null,
     awayMessageMulti: {},

@@ -205,7 +205,7 @@ export class SettingsService {
             businessHoursOnly: record.businessHoursOnly ?? false,
             businessHoursStart: record.businessHoursStart || '09:00',
             businessHoursEnd: record.businessHoursEnd || '18:00',
-            timezone: record.timezone || 'Asia/Riyadh',
+            timezone: record.timezone || 'Asia/Damascus',
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
             // Multilingual messages (JSONB)

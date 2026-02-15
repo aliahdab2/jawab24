@@ -31,34 +31,6 @@ import { useTranslation, useLanguage, type TranslationKey } from '@/i18n';
 import type { NextPageWithLayout } from './_app';
 import type { Page, ShopifyStore } from '@jawab24/shared';
 
-// Curated timezone list with UTC offset labels
-const timezoneOptions = (() => {
-  const common = [
-    'Asia/Riyadh', 'Asia/Dubai', 'Asia/Kuwait', 'Asia/Bahrain', 'Asia/Qatar',
-    'Africa/Cairo', 'Asia/Amman', 'Asia/Beirut', 'Asia/Baghdad', 'Asia/Muscat',
-    'Europe/Istanbul', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
-    'Europe/Stockholm', 'Europe/Moscow',
-    'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
-    'America/Toronto', 'America/Sao_Paulo',
-    'Asia/Kolkata', 'Asia/Karachi', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Singapore',
-    'Australia/Sydney', 'Pacific/Auckland',
-    'UTC',
-  ];
-  // Always include the browser's timezone
-  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const all = common.includes(browserTz) ? common : [browserTz, ...common];
-  return all.map(tz => {
-    try {
-      const offset = new Intl.DateTimeFormat('en-US', {
-        timeZone: tz, timeZoneName: 'shortOffset',
-      }).formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value || '';
-      return { value: tz, label: `${tz.replace(/_/g, ' ')} (${offset})` };
-    } catch {
-      return { value: tz, label: tz.replace(/_/g, ' ') };
-    }
-  });
-})();
-
 // Simple toggle row component with better design
 function SimpleToggle({
   icon,
@@ -922,25 +894,6 @@ const SettingsPage: NextPageWithLayout = () => {
                       </div>
                     );
                   })()}
-
-                  {/* Timezone Selector */}
-                  <div className="p-4 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 rounded-lg bg-surface-200 text-surface-500 flex items-center justify-center">
-                        <Globe className="w-4 h-4" />
-                      </div>
-                      <div className="text-start">
-                        <h5 className="font-bold text-surface-800 text-sm">{t('settings.timezone')}</h5>
-                        <p className="text-[11px] text-surface-600 font-medium">{t('settings.timezoneDesc')}</p>
-                      </div>
-                    </div>
-                    <Select
-                      value={settings.timezone}
-                      onChange={(val) => setSettings({ ...settings, timezone: val })}
-                      options={timezoneOptions}
-                      disabled={!settings.businessHoursOnly}
-                    />
-                  </div>
 
                   {/* Away Message — nested inside business hours */}
                   <div className="p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">

@@ -1,1 +1,1 @@
-ALTER TABLE "settings" ADD COLUMN "timezone" varchar(100) DEFAULT 'Asia/Riyadh';
+ALTER TABLE "settings" ADD COLUMN "timezone" varchar(100) DEFAULT 'Asia/Damascus';
