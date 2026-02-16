@@ -243,3 +243,71 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         expect(adapter.sendReply).toHaveBeenCalled();
     });
 });
+
+describe('MessageProcessor — Handoff Re-enqueue', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+
+        vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            handoffPauseDurationMinutes: 20,
+        } as any);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+    });
+
+    it('should return handoffDelayMs when handoff is active', async () => {
+        vi.mocked(messagesService.isPaused).mockResolvedValue(true);
+        vi.mocked(messagesService.getRemainingPauseMs).mockResolvedValue(300000); // 5 min remaining
+        const adapter = createMockAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Handoff active');
+        expect(result.handoffDelayMs).toBe(305000); // remaining + 5s buffer
+        expect(messagesService.getRemainingPauseMs).toHaveBeenCalledWith('page-uuid', 'sender-1', 20);
+    });
+
+    it('should use full pause duration when remaining is 0', async () => {
+        vi.mocked(messagesService.isPaused).mockResolvedValue(true);
+        vi.mocked(messagesService.getRemainingPauseMs).mockResolvedValue(0);
+        const adapter = createMockAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.handoffDelayMs).toBe(20 * 60 * 1000); // full 20 min
+    });
+
+    it('should not return handoffDelayMs when handoff is not active', async () => {
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'Hello', createdTime: new Date() } as any,
+        ]);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Hi!',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+        const adapter = createMockAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.handoffDelayMs).toBeUndefined();
+    });
+});

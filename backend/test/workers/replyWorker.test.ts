@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ReplyJobData } from '@jawab24/shared';
+import type { Job } from 'bullmq';
 
 // Mock BullMQ Worker
 const mockWorkerInstance = {
@@ -251,5 +252,172 @@ describe('Reply Worker Job Processing', () => {
 
             expect(result.success).toBe(true);
         });
+    });
+});
+
+describe('Reply Worker — Handoff Re-enqueue', () => {
+    let processJobFn: (job: Job<ReplyJobData>) => Promise<any>;
+    let mockEnqueueMessage: ReturnType<typeof vi.fn>;
+    let mockEnqueueComment: ReturnType<typeof vi.fn>;
+    let mockPipelineRecord: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        vi.resetModules();
+
+        // Import the worker module (triggers module init)
+        await import('../../src/workers/replyWorker');
+
+        // Capture the processJob function passed to BullMQ Worker constructor
+        const { Worker } = await import('bullmq');
+        const workerCalls = vi.mocked(Worker).mock.calls;
+        // startWorker() hasn't been called yet, so we need to call it
+        const module = await import('../../src/workers/replyWorker');
+        module.startWorker();
+
+        const latestCall = vi.mocked(Worker).mock.calls;
+        processJobFn = latestCall[latestCall.length - 1][1] as any;
+
+        // Get mock references
+        const replyQueueModule = await import('../../src/lib/replyQueue');
+        mockEnqueueMessage = vi.mocked(replyQueueModule.enqueueMessage);
+        mockEnqueueComment = vi.mocked(replyQueueModule.enqueueComment);
+
+        const metricsModule = await import('../../src/lib/pipelineMetrics');
+        mockPipelineRecord = vi.mocked(metricsModule.pipelineMetrics.record);
+    });
+
+    function createMockJob(overrides: Partial<ReplyJobData> = {}, jobMeta: Partial<Job<ReplyJobData>> = {}): Job<ReplyJobData> {
+        return {
+            id: 'job-1',
+            attemptsMade: 0,
+            data: {
+                jobType: 'facebook_message',
+                pageId: 'page-1',
+                messageId: 'msg-1',
+                senderId: 'sender-1',
+                text: 'Hello',
+                receivedAt: new Date().toISOString(),
+                ...overrides,
+            },
+            ...jobMeta,
+        } as Job<ReplyJobData>;
+    }
+
+    it('should re-enqueue a message job when handoffDelayMs is returned', async () => {
+        mockReplyService.processMessage.mockResolvedValue({
+            success: false,
+            messageId: 'msg-1',
+            error: 'Handoff active',
+            handoffDelayMs: 120000,
+        });
+
+        const job = createMockJob({ handoffRetries: 0 });
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'facebook_message',
+            pageId: 'page-1',
+            messageId: 'msg-1',
+            senderId: 'sender-1',
+            replyDelay: 120,
+            handoffRetries: 1,
+        }));
+        expect(mockPipelineRecord).toHaveBeenCalledWith('facebook_message', 'handoff_requeued');
+    });
+
+    it('should re-enqueue a comment job when handoffDelayMs is returned', async () => {
+        mockReplyService.processComment.mockResolvedValue({
+            success: false,
+            commentId: 'comment-1',
+            error: 'Handoff active',
+            handoffDelayMs: 60000,
+        });
+
+        const job = createMockJob({
+            jobType: 'facebook_comment',
+            postId: 'post-1',
+            commentId: 'comment-1',
+            handoffRetries: 1,
+        });
+        await processJobFn(job);
+
+        expect(mockEnqueueComment).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'facebook_comment',
+            postId: 'post-1',
+            commentId: 'comment-1',
+            replyDelay: 60,
+            handoffRetries: 2,
+        }));
+        expect(mockPipelineRecord).toHaveBeenCalledWith('facebook_comment', 'handoff_requeued');
+    });
+
+    it('should NOT re-enqueue when handoffRetries reaches MAX_HANDOFF_RETRIES (3)', async () => {
+        mockReplyService.processMessage.mockResolvedValue({
+            success: false,
+            messageId: 'msg-1',
+            error: 'Handoff active',
+            handoffDelayMs: 60000,
+        });
+
+        const job = createMockJob({ handoffRetries: 3 });
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        expect(mockEnqueueComment).not.toHaveBeenCalled();
+    });
+
+    it('should NOT re-enqueue when result has no handoffDelayMs', async () => {
+        mockReplyService.processMessage.mockResolvedValue({
+            success: true,
+            messageId: 'msg-1',
+            replyText: 'Hello!',
+            replyMethod: 'ai',
+        });
+
+        const job = createMockJob();
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        expect(mockEnqueueComment).not.toHaveBeenCalled();
+    });
+
+    it('should increment handoffRetries on each re-enqueue', async () => {
+        mockReplyService.processMessage.mockResolvedValue({
+            success: false,
+            messageId: 'msg-1',
+            error: 'Handoff active',
+            handoffDelayMs: 90000,
+        });
+
+        const job = createMockJob({ handoffRetries: 2 });
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            handoffRetries: 3,
+            replyDelay: 90,
+        }));
+    });
+
+    it('should handle Instagram message re-enqueue', async () => {
+        mockInstagramReplyService.processMessage.mockResolvedValue({
+            success: false,
+            messageId: 'ig-msg-1',
+            error: 'Handoff active',
+            handoffDelayMs: 45000,
+        });
+
+        const job = createMockJob({
+            jobType: 'instagram_message',
+            messageId: 'ig-msg-1',
+            senderId: 'ig-sender-1',
+        });
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'instagram_message',
+            replyDelay: 45,
+            handoffRetries: 1,
+        }));
     });
 });

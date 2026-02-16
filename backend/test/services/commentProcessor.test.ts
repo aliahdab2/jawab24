@@ -219,8 +219,9 @@ describe('CommentProcessor', () => {
         expect(result.error).toBe('Comment already replied');
     });
 
-    it('should skip when handoff is active', async () => {
+    it('should skip when handoff is active and return handoffDelayMs', async () => {
         vi.mocked(messagesService.isPaused).mockResolvedValue(true);
+        vi.mocked(messagesService.getRemainingPauseMs).mockResolvedValue(120000); // 2 min remaining
         const adapter = createMockAdapter();
 
         const result = await commentProcessor.processComment(
@@ -229,6 +230,28 @@ describe('CommentProcessor', () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe('Handoff active');
+        expect(result.handoffDelayMs).toBe(125000); // remaining + 5s buffer
+        expect(messagesService.getRemainingPauseMs).toHaveBeenCalledWith('page-uuid', 'from-1', undefined);
+    });
+
+    it('should use full pause duration as delay when getRemainingPauseMs returns 0', async () => {
+        vi.mocked(messagesService.isPaused).mockResolvedValue(true);
+        vi.mocked(messagesService.getRemainingPauseMs).mockResolvedValue(0);
+        vi.mocked(settingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentsAutoReply: true,
+            handoffPauseDurationMinutes: 15,
+        } as any);
+        const adapter = createMockAdapter();
+
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.handoffDelayMs).toBe(15 * 60 * 1000); // full 15 min
     });
 
     it('should skip handoff check when fromId is missing', async () => {
