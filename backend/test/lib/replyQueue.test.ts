@@ -10,6 +10,7 @@ vi.mock('bullmq', () => {
         getCompletedCount: vi.fn().mockResolvedValue(100),
         getFailedCount: vi.fn().mockResolvedValue(3),
         getDelayedCount: vi.fn().mockResolvedValue(1),
+        getDelayed: vi.fn().mockResolvedValue([]),
     };
     return {
         Queue: vi.fn().mockImplementation(() => mockQueue),
@@ -32,6 +33,7 @@ describe('Reply Queue', () => {
     let enqueueComment: any;
     let enqueueMessage: any;
     let getQueueStats: any;
+    let promoteDelayedJobs: any;
 
     beforeEach(async () => {
         vi.clearAllMocks();
@@ -41,6 +43,7 @@ describe('Reply Queue', () => {
         enqueueComment = module.enqueueComment;
         enqueueMessage = module.enqueueMessage;
         getQueueStats = module.getQueueStats;
+        promoteDelayedJobs = module.promoteDelayedJobs;
     });
 
     describe('Queue Initialization', () => {
@@ -203,6 +206,70 @@ describe('Reply Queue', () => {
                 delayed: 1,
                 total: 8, // waiting + active + delayed
             });
+        });
+    });
+
+    describe('promoteDelayedJobs', () => {
+        it('should promote delayed handoff jobs matching page + sender', async () => {
+            const mockPromote = vi.fn().mockResolvedValue(undefined);
+            replyQueue.getDelayed.mockResolvedValue([
+                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 1 }, promote: mockPromote },
+                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 2 }, promote: mockPromote },
+            ]);
+
+            const count = await promoteDelayedJobs('page-1', 'sender-1');
+
+            expect(count).toBe(2);
+            expect(mockPromote).toHaveBeenCalledTimes(2);
+        });
+
+        it('should NOT promote jobs for a different sender', async () => {
+            const mockPromote = vi.fn();
+            replyQueue.getDelayed.mockResolvedValue([
+                { data: { pageId: 'page-1', senderId: 'sender-other', handoffRetries: 1 }, promote: mockPromote },
+            ]);
+
+            const count = await promoteDelayedJobs('page-1', 'sender-1');
+
+            expect(count).toBe(0);
+            expect(mockPromote).not.toHaveBeenCalled();
+        });
+
+        it('should NOT promote non-handoff delayed jobs (handoffRetries=0 or missing)', async () => {
+            const mockPromote = vi.fn();
+            replyQueue.getDelayed.mockResolvedValue([
+                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 0 }, promote: mockPromote },
+                { data: { pageId: 'page-1', senderId: 'sender-1' }, promote: mockPromote },
+            ]);
+
+            const count = await promoteDelayedJobs('page-1', 'sender-1');
+
+            expect(count).toBe(0);
+            expect(mockPromote).not.toHaveBeenCalled();
+        });
+
+        it('should return 0 when no delayed jobs exist', async () => {
+            replyQueue.getDelayed.mockResolvedValue([]);
+
+            const count = await promoteDelayedJobs('page-1', 'sender-1');
+
+            expect(count).toBe(0);
+        });
+
+        it('should skip jobs where promote() throws and continue with remaining', async () => {
+            const failingPromote = vi.fn().mockRejectedValue(new Error('Job already processed'));
+            const successPromote = vi.fn().mockResolvedValue(undefined);
+            replyQueue.getDelayed.mockResolvedValue([
+                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 1 }, promote: failingPromote },
+                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 2 }, promote: successPromote },
+            ]);
+
+            const count = await promoteDelayedJobs('page-1', 'sender-1');
+
+            // Only the second job succeeded
+            expect(count).toBe(1);
+            expect(failingPromote).toHaveBeenCalledTimes(1);
+            expect(successPromote).toHaveBeenCalledTimes(1);
         });
     });
 });

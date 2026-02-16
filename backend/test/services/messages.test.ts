@@ -704,6 +704,84 @@ describe('MessagesService', () => {
     });
 
     // ───────────────────────────────────────────
+    // getRemainingPauseMs
+    // ───────────────────────────────────────────
+    describe('getRemainingPauseMs', () => {
+        it('should return remaining ms from explicit pause', async () => {
+            const tenMinFromNow = new Date(Date.now() + 10 * 60 * 1000);
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue({
+                id: 'pause-1',
+                pageId: 'page-1',
+                senderId: 'sender-1',
+                pausedUntil: tenMinFromNow,
+                createdAt: new Date(),
+            } as any);
+
+            const remaining = await messagesService.getRemainingPauseMs('page-1', 'sender-1');
+
+            // Should be close to 10 minutes (allow 2s tolerance for test execution)
+            expect(remaining).toBeGreaterThan(9 * 60 * 1000);
+            expect(remaining).toBeLessThanOrEqual(10 * 60 * 1000);
+        });
+
+        it('should return 0 when explicit pause has expired', async () => {
+            const pastDate = new Date(Date.now() - 1000);
+            // getExplicitPause uses gt(pausedUntil, now), so expired pause returns null
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
+
+            const remaining = await messagesService.getRemainingPauseMs('page-1', 'sender-1');
+
+            expect(remaining).toBe(0);
+        });
+
+        it('should fall back to implicit pause from manual reply', async () => {
+            // No explicit pause
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
+            // Manual reply sent 5 minutes ago
+            const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(
+                mockDbRow({ direction: 'outgoing', replyMethod: 'manual', createdAt: fiveMinAgo }) as any
+            );
+
+            // With 15-min pause, 10 min should remain
+            const remaining = await messagesService.getRemainingPauseMs('page-1', 'sender-1', 15);
+
+            expect(remaining).toBeGreaterThan(9 * 60 * 1000);
+            expect(remaining).toBeLessThanOrEqual(10 * 60 * 1000);
+        });
+
+        it('should return 0 when no pause of any kind is active', async () => {
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
+
+            const remaining = await messagesService.getRemainingPauseMs('page-1', 'sender-1');
+
+            expect(remaining).toBe(0);
+        });
+
+        it('should prioritize explicit pause over implicit pause', async () => {
+            // Explicit pause: 2 min remaining
+            const twoMinFromNow = new Date(Date.now() + 2 * 60 * 1000);
+            vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue({
+                id: 'pause-1',
+                pageId: 'page-1',
+                senderId: 'sender-1',
+                pausedUntil: twoMinFromNow,
+                createdAt: new Date(),
+            } as any);
+
+            const remaining = await messagesService.getRemainingPauseMs('page-1', 'sender-1');
+
+            // Should use explicit pause (~2 min), not implicit
+            expect(remaining).toBeGreaterThan(1 * 60 * 1000);
+            expect(remaining).toBeLessThanOrEqual(2 * 60 * 1000);
+            // Should NOT query messages (explicit took precedence)
+            expect(db.query.messages.findFirst).not.toHaveBeenCalled();
+        });
+    });
+
+    // ───────────────────────────────────────────
     // pauseConversation / resumeConversation / getPauseStatus
     // ───────────────────────────────────────────
     describe('pauseConversation', () => {

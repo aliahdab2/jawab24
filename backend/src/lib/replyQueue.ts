@@ -104,6 +104,34 @@ export async function enqueueMessage(data: {
 }
 
 /**
+ * Promote all delayed handoff jobs for a specific page + sender.
+ * Called when the user clicks "Resume Smart Reply" so messages
+ * are processed immediately instead of waiting for the timer.
+ */
+export async function promoteDelayedJobs(pageId: string, senderId: string): Promise<number> {
+    const delayed = await replyQueue.getDelayed();
+    let promoted = 0;
+
+    for (const job of delayed) {
+        if (
+            job.data.pageId === pageId &&
+            job.data.senderId === senderId &&
+            job.data.handoffRetries !== undefined &&
+            job.data.handoffRetries > 0
+        ) {
+            try {
+                await job.promote();
+                promoted++;
+            } catch {
+                // Job may have already been processed or removed — skip it
+            }
+        }
+    }
+
+    return promoted;
+}
+
+/**
  * Get queue statistics for monitoring
  */
 export async function getQueueStats() {

@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ALTER COLUMN "handoff_pause_duration_minutes" SET DEFAULT 15;

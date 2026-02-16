@@ -4,6 +4,7 @@ import { pagesService } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
 import { settingsService } from '../services/settings';
+import { promoteDelayedJobs } from '../lib/replyQueue';
 
 /** Authenticated request with user info */
 interface AuthenticatedRequest extends FastifyRequest {
@@ -235,7 +236,16 @@ export class MessagesController {
             }
 
             await messagesService.resumeConversation(pageId, senderId);
-            return reply.send({ success: true });
+
+            // Promote any delayed handoff jobs so they process immediately
+            let promoted = 0;
+            try {
+                promoted = await promoteDelayedJobs(page.id, senderId);
+            } catch (err) {
+                // Non-critical: resume succeeded, jobs will process when their delay expires
+                request.log.warn({ error: String(err), pageId, senderId }, 'Failed to promote delayed jobs on resume');
+            }
+            return reply.send({ success: true, promotedJobs: promoted });
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error resuming conversation');
             return reply.status(500).send({ error: 'Failed to resume conversation' });
