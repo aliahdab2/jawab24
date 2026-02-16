@@ -63,16 +63,16 @@ function PlanCard({
 
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${isHighlighted
-        ? 'ring-2 ring-brand-500/80 shadow-xl shadow-brand-500/10 md:scale-105 z-10 md:mt-4'
-        : 'border-surface-200 shadow-sm'
+      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${isHighlighted
+        ? 'ring-2 ring-brand-500 shadow-[0_20px_40px_rgba(0,0,0,0.15)] md:scale-105 z-10'
+        : 'border-surface-200 shadow-[0_4px_6px_rgba(0,0,0,0.07)]'
         } ${isCurrentPlan ? 'bg-brand-50/50' : 'bg-white'}`}
     >
-      {/* Popular badge - High-contrast premium look */}
+      {/* Popular badge */}
       {isPopular && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
-          <span className="bg-gradient-to-r from-indigo-600 via-brand-600 to-brand-500 text-white text-[10px] md:text-xs font-extrabold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-xl shadow-brand-500/20 border border-white/20 whitespace-nowrap uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+        <div className="absolute -top-4 start-1/2 -translate-x-1/2 z-20">
+          <span className="bg-gradient-to-r from-blue-500 to-brand-500 text-white text-[13px] font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-[0_4px_8px_rgba(0,0,0,0.2)] whitespace-nowrap uppercase tracking-wider">
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             {t('pricing.popular')}
           </span>
         </div>
@@ -482,26 +482,26 @@ const PricingPage: NextPageWithLayout = () => {
         </div>
 
         {/* Billing interval toggle */}
-        <div className="flex items-center justify-center gap-3 pt-4 pb-2">
+        <div className="flex items-center justify-center gap-3 mb-12">
           <button
             onClick={() => setBillingInterval('month')}
-            className={`px-4 py-2 text-sm font-semibold rounded-full transition-all ${billingInterval === 'month' ? 'bg-brand-600 text-white shadow-md' : 'text-surface-500 hover:text-surface-700'}`}
+            className={`min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-[10px] transition-all duration-200 ${billingInterval === 'month' ? 'bg-brand-600 text-white shadow-md hover:scale-[1.02]' : 'bg-surface-100 text-surface-700 hover:bg-surface-200'}`}
           >
             {t('pricing.monthly')}
           </button>
           <button
             onClick={() => setBillingInterval('year')}
-            className={`px-4 py-2 text-sm font-semibold rounded-full transition-all flex items-center gap-2 ${billingInterval === 'year' ? 'bg-brand-600 text-white shadow-md' : 'text-surface-500 hover:text-surface-700'}`}
+            className={`min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-[10px] transition-all duration-200 flex items-center gap-2 ${billingInterval === 'year' ? 'bg-brand-600 text-white shadow-md hover:scale-[1.02]' : 'bg-surface-100 text-surface-700 hover:bg-surface-200'}`}
           >
             {t('pricing.yearly')}
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${billingInterval === 'year' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-700'}`}>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-500 text-white">
               {t('pricing.savePercent' as TranslationKey)}
             </span>
           </button>
         </div>
 
         {/* Plans Grid - Responsive grid based on count */}
-        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4 md:gap-4 lg:gap-6 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0 pt-4 md:pt-8`}>
+        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'} gap-6 md:gap-6 lg:gap-8 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0`}>
           {activePlans.map((plan) => (
             <PlanCard
               key={plan.id}
