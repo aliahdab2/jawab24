@@ -209,7 +209,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               return (
                 <textarea
                   disabled={!settings.businessHoursOnly}
-                  className={`input min-h-[80px] landscape:min-h-[50px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-4 rounded-xl text-sm placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'rtl' : 'ltr'}`}
+                  className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'rtl' : 'ltr'}`}
                   placeholder={placeholder}
                   dir={currentLang === 'ar' ? "rtl" : "ltr"}
                   value={displayValue}
