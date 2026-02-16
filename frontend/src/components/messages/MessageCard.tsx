@@ -49,26 +49,15 @@ export function MessageCard({
     });
   };
 
-  // Find the last incoming message (customer message)
-  const lastIncoming = [...conv.messages]
-    .filter((m) => m.direction === 'incoming')
-    .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())[0];
-
-  // Find the last outgoing message (reply)
-  const lastOutgoing = [...conv.messages]
-    .filter((m) => m.direction === 'outgoing')
-    .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())[0];
-
-  // Determine chronological order for card display
-  const incomingTime = lastIncoming?.createdAt ? new Date(lastIncoming.createdAt).getTime() : 0;
-  const outgoingTime = lastOutgoing?.createdAt ? new Date(lastOutgoing.createdAt).getTime() : 0;
-  const outgoingIsNewer = outgoingTime >= incomingTime;
-  const showOutgoing = !!lastOutgoing && !conv.needsHumanAttention;
+  // Get the last 2 messages chronologically (regardless of direction)
+  const lastTwoMessages = [...conv.messages]
+    .sort((a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime())
+    .slice(-2);
 
   // Reply Source Indicator (matches CommentCard)
-  const ReplySourceIndicator = () => {
-    if (!lastOutgoing?.replyMethod) return null;
-    const isAI = lastOutgoing.replyMethod === 'ai';
+  const ReplySourceIndicator = ({ msg }: { msg: Message }) => {
+    if (!msg.replyMethod) return null;
+    const isAI = msg.replyMethod === 'ai';
 
     return (
       <div className="flex flex-col items-center gap-1">
@@ -92,37 +81,49 @@ export function MessageCard({
     );
   };
 
-  // Message bubble elements for chronological rendering
-  const incomingBubble = lastIncoming ? (
-    <div className="me-8 sm:me-12">
-      <div
-        className={clsx(
-          'px-4 py-3 bg-surface-50 rounded-2xl rounded-tl-sm text-surface-700 text-sm leading-relaxed border border-surface-100',
-          'transition-colors'
-        )}
-      >
-        <p className="line-clamp-3">{lastIncoming.message}</p>
-      </div>
-    </div>
-  ) : null;
+  // Check if the last message in the conversation has an outgoing reply
+  const hasOutgoingInLastTwo = lastTwoMessages.some(
+    (m) => m.direction === 'outgoing' && !conv.needsHumanAttention
+  );
 
-  const outgoingBubble = showOutgoing ? (
-    <div className="flex items-end justify-end gap-3 ms-8 sm:ms-12">
-      <div className="flex flex-col items-end gap-1 min-w-0">
-        <div className="relative">
-          <div className="px-4 py-3 bg-emerald-50 rounded-2xl rounded-tr-sm text-surface-800 text-sm leading-relaxed border border-emerald-100 shadow-sm">
-            <p className="line-clamp-2 italic">{lastOutgoing.message}</p>
-            <div className="mt-1 flex justify-end">
-              <CheckCircle className="w-3 h-3 text-emerald-500" />
+  // Render a single message bubble based on direction
+  const renderBubble = (msg: Message) => {
+    if (msg.direction === 'incoming') {
+      return (
+        <div key={msg.id} className="me-8 sm:me-12">
+          <div
+            className={clsx(
+              'px-4 py-3 bg-surface-50 rounded-2xl rounded-tl-sm text-surface-700 text-sm leading-relaxed border border-surface-100',
+              'transition-colors'
+            )}
+          >
+            <p className="line-clamp-3">{msg.message}</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Outgoing bubble — skip if needsHumanAttention
+    if (conv.needsHumanAttention) return null;
+
+    return (
+      <div key={msg.id} className="flex items-end justify-end gap-3 ms-8 sm:ms-12">
+        <div className="flex flex-col items-end gap-1 min-w-0">
+          <div className="relative">
+            <div className="px-4 py-3 bg-emerald-50 rounded-2xl rounded-tr-sm text-surface-800 text-sm leading-relaxed border border-emerald-100 shadow-sm">
+              <p className="line-clamp-2 italic">{msg.message}</p>
+              <div className="mt-1 flex justify-end">
+                <CheckCircle className="w-3 h-3 text-emerald-500" />
+              </div>
             </div>
           </div>
         </div>
+        <div className="flex-shrink-0 mb-1">
+          <ReplySourceIndicator msg={msg} />
+        </div>
       </div>
-      <div className="flex-shrink-0 mb-1">
-        <ReplySourceIndicator />
-      </div>
-    </div>
-  ) : null;
+    );
+  };
 
   return (
     <div
@@ -187,18 +188,8 @@ export function MessageCard({
           </div>
         </div>
 
-        {/* Message Bubbles - rendered in chronological order */}
-        {outgoingIsNewer ? (
-          <>
-            {incomingBubble}
-            {outgoingBubble}
-          </>
-        ) : (
-          <>
-            {outgoingBubble}
-            {incomingBubble}
-          </>
-        )}
+        {/* Message Bubbles - last 2 in chronological order */}
+        {lastTwoMessages.map((msg) => renderBubble(msg))}
 
         {/* Action Buttons */}
         {conv.needsHumanAttention ? (
@@ -208,7 +199,7 @@ export function MessageCard({
               <span>{t('comments.reply')}</span>
             </div>
           </div>
-        ) : !showOutgoing && (
+        ) : !hasOutgoingInLastTwo && (
           <div className="flex justify-end mt-2 animate-fade-in">
             <div className="flex items-center gap-1.5 text-xs font-bold text-brand-600 opacity-60 group-hover:opacity-100 transition-opacity">
               <MessageCircle className="w-3.5 h-3.5" />

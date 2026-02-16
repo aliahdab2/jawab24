@@ -213,7 +213,7 @@ const TemplatesPage: NextPageWithLayout = () => {
               onChange={(e) => setFormData({ ...formData, message: e.target.value })}
               helperText={t('templates.variablesDesc')}
               className="!py-2.5 min-h-[100px]"
-              dir="auto"
+              dir={formData.message ? 'auto' : undefined}
             />
             <div className="flex items-center justify-between text-xs mt-1.5">
               {messageError ? (

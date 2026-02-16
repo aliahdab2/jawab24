@@ -176,6 +176,44 @@ describe('MessageCard', () => {
       expect(screen.getByText('Angry message')).toBeInTheDocument();
       expect(screen.queryByText('Auto reply')).not.toBeInTheDocument();
     });
+
+    it('shows both incoming messages when last 2 messages are from the customer', () => {
+      const older = makeMessage({
+        id: '1',
+        message: 'مساء الخير',
+        direction: 'incoming',
+        createdAt: '2026-02-16T22:21:00Z',
+      });
+      const newer = makeMessage({
+        id: '2',
+        message: 'باديش كيلو الموز',
+        direction: 'incoming',
+        createdAt: '2026-02-16T22:21:30Z',
+      });
+      const outgoing = makeMessage({
+        id: '3',
+        message: 'Earlier reply',
+        direction: 'outgoing',
+        replyMethod: 'template',
+        createdAt: '2026-02-16T11:10:00Z',
+      });
+
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [outgoing, older, newer],
+            lastMessage: newer,
+          })}
+        />
+      );
+
+      // Both incoming messages should be visible
+      expect(screen.getByText('مساء الخير')).toBeInTheDocument();
+      expect(screen.getByText('باديش كيلو الموز')).toBeInTheDocument();
+      // The older outgoing reply should NOT be visible (not in last 2)
+      expect(screen.queryByText('Earlier reply')).not.toBeInTheDocument();
+    });
   });
 
   describe('status badges', () => {
