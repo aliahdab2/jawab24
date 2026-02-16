@@ -35,7 +35,8 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
             ...settings,
             greetingMessageMulti: {
               ...settings.greetingMessageMulti,
-              [currentLang]: newValue
+              [currentLang]: newValue,
+              sourceLang: currentLang
             }
           });
         }}

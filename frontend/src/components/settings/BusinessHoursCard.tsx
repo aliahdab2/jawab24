@@ -219,7 +219,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                       ...settings,
                       awayMessageMulti: {
                         ...settings.awayMessageMulti,
-                        [currentLang]: newValue
+                        [currentLang]: newValue,
+                        sourceLang: currentLang
                       }
                     });
                   }}

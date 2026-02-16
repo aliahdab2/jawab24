@@ -163,7 +163,8 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                     ...settings,
                     dualReplyNudgeMulti: {
                         ...settings.dualReplyNudgeMulti,
-                        [currentLang]: value
+                        [currentLang]: value,
+                        sourceLang: currentLang
                     },
                     dualReplyNudge: value
                   });
