@@ -39,6 +39,9 @@ export const PRICE_FALLBACK: Record<string, string> = {
 export interface GenerateReplyContext {
     userId: string;
     text: string;
+    /** Text to use for template keyword matching (latest message only).
+     *  Falls back to `text` if not provided. */
+    templateMatchText?: string;
     pageName?: string;
     knowledgeBase?: string;
     kbActiveVersion?: number | null;
@@ -146,7 +149,9 @@ export class ReplyGenerator {
         const { userId, text, pageName, knowledgeBase, pageId, senderId } = context;
 
         // 1. Try to find a matching rule with template
-        const templateResult = await this.tryTemplateMatch(userId, text);
+        // Use templateMatchText (latest message) for keyword matching to avoid
+        // stale consolidated messages hijacking the user's current intent.
+        const templateResult = await this.tryTemplateMatch(userId, context.templateMatchText || text);
         if (templateResult) return templateResult;
 
         // 2. If no template, use AI with conversation context

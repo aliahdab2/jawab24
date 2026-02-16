@@ -181,6 +181,12 @@ export class MessageProcessor {
             // 11. Consolidate all unreplied messages from this sender
             const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
             lap('11-consolidate');
+
+            // Use latest message for template matching (reflects current intent),
+            // but full consolidation for AI context (gives conversation history).
+            const latestMessageText = unrepliedMessages.length > 0
+                ? unrepliedMessages[unrepliedMessages.length - 1].message
+                : messageText;
             const consolidatedText = unrepliedMessages.length > 1
                 ? unrepliedMessages.map(m => m.message).join('\n')
                 : messageText;
@@ -205,6 +211,7 @@ export class MessageProcessor {
                     {
                         userId,
                         text: consolidatedText,
+                        templateMatchText: latestMessageText,
                         pageName: page.name || undefined,
                         knowledgeBase,
                         kbActiveVersion: page.kbActiveVersion,
