@@ -106,7 +106,9 @@ const SettingsPage: NextPageWithLayout = () => {
         businessHoursEnd: (data.businessHoursEnd && data.businessHoursEnd !== '00:00') ? data.businessHoursEnd : '18:00',
         timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         awayMessageMulti: data.awayMessageMulti || {},
-        greetingMessageMulti: data.greetingMessageMulti || {},
+        greetingMessageMulti: data.greetingMessageMulti && Object.keys(data.greetingMessageMulti).length > 0
+          ? data.greetingMessageMulti
+          : { [data.dashboardLanguage || language]: t('settings.greetingMessagePlaceholder'), sourceLang: data.dashboardLanguage || language },
         dualReplyNudgeMulti: data.dualReplyNudgeMulti || {},
         awayMessage: data.awayMessage || '',
         greetingMessage: data.greetingMessage || '',
