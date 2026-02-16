@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { settingsService } from '../../src/services/settings';
 
 // Mock database
@@ -51,7 +52,7 @@ const baseSettings = {
     replyDelay: 0,
     commentEscalationMinutes: 60,
     messageEscalationMinutes: 30,
-    handoffPauseDurationMinutes: 30,
+    handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
     notificationsEnabled: true,
     createdAt: new Date(),
     updatedAt: new Date(),

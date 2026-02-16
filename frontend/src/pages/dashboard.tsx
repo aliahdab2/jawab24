@@ -223,7 +223,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
-      toast.error(t('dashboard.fetchError' as TranslationKey) || 'Failed to load dashboard data');
+      toast.error(t('dashboard.fetchError'));
     } finally {
       setLoading(false);
     }
@@ -240,7 +240,7 @@ const DashboardPage: NextPageWithLayout = () => {
         })
         .catch(err => {
           console.error('Dashboard: Auto-sync failed', err);
-          toast.error(t('dashboard.syncError' as TranslationKey) || 'Failed to sync pages');
+          toast.error(t('dashboard.syncError'));
         });
     }
   }, [loading, pages.length, fbToken, isAuthenticated, fetchDashboardData, t]);

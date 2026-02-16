@@ -185,6 +185,8 @@
   "dashboard.flaggedItems": "تحتاج مراجعة",
   "dashboard.avgSpeed": "متوسط السرعة",
   "dashboard.seconds": "ث",
+  "dashboard.fetchError": "فشل في تحميل بيانات لوحة المعلومات",
+  "dashboard.syncError": "فشل في مزامنة الصفحات",
   "pages.title": "إدارة الصفحات",
   "pages.description": "اربط وأدر صفحاتك على فيسبوك وإنستغرام",
   "pages.addPage": "إضافة صفحة",

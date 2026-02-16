@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { settings } from '../db/schema';
 import { UserSettings, UpdateSettingsDTO } from '../types';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 
 // Re-export for backward compatibility
 export type { UserSettings, UpdateSettingsDTO };
@@ -215,7 +216,7 @@ export class SettingsService {
             replyDelay: record.replyDelay ?? 0,
             commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,
-            handoffPauseDurationMinutes: record.handoffPauseDurationMinutes ?? 30,
+            handoffPauseDurationMinutes: record.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES,
             notificationsEnabled: record.notificationsEnabled ?? true,
         };
     }

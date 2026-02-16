@@ -186,6 +186,8 @@
   "dashboard.flaggedItems": "Flagged",
   "dashboard.avgSpeed": "Avg Speed",
   "dashboard.seconds": "s",
+  "dashboard.fetchError": "Failed to load dashboard data",
+  "dashboard.syncError": "Failed to sync pages",
   "pages.title": "My Pages",
   "pages.description": "Your Facebook & Instagram pages",
   "pages.addPage": "Add Page",

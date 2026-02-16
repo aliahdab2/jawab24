@@ -2,7 +2,7 @@ import { eq, desc, asc, and, sql, gt, ne, isNotNull } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages, conversationPauses } from '../db/schema';
 import { ConversationMessage } from '../types';
-import { Message } from '@jawab24/shared';
+import { Message, DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 
 /** DB connection or transaction — methods accepting this can participate in a transaction. */
 type DbConn = typeof db;
@@ -458,7 +458,7 @@ export class MessagesService {
     async isPaused(
         pageId: string,
         senderId: string,
-        pauseMinutes: number = 30
+        pauseMinutes: number = DEFAULT_HANDOFF_PAUSE_MINUTES
     ): Promise<boolean> {
         // 1. Check explicit pause (from UI "pause" button)
         const explicitPause = await this.getExplicitPause(pageId, senderId);
@@ -476,7 +476,7 @@ export class MessagesService {
     async getRemainingPauseMs(
         pageId: string,
         senderId: string,
-        pauseMinutes: number = 30
+        pauseMinutes: number = DEFAULT_HANDOFF_PAUSE_MINUTES
     ): Promise<number> {
         const now = Date.now();
 
@@ -597,7 +597,7 @@ export class MessagesService {
     private async _hasRecentManualReply(
         pageId: string,
         senderId: string,
-        pauseMinutes: number = 30
+        pauseMinutes: number = DEFAULT_HANDOFF_PAUSE_MINUTES
     ): Promise<boolean> {
         const cutoff = new Date(Date.now() - pauseMinutes * 60 * 1000);
 

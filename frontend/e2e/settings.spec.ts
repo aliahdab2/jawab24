@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 
 /**
  * Settings Page E2E Tests
@@ -28,7 +29,7 @@ const MOCK_SETTINGS = {
   replyDelay: 0,
   commentEscalationMinutes: 60,
   messageEscalationMinutes: 30,
-  handoffPauseDurationMinutes: 30,
+  handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
 };
 
 test.describe('Settings Page', () => {

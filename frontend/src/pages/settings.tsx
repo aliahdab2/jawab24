@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -55,7 +56,7 @@ const INITIAL_SETTINGS: SettingsState = {
   dualReplyNudge: '',
   commentEscalationMinutes: 60,
   messageEscalationMinutes: 30,
-  handoffPauseDurationMinutes: 30,
+  handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
 };
 
 const SettingsPage: NextPageWithLayout = () => {
@@ -113,7 +114,7 @@ const SettingsPage: NextPageWithLayout = () => {
         dualReplyNudge: data.dualReplyNudge || '',
         commentEscalationMinutes: data.commentEscalationMinutes ?? 60,
         messageEscalationMinutes: data.messageEscalationMinutes ?? 30,
-        handoffPauseDurationMinutes: data.handoffPauseDurationMinutes ?? 30,
+        handoffPauseDurationMinutes: data.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES,
         notificationsEnabled: data.notificationsEnabled ?? true,
         pushNotifications: data.pushNotifications ?? true,
       };

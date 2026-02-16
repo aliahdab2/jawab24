@@ -18,9 +18,13 @@ vi.mock('../../../src/services/notifications', () => ({
 }));
 
 // Mock normalizeArabic
-vi.mock('@jawab24/shared', () => ({
-    normalizeArabic: vi.fn((text: string) => text.toLowerCase()),
-}));
+vi.mock('@jawab24/shared', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@jawab24/shared')>();
+    return {
+        ...actual,
+        normalizeArabic: vi.fn((text: string) => text.toLowerCase()),
+    };
+});
 
 // Mock intent detector
 vi.mock('../../../src/services/kb/intent-detector', () => ({

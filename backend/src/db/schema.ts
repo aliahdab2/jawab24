@@ -1,5 +1,6 @@
 import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 
 // 1. Users Table
 export const users = pgTable('users', {
@@ -238,7 +239,7 @@ export const settings = pgTable('settings', {
     commentEscalationMinutes: integer('comment_escalation_minutes').default(60),
     messageEscalationMinutes: integer('message_escalation_minutes').default(30),
     // Human handoff: default pause duration when user takes over a conversation
-    handoffPauseDurationMinutes: integer('handoff_pause_duration_minutes').default(30),
+    handoffPauseDurationMinutes: integer('handoff_pause_duration_minutes').default(DEFAULT_HANDOFF_PAUSE_MINUTES),
     // Push notification preferences
     notificationsEnabled: boolean('notifications_enabled').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow(),

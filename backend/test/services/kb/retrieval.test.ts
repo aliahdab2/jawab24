@@ -8,9 +8,13 @@ vi.mock('../../../src/db', () => ({
 }));
 
 // Mock normalizeArabic
-vi.mock('@jawab24/shared', () => ({
-    normalizeArabic: vi.fn((text: string) => text.toLowerCase()),
-}));
+vi.mock('@jawab24/shared', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@jawab24/shared')>();
+    return {
+        ...actual,
+        normalizeArabic: vi.fn((text: string) => text.toLowerCase()),
+    };
+});
 
 import { RetrievalService, type RetrievedChunk } from '../../../src/services/kb/retrieval';
 import type { EmbeddingProvider } from '../../../src/services/kb/interfaces';

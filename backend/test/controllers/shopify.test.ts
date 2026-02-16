@@ -68,9 +68,13 @@ vi.mock('../../src/services/cookies', () => ({
     },
 }));
 
-vi.mock('@jawab24/shared', () => ({
-    SHOPIFY_SYNC_QUEUE_NAME: 'shopify-sync-queue',
-}));
+vi.mock('@jawab24/shared', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@jawab24/shared')>();
+    return {
+        ...actual,
+        SHOPIFY_SYNC_QUEUE_NAME: 'shopify-sync-queue',
+    };
+});
 
 // Mock the singleton sync queue
 const mockEnqueueSyncJob = vi.fn().mockResolvedValue(undefined);

@@ -11,9 +11,13 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
-vi.mock('@jawab24/shared', () => ({
-    AI_QUEUE_NAME: 'ai-generate',
-}));
+vi.mock('@jawab24/shared', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@jawab24/shared')>();
+    return {
+        ...actual,
+        AI_QUEUE_NAME: 'ai-generate',
+    };
+});
 
 describe('queue', () => {
     beforeEach(() => {
