@@ -101,12 +101,18 @@ export class CommentProcessor {
             }
 
             // 5. Handoff pause check
+            const userSettings = await settingsService.getSettings(userId);
             if (fromId) {
-                const isPaused = await messagesService.isPaused(page.id, fromId);
+                const pauseMinutes = userSettings.handoffPauseDurationMinutes;
+                const isPaused = await messagesService.isPaused(page.id, fromId, pauseMinutes);
                 if (isPaused) {
+                    const remainingMs = await messagesService.getRemainingPauseMs(page.id, fromId, pauseMinutes);
+                    const delayMs = remainingMs > 0 ? remainingMs + 5000 : pauseMinutes * 60 * 1000;
                     pipelineMetrics.record(pipeline, 'handoff_active');
-                    this.logger.info(`[${platform}] Comment skipped — handoff active`, { fromId, pageId: page.id });
-                    return { success: false, commentId: comment.id, error: 'Handoff active' };
+                    this.logger.info(`[${platform}] Comment handoff active — requesting re-enqueue`, {
+                        fromId, pageId: page.id, delayMs,
+                    });
+                    return { success: false, commentId: comment.id, error: 'Handoff active', handoffDelayMs: delayMs };
                 }
             }
 
@@ -129,7 +135,6 @@ export class CommentProcessor {
             }
 
             // 8. Generate reply (enrich KB with e-commerce data if linked)
-            const userSettings = await settingsService.getSettings(userId);
             const generatorContext = adapter.buildGeneratorContext(page, content, contentId);
             generatorContext.text = commentMessage;
             for (const integration of integrationRegistry.getEnabled()) {

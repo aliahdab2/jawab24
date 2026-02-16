@@ -48,6 +48,7 @@ export async function enqueueComment(data: {
     senderName?: string;
     requestId?: string;
     replyDelay?: number;
+    handoffRetries?: number;
 }): Promise<string> {
     const jobData: ReplyJobData = {
         jobType: data.jobType,
@@ -59,6 +60,7 @@ export async function enqueueComment(data: {
         senderName: data.senderName,
         requestId: data.requestId,
         receivedAt: new Date().toISOString(),
+        handoffRetries: data.handoffRetries,
     };
 
     // Use delay option if replyDelay is set (in milliseconds)
@@ -80,6 +82,7 @@ export async function enqueueMessage(data: {
     senderName?: string;
     requestId?: string;
     replyDelay?: number;
+    handoffRetries?: number;
 }): Promise<string> {
     const jobData: ReplyJobData = {
         jobType: data.jobType,
@@ -90,6 +93,7 @@ export async function enqueueMessage(data: {
         senderName: data.senderName,
         requestId: data.requestId,
         receivedAt: new Date().toISOString(),
+        handoffRetries: data.handoffRetries,
     };
 
     // Use delay option if replyDelay is set (in milliseconds)

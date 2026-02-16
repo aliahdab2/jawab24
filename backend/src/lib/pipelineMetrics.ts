@@ -21,6 +21,7 @@ export type Outcome =
     | 'auto_reply_disabled'
     | 'debounce_skipped'
     | 'handoff_active'
+    | 'handoff_requeued'
     | 'rate_limited'
     | 'settings_disabled'
     | 'already_replied'

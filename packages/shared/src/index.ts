@@ -290,6 +290,7 @@ export interface ReplyJobData {
   // Metadata
   receivedAt: string;       // ISO timestamp when webhook received
   replyDelay?: number;      // Delay in seconds before processing (from user settings)
+  handoffRetries?: number;  // How many times this job has been re-enqueued due to handoff pause
 }
 
 export interface ReplyJobResult {
@@ -302,6 +303,8 @@ export interface ReplyJobResult {
   needsAttention?: boolean;
   flagReason?: string;
   aiIntent?: string;
+  /** When set, the worker should re-enqueue this job with the given delay (ms) */
+  handoffDelayMs?: number;
 }
 
 export const REPLY_QUEUE_NAME = 'reply-processing-queue';

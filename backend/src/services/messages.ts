@@ -469,6 +469,47 @@ export class MessagesService {
     }
 
     /**
+     * Get the remaining pause time in milliseconds.
+     * Returns 0 if not paused. Used to schedule delayed re-enqueue of messages
+     * that arrive during a handoff pause.
+     */
+    async getRemainingPauseMs(
+        pageId: string,
+        senderId: string,
+        pauseMinutes: number = 30
+    ): Promise<number> {
+        const now = Date.now();
+
+        // 1. Check explicit pause
+        const explicitPause = await this.getExplicitPause(pageId, senderId);
+        if (explicitPause) {
+            const remaining = explicitPause.pausedUntil.getTime() - now;
+            return Math.max(0, remaining);
+        }
+
+        // 2. Check implicit pause (recent manual reply)
+        const cutoff = new Date(now - pauseMinutes * 60 * 1000);
+        const recentManual = await db.query.messages.findFirst({
+            where: and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'outgoing'),
+                eq(messages.replyMethod, 'manual'),
+                sql`${messages.createdAt} > ${cutoff}`
+            ),
+            orderBy: [desc(messages.createdAt)],
+        });
+
+        if (recentManual?.createdAt) {
+            const pauseExpiresAt = recentManual.createdAt.getTime() + pauseMinutes * 60 * 1000;
+            const remaining = pauseExpiresAt - now;
+            return Math.max(0, remaining);
+        }
+
+        return 0;
+    }
+
+    /**
      * Check if there is an active explicit pause for this conversation.
      */
     private async getExplicitPause(

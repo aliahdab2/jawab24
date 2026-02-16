@@ -3,7 +3,11 @@ import { config } from '../config';
 import { ReplyJobData, ReplyJobResult, REPLY_QUEUE_NAME } from '@jawab24/shared';
 import { replyService } from '../services/reply';
 import { instagramReplyService } from '../services/instagramReply';
+import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
+import { pipelineMetrics, Pipeline } from '../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../types';
+
+const MAX_HANDOFF_RETRIES = 3;
 
 // Connection configuration for BullMQ
 const connection = {
@@ -55,6 +59,7 @@ async function processFacebookComment(job: Job<ReplyJobData>): Promise<ReplyJobR
         replyText: result.replyText,
         replyMethod: result.replyMethod as 'template' | 'ai' | undefined,
         error: result.error,
+        handoffDelayMs: result.handoffDelayMs,
     };
 }
 
@@ -87,6 +92,7 @@ async function processFacebookMessage(job: Job<ReplyJobData>): Promise<ReplyJobR
         replyText: result.replyText,
         replyMethod: result.replyMethod as 'template' | 'ai' | undefined,
         error: result.error,
+        handoffDelayMs: result.handoffDelayMs,
     };
 }
 
@@ -121,6 +127,7 @@ async function processInstagramComment(job: Job<ReplyJobData>): Promise<ReplyJob
         replyText: result.replyText,
         replyMethod: result.replyMethod as 'template' | 'ai' | undefined,
         error: result.error,
+        handoffDelayMs: result.handoffDelayMs,
     };
 }
 
@@ -153,6 +160,7 @@ async function processInstagramMessage(job: Job<ReplyJobData>): Promise<ReplyJob
         replyText: result.replyText,
         replyMethod: result.replyMethod as 'template' | 'ai' | undefined,
         error: result.error,
+        handoffDelayMs: result.handoffDelayMs,
     };
 }
 
@@ -191,6 +199,58 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
                 break;
             default:
                 throw new UnrecoverableError(`Unknown job type: ${jobType}`);
+        }
+
+        // Re-enqueue if handoff pause is active and retries not exhausted
+        if (result.handoffDelayMs && result.handoffDelayMs > 0) {
+            const retries = job.data.handoffRetries || 0;
+            if (retries < MAX_HANDOFF_RETRIES) {
+                const pipeline = jobType as Pipeline;
+                const isComment = jobType.includes('comment');
+
+                if (isComment && job.data.postId && job.data.commentId) {
+                    await enqueueComment({
+                        jobType: jobType as 'facebook_comment' | 'instagram_comment',
+                        pageId: job.data.pageId,
+                        postId: job.data.postId,
+                        commentId: job.data.commentId,
+                        text: job.data.text,
+                        senderId: job.data.senderId,
+                        senderName: job.data.senderName,
+                        requestId: job.data.requestId,
+                        replyDelay: Math.ceil(result.handoffDelayMs / 1000),
+                        handoffRetries: retries + 1,
+                    });
+                } else if (!isComment && job.data.messageId && job.data.senderId) {
+                    await enqueueMessage({
+                        jobType: jobType as 'facebook_message' | 'instagram_message',
+                        pageId: job.data.pageId,
+                        messageId: job.data.messageId,
+                        senderId: job.data.senderId,
+                        text: job.data.text,
+                        senderName: job.data.senderName,
+                        requestId: job.data.requestId,
+                        replyDelay: Math.ceil(result.handoffDelayMs / 1000),
+                        handoffRetries: retries + 1,
+                    });
+                }
+
+                pipelineMetrics.record(pipeline, 'handoff_requeued');
+                logger.info('[ReplyWorker] Job re-enqueued after handoff pause', {
+                    jobId: job.id,
+                    jobType,
+                    requestId,
+                    delayMs: result.handoffDelayMs,
+                    retryNumber: retries + 1,
+                });
+            } else {
+                logger.warn('[ReplyWorker] Handoff retries exhausted, dropping job', {
+                    jobId: job.id,
+                    jobType,
+                    requestId,
+                    retries,
+                });
+            }
         }
 
         const duration = Date.now() - startTime;

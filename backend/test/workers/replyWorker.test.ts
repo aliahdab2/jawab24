@@ -50,6 +50,19 @@ vi.mock('../../src/services/settings', () => ({
     },
 }));
 
+// Mock replyQueue (enqueueComment, enqueueMessage)
+vi.mock('../../src/lib/replyQueue', () => ({
+    enqueueComment: vi.fn().mockResolvedValue('job-id'),
+    enqueueMessage: vi.fn().mockResolvedValue('job-id'),
+}));
+
+// Mock pipelineMetrics
+vi.mock('../../src/lib/pipelineMetrics', () => ({
+    pipelineMetrics: {
+        record: vi.fn(),
+    },
+}));
+
 // Mock config
 vi.mock('../../src/config', () => ({
     config: {

@@ -93,6 +93,7 @@ vi.mock('../../src/services/instagram', () => ({
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
         isPaused: vi.fn(),
+        getRemainingPauseMs: vi.fn().mockResolvedValue(60000),
         hasNewerUnrepliedMessage: vi.fn(),
         storeOutgoingMessage: vi.fn(),
         getUnrepliedFromSender: vi.fn(),

@@ -112,12 +112,18 @@ export class MessageProcessor {
             }
 
             // 6. Handoff pause check
-            const isPaused = await messagesService.isPaused(page.id, senderId);
+            const userSettings = await settingsService.getSettings(userId);
+            const pauseMinutes = userSettings.handoffPauseDurationMinutes;
+            const isPaused = await messagesService.isPaused(page.id, senderId, pauseMinutes);
             lap('6-isPaused');
             if (isPaused) {
+                const remainingMs = await messagesService.getRemainingPauseMs(page.id, senderId, pauseMinutes);
+                const delayMs = remainingMs > 0 ? remainingMs + 5000 : pauseMinutes * 60 * 1000;
                 pipelineMetrics.record(pipeline, 'handoff_active');
-                this.logger.info(`[${platform}] Skipping — handoff active`, { senderId, pageId: page.id });
-                return { success: false, messageId: platformMessageId, error: 'Handoff active' };
+                this.logger.info(`[${platform}] Handoff active — requesting re-enqueue`, {
+                    senderId, pageId: page.id, delayMs,
+                });
+                return { success: false, messageId: platformMessageId, error: 'Handoff active', handoffDelayMs: delayMs };
             }
 
             // 7. Rate limit check
@@ -192,7 +198,6 @@ export class MessageProcessor {
                 : messageText;
 
             // 12. Generate reply (enrich KB with e-commerce data if linked)
-            const userSettings = await settingsService.getSettings(userId);
             let knowledgeBase = page.knowledgeBase || undefined;
             for (const integration of integrationRegistry.getEnabled()) {
                 const enriched = await integration.enrichKnowledgeBase(knowledgeBase, page as unknown as Record<string, unknown>);

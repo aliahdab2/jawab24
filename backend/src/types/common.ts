@@ -27,6 +27,8 @@ export interface CommentResult {
     replyText?: string;
     replyMethod?: 'template' | 'ai' | 'manual';
     error?: string;
+    /** When set, the worker should re-enqueue this job with the given delay (ms) */
+    handoffDelayMs?: number;
 }
 
 /** @deprecated Use CommentResult instead */
