@@ -204,7 +204,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               const sourceLang = settings.awayMessageMulti?.sourceLang;
               const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
               const displayValue = isAutoTranslated ? '' : value;
-              const placeholder = isAutoTranslated ? value : t('settings.awayMessagePlaceholder');
+              const placeholder = isAutoTranslated && value ? value : t('settings.awayMessagePlaceholder');
 
               return (
                 <textarea

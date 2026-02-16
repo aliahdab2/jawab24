@@ -156,8 +156,16 @@ const RulesPage: NextPageWithLayout = () => {
     if (!deleteConfirmationId) return;
     try {
       await rulesApi.delete(deleteConfirmationId);
-      setRules(rules.filter(r => r.id !== deleteConfirmationId));
+      const remaining = rules
+        .filter(r => r.id !== deleteConfirmationId)
+        .map((r, i) => ({ ...r, priority: i + 1 }));
+      setRules(remaining);
       setDeleteConfirmationId(null);
+
+      // Update re-normalized priorities on server
+      await Promise.all(
+        remaining.map(r => rulesApi.update(r.id, { priority: r.priority ?? undefined }))
+      );
     } catch (error) {
       console.error('Failed to delete rule:', error);
     }
@@ -286,7 +294,7 @@ const RulesPage: NextPageWithLayout = () => {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="!py-2.5 sm:!py-3"
-              dir="auto"
+              dir={formData.name ? 'auto' : undefined}
             />
 
             <Input
@@ -296,7 +304,7 @@ const RulesPage: NextPageWithLayout = () => {
               onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
               helperText={t('rules.keywordsHelper' as TranslationKey)}
               className="!py-2.5 sm:!py-3"
-              dir="auto"
+              dir={formData.keywords ? 'auto' : undefined}
             />
           </div>
           {modalKeywordConflicts.length > 0 && (
@@ -356,14 +364,14 @@ const RulesPage: NextPageWithLayout = () => {
                   value={quickTemplate.name}
                   onChange={(e) => setQuickTemplate({ ...quickTemplate, name: e.target.value })}
                   className="!py-2"
-                  dir="auto"
+                  dir={quickTemplate.name ? 'auto' : undefined}
                 />
                 <Textarea
                   placeholder={t('templates.templateContent')}
                   value={quickTemplate.text}
                   onChange={(e) => setQuickTemplate({ ...quickTemplate, text: e.target.value })}
                   className="!py-2 min-h-[60px]"
-                  dir="auto"
+                  dir={quickTemplate.text ? 'auto' : undefined}
                 />
                 <div className="flex items-center justify-end text-xs mt-1">
                   <CharCounter value={quickTemplate.text} max={5000} warnAt={4500} />

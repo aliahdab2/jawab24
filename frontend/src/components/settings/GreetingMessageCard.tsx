@@ -11,7 +11,7 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
   const sourceLang = settings.greetingMessageMulti?.sourceLang;
   const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
   const displayValue = isAutoTranslated ? '' : value;
-  const placeholder = isAutoTranslated ? value : t('settings.greetingMessagePlaceholder');
+  const placeholder = isAutoTranslated && value ? value : t('settings.greetingMessagePlaceholder');
 
   return (
     <Card className="border-none shadow-lg shadow-surface-200/50 p-5 landscape:p-3">

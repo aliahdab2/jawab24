@@ -174,7 +174,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                   const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
                   const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
                   const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-                  return isAutoTranslated ? value : t('settings.publicReplyPlaceholder');
+                  return isAutoTranslated && value ? value : t('settings.publicReplyPlaceholder');
                 })()}
                 className="bg-white !py-2.5 placeholder:text-surface-400 placeholder:italic"
                 maxLength={80}
