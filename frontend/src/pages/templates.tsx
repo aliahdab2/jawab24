@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, type ReactElement } from 're
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { templatesApi, rulesApi } from '@/lib/api';
 import {
@@ -314,9 +314,22 @@ const TemplatesPage: NextPageWithLayout = () => {
               className="!py-2.5 min-h-[100px]"
               dir="auto"
             />
-            {messageError && (
-              <p className="text-xs text-red-500 mt-1">{t('templates.messageRequired')}</p>
-            )}
+            <div className="flex items-center justify-between text-xs mt-1.5">
+              {messageError ? (
+                <p className="text-red-500">{t('templates.messageRequired')}</p>
+              ) : (
+                <span />
+              )}
+              <span className={`font-bold ${
+                formData.message.length > 5000
+                  ? 'text-red-500'
+                  : formData.message.length > 4500
+                    ? 'text-amber-500'
+                    : 'text-surface-500'
+              }`}>
+                {formData.message.length}/5000
+              </span>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-surface-100">
@@ -336,9 +349,17 @@ const TemplatesPage: NextPageWithLayout = () => {
         onClose={() => setDeleteConfirmationId(null)}
         onConfirm={handleConfirmDelete}
         title={t('templates.deleteTemplate')}
-        message={t('templates.deleteTemplateConfirm')}
+        message={
+          deleteConfirmationId && (rulesCountMap[deleteConfirmationId] || 0) > 0
+            ? t('templates.deleteTemplateUsedByRules' as TranslationKey, { count: rulesCountMap[deleteConfirmationId] })
+            : t('templates.deleteTemplateConfirm')
+        }
         confirmText={t('common.delete')}
-        variant="danger"
+        variant={
+          deleteConfirmationId && (rulesCountMap[deleteConfirmationId] || 0) > 0
+            ? 'warning'
+            : 'danger'
+        }
       />
     </>
   );

@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, type ReactElement } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Textarea, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
+import { Card, Button, Input, Textarea, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, Badge } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { rulesApi, templatesApi } from '@/lib/api';
@@ -14,7 +14,8 @@ import {
   ArrowUp,
   ArrowDown,
   Tag,
-  BookTemplate
+  BookTemplate,
+  AlertTriangle
 } from 'lucide-react';
 import type { Rule, Template } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
@@ -71,6 +72,19 @@ const RulesPage: NextPageWithLayout = () => {
       fetchData();
     }
   }, [isAuthenticated, fetchData]);
+
+  // Map each keyword to the list of rule names that use it (for duplicate detection)
+  const keywordRulesMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const rule of rules) {
+      for (const kw of rule.keywords || []) {
+        const normalized = kw.toLowerCase().trim();
+        if (!map[normalized]) map[normalized] = [];
+        map[normalized].push(rule.name);
+      }
+    }
+    return map;
+  }, [rules]);
 
   const handleOpenModal = (rule?: Rule) => {
     if (rule) {
@@ -210,6 +224,14 @@ const RulesPage: NextPageWithLayout = () => {
     return templates.find(t => t.id === id)?.name || t('common.unknown');
   };
 
+  const getTemplateStatus = (templateId: string | null): 'missing' | 'inactive' | 'ok' => {
+    if (!templateId) return 'missing';
+    const template = templates.find(tp => tp.id === templateId);
+    if (!template) return 'missing';
+    if (template.active === false) return 'inactive';
+    return 'ok';
+  };
+
   // Build template options with preview text
   const getTemplatePreview = (template: Template) => {
     const text = template.message || '';
@@ -307,18 +329,30 @@ const RulesPage: NextPageWithLayout = () => {
 
                   <div className="space-y-4">
                     {/* Condition Box */}
-                    <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100 relative group/condition">
-                      <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-surface-400">
+                    <div className="p-4 rounded-2xl bg-blue-50/30 border border-blue-100/50 relative group/condition">
+                      <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-blue-600">
                         <Tag className="w-3 h-3" />
                         <span>{t('rules.condition')}</span>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         {(rule.keywords || []).map((keyword) => (
-                          <span key={keyword} className="px-2.5 py-1 rounded-lg bg-white border border-surface-200 text-surface-700 text-xs font-bold shadow-sm">
+                          <span key={keyword} className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 text-blue-800 text-xs font-bold shadow-sm">
                             {keyword}
                           </span>
                         ))}
                       </div>
+                      {(() => {
+                        const dupes = (rule.keywords || []).filter(kw =>
+                          (keywordRulesMap[kw.toLowerCase().trim()]?.length || 0) > 1
+                        );
+                        if (dupes.length === 0) return null;
+                        return (
+                          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600">
+                            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                            <span>{t('rules.duplicateKeywordsWarning' as TranslationKey, { count: dupes.length })}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Action Box */}
@@ -330,6 +364,18 @@ const RulesPage: NextPageWithLayout = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-surface-500">{t('rules.actions.replyWithTemplate')}:</span>
                         <span className="text-sm font-bold text-brand-900">{getTemplateName(rule.templateId)}</span>
+                        {getTemplateStatus(rule.templateId) === 'missing' && (
+                          <Badge variant="error" size="sm" className="ms-2">
+                            <AlertTriangle className="w-3 h-3 me-1" />
+                            {t('rules.templateMissing' as TranslationKey)}
+                          </Badge>
+                        )}
+                        {getTemplateStatus(rule.templateId) === 'inactive' && (
+                          <Badge variant="warning" size="sm" className="ms-2">
+                            <AlertTriangle className="w-3 h-3 me-1" />
+                            {t('rules.templateInactive' as TranslationKey)}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -416,6 +462,39 @@ const RulesPage: NextPageWithLayout = () => {
               className="!py-2.5 sm:!py-3"
             />
           </div>
+          {(() => {
+            const currentKeywords = formData.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+            const conflicts: { keyword: string; ruleName: string }[] = [];
+            for (const kw of currentKeywords) {
+              const ruleNames = keywordRulesMap[kw] || [];
+              const otherRules = ruleNames.filter(name => name !== editingRule?.name);
+              for (const rn of otherRules) {
+                conflicts.push({ keyword: kw, ruleName: rn });
+              }
+            }
+            if (conflicts.length === 0) return null;
+            const uniqueKeywords = [...new Set(conflicts.map(c => c.keyword))];
+            return (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-xs text-amber-700">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">{t('rules.duplicateKeywordsInModal' as TranslationKey)}</span>
+                    <ul className="mt-1 space-y-0.5 list-disc ps-4">
+                      {uniqueKeywords.map(kw => {
+                        const ruleNames = conflicts.filter(c => c.keyword === kw).map(c => c.ruleName);
+                        return (
+                          <li key={kw}>
+                            <span className="font-bold">&ldquo;{kw}&rdquo;</span> — {ruleNames.join(', ')}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div>
             <Select
@@ -461,6 +540,17 @@ const RulesPage: NextPageWithLayout = () => {
                   className="!py-2 min-h-[60px]"
                   dir="auto"
                 />
+                <div className="flex items-center justify-end text-xs mt-1">
+                  <span className={`font-bold ${
+                    quickTemplate.text.length > 5000
+                      ? 'text-red-500'
+                      : quickTemplate.text.length > 4500
+                        ? 'text-amber-500'
+                        : 'text-surface-500'
+                  }`}>
+                    {quickTemplate.text.length}/5000
+                  </span>
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="ghost"
