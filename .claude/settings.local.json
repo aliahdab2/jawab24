@@ -105,7 +105,9 @@
       "Bash(cd /Users/aliahdab/Documents/AutoReply/backend && npm test:*)",
       "Bash(npx jest --passWithNoTests)",
       "WebFetch(domain:medium.com)",
-      "WebFetch(domain:ui-avatars.com)"
+      "WebFetch(domain:ui-avatars.com)",
+      "Bash(npx next build)",
+      "Bash(npx playwright test)"
     ]
   }
 }

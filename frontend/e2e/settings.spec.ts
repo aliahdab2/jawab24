@@ -218,6 +218,77 @@ test.describe('Settings Page', () => {
     expect(bodyText.length).toBeGreaterThan(50);
   });
 
+  test('should allow typing multiple characters in greeting message', async ({ page }) => {
+    await page.goto('/en/settings');
+
+    // Open advanced settings
+    const advancedBtn = page.locator('button').filter({ hasText: /Advanced/i }).first();
+    await expect(advancedBtn).toBeVisible({ timeout: 15000 });
+    await advancedBtn.click();
+
+    // Find the greeting message textarea (last textarea on the page, in the greeting card)
+    const greetingHeading = page.locator('h4').filter({ hasText: /First Message/i }).first();
+    await expect(greetingHeading).toBeVisible({ timeout: 10000 });
+
+    // The textarea is a sibling of the heading's parent div, inside the same card
+    const textarea = greetingHeading.locator('../../..').locator('textarea');
+    await expect(textarea).toBeVisible();
+
+    // Type a full message — should retain all characters (not reset after each keystroke)
+    await textarea.fill('Welcome to our store!');
+    await expect(textarea).toHaveValue('Welcome to our store!');
+
+    // Save button should be enabled after typing
+    const saveBtn = page.locator('button').filter({ hasText: /Save/i }).first();
+    await expect(saveBtn).toBeEnabled({ timeout: 5000 });
+  });
+
+  test('should retain greeting message when auto-translated sourceLang exists', async ({ page }) => {
+    // Mock settings with auto-translated greeting (sourceLang differs from dashboard lang)
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      const method = route.request().method();
+      if (url.includes('/settings') && method === 'PUT') {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      }
+      if (url.includes('/settings')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ...MOCK_SETTINGS,
+            greetingMessageMulti: { ar: 'مرحبا بكم', en: 'Welcome', sourceLang: 'ar' },
+          }),
+        });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/settings');
+
+    // Open advanced settings
+    const advancedBtn = page.locator('button').filter({ hasText: /Advanced/i }).first();
+    await expect(advancedBtn).toBeVisible({ timeout: 15000 });
+    await advancedBtn.click();
+
+    const greetingHeading = page.locator('h4').filter({ hasText: /First Message/i }).first();
+    const textarea = greetingHeading.locator('../../..').locator('textarea');
+    await expect(textarea).toBeVisible();
+
+    // Auto-translated field should start empty (translated text shown as placeholder)
+    await expect(textarea).toHaveValue('');
+
+    // Type a new message — should NOT reset after first character
+    await textarea.fill('Hello! How can we help?');
+    await expect(textarea).toHaveValue('Hello! How can we help?');
+  });
+
   test('should not crash when APIs fail', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();

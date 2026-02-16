@@ -127,7 +127,7 @@ const SettingsPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [language, setLanguage]);
+  }, [language, setLanguage, t]);
 
   useEffect(() => {
     if (isAuthenticated) {

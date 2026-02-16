@@ -185,6 +185,184 @@ test.describe('Rules Page', () => {
     expect(bodyText.length).toBeGreaterThan(20);
   });
 
+  test('should show first-match-wins hint text', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/rules')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_RULES }) });
+      if (url.includes('/templates')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_TEMPLATES }) });
+      if (url.includes('/subscription/usage')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
+      if (url.includes('/settings')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      if (url.includes('/auth/profile')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/rules');
+
+    await expect(
+      page.locator('h1').filter({ hasText: /Auto Rules/i }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Should show the first-match-wins hint
+    await expect(
+      page.locator('text=First match wins').first()
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should open create rule modal and fill form', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      const method = route.request().method();
+      if (url.includes('/rules') && method === 'POST') {
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: 'rule_new', name: 'Price Rule', keywords: ['price', 'cost'], templateId: 'tpl_1', priority: 2, active: true }),
+        });
+      }
+      if (url.includes('/rules')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_RULES }) });
+      if (url.includes('/templates')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_TEMPLATES }) });
+      if (url.includes('/subscription/usage')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
+      if (url.includes('/settings')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      if (url.includes('/auth/profile')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/rules');
+
+    await expect(
+      page.locator('h1').filter({ hasText: /Auto Rules/i }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Click "Add Rule" button
+    const addBtn = page.locator('button').filter({ hasText: /Add Rule/i }).first();
+    await addBtn.click();
+
+    // Modal should open
+    await expect(page.locator('text=Rule Name').first()).toBeVisible({ timeout: 5000 });
+
+    // Fill in rule name
+    const nameInput = page.locator('input').first();
+    await nameInput.fill('Price Rule');
+    await expect(nameInput).toHaveValue('Price Rule');
+
+    // Fill in keywords
+    const keywordsInput = page.locator('input').nth(1);
+    await keywordsInput.fill('price, cost');
+    await expect(keywordsInput).toHaveValue('price, cost');
+  });
+
+  test('should show rule toggle and keywords', async ({ page }) => {
+    const RULES_WITH_TOGGLE = [
+      { id: 'rule_1', name: 'Greeting Rule', keywords: ['hello', 'hi'], templateId: 'tpl_1', active: true, priority: 1 },
+      { id: 'rule_2', name: 'Price Rule', keywords: ['price', 'cost'], templateId: 'tpl_1', active: false, priority: 2 },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/rules')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: RULES_WITH_TOGGLE }) });
+      if (url.includes('/templates')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_TEMPLATES }) });
+      if (url.includes('/subscription/usage')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
+      if (url.includes('/settings')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      if (url.includes('/auth/profile')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/rules');
+
+    await expect(
+      page.locator('h1').filter({ hasText: /Auto Rules/i }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Both rules should be visible
+    await expect(page.getByText('Greeting Rule').first()).toBeVisible();
+    await expect(page.getByText('Price Rule').first()).toBeVisible();
+
+    // Keywords should be displayed
+    await expect(page.getByText('hello').first()).toBeVisible();
+    await expect(page.getByText('price').first()).toBeVisible();
+
+    // Toggle switches should be present (at least one per rule + possible page-level toggles)
+    const toggles = page.locator('[role="switch"]');
+    const count = await toggles.count();
+    expect(count).toBeGreaterThanOrEqual(2);
+  });
+
+  test('should render rules page in Arabic (RTL)', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'ui-storage',
+        JSON.stringify({ state: { sidebarOpen: true, language: 'ar', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
+      );
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/rules')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_RULES }) });
+      if (url.includes('/templates')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_TEMPLATES }) });
+      if (url.includes('/subscription/usage')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
+      if (url.includes('/settings')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      if (url.includes('/auth/profile')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/ar/rules');
+
+    // Arabic heading
+    await expect(
+      page.locator('h1').filter({ hasText: /قواعد الرد التلقائي/i }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Rule name should still be visible (rule names are user-defined, not translated)
+    await expect(page.getByText('Greeting Rule').first()).toBeVisible();
+
+    // Arabic hint text
+    await expect(
+      page.locator('text=أول قاعدة مطابقة').first()
+    ).toBeVisible({ timeout: 10000 });
+
+    // Add Rule button in Arabic
+    await expect(
+      page.locator('button').filter({ hasText: /إضافة قاعدة/i }).first()
+    ).toBeVisible();
+  });
+
+  test('should open create rule modal in Arabic', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'ui-storage',
+        JSON.stringify({ state: { sidebarOpen: true, language: 'ar', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
+      );
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/rules')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_RULES }) });
+      if (url.includes('/templates')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_TEMPLATES }) });
+      if (url.includes('/subscription/usage')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
+      if (url.includes('/settings')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      if (url.includes('/auth/profile')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/ar/rules');
+
+    await expect(
+      page.locator('h1').filter({ hasText: /قواعد الرد التلقائي/i }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Click Arabic "Add Rule" button
+    const addBtn = page.locator('button').filter({ hasText: /إضافة قاعدة/i }).first();
+    await addBtn.click();
+
+    // Modal should open with Arabic label
+    await expect(page.locator('text=اسم القاعدة').first()).toBeVisible({ timeout: 5000 });
+
+    // Fill in rule name
+    const nameInput = page.locator('input').first();
+    await nameInput.fill('قاعدة الأسعار');
+    await expect(nameInput).toHaveValue('قاعدة الأسعار');
+  });
+
   test('should handle API failures gracefully', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
