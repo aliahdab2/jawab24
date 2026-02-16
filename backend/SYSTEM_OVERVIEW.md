@@ -23,19 +23,50 @@ The system is an event-driven loop triggered by social media webhooks.
 
 ## 3. The Decision Engine
 
-Located primarily in `src/services/reply.ts`.
+Located in `src/services/reply/generator.ts`, orchestrated by `messageProcessor.ts` (DMs) and `commentProcessor.ts` (comments).
 
-**Priority Logic (The "Stack"):**
+### 3.1 DM Pipeline (`messageProcessor.ts`)
 
-1.  **Business Hours Check**:
-    - _Outside Hours?_ -> Send "Away Message" (if DM) or "Out of Hours" comment. Stop.
-2.  **Rule Matching** (Highest Priority):
-    - _Keyword Match?_ -> Use specific Template (e.g., "price" -> Price Template). Stop.
-3.  **AI Reply** (Fallback):
+| Step | Name | What it does |
+|------|------|-------------|
+| 1 | Validate page | Page exists, has user, auto-reply enabled |
+| 2 | Check platform auto-reply | Page-level toggle |
+| 3 | Fetch sender name | Best-effort Graph API call |
+| 4 | Store incoming message | Persist to DB |
+| 5 | Debounce | Skip if newer unreplied message from same sender |
+| 6 | Handoff pause | Skip if human replied manually in last 30 min |
+| 7 | Rate limit | Per-sender velocity check |
+| 8 | User settings | Check messages auto-reply enabled; send away message if not |
+| 9 | Already replied | Skip duplicates |
+| 9b | Greeting message | Send greeting for new conversations |
+| 10 | Reply delay | User-configured delay |
+| 11 | Consolidate | Gather all unreplied messages from sender |
+| 12 | Generate reply | Template match first, then AI (see 3.2) |
+| 13 | Send reply | Graph API call |
+| 14-16 | Post-reply | Mark replied, store outgoing, mark older messages |
+| 17 | Notify | Push notification if flagged |
+
+### 3.2 Reply Generation Priority (The "Stack")
+
+Located in `src/services/reply/generator.ts`.
+
+1.  **Rule Matching** (Highest Priority):
+    - _Keyword Match?_ -> Use specific Template (e.g., "shipping" -> Shipping Template). Stop.
+    - **Important:** Template matching uses only the _latest_ message text, not the full consolidated text. This prevents stale unreplied messages from hijacking the user's current intent.
+2.  **AI Reply** (Fallback):
     - _AI Enabled?_ -> Generate reply using strict prompt (No hallucination).
+    - AI receives the _full consolidated text_ for conversation context.
     - _Guardrail Failed?_ -> Fallback to Safe Default.
-4.  **Default Fallback**:
+3.  **Default Fallback**:
     - If all above fail -> Send generic "Thanks for contacting us" message.
+
+### 3.3 Message Consolidation
+
+When multiple unreplied messages exist from the same sender (e.g., rapid-fire messages, or messages that arrived during a handoff pause), the pipeline consolidates them:
+
+- **Template matching** uses the **latest message only** (reflects current intent)
+- **AI context** uses **all unreplied messages joined** (gives full conversation history)
+- After replying, all older unreplied messages are marked as replied (Step 16)
 
 ## 4. The Protection Layer (V1)
 

@@ -133,19 +133,20 @@ Improve: Add dialect hints to prompt based on page location/settings
 
 **Goal:** Catch more comments with templates before using AI (cheaper + predictable).
 
+#### 3.0 Template Matching Uses Latest Message Only (DONE)
+**Files:** `backend/src/services/reply/generator.ts`, `backend/src/services/reply/messageProcessor.ts`
+
+**Fixed:** When multiple unreplied messages are consolidated, template keyword matching now runs against the **latest message only** (not the full concatenated text). This prevents stale messages from hijacking the user's current intent. AI still receives the full consolidated text for conversation context.
+
 #### 3.1 Fuzzy/Semantic Keyword Matching
 **File:** `backend/src/services/rules.ts`
 
-Current `findMatchingRule()` uses exact substring match. Improve:
+~~Current `findMatchingRule()` uses exact substring match.~~ **Partially improved:** Arabic uses substring matching with normalization (diacritics, alef variants). English uses word-boundary matching. Further improvements possible:
 
 ```typescript
-// Current (weak)
-lowerComment.includes(keyword.toLowerCase())
-
 // Improved options:
 // A) Synonym groups: "price" also matches "cost", "how much", "كم السعر"
-// B) Word boundary matching: "price" won't match "surprise"
-// C) Arabic normalization: remove tashkeel, normalize hamza/alef
+// B) Arabic root/stem matching for better coverage
 ```
 
 #### 3.2 Auto-Suggest Templates from AI Replies
