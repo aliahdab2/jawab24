@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
 import { Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, Clock } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount } from '@/lib/notifications';
+import { SwipeableNotificationItem } from './SwipeableNotificationItem';
 
 interface Notification {
     id: string;
@@ -157,6 +159,44 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         setUnreadCount(0);
     };
 
+    const handleDismissNotification = (notificationId: string, wasUnread: boolean) => {
+        const dismissed = notifications.find(n => n.id === notificationId);
+        const dismissedIndex = notifications.findIndex(n => n.id === notificationId);
+
+        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+        if (wasUnread) {
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        }
+
+        let undone = false;
+        const apiTimer = setTimeout(() => {
+            if (!undone) {
+                markNotificationAsRead(notificationId);
+            }
+        }, 5000);
+
+        toast(t('notifications.dismissed'), {
+            duration: 4000,
+            action: {
+                label: t('notifications.undo'),
+                onClick: () => {
+                    undone = true;
+                    clearTimeout(apiTimer);
+                    if (dismissed) {
+                        setNotifications(prev => {
+                            const updated = [...prev];
+                            const insertAt = Math.min(dismissedIndex, updated.length);
+                            updated.splice(insertAt, 0, dismissed);
+                            return updated;
+                        });
+                        if (wasUnread) {
+                            setUnreadCount(prev => prev + 1);
+                        }
+                    }
+                },
+            },
+        });
+    };
 
     const getRelativeTime = (dateString: string) => {
         const date = new Date(dateString);
@@ -246,7 +286,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                     </div>
 
                     {/* Notifications List */}
-                    <div className="max-h-[400px] overflow-y-auto divide-y divide-surface-100">
+                    <div className="max-h-[400px] overflow-y-auto">
                         {loading ? (
                             <div className="p-10 text-center">
                                 <div className="w-8 h-8 border-[3px] border-brand-200 border-t-brand-500 rounded-full animate-spin mx-auto mb-3" />
@@ -267,15 +307,19 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 const isUnread = !notification.read;
 
                                 return (
-                                    <div
+                                    <SwipeableNotificationItem
                                         key={notification.id}
-                                        className={`group relative px-5 py-3.5 transition-all duration-200 cursor-pointer ${
-                                            isUnread
-                                                ? 'bg-brand-50/40 hover:bg-brand-50/70'
-                                                : 'hover:bg-surface-50'
-                                        }`}
-                                        onClick={() => handleNotificationClick(notification)}
+                                        onDismiss={() => handleDismissNotification(notification.id, isUnread)}
+                                        enabled={isUnread}
                                     >
+                                        <div
+                                            className={`group relative px-5 py-3.5 transition-colors duration-200 cursor-pointer ${
+                                                isUnread
+                                                    ? 'bg-brand-50/40 hover:bg-brand-50/70'
+                                                    : 'hover:bg-surface-50'
+                                            }`}
+                                            onClick={() => handleNotificationClick(notification)}
+                                        >
                                         {/* Unread accent bar */}
                                         {isUnread && (
                                             <div className="absolute inset-y-0 start-0 w-[3px] bg-brand-500 rounded-e-full" />
@@ -341,7 +385,8 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                                 ) : null}
                                             </div>
                                         </div>
-                                    </div>
+                                        </div>
+                                    </SwipeableNotificationItem>
                                 );
                             })
                         )}

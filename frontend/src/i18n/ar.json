@@ -1019,6 +1019,8 @@
   "notifications.minutesAgo": "منذ {count} دقيقة",
   "notifications.hoursAgo": "منذ {count} ساعة",
   "notifications.daysAgo": "منذ {count} يوم",
+  "notifications.dismissed": "تم إخفاء الإشعار",
+  "notifications.undo": "تراجع",
   "notifications.prePrompt.title": "ابقَ على اطلاع",
   "notifications.prePrompt.body": "احصل على إشعار عندما تحتاج التعليقات انتباهك أو عند حدوث شيء مهم في صفحاتك.",
   "notifications.prePrompt.enable": "تفعيل الإشعارات",

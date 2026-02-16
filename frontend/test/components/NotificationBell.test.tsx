@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { NotificationBell } from '../../src/components/ui/NotificationBell';
+
+// Mock sonner toast
+const mockToast = vi.fn();
+vi.mock('sonner', () => ({
+    toast: (...args: unknown[]) => mockToast(...args),
+}));
 
 // Mock useAuthStore
 let mockIsAuthenticated = true;
@@ -269,5 +275,152 @@ describe('NotificationBell', () => {
         expect(mockGetUnreadCount.mock.calls.length).toBeGreaterThan(1);
 
         vi.useRealTimers();
+    });
+
+    describe('Swipe dismiss & undo toast', () => {
+        const notification1 = {
+            id: 'notif-1',
+            type: 'new_comment',
+            title: 'New Comment',
+            body: 'Someone commented on your post.',
+            read: false,
+            createdAt: new Date().toISOString(),
+            data: null,
+        };
+        const notification2 = {
+            id: 'notif-2',
+            type: 'payment_failed',
+            title: 'Payment Failed',
+            body: 'Your payment could not be processed.',
+            read: false,
+            createdAt: new Date().toISOString(),
+            data: null,
+        };
+        const readNotification = {
+            id: 'notif-3',
+            type: 'subscription_renewed',
+            title: 'Subscription Renewed',
+            body: 'Your subscription was renewed.',
+            read: true,
+            createdAt: new Date().toISOString(),
+            data: null,
+        };
+
+        it('should wrap notifications in SwipeableNotificationItem', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [notification1, readNotification],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+            });
+
+            // Each notification is wrapped — the wrapper has overflow-hidden in its className
+            // Query via the notification text's ancestor chain
+            const newCommentEl = screen.getByText('New Comment');
+            const wrapper = newCommentEl.closest('div[class*="overflow-hidden"]');
+            expect(wrapper).not.toBeNull();
+            expect(wrapper?.className).toContain('border-b');
+        });
+
+        it('should show both unread and read notifications with appropriate styling', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [notification1, readNotification],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+                expect(screen.getByText('Subscription Renewed')).toBeInTheDocument();
+            });
+
+            // Unread notification has brand background
+            const unreadNotif = screen.getByText('New Comment').closest('div[class*="cursor-pointer"]');
+            expect(unreadNotif?.className).toContain('bg-brand-50');
+
+            // Read notification has surface hover
+            const readNotif = screen.getByText('Subscription Renewed').closest('div[class*="cursor-pointer"]');
+            expect(readNotif?.className).toContain('hover:bg-surface-50');
+        });
+
+        it('should display notification content structure (title, body, timestamp)', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [notification1],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+            });
+
+            expect(screen.getByText('Someone commented on your post.')).toBeInTheDocument();
+            expect(screen.getByText('notifications.justNow')).toBeInTheDocument();
+        });
+
+        it('should show background label for unread notifications only', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [notification1, readNotification],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+            });
+
+            // The SwipeableNotificationItem shows "markAsRead" labels for enabled (unread) items
+            // Unread notification1 has enabled=true so its wrapper shows background labels
+            // The text "notifications.markAsRead" appears in the swipe background (2 per unread item: left + right)
+            const markAsReadTexts = screen.getAllByText('notifications.markAsRead');
+            // At least 2 from the background (one unread notification) + possibly 1 from the check button
+            expect(markAsReadTexts.length).toBeGreaterThanOrEqual(2);
+        });
+
+        it('should not call markNotificationAsRead on initial render', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [notification1],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+            });
+
+            // markNotificationAsRead should not have been called yet
+            expect(mockMarkNotificationAsRead).not.toHaveBeenCalled();
+        });
+
+        it('should use transition-colors instead of transition-all on notification items', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [notification1],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+            });
+
+            const notifDiv = screen.getByText('New Comment').closest('div[class*="cursor-pointer"]');
+            expect(notifDiv?.className).toContain('transition-colors');
+            expect(notifDiv?.className).not.toContain('transition-all');
+        });
     });
 });

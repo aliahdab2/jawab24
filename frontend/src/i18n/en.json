@@ -1023,6 +1023,8 @@
   "notifications.minutesAgo": "{count}m ago",
   "notifications.hoursAgo": "{count}h ago",
   "notifications.daysAgo": "{count}d ago",
+  "notifications.dismissed": "Notification dismissed",
+  "notifications.undo": "Undo",
   "notifications.prePrompt.title": "Stay in the loop",
   "notifications.prePrompt.body": "Get notified when comments need your attention or when something important happens with your pages.",
   "notifications.prePrompt.enable": "Enable notifications",
