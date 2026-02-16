@@ -357,6 +357,7 @@
   "templates.notUsedByRules": "Not used by any rule",
   "rules.title": "Auto Rules",
   "rules.description": "Create rules to automatically reply based on keywords",
+  "rules.firstMatchHint": "Rules are checked top to bottom. First match wins.",
   "rules.addRule": "Add Rule",
   "rules.ruleName": "Rule Name",
   "rules.ruleNamePlaceholder": "e.g. Price Questions",

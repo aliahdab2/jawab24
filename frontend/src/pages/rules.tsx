@@ -227,7 +227,12 @@ const RulesPage: NextPageWithLayout = () => {
       {/* Header */}
       <PageHeader
         title={t('rules.title')}
-        description={t('rules.description')}
+        description={
+          <>
+            {t('rules.description')}
+            <span className="block text-xs text-surface-400 mt-1">{t('rules.firstMatchHint' as TranslationKey)}</span>
+          </>
+        }
         action={
           <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
             {t('rules.addRule')}

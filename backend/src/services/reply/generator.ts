@@ -260,7 +260,7 @@ export class ReplyGenerator {
         if (matchingRule?.templateId) {
             const template = await templatesService.getTemplate(userId, matchingRule.templateId);
 
-            if (template?.message) {
+            if (template?.message && template.active !== false) {
                 this.logger.debug('[Generator] Using template', { templateName: template.name });
                 return { replyText: template.message, replyMethod: 'template', templateId: template.id, needsAttention: false };
             }

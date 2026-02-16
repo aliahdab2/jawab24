@@ -353,6 +353,7 @@
   "templates.notUsedByRules": "غير مستخدم في أي قاعدة",
   "rules.title": "قواعد الرد التلقائي",
   "rules.description": "أنشئ قواعد للرد تلقائياً بناءً على الكلمات المفتاحية",
+  "rules.firstMatchHint": "يتم فحص القواعد من الأعلى للأسفل. أول قاعدة مطابقة هي التي تُنفَّذ.",
   "rules.addRule": "إضافة قاعدة",
   "rules.ruleName": "اسم القاعدة",
   "rules.ruleNamePlaceholder": "مثال: أسئلة الأسعار",

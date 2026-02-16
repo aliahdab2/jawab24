@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { rules, templates } from '../db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { CreateRuleDTO, UpdateRuleDTO } from '../types';
 import { normalizeArabic } from '@jawab24/shared';
 
@@ -97,7 +97,7 @@ export class RulesService {
             .from(rules)
             .leftJoin(templates, eq(rules.templateId, templates.id))
             .where(eq(rules.userId, userId))
-            .orderBy(desc(rules.priority), desc(rules.createdAt))
+            .orderBy(asc(rules.priority), asc(rules.createdAt))
             .limit(limit)
             .offset(offset);
 
@@ -159,7 +159,7 @@ export class RulesService {
             .select()
             .from(rules)
             .where(and(eq(rules.userId, userId), eq(rules.active, true)))
-            .orderBy(desc(rules.priority))
+            .orderBy(asc(rules.priority))
             .limit(100);
 
         // Normalize once outside the loop

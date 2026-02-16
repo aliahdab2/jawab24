@@ -61,7 +61,7 @@ vi.mock('../../src/db/schema', () => ({
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn(),
     and: vi.fn(),
-    desc: vi.fn(),
+    asc: vi.fn(),
     sql: vi.fn(),
 }));
 
@@ -274,24 +274,24 @@ describe('RulesService', () => {
             expect(result).toEqual(matchingRule);
         });
 
-        it('should return highest priority match', async () => {
+        it('should return first match by ascending priority (top of UI wins)', async () => {
             const { db } = await import('../../src/db');
-            const highPriorityRule = { id: 'rule-1', keywords: ['price'], priority: 100 };
-            const lowPriorityRule = { id: 'rule-2', keywords: ['price'], priority: 10 };
+            const topRule = { id: 'rule-1', keywords: ['price'], priority: 1 };
+            const bottomRule = { id: 'rule-2', keywords: ['price'], priority: 10 };
 
-            // Rules should be returned ordered by priority DESC
+            // Rules returned ordered by priority ASC (low number = top of UI = checked first)
             (db.select as ReturnType<typeof vi.fn>).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
                         orderBy: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([highPriorityRule, lowPriorityRule]),
+                            limit: vi.fn().mockResolvedValue([topRule, bottomRule]),
                         }),
                     }),
                 }),
             });
 
             const result = await service.findMatchingRule('user-123', 'price check');
-            expect(result).toEqual(highPriorityRule);
+            expect(result).toEqual(topRule);
         });
 
         it('should handle rules with null keywords', async () => {
