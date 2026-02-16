@@ -59,6 +59,12 @@ export function MessageCard({
     .filter((m) => m.direction === 'outgoing')
     .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())[0];
 
+  // Determine chronological order for card display
+  const incomingTime = lastIncoming?.createdAt ? new Date(lastIncoming.createdAt).getTime() : 0;
+  const outgoingTime = lastOutgoing?.createdAt ? new Date(lastOutgoing.createdAt).getTime() : 0;
+  const outgoingIsNewer = outgoingTime >= incomingTime;
+  const showOutgoing = !!lastOutgoing && !conv.needsHumanAttention;
+
   // Reply Source Indicator (matches CommentCard)
   const ReplySourceIndicator = () => {
     if (!lastOutgoing?.replyMethod) return null;
@@ -85,6 +91,38 @@ export function MessageCard({
       </div>
     );
   };
+
+  // Message bubble elements for chronological rendering
+  const incomingBubble = lastIncoming ? (
+    <div className="me-8 sm:me-12">
+      <div
+        className={clsx(
+          'px-4 py-3 bg-surface-50 rounded-2xl rounded-tl-sm text-surface-700 text-sm leading-relaxed border border-surface-100',
+          'transition-colors'
+        )}
+      >
+        <p className="line-clamp-3">{lastIncoming.message}</p>
+      </div>
+    </div>
+  ) : null;
+
+  const outgoingBubble = showOutgoing ? (
+    <div className="flex items-end justify-end gap-3 ms-8 sm:ms-12">
+      <div className="flex flex-col items-end gap-1 min-w-0">
+        <div className="relative">
+          <div className="px-4 py-3 bg-emerald-50 rounded-2xl rounded-tr-sm text-surface-800 text-sm leading-relaxed border border-emerald-100 shadow-sm">
+            <p className="line-clamp-2 italic">{lastOutgoing.message}</p>
+            <div className="mt-1 flex justify-end">
+              <CheckCircle className="w-3 h-3 text-emerald-500" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex-shrink-0 mb-1">
+        <ReplySourceIndicator />
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div
@@ -122,19 +160,17 @@ export function MessageCard({
         )
       )}
 
-      <div className="p-5 flex flex-col gap-6">
-        {/* Customer Message Bubble (Start/Left) */}
+      <div className="p-5 flex flex-col gap-4">
+        {/* Header: Avatar + Name + Time + Message Count */}
         <div className="flex items-start gap-3 me-8 sm:me-12">
-          {/* Avatar */}
           <div className="flex-shrink-0">
             <div className="w-10 h-10 rounded-full bg-surface-100 flex items-center justify-center text-surface-400 border-2 border-white shadow-sm">
               <User className="w-5 h-5" />
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-1 min-w-0">
-            {/* Name & Time & Message Count */}
-            <div className="flex flex-col px-1 mb-1">
+          <div className="flex flex-col items-start min-w-0">
+            <div className="flex flex-col px-1">
               <span className="text-sm font-bold text-surface-900 truncate">
                 {conv.senderName || t('common.unknownUser')}
               </span>
@@ -148,50 +184,31 @@ export function MessageCard({
                 </span>
               </div>
             </div>
-
-            {/* Message Bubble */}
-            {lastIncoming && (
-              <div className="relative group/bubble">
-                <div
-                  className={clsx(
-                    'px-4 py-3 bg-surface-50 rounded-2xl rounded-tl-sm text-surface-700 text-sm leading-relaxed border border-surface-100',
-                    'group-hover/card:bg-surface-100/50 transition-colors'
-                  )}
-                >
-                  <p className="line-clamp-3">{lastIncoming.message}</p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Reply Bubble (End/Right) or Action Button */}
-        {lastOutgoing && !conv.needsHumanAttention ? (
-          <div className="flex items-end justify-end gap-3 ms-8 sm:ms-12">
-            <div className="flex flex-col items-end gap-1 min-w-0">
-              <div className="relative">
-                <div className="px-4 py-3 bg-emerald-50 rounded-2xl rounded-tr-sm text-surface-800 text-sm leading-relaxed border border-emerald-100 shadow-sm">
-                  <p className="line-clamp-2 italic">{lastOutgoing.message}</p>
-                  <div className="mt-1 flex justify-end">
-                    <CheckCircle className="w-3 h-3 text-emerald-500" />
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* Message Bubbles - rendered in chronological order */}
+        {outgoingIsNewer ? (
+          <>
+            {incomingBubble}
+            {outgoingBubble}
+          </>
+        ) : (
+          <>
+            {outgoingBubble}
+            {incomingBubble}
+          </>
+        )}
 
-            {/* Source Indicator */}
-            <div className="flex-shrink-0 mb-1">
-              <ReplySourceIndicator />
-            </div>
-          </div>
-        ) : conv.needsHumanAttention ? (
+        {/* Action Buttons */}
+        {conv.needsHumanAttention ? (
           <div className="flex justify-end mt-1 animate-fade-in">
             <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-100 text-xs font-bold uppercase tracking-wider group-hover:bg-red-100 transition-colors">
               <Send className="w-3.5 h-3.5" />
               <span>{t('comments.reply')}</span>
             </div>
           </div>
-        ) : (
+        ) : !showOutgoing && (
           <div className="flex justify-end mt-2 animate-fade-in">
             <div className="flex items-center gap-1.5 text-xs font-bold text-brand-600 opacity-60 group-hover:opacity-100 transition-opacity">
               <MessageCircle className="w-3.5 h-3.5" />
