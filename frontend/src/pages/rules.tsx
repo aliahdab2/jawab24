@@ -1,22 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, type ReactElement } from 'react';
-import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, Textarea, Select, Modal, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, Badge } from '@/components/ui';
+import { Card, Button, Input, Textarea, Select, Modal, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, CharCounter } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { rulesApi, templatesApi } from '@/lib/api';
-import {
-  Zap,
-  Plus,
-  Edit,
-  Trash2,
-  Copy,
-  ArrowUp,
-  ArrowDown,
-  Tag,
-  BookTemplate,
-  AlertTriangle
-} from 'lucide-react';
+import { extractArrayData } from '@/lib/api-utils';
+import { Zap, Plus, BookTemplate, AlertTriangle } from 'lucide-react';
+import { RuleCard } from '@/components/rules';
 import type { Rule, Template } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 
@@ -47,16 +37,10 @@ const RulesPage: NextPageWithLayout = () => {
         templatesApi.getAll()
       ]);
 
-      const rulesData = Array.isArray(rulesRes.data)
-        ? rulesRes.data
-        : (Array.isArray(rulesRes.data?.data) ? rulesRes.data.data : []);
+      const rulesData = extractArrayData<Rule>(rulesRes.data);
+      const templatesData = extractArrayData<Template>(templatesRes.data);
 
-      const templatesData = Array.isArray(templatesRes.data)
-        ? templatesRes.data
-        : (Array.isArray(templatesRes.data?.data) ? templatesRes.data.data : []);
-
-      // Sort rules by priority
-      const sortedRules = [...rulesData].sort((a: Rule, b: Rule) => (a.priority ?? 0) - (b.priority ?? 0));
+      const sortedRules = [...rulesData].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
       setRules(sortedRules);
       setTemplates(templatesData);
     } catch (error) {
@@ -67,7 +51,6 @@ const RulesPage: NextPageWithLayout = () => {
   }, []);
 
   useEffect(() => {
-    // Use isAuthenticated instead of token - on web, auth is via cookies
     if (isAuthenticated) {
       fetchData();
     }
@@ -147,7 +130,7 @@ const RulesPage: NextPageWithLayout = () => {
   };
 
   const handleDuplicate = (rule: Rule) => {
-    setEditingRule(null); // Create mode
+    setEditingRule(null);
     setFormData({
       name: `${rule.name} (Copy)`,
       keywords: (rule.keywords || []).join(', '),
@@ -158,27 +141,19 @@ const RulesPage: NextPageWithLayout = () => {
   };
 
   const handleToggle = async (id: string, active: boolean) => {
-    // Optimistic update
     setRules(rules.map(r => r.id === id ? { ...r, active } : r));
-
     try {
       await rulesApi.update(id, { active });
     } catch (error) {
       console.error('Failed to toggle rule:', error);
-      // Revert
       setRules(rules.map(r => r.id === id ? { ...r, active: !active } : r));
     }
   };
 
   const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
 
-  const handleDelete = (id: string) => {
-    setDeleteConfirmationId(id);
-  };
-
   const handleConfirmDelete = async () => {
     if (!deleteConfirmationId) return;
-
     try {
       await rulesApi.delete(deleteConfirmationId);
       setRules(rules.filter(r => r.id !== deleteConfirmationId));
@@ -197,17 +172,13 @@ const RulesPage: NextPageWithLayout = () => {
     const newRules = [...rules];
     const swapIndex = direction === 'up' ? index - 1 : index + 1;
 
-    // Swap priorities locally
     const tempPriority = newRules[index].priority;
     newRules[index].priority = newRules[swapIndex].priority;
     newRules[swapIndex].priority = tempPriority;
-
-    // Swap elements
     [newRules[index], newRules[swapIndex]] = [newRules[swapIndex], newRules[index]];
 
     setRules(newRules);
 
-    // Update backend (ideally use a reorder endpoint, but loop updates for now)
     try {
       await Promise.all([
         rulesApi.update(newRules[index].id, { priority: newRules[index].priority ?? undefined }),
@@ -215,21 +186,8 @@ const RulesPage: NextPageWithLayout = () => {
       ]);
     } catch (error) {
       console.error("Failed to update priority", error);
-      fetchData(); // Revert by re-fetching
+      fetchData();
     }
-  };
-
-  const getTemplateName = (id: string | null) => {
-    if (!id) return t('common.unknown');
-    return templates.find(t => t.id === id)?.name || t('common.unknown');
-  };
-
-  const getTemplateStatus = (templateId: string | null): 'missing' | 'inactive' | 'ok' => {
-    if (!templateId) return 'missing';
-    const template = templates.find(tp => tp.id === templateId);
-    if (!template) return 'missing';
-    if (template.active === false) return 'inactive';
-    return 'ok';
   };
 
   // Build template options with preview text
@@ -243,6 +201,22 @@ const RulesPage: NextPageWithLayout = () => {
   if (loading && rules.length === 0) {
     return <PageSkeleton />;
   }
+
+  // Compute keyword conflicts for modal
+  const modalKeywordConflicts = (() => {
+    const currentKeywords = formData.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+    const conflicts: { keyword: string; ruleName: string }[] = [];
+    for (const kw of currentKeywords) {
+      const ruleNames = keywordRulesMap[kw] || [];
+      const otherRules = ruleNames.filter(name => name !== editingRule?.name);
+      for (const rn of otherRules) {
+        conflicts.push({ keyword: kw, ruleName: rn });
+      }
+    }
+    return conflicts;
+  })();
+
+  const uniqueConflictKeywords = [...new Set(modalKeywordConflicts.map(c => c.keyword))];
 
   return (
     <>
@@ -266,158 +240,19 @@ const RulesPage: NextPageWithLayout = () => {
       {rules.length > 0 ? (
         <div className="space-y-6 pb-12">
           {rules.map((rule, i) => (
-            <Card
+            <RuleCard
               key={rule.id}
-              hover
-              className={clsx(
-                "animate-slide-up border-none transition-all duration-300 rounded-3xl overflow-hidden group flex flex-col h-full",
-                !rule.active ? 'opacity-75 grayscale-[0.5]' : 'bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
-              )}
-              padding="none"
-              style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
-            >
-              <div className="flex flex-col lg:flex-row">
-                {/* Priority & Reorder Controls */}
-                <div className="bg-surface-50 border-b lg:border-b-0 lg:border-e border-surface-100 p-4 lg:p-6 flex lg:flex-col items-center justify-between lg:justify-center gap-4">
-                  <div className="flex lg:flex-col items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handlePriorityChange(rule.id, 'up')}
-                      disabled={i === 0}
-                      className="text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm"
-                    >
-                      <ArrowUp className="w-4 h-4" />
-                    </Button>
-                    <div className="w-10 h-10 rounded-xl bg-white border border-surface-200 shadow-sm flex items-center justify-center">
-                      <span className="text-lg font-bold text-surface-900">{rule.priority}</span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handlePriorityChange(rule.id, 'down')}
-                      disabled={i === rules.length - 1}
-                      className="text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm"
-                    >
-                      <ArrowDown className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <div className="lg:hidden">
-                    <Toggle
-                      enabled={rule.active ?? false}
-                      onChange={(active) => handleToggle(rule.id, active)}
-                      size="sm"
-                    />
-                  </div>
-                </div>
-
-                {/* Rule Content */}
-                <div className="flex-1 p-6 text-start">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold text-surface-900">{rule.name}</h3>
-                      <div className={`w-2 h-2 rounded-full ${rule.active ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
-                    </div>
-                    <div className="hidden lg:block">
-                      <Toggle
-                        enabled={rule.active ?? false}
-                        onChange={(active) => handleToggle(rule.id, active)}
-                        size="sm"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {/* Condition Box */}
-                    <div className="p-4 rounded-2xl bg-blue-50/30 border border-blue-100/50 relative group/condition">
-                      <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-blue-600">
-                        <Tag className="w-3 h-3" />
-                        <span>{t('rules.condition')}</span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {(rule.keywords || []).map((keyword) => (
-                          <span key={keyword} className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 text-blue-800 text-xs font-bold shadow-sm">
-                            {keyword}
-                          </span>
-                        ))}
-                      </div>
-                      {(() => {
-                        const dupes = (rule.keywords || []).filter(kw =>
-                          (keywordRulesMap[kw.toLowerCase().trim()]?.length || 0) > 1
-                        );
-                        if (dupes.length === 0) return null;
-                        return (
-                          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600">
-                            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                            <span>{t('rules.duplicateKeywordsWarning' as TranslationKey, { count: dupes.length })}</span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Action Box */}
-                    <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative group/action">
-                      <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-brand-600">
-                        <BookTemplate className="w-3 h-3" />
-                        <span>{t('rules.action')}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-surface-500">{t('rules.actions.replyWithTemplate')}:</span>
-                        <span className="text-sm font-bold text-brand-900">{getTemplateName(rule.templateId)}</span>
-                        {getTemplateStatus(rule.templateId) === 'missing' && (
-                          <Badge variant="error" size="sm" className="ms-2">
-                            <AlertTriangle className="w-3 h-3 me-1" />
-                            {t('rules.templateMissing' as TranslationKey)}
-                          </Badge>
-                        )}
-                        {getTemplateStatus(rule.templateId) === 'inactive' && (
-                          <Badge variant="warning" size="sm" className="ms-2">
-                            <AlertTriangle className="w-3 h-3 me-1" />
-                            {t('rules.templateInactive' as TranslationKey)}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions Footer / Side */}
-                <div className="bg-surface-50 lg:bg-white border-t lg:border-t-0 lg:border-s border-surface-100 p-4 lg:p-6 flex lg:flex-col items-center justify-end lg:justify-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleOpenModal(rule)}
-                    className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
-                  >
-                    <Edit className="w-4 h-4" />
-                    <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('common.edit')}</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDuplicate(rule)}
-                    className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
-                  >
-                    <Copy className="w-4 h-4" />
-                    <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('rules.duplicateRule')}</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(rule.id)}
-                    className="text-surface-400 hover:text-red-600 hover:bg-red-50 flex items-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="lg:hidden text-xs font-bold uppercase tracking-wider text-red-600">{t('common.delete')}</span>
-                  </Button>
-                  {rule.matchCount !== undefined && (
-                    <div className="mt-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
-                      {rule.matchCount} {t('rules.matches')}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
+              rule={rule}
+              index={i}
+              totalRules={rules.length}
+              templates={templates}
+              keywordRulesMap={keywordRulesMap}
+              onEdit={handleOpenModal}
+              onDuplicate={handleDuplicate}
+              onDelete={(id) => setDeleteConfirmationId(id)}
+              onToggle={handleToggle}
+              onPriorityChange={handlePriorityChange}
+            />
           ))}
         </div>
       ) : (
@@ -462,39 +297,26 @@ const RulesPage: NextPageWithLayout = () => {
               className="!py-2.5 sm:!py-3"
             />
           </div>
-          {(() => {
-            const currentKeywords = formData.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
-            const conflicts: { keyword: string; ruleName: string }[] = [];
-            for (const kw of currentKeywords) {
-              const ruleNames = keywordRulesMap[kw] || [];
-              const otherRules = ruleNames.filter(name => name !== editingRule?.name);
-              for (const rn of otherRules) {
-                conflicts.push({ keyword: kw, ruleName: rn });
-              }
-            }
-            if (conflicts.length === 0) return null;
-            const uniqueKeywords = [...new Set(conflicts.map(c => c.keyword))];
-            return (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-xs text-amber-700">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold">{t('rules.duplicateKeywordsInModal' as TranslationKey)}</span>
-                    <ul className="mt-1 space-y-0.5 list-disc ps-4">
-                      {uniqueKeywords.map(kw => {
-                        const ruleNames = conflicts.filter(c => c.keyword === kw).map(c => c.ruleName);
-                        return (
-                          <li key={kw}>
-                            <span className="font-bold">&ldquo;{kw}&rdquo;</span> — {ruleNames.join(', ')}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+          {modalKeywordConflicts.length > 0 && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-100 text-xs text-amber-700">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">{t('rules.duplicateKeywordsInModal' as TranslationKey)}</span>
+                  <ul className="mt-1 space-y-0.5 list-disc ps-4">
+                    {uniqueConflictKeywords.map(kw => {
+                      const ruleNames = modalKeywordConflicts.filter(c => c.keyword === kw).map(c => c.ruleName);
+                      return (
+                        <li key={kw}>
+                          <span className="font-bold">&ldquo;{kw}&rdquo;</span> — {ruleNames.join(', ')}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
 
           <div>
             <Select
@@ -541,15 +363,7 @@ const RulesPage: NextPageWithLayout = () => {
                   dir="auto"
                 />
                 <div className="flex items-center justify-end text-xs mt-1">
-                  <span className={`font-bold ${
-                    quickTemplate.text.length > 5000
-                      ? 'text-red-500'
-                      : quickTemplate.text.length > 4500
-                        ? 'text-amber-500'
-                        : 'text-surface-500'
-                  }`}>
-                    {quickTemplate.text.length}/5000
-                  </span>
+                  <CharCounter value={quickTemplate.text} max={5000} warnAt={4500} />
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button
