@@ -61,7 +61,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
             </h3>
             <button
               onClick={onClose}
-              className="p-2 -mr-2 sm:mr-0 rounded-xl text-surface-400 hover:bg-surface-50 hover:text-surface-600 transition-all flex-shrink-0"
+              className="p-2 -me-2 sm:me-0 rounded-xl text-surface-400 hover:bg-surface-50 hover:text-surface-600 transition-all flex-shrink-0"
             >
               <X className="w-5 h-5" />
             </button>

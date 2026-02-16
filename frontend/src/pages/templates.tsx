@@ -200,6 +200,7 @@ const TemplatesPage: NextPageWithLayout = () => {
               value={formData.name}
               onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
               className={clsx("!py-2.5", nameError && "!border-red-300 !ring-red-500")}
+              dir="auto"
             />
             {nameError && (
               <p className="text-xs text-red-500 mt-1">{t('templates.templateNameRequired')}</p>
@@ -213,7 +214,7 @@ const TemplatesPage: NextPageWithLayout = () => {
               onChange={(e) => setFormData({ ...formData, message: e.target.value })}
               helperText={t('templates.variablesDesc')}
               className="!py-2.5 min-h-[100px]"
-              dir={formData.message ? 'auto' : undefined}
+              dir="auto"
             />
             <div className="flex items-center justify-between text-xs mt-1.5">
               {messageError ? (

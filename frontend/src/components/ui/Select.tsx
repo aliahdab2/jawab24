@@ -101,7 +101,7 @@ export function Select({ value, onChange, options, placeholder, label, className
       {isOpen && !disabled && (
         <div
           ref={dropdownRef}
-          className="absolute left-0 right-0 z-[100] bg-white rounded-xl border border-surface-200 shadow-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150"
+          className="absolute inset-x-0 z-[100] bg-white rounded-xl border border-surface-200 shadow-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150"
         >
           {options.length === 0 ? (
             <div className="px-4 py-3 text-sm text-surface-400 text-center">
