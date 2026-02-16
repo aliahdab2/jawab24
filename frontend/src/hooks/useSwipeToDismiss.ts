@@ -177,13 +177,19 @@ export function useSwipeToDismiss({
         element.style.transform = `translateX(${targetX}px)`;
         element.style.opacity = '0';
 
+        // Guard: ensure onDismiss fires exactly once
+        let dismissed = false;
+        let collapsed = false;
+
         const collapseAfterSlide = () => {
+          if (collapsed) return;
+          collapsed = true;
           element.removeEventListener('transitionend', collapseAfterSlide);
 
           // Collapse height
           const outer = element.parentElement;
           if (!outer) {
-            onDismissRef.current();
+            if (!dismissed) { dismissed = true; onDismissRef.current(); }
             return;
           }
 
@@ -202,7 +208,7 @@ export function useSwipeToDismiss({
 
           const finalize = () => {
             outer.removeEventListener('transitionend', finalize);
-            onDismissRef.current();
+            if (!dismissed) { dismissed = true; onDismissRef.current(); }
           };
           outer.addEventListener('transitionend', finalize, { once: true });
           // Safety fallback

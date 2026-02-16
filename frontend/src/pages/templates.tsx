@@ -200,7 +200,6 @@ const TemplatesPage: NextPageWithLayout = () => {
               value={formData.name}
               onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
               className={clsx("!py-2.5", nameError && "!border-red-300 !ring-red-500")}
-              dir={formData.name ? 'auto' : undefined}
             />
             {nameError && (
               <p className="text-xs text-red-500 mt-1">{t('templates.templateNameRequired')}</p>

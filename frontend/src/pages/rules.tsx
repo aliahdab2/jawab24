@@ -294,7 +294,6 @@ const RulesPage: NextPageWithLayout = () => {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="!py-2.5 sm:!py-3"
-              dir={formData.name ? 'auto' : undefined}
             />
 
             <Input
@@ -304,7 +303,6 @@ const RulesPage: NextPageWithLayout = () => {
               onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
               helperText={t('rules.keywordsHelper' as TranslationKey)}
               className="!py-2.5 sm:!py-3"
-              dir={formData.keywords ? 'auto' : undefined}
             />
           </div>
           {modalKeywordConflicts.length > 0 && (
@@ -364,7 +362,6 @@ const RulesPage: NextPageWithLayout = () => {
                   value={quickTemplate.name}
                   onChange={(e) => setQuickTemplate({ ...quickTemplate, name: e.target.value })}
                   className="!py-2"
-                  dir={quickTemplate.name ? 'auto' : undefined}
                 />
                 <Textarea
                   placeholder={t('templates.templateContent')}
