@@ -8,7 +8,9 @@ import {
   Sparkles,
   Zap,
   CheckCircle,
-  User
+  CheckCheck,
+  User,
+  FileText
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import type { Comment } from '@jawab24/shared';
@@ -17,6 +19,7 @@ export interface CommentCardProps {
   comment: Comment;
   onClick: () => void;
   onQuickReply?: (e: React.MouseEvent) => void;
+  onResolve?: (e: React.MouseEvent) => void;
   variant?: 'compact' | 'full';
   pageName?: string;
   showPageName?: boolean;
@@ -79,13 +82,14 @@ export function CommentCard({
   comment,
   onClick,
   onQuickReply,
+  onResolve,
   variant = 'compact',
   pageName,
   showPlatformIcon = false,
   animationDelay = 0,
   className
 }: CommentCardProps) {
-  const { t, language, dateLocale } = useTranslation();
+  const { t, dateLocale } = useTranslation();
   const needsAttention = checkNeedsAttention(comment);
 
   const formatTime = (date?: string | Date | null) => {
@@ -102,19 +106,11 @@ export function CommentCard({
     const isAI = comment.replyMethod === 'ai';
 
     return (
-      <div className="flex flex-col items-center gap-1">
-        <div className={clsx(
-          "w-8 h-8 rounded-full flex items-center justify-center shadow-sm border-2 border-white",
-          isAI ? "bg-violet-100 text-violet-600" : "bg-emerald-100 text-emerald-600"
-        )}>
-          {isAI ? <Sparkles className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
-        </div>
-        <span className={clsx(
-          "text-[9px] font-bold uppercase tracking-wider",
-          isAI ? "text-violet-600" : "text-emerald-600"
-        )}>
-          {isAI ? t('dashboard.aiReply') : t('dashboard.templateReply')}
-        </span>
+      <div className={clsx(
+        "w-8 h-8 rounded-full flex items-center justify-center shadow-sm border-2 border-white",
+        isAI ? "bg-violet-100 text-violet-600" : "bg-emerald-100 text-emerald-600"
+      )}>
+        {isAI ? <Sparkles className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
       </div>
     );
   };
@@ -148,16 +144,9 @@ export function CommentCard({
       {/* Needs Attention Badge */}
       {needsAttention ? (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
-           <div className="flex flex-col items-end gap-0.5">
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100">
-                <AlertTriangle className="w-3 h-3" />
-                {t('comments.needsAttention')}
-              </div>
-              {comment.flagReason && (
-                <span className="text-[9px] text-red-400 px-2">
-                  {translateFlagReason(comment.flagReason, t, language)}
-                </span>
-              )}
+           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100">
+             <AlertTriangle className="w-3 h-3" />
+             {t('comments.needsAttention')}
            </div>
         </div>
       ) : !comment.replied && (
@@ -199,6 +188,14 @@ export function CommentCard({
                 </div>
              </div>
 
+             {/* Post Context */}
+             {comment.postMessage && (
+               <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-surface-400 max-w-full">
+                 <FileText className="w-3 h-3 flex-shrink-0" />
+                 <span className="truncate">{comment.postMessage.length > 50 ? comment.postMessage.slice(0, 50) + '…' : comment.postMessage}</span>
+               </div>
+             )}
+
              {/* Message Bubble */}
              <div className="relative group/bubble">
                <div className={clsx(
@@ -237,21 +234,37 @@ export function CommentCard({
               </div>
            </div>
         ) : (
-           /* Quick Reply Action (if not replied) */
-           onQuickReply && (
-             <div className="flex justify-end mt-2 animate-fade-in">
-                 <Button
-                   size="sm"
-                   variant="primary"
-                   className="rounded-xl px-5 py-2 shadow-sm text-xs font-bold"
-                   onClick={(e) => {
-                     e.stopPropagation();
-                     onQuickReply(e);
-                   }}
-                   icon={<Zap className="w-3.5 h-3.5" />}
-                 >
-                   {t('comments.reply')}
-                 </Button>
+           /* Quick Reply + Resolve Actions (if not replied) */
+           (onQuickReply || onResolve) && (
+             <div className="flex items-center justify-end gap-2 mt-2 animate-fade-in">
+                 {onResolve && (
+                   <Button
+                     size="sm"
+                     variant="secondary"
+                     className="rounded-xl px-4 py-2 text-xs font-bold"
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       onResolve(e);
+                     }}
+                     icon={<CheckCheck className="w-3.5 h-3.5" />}
+                   >
+                     {t('comments.resolve' as any)}
+                   </Button>
+                 )}
+                 {onQuickReply && (
+                   <Button
+                     size="sm"
+                     variant="primary"
+                     className="rounded-xl px-5 py-2 shadow-sm text-xs font-bold"
+                     onClick={(e) => {
+                       e.stopPropagation();
+                       onQuickReply(e);
+                     }}
+                     icon={<Zap className="w-3.5 h-3.5" />}
+                   >
+                     {t('comments.reply')}
+                   </Button>
+                 )}
              </div>
            )
         )}

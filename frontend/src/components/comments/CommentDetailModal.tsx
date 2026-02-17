@@ -7,7 +7,6 @@ import { useTranslation } from '@/i18n';
 import { commentsApi, aiApi, subscriptionApi, messagesApi } from '@/lib/api';
 import type { Comment } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
-import { translateFlagReason } from './CommentCard';
 import {
   MessageSquare,
   Bot,
@@ -15,9 +14,10 @@ import {
   AlertTriangle,
   X,
   ExternalLink,
-  CheckCircle,
+  CheckCheck,
   PauseCircle,
   PlayCircle,
+  FileText,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -25,6 +25,7 @@ interface CommentDetailModalProps {
   comment: Comment;
   onClose: () => void;
   onReplySuccess: () => void;
+  onResolve?: () => void;
   mode?: 'full' | 'quick';
 }
 
@@ -32,9 +33,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   comment,
   onClose,
   onReplySuccess,
+  onResolve,
   mode = 'full',
 }) => {
-  const { t, language, dateLocale } = useTranslation();
+  const { t, dateLocale } = useTranslation();
   
   // Close on ESC
   useEscapeKey(onClose);
@@ -46,7 +48,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   
   // Limit State
   const [aiLimit, setAiLimit] = useState<{ allowed: boolean; reason?: string }>({ allowed: true });
-  const [isReplyGenerated, setIsReplyGenerated] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Pause state
@@ -127,8 +128,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   };
 
   const handleGenerateAi = async () => {
-    if (!aiLimit.allowed || isReplyGenerated) return;
-    
+    if (!aiLimit.allowed) return;
+
     setIsGenerating(true);
     setGenerationStatus(t('common.loading'));
 
@@ -150,17 +151,16 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             setReplyText(status.result.reply);
             setIsGenerating(false);
             setGenerationStatus('');
-            setIsReplyGenerated(true); // Lock the button! One-shot only.
-            
+
             // Refresh limits after successful generation
             fetchLimits();
           } else if (status.status === 'failed') {
             clearInterval(interval);
             setIsGenerating(false);
-            setGenerationStatus('Failed');
-            toast.error('AI Generation failed');
+            setGenerationStatus('');
+            toast.error(t('common.error'));
           } else {
-            setGenerationStatus('Generating...');
+            setGenerationStatus(t('common.loading'));
           }
         } catch {
           clearInterval(interval);
@@ -171,12 +171,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     } catch (error: any) {
       console.error('AI Generation caught error', error);
       setIsGenerating(false);
-      
+
       // Fallback: If 403 happens (e.g. race condition), show toast and refresh limits
       if (error.response?.status === 403) {
         setGenerationStatus('');
         fetchLimits(); // Update UI state
-        toast.error(error.response?.data?.error || 'Limit reached', {
+        toast.error(error.response?.data?.error || t('common.error'), {
           duration: 5000,
           action: {
             label: t('pricing.upgrade'),
@@ -226,19 +226,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           <div className="flex items-center gap-2">
             {pauseStatus?.paused && (
               <Badge variant="info">
-                <PauseCircle className="w-3 h-3 mr-1" />
+                <PauseCircle className="w-3 h-3 me-1" />
                 {t('messages.smartReplyPaused' as any)}
               </Badge>
             )}
             {needsAttention && (
               <Badge variant="warning">
-                <AlertTriangle className="w-3 h-3 mr-1" />
+                <AlertTriangle className="w-3 h-3 me-1" />
                 {t('comments.needsAttention')}
-                {comment.flagReason && (
-                  <span className="ml-1 font-normal opacity-80">
-                    — {translateFlagReason(comment.flagReason, t, language)}
-                  </span>
-                )}
               </Badge>
             )}
             <button
@@ -252,21 +247,19 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+          {/* Post Context */}
+          {comment.postMessage && (
+            <div className="flex items-start gap-2 px-3 py-2 bg-surface-50 rounded-lg text-sm text-surface-500">
+              <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span className="line-clamp-2">{comment.postMessage}</span>
+            </div>
+          )}
+
           {/* Original Comment */}
-          <div>
-            <h3 className="text-sm font-medium text-surface-500 mb-2">
-              {t('comments.originalComment')}
-            </h3>
-            <div className="bg-surface-50 rounded-xl p-4">
-              <p className="text-surface-900 whitespace-pre-wrap">{comment.message}</p>
-              <div className="flex items-center gap-3 mt-3 text-xs text-surface-400">
-                <span>{formatFullTime(comment.createdAt)}</span>
-                {comment.detectedLanguage && (
-                  <Badge size="sm" variant="default">
-                    {comment.detectedLanguage.toUpperCase()}
-                  </Badge>
-                )}
-              </div>
+          <div className="bg-surface-50 rounded-xl p-4">
+            <p className="text-surface-900 whitespace-pre-wrap">{comment.message}</p>
+            <div className="flex items-center gap-3 mt-3 text-xs text-surface-400">
+              <span>{formatFullTime(comment.createdAt)}</span>
             </div>
           </div>
 
@@ -309,28 +302,26 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                       variant="ghost"
                       size="sm"
                       onClick={handleGenerateAi}
-                      disabled={isGenerating || !aiLimit.allowed || isReplyGenerated}
+                      disabled={isGenerating || !aiLimit.allowed}
                       className={clsx(
                         isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50',
-                        (!aiLimit.allowed || isReplyGenerated) && 'opacity-50 cursor-not-allowed'
+                        !aiLimit.allowed && 'opacity-50 cursor-not-allowed'
                       )}
-                      icon={isReplyGenerated ? <CheckCircle className="w-4 h-4 text-emerald-500" /> : <Bot className="w-4 h-4" />}
+                      icon={<Bot className="w-4 h-4" />}
                     >
-                      {isGenerating 
-                        ? generationStatus || t('common.loading') 
-                        : isReplyGenerated 
-                          ? 'Generated' 
-                          : !aiLimit.allowed 
-                            ? 'Limit Reached' 
+                      {isGenerating
+                        ? generationStatus || t('common.loading')
+                        : !aiLimit.allowed
+                          ? t('pricing.limitReached' as any)
+                          : replyText
+                            ? t('comments.regenerate' as any)
                             : t('dashboard.aiReply')}
                     </Button>
-                    
+
                     {/* Tooltip for disabled state */}
-                    {(!aiLimit.allowed || isReplyGenerated) && (
-                      <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
-                        {!aiLimit.allowed 
-                          ? aiLimit.reason || 'Monthly AI limit reached' 
-                          : 'Already generated for this comment'}
+                    {!aiLimit.allowed && (
+                      <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
+                        {aiLimit.reason || t('pricing.limitReached' as any)}
                       </div>
                     )}
                   </div>
@@ -346,6 +337,16 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 dir="auto"
               />
               <div className="flex justify-end mt-3 gap-2">
+                {onResolve && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => { onResolve(); onClose(); }}
+                    disabled={isSending}
+                    icon={<CheckCheck className="w-4 h-4" />}
+                  >
+                    {t('comments.resolve' as any)}
+                  </Button>
+                )}
                 <Button variant="secondary" onClick={onClose} disabled={isSending}>
                    {t('common.cancel')}
                 </Button>

@@ -3,51 +3,38 @@ import clsx from 'clsx';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useSearchParams } from 'next/navigation';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton } from '@/components/ui';
-import { StatCard } from '@/components/dashboard/StatCard';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
 import { useAuthStore } from '@/lib/store';
 import { commentsApi, pagesApi, type CommentsQueryParams } from '@/lib/api';
 import {
   MessageSquare,
   Search,
-  Bot,
-  Clock,
   Check,
-  CheckCircle,
   Download,
   AlertTriangle,
   ExternalLink,
-  X,
-  Zap,
+  MoreVertical,
   Loader2
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
-import { format, isToday } from 'date-fns';
+import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { Comment, Page } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
-// Filter types - server-side filters use API params, client-side filters use local filtering
-type FilterType = 'all' | 'template' | 'ai' | 'pending' | 'needs_attention' | 'replied_today' | 'flagged';
+type FilterType = 'needs_action' | 'all' | 'auto_replied';
 
 // Map frontend filters to API params
 function getApiParams(filter: FilterType): CommentsQueryParams {
   switch (filter) {
-    case 'pending':
-      return { replied: false };
-    case 'ai':
-      return { replied: true, replyMethod: 'ai' };
-    case 'template':
-      return { replied: true, replyMethod: 'template' };
-    case 'needs_attention':
-    case 'flagged':
-      return { needsAttention: true };
-    // These filters need client-side filtering on top of server data
-    case 'replied_today':
+    case 'needs_action':
+      return { replied: false, resolved: false };
+    case 'auto_replied':
+      return { replied: true };
     case 'all':
     default:
       return {};
@@ -77,15 +64,15 @@ const CommentsPage: NextPageWithLayout = () => {
 
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // Map URL 'flagged' -> 'needs_attention' internally
-  const rawFilter = (searchParams.get('filter') as string) || 'all';
-  const initialFilter = rawFilter === 'flagged' ? 'needs_attention' : (rawFilter as FilterType);
-
-  const [filter, setFilter] = useState<FilterType>(initialFilter);
+  const rawFilter = (searchParams.get('filter') as FilterType) || 'needs_action';
+  const [filter, setFilter] = useState<FilterType>(rawFilter);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   // Infinite scroll observer ref
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -137,26 +124,16 @@ const CommentsPage: NextPageWithLayout = () => {
     return data.pages.flatMap(page => page.data as unknown as Comment[]);
   }, [data]);
 
-  // Client-side filtering for search and special filters
+  // Client-side filtering for search
   const filteredComments = useMemo(() => {
-    let result = allComments;
+    if (!debouncedSearch) return allComments;
 
-    // Apply client-side filter for special filters
-    if (filter === 'replied_today') {
-      result = result.filter(c => c.replied && c.repliedAt && isToday(new Date(c.repliedAt)));
-    }
-
-    // Apply search filter
-    if (debouncedSearch) {
-      const query = debouncedSearch.toLowerCase();
-      result = result.filter(c =>
-        c.message.toLowerCase().includes(query) ||
-        (c.fromName || '').toLowerCase().includes(query)
-      );
-    }
-
-    return result;
-  }, [allComments, filter, debouncedSearch]);
+    const query = debouncedSearch.toLowerCase();
+    return allComments.filter(c =>
+      c.message.toLowerCase().includes(query) ||
+      (c.fromName || '').toLowerCase().includes(query)
+    );
+  }, [allComments, debouncedSearch]);
 
   // Fetch global stats from server
   const { data: statsData } = useQuery({
@@ -174,21 +151,15 @@ const CommentsPage: NextPageWithLayout = () => {
     if (statsData) {
       return {
         total: statsData.total,
-        templateReplies: statsData.byMethod.template,
-        pending: statsData.unreplied,
-        aiReplies: statsData.byMethod.ai,
-        needsAttention: statsData.needsAttention,
-        repliedToday: statsData.repliedToday,
+        unreplied: statsData.unreplied,
+        autoReplied: statsData.byMethod.ai + statsData.byMethod.template,
       };
     }
 
     return {
       total: 0,
-      templateReplies: 0,
-      pending: 0,
-      aiReplies: 0,
-      needsAttention: 0,
-      repliedToday: 0,
+      unreplied: 0,
+      autoReplied: 0,
     };
   }, [statsData]);
 
@@ -209,6 +180,18 @@ const CommentsPage: NextPageWithLayout = () => {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // Close overflow menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
   // Sync Filter to URL
   const updateFilter = useCallback((newFilter: FilterType) => {
     if (newFilter === filter) return;
@@ -220,13 +203,10 @@ const CommentsPage: NextPageWithLayout = () => {
     }, 120);
 
     const params = new URLSearchParams(window.location.search);
-    let urlFilter = newFilter;
-    if (newFilter === 'needs_attention') urlFilter = 'flagged';
-
-    if (newFilter === 'all') {
+    if (newFilter === 'needs_action') {
       params.delete('filter');
     } else {
-      params.set('filter', urlFilter);
+      params.set('filter', newFilter);
     }
     router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
   }, [filter, router]);
@@ -234,45 +214,37 @@ const CommentsPage: NextPageWithLayout = () => {
   // Update internal filter when URL changes
   useEffect(() => {
     const currentParam = searchParams.get('filter');
-    if (currentParam === 'flagged') {
-      setFilter('needs_attention');
-    } else if (currentParam) {
+    if (currentParam) {
       setFilter(currentParam as FilterType);
     } else {
-      setFilter('all');
+      setFilter('needs_action');
     }
   }, [searchParams]);
 
   // Update Page Title
   useEffect(() => {
-    const filterLabel = filter === 'all' ? '' : ` — ${t(`comments.${filter}` as any)}`;
+    const filterLabels: Record<FilterType, string> = {
+      needs_action: t('comments.needsAction' as any),
+      all: '',
+      auto_replied: t('comments.autoReplied' as any),
+    };
+    const filterLabel = filterLabels[filter] ? ` — ${filterLabels[filter]}` : '';
     const countLabel = filteredComments.length > 0 ? ` (${filteredComments.length})` : '';
     document.title = `${t('comments.title')}${filterLabel}${countLabel}`;
   }, [filter, filteredComments.length, t]);
 
-  // Auto-scroll active card into view on mobile
-  useEffect(() => {
-    if (filter !== 'all') {
-      const activeEl = document.getElementById('active-stat');
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      }
-    }
-  }, [filter]);
-
   // ESC key to close modal
   useEscapeKey(() => setSelectedComment(null), !!selectedComment);
 
-  const getFilterChipLabel = (filterType: FilterType) => {
-    switch (filterType) {
-      case 'template': return t('comments.replied');
-      case 'ai': return t('dashboard.aiReply');
-      case 'pending': return t('comments.pending');
-      case 'needs_attention': return t('comments.needsAttention');
-      case 'replied_today': return t('comments.replied_today');
-      default: return '';
+  const handleResolve = useCallback(async (commentId: string) => {
+    try {
+      await commentsApi.resolve(commentId);
+      queryClient.invalidateQueries({ queryKey: ['comments'] });
+      queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+    } catch (err) {
+      console.error('Failed to resolve comment:', err);
     }
-  };
+  }, [queryClient]);
 
   const exportToCSV = () => {
     setExporting(true);
@@ -335,134 +307,74 @@ const CommentsPage: NextPageWithLayout = () => {
         title={t('comments.title')}
         description={t('comments.description')}
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<Download className="w-[18px] h-[18px] sm:w-5 sm:h-5" />}
-            onClick={exportToCSV}
-            loading={exporting}
-          >
-            {t('comments.exportCSV')}
-          </Button>
+          <div ref={menuRef} className="relative">
+            <button
+              onClick={() => setMenuOpen(prev => !prev)}
+              className="p-2 rounded-xl text-surface-500 hover:text-surface-700 hover:bg-surface-100 transition-colors"
+              aria-label={t('common.export' as any)}
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
+            {menuOpen && (
+              <div className="absolute end-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg ring-1 ring-surface-200/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
+                <button
+                  onClick={() => { exportToCSV(); setMenuOpen(false); }}
+                  disabled={exporting}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-surface-700 hover:bg-surface-50 transition-colors disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4" />
+                  {t('comments.exportCSV')}
+                </button>
+              </div>
+            )}
+          </div>
         }
       />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-12">
-        <div onClick={() => updateFilter('all')}>
-          <StatCard
-            nameKey="comments.allComments"
-            value={stats.total.toLocaleString()}
-            icon={MessageSquare}
-            color="brand"
-            index={0}
-            isActive={filter === 'all'}
-          />
+      {/* Filter Chips + Search */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          {([
+            { key: 'needs_action' as FilterType, label: t('comments.needsAction' as any), count: stats.unreplied },
+            { key: 'all' as FilterType, label: t('comments.allComments'), count: stats.total },
+            { key: 'auto_replied' as FilterType, label: t('comments.autoReplied' as any), count: stats.autoReplied },
+          ]).map(chip => (
+            <button
+              key={chip.key}
+              onClick={() => updateFilter(chip.key)}
+              className={clsx(
+                "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200",
+                filter === chip.key
+                  ? "bg-brand-500 text-white shadow-sm shadow-brand-500/25"
+                  : "bg-surface-100 text-surface-600 hover:bg-surface-200"
+              )}
+            >
+              {chip.label}
+              {chip.count > 0 && (
+                <span className={clsx(
+                  "text-xs tabular-nums",
+                  filter === chip.key ? "text-white/80" : "text-surface-400"
+                )}>
+                  ({chip.count.toLocaleString()})
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-        <div onClick={() => updateFilter('pending')}>
-          <StatCard
-            nameKey="comments.pending"
-            value={stats.pending.toLocaleString()}
-            icon={Clock}
-            color="amber"
-            index={1}
-            isActive={filter === 'pending'}
+
+        <div className="relative group flex-1 w-full sm:w-auto">
+          <Search
+            className="absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
+            style={{ insetInlineStart: '0.875rem' }}
           />
-        </div>
-        <div onClick={() => updateFilter('replied_today')}>
-          <StatCard
-            nameKey="comments.repliedToday"
-            value={stats.repliedToday.toLocaleString()}
-            icon={CheckCircle}
-            color="emerald"
-            index={2}
-            isActive={filter === 'replied_today'}
-          />
-        </div>
-        <div onClick={() => updateFilter('ai')}>
-          <StatCard
-            nameKey="dashboard.aiReply"
-            value={stats.aiReplies.toLocaleString()}
-            icon={Bot}
-            color="violet"
-            index={3}
-            isActive={filter === 'ai'}
-          />
-        </div>
-        <div onClick={() => updateFilter('template')}>
-          <StatCard
-            nameKey="dashboard.templateReply"
-            value={stats.templateReplies.toLocaleString()}
-            icon={Zap}
-            color="brand"
-            index={4}
-            isActive={filter === 'template'}
-          />
-        </div>
-        <div onClick={() => updateFilter('needs_attention')}>
-          <StatCard
-            nameKey="comments.needsAttention"
-            value={stats.needsAttention.toLocaleString()}
-            icon={AlertTriangle}
-            color="red"
-            index={5}
-            isActive={filter === 'needs_attention'}
+          <Input
+            placeholder={t('common.search') + '...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="py-2.5 ps-10 rounded-full bg-surface-50 border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all text-sm"
           />
         </div>
       </div>
-
-      {/* Filters & Search */}
-      <Card className="mb-12 border-none shadow-md shadow-surface-200/20 overflow-visible" padding="none">
-        <div className="p-4 sm:p-5 flex flex-col md:flex-row items-center gap-4">
-          <div className="relative group flex-1 w-full">
-            <Search
-              className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
-              style={{ insetInlineStart: '1.25rem' }}
-            />
-            <Input
-              placeholder={t('common.search') + '...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="py-3.5 ps-14 rounded-2xl bg-surface-50 border-none focus:ring-4 focus:ring-brand-500/10 focus:bg-white transition-all shadow-sm"
-            />
-          </div>
-
-          {filter !== 'all' && (
-            <div className="flex shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
-              <button
-                onClick={() => updateFilter('all')}
-                className={clsx(
-                  "group relative flex items-center gap-2.5 py-2.5 px-5 rounded-full shadow-sm hover:shadow-md transition-all duration-300 ring-1 ring-inset",
-                  filter === 'pending' && "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100",
-                  filter === 'ai' && "bg-violet-50 text-violet-700 ring-violet-200 hover:bg-violet-100",
-                  filter === 'needs_attention' && "bg-red-50 text-red-700 ring-red-200 hover:bg-red-100",
-                  (filter === 'template' || filter === 'replied_today') && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100"
-                )}
-              >
-                {filter === 'pending' && <Clock className="w-4 h-4" />}
-                {filter === 'ai' && <Bot className="w-4 h-4" />}
-                {filter === 'needs_attention' && <AlertTriangle className="w-4 h-4" />}
-                {(filter === 'template' || filter === 'replied_today') && <CheckCircle className="w-4 h-4" />}
-
-                <span className="font-bold text-sm tracking-wide">{getFilterChipLabel(filter)}</span>
-
-                <div className="w-px h-4 mx-1 opacity-20 bg-current" />
-
-                <div className="bg-white/50 rounded-full p-0.5 group-hover:bg-white transition-colors">
-                  <X className="w-3.5 h-3.5" />
-                </div>
-              </button>
-            </div>
-          )}
-
-          {filteredComments.length > 0 && (
-            <div className="hidden md:flex items-center gap-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest whitespace-nowrap">
-              <span>{filteredComments.length} {t('dashboard.comments')}</span>
-              {hasNextPage && <span className="text-brand-500">+</span>}
-            </div>
-          )}
-        </div>
-      </Card>
 
       {/* Comments List */}
       {filteredComments.length > 0 ? (
@@ -487,6 +399,7 @@ const CommentsPage: NextPageWithLayout = () => {
                   animationDelay={i < 10 ? i * 0.05 : 0}
                   onClick={() => setSelectedComment(comment)}
                   onQuickReply={() => setSelectedComment(comment)}
+                  onResolve={!comment.replied && !comment.resolved ? () => handleResolve(comment.id) : undefined}
                 />
               );
             })}
@@ -545,6 +458,7 @@ const CommentsPage: NextPageWithLayout = () => {
           comment={selectedComment}
           onClose={() => setSelectedComment(null)}
           onReplySuccess={() => refetch()}
+          onResolve={!selectedComment.replied && !selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
         />
       )}
     </>
