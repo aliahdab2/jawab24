@@ -668,7 +668,7 @@ describe('CommentProcessor', () => {
 
     // --- Existing behavior preservation tests ---
 
-    it('should NOT skip reply for low_confidence flag', async () => {
+    it('should skip reply for low_confidence flag (do not auto-reply when AI is unsure)', async () => {
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Hmm, I think...',
             replyMethod: 'ai',
@@ -681,9 +681,11 @@ describe('CommentProcessor', () => {
             adapter, 'page-1', 'content-1', 'comment-1', 'Complex question', 'from-1', 'User',
         );
 
+        // Processing is "successful" (correctly decided not to reply)
         expect(result.success).toBe(true);
-        expect(adapter.sendReply).toHaveBeenCalled();
-        expect(adapter.flagComment).not.toHaveBeenCalled();
+        // But the reply should NOT be sent — comment is flagged instead
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(adapter.flagComment).toHaveBeenCalled();
     });
 
     // --- Reply length enforcement tests ---
@@ -915,7 +917,7 @@ describe('shouldSkipReply', () => {
 
     it('should handle comma-separated flags', () => {
         expect(shouldSkipReply('low_confidence,offensive_or_abusive')).toBe(true);
-        expect(shouldSkipReply('low_confidence,angry_customer')).toBe(false);
+        expect(shouldSkipReply('low_confidence,angry_customer')).toBe(true);
     });
 
     it('should trim whitespace around flags', () => {

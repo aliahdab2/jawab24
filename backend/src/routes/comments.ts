@@ -65,6 +65,22 @@ export default async function commentsRoutes(fastify: FastifyInstance) {
             },
         }, commentsController.reply);
 
+        protectedRoutes.post('/comments/:id/resolve', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Resolve a comment (mark as handled)',
+                security: auth,
+            },
+        }, commentsController.resolve);
+
+        protectedRoutes.post('/comments/:id/unresolve', {
+            schema: {
+                tags: ['Comments'],
+                summary: 'Unresolve a comment (reopen for action)',
+                security: auth,
+            },
+        }, commentsController.unresolve);
+
         protectedRoutes.post('/comments/:id/feedback', {
             schema: {
                 tags: ['Comments'],

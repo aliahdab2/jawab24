@@ -142,6 +142,7 @@ export const comments = pgTable('comments', {
     needsAttention: boolean('needs_attention').default(false),
     flagReason: varchar('flag_reason', { length: 255 }),
     aiIntent: varchar('ai_intent', { length: 50 }),
+    resolved: boolean('resolved').default(false),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -153,6 +154,7 @@ export const comments = pgTable('comments', {
         repliedIdx: index('idx_comments_replied').on(table.replied),
         detectedLanguageIdx: index('idx_comments_detected_language').on(table.detectedLanguage),
         needsAttentionIdx: index('idx_comments_needs_attention').on(table.needsAttention),
+        resolvedIdx: index('idx_comments_resolved').on(table.resolved),
         createdAtIdx: index('idx_comments_created_at').on(table.createdAt),
         createdTimeIdx: index('idx_comments_created_time').on(table.createdTime),
     };
@@ -174,6 +176,7 @@ export const instagramComments = pgTable('instagram_comments', {
     needsAttention: boolean('needs_attention').default(false),
     flagReason: varchar('flag_reason', { length: 255 }),
     aiIntent: varchar('ai_intent', { length: 50 }),
+    resolved: boolean('resolved').default(false),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -184,6 +187,7 @@ export const instagramComments = pgTable('instagram_comments', {
         instagramCommentIdIdx: index('idx_instagram_comments_id').on(table.instagramCommentId),
         repliedIdx: index('idx_instagram_comments_replied').on(table.replied),
         needsAttentionIdx: index('idx_instagram_comments_needs_attention').on(table.needsAttention),
+        resolvedIdx: index('idx_instagram_comments_resolved').on(table.resolved),
         createdAtIdx: index('idx_instagram_comments_created_at').on(table.createdAt),
         createdTimeIdx: index('idx_instagram_comments_created_time').on(table.createdTime),
     };

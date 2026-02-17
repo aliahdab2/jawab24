@@ -16,6 +16,7 @@ function mockStatsQuery(stats: {
     total: number;
     replied: number;
     needsAttention: number;
+    resolved: number;
     repliedToday: number;
     ai: number;
     template: number;
@@ -46,6 +47,7 @@ describe('CommentsService', () => {
                     total: 100,
                     replied: 60,
                     needsAttention: 2,
+                    resolved: 3,
                     repliedToday: 3,
                     ai: 20,
                     template: 30,
@@ -56,6 +58,7 @@ describe('CommentsService', () => {
                     total: 50,
                     replied: 30,
                     needsAttention: 1,
+                    resolved: 2,
                     repliedToday: 2,
                     ai: 15,
                     template: 10,
@@ -67,8 +70,9 @@ describe('CommentsService', () => {
             expect(stats).toEqual({
                 total: 150,          // 100 + 50
                 replied: 90,         // 60 + 30
-                unreplied: 60,       // total - replied
+                unreplied: 55,       // total - replied - resolved = 150 - 90 - 5
                 needsAttention: 3,   // 2 + 1
+                resolved: 5,         // 3 + 2
                 repliedToday: 5,     // 3 + 2
                 replyRate: '60.0',
                 byMethod: {
@@ -83,11 +87,11 @@ describe('CommentsService', () => {
             // Both queries return zeros
             vi.mocked(db.select)
                 .mockReturnValueOnce(mockStatsQuery({
-                    total: 0, replied: 0, needsAttention: 0,
+                    total: 0, replied: 0, needsAttention: 0, resolved: 0,
                     repliedToday: 0, ai: 0, template: 0, manual: 0,
                 }) as any)
                 .mockReturnValueOnce(mockStatsQuery({
-                    total: 0, replied: 0, needsAttention: 0,
+                    total: 0, replied: 0, needsAttention: 0, resolved: 0,
                     repliedToday: 0, ai: 0, template: 0, manual: 0,
                 }) as any);
 
@@ -98,6 +102,7 @@ describe('CommentsService', () => {
                 replied: 0,
                 unreplied: 0,
                 needsAttention: 0,
+                resolved: 0,
                 repliedToday: 0,
                 replyRate: '0',
                 byMethod: { template: 0, ai: 0, manual: 0 }

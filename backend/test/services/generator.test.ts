@@ -102,7 +102,7 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.aiIntent).toBe('COMPLAINT');
         });
 
-        it('should flag when AI confidence is low', async () => {
+        it('should flag when AI confidence is low and include low_confidence in flagReason', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
 
@@ -119,6 +119,7 @@ describe('ReplyGenerator - Flagging System', () => {
             const result = await generator.generateForComment(baseContext, true);
 
             expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toContain('low_confidence');
         });
 
         it('should NOT flag when AI response is clean (no flags, high confidence, non-complaint)', async () => {
@@ -610,5 +611,41 @@ describe('ReplyGenerator - Flagging System', () => {
 
             expect(result.replyText).toBe('Welcome!');
         });
+    });
+});
+
+// --- shouldSkipReply tests ---
+
+import { shouldSkipReply } from '../../src/services/reply/generator';
+
+describe('shouldSkipReply', () => {
+    it('should return true for offensive_or_abusive flag', () => {
+        expect(shouldSkipReply('offensive_or_abusive')).toBe(true);
+    });
+
+    it('should return true for offensive flag', () => {
+        expect(shouldSkipReply('offensive')).toBe(true);
+    });
+
+    it('should return true for low_confidence flag', () => {
+        expect(shouldSkipReply('low_confidence')).toBe(true);
+    });
+
+    it('should return true for OFFENSIVE intent', () => {
+        expect(shouldSkipReply(undefined, 'OFFENSIVE')).toBe(true);
+    });
+
+    it('should return false for non-skip flags', () => {
+        expect(shouldSkipReply('price_not_in_kb')).toBe(false);
+        expect(shouldSkipReply('angry_customer')).toBe(false);
+    });
+
+    it('should return false when no flags or intent', () => {
+        expect(shouldSkipReply()).toBe(false);
+        expect(shouldSkipReply(undefined, undefined)).toBe(false);
+    });
+
+    it('should return true when low_confidence is among multiple flags', () => {
+        expect(shouldSkipReply('price_not_in_kb,low_confidence')).toBe(true);
     });
 });

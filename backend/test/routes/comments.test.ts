@@ -169,5 +169,71 @@ describe('Comments Routes', () => {
             expect(commentsService.deleteComment).toHaveBeenCalledWith('comment_1');
         });
     });
+
+    describe('POST /comments/:id/resolve', () => {
+        it('should resolve a comment', async () => {
+            vi.mocked(commentsService.resolveComment).mockResolvedValue({ id: 'comment_1', resolved: true } as any);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/comments/comment_1/resolve'
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment_1');
+            expect(JSON.parse(response.payload)).toEqual({ success: true });
+        });
+
+        it('should return 404 if comment not found', async () => {
+            vi.mocked(commentsService.resolveComment).mockResolvedValue(undefined);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/comments/non_existent/resolve'
+            });
+
+            expect(response.statusCode).toBe(404);
+        });
+    });
+
+    describe('POST /comments/:id/unresolve', () => {
+        it('should unresolve a comment', async () => {
+            vi.mocked(commentsService.unresolveComment).mockResolvedValue({ id: 'comment_1', resolved: false } as any);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/comments/comment_1/unresolve'
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(commentsService.unresolveComment).toHaveBeenCalledWith('comment_1');
+            expect(JSON.parse(response.payload)).toEqual({ success: true });
+        });
+
+        it('should return 404 if comment not found', async () => {
+            vi.mocked(commentsService.unresolveComment).mockResolvedValue(undefined);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/comments/non_existent/unresolve'
+            });
+
+            expect(response.statusCode).toBe(404);
+        });
+    });
+
+    describe('GET /comments with resolved filter', () => {
+        it('should pass resolved=false to service', async () => {
+            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } } as any);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/comments?resolved=false'
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('test_user_id', expect.objectContaining({ resolved: false }));
+        });
+    });
 });
 

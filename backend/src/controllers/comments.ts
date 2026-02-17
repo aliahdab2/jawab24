@@ -28,6 +28,7 @@ export class CommentsController {
             replied?: string;
             replyMethod?: 'ai' | 'template' | 'manual';
             needsAttention?: string;
+            resolved?: string;
         }
     }>, reply: FastifyReply) {
         const user = (request as AuthenticatedRequest).user;
@@ -35,7 +36,7 @@ export class CommentsController {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { userId } = user;
-        const { cursor, limit, replied, replyMethod, needsAttention } = request.query;
+        const { cursor, limit, replied, replyMethod, needsAttention, resolved } = request.query;
 
         try {
             const options: {
@@ -44,6 +45,7 @@ export class CommentsController {
                 replied?: boolean;
                 replyMethod?: 'ai' | 'template' | 'manual';
                 needsAttention?: boolean;
+                resolved?: boolean;
             } = {};
 
             // Parse cursor for pagination
@@ -70,6 +72,11 @@ export class CommentsController {
             // Parse needsAttention filter
             if (needsAttention !== undefined) {
                 options.needsAttention = needsAttention === 'true';
+            }
+
+            // Parse resolved filter
+            if (resolved !== undefined) {
+                options.resolved = resolved === 'true';
             }
 
             const result = await commentsService.getCommentsByUser(userId, options);
@@ -214,6 +221,54 @@ export class CommentsController {
             return reply.status(500).send({ error: 'Failed to delete comment' });
         }
     }
+    /**
+     * Resolve a comment (mark as handled without replying)
+     * POST /comments/:id/resolve
+     */
+    async resolve(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const { id } = request.params;
+
+        try {
+            const comment = await commentsService.resolveComment(id);
+            if (!comment) {
+                return reply.status(404).send({ error: 'Comment not found' });
+            }
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to resolve comment' });
+        }
+    }
+
+    /**
+     * Unresolve a comment (reopen for action)
+     * POST /comments/:id/unresolve
+     */
+    async unresolve(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const user = (request as AuthenticatedRequest).user;
+        if (!user) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const { id } = request.params;
+
+        try {
+            const comment = await commentsService.unresolveComment(id);
+            if (!comment) {
+                return reply.status(404).send({ error: 'Comment not found' });
+            }
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to unresolve comment' });
+        }
+    }
+
     /**
      * Submit feedback for a reply
      * POST /comments/:id/feedback

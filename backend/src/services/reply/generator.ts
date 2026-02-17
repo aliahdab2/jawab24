@@ -12,7 +12,7 @@ import { gapDetectorService } from '../kb/gap-detector';
 import { detectLanguageCode } from '../../utils/language';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying */
-export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
+export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive', 'low_confidence'] as const;
 export const SAFE_FALLBACK_FLAGS = ['price_not_in_kb'] as const;
 export const SKIP_REPLY_INTENTS = ['OFFENSIVE'] as const;
 
@@ -278,9 +278,11 @@ export class ReplyGenerator {
         userId: string,
         pageId?: string
     ): Promise<GenerateReplyResult> {
-        const flags = aiResponse.flags || [];
+        const flags = [...(aiResponse.flags || [])];
+        if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
+            flags.push('low_confidence');
+        }
         const needsAttention = flags.length > 0 ||
-            aiResponse.confidence === 'low' ||
             aiResponse.intent === 'COMPLAINT' ||
             aiResponse.intent === 'OFFENSIVE';
         const flagReason = flags.join(',') ||

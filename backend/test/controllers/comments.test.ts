@@ -13,6 +13,8 @@ vi.mock('../../src/services/comments', () => ({
         getStats: vi.fn(),
         deleteComment: vi.fn(),
         logFeedback: vi.fn(),
+        resolveComment: vi.fn(),
+        unresolveComment: vi.fn(),
     },
 }));
 
@@ -282,6 +284,104 @@ describe('CommentsController', () => {
             mockRequest.body = { helpful: true };
 
             await commentsController.feedback(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+        });
+    });
+
+    // ─── getAll with resolved filter ──────────────────────────────
+
+    describe('getAll with resolved filter', () => {
+        it('should pass resolved=false filter to service', async () => {
+            mockRequest.query = { resolved: 'false' };
+            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
+
+            await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('user-123', expect.objectContaining({ resolved: false }));
+        });
+
+        it('should pass resolved=true filter to service', async () => {
+            mockRequest.query = { resolved: 'true' };
+            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
+
+            await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('user-123', expect.objectContaining({ resolved: true }));
+        });
+    });
+
+    // ─── resolve() ────────────────────────────────────────────────
+
+    describe('resolve', () => {
+        it('should resolve a comment and return success', async () => {
+            mockRequest.params = { id: 'c-1' };
+            vi.mocked(commentsService.resolveComment).mockResolvedValue({ id: 'c-1', resolved: true } as any);
+
+            await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('c-1');
+            expect(mockReply.send).toHaveBeenCalledWith({ success: true });
+        });
+
+        it('should return 404 when comment not found', async () => {
+            mockRequest.params = { id: 'missing' };
+            vi.mocked(commentsService.resolveComment).mockResolvedValue(undefined);
+
+            await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Comment not found' });
+        });
+
+        it('should return 401 when user is not authenticated', async () => {
+            mockRequest.user = undefined;
+            mockRequest.params = { id: 'c-1' };
+
+            await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+        });
+
+        it('should return 500 when service throws', async () => {
+            mockRequest.params = { id: 'c-1' };
+            vi.mocked(commentsService.resolveComment).mockRejectedValue(new Error('DB error'));
+
+            await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(500);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Failed to resolve comment' });
+        });
+    });
+
+    // ─── unresolve() ──────────────────────────────────────────────
+
+    describe('unresolve', () => {
+        it('should unresolve a comment and return success', async () => {
+            mockRequest.params = { id: 'c-1' };
+            vi.mocked(commentsService.unresolveComment).mockResolvedValue({ id: 'c-1', resolved: false } as any);
+
+            await commentsController.unresolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentsService.unresolveComment).toHaveBeenCalledWith('c-1');
+            expect(mockReply.send).toHaveBeenCalledWith({ success: true });
+        });
+
+        it('should return 404 when comment not found', async () => {
+            mockRequest.params = { id: 'missing' };
+            vi.mocked(commentsService.unresolveComment).mockResolvedValue(undefined);
+
+            await commentsController.unresolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Comment not found' });
+        });
+
+        it('should return 401 when user is not authenticated', async () => {
+            mockRequest.user = undefined;
+            mockRequest.params = { id: 'c-1' };
+
+            await commentsController.unresolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
             expect(mockReply.status).toHaveBeenCalledWith(401);
         });

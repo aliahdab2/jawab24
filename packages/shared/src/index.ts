@@ -44,6 +44,8 @@ export interface Comment {
   needsAttention?: boolean;
   flagReason?: string | null;
   aiIntent?: string | null;
+  resolved?: boolean | null;
+  postMessage?: string | null;
   source?: 'facebook' | 'instagram';
 }
 

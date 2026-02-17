@@ -160,6 +160,7 @@ export interface CommentsQueryParams {
   replied?: boolean;         // Filter: true = replied only, false = unreplied only
   replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
   needsAttention?: boolean;  // Filter by needsAttention flag
+  resolved?: boolean;        // Filter by resolved status
 }
 
 // Comments Stats Interface
@@ -168,6 +169,7 @@ export interface CommentStats {
   replied: number;
   unreplied: number;
   needsAttention: number;
+  resolved: number;
   repliedToday: number;
   replyRate: string;
   byMethod: {
@@ -191,6 +193,8 @@ export const commentsApi = {
       reason: data.reason ? data.reason.join(', ') : undefined,
       // Source param is tracked by frontend but not currently used by backend controller
     }),
+  resolve: (id: string) => api.post(`/comments/${id}/resolve`),
+  unresolve: (id: string) => api.post(`/comments/${id}/unresolve`),
 };
 
 // Templates API
