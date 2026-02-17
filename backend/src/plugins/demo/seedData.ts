@@ -142,8 +142,20 @@ const DEMO_POSTS = [
     },
 ];
 
-const DEMO_COMMENTS = [
-    // Institute comments (posts 0, 1)
+const DEMO_COMMENTS: Array<{
+    facebookCommentId: string;
+    message: string;
+    fromId: string;
+    fromName: string;
+    postIndex: number;
+    replied: boolean;
+    replyText: string | null;
+    replyMethod: string | null;
+    needsAttention?: boolean;
+    flagReason?: string;
+    resolved?: boolean;
+}> = [
+    // ── Institute comments (posts 0, 1) ──
     {
         facebookCommentId: 'demo_comment_1',
         message: 'كم رسوم دورة الإنجليزي؟',
@@ -175,6 +187,7 @@ const DEMO_COMMENTS = [
         replyMethod: 'ai',
     },
     {
+        // Needs human attention — flagged by keyword + backend flag
         facebookCommentId: 'demo_comment_4',
         message: 'عندي مشكلة في التسجيل، أحتاج مساعدة من موظف',
         fromId: 'user_4',
@@ -183,8 +196,34 @@ const DEMO_COMMENTS = [
         replied: false,
         replyText: null,
         replyMethod: null,
+        needsAttention: true,
+        flagReason: 'human_requested',
     },
-    // School comments (posts 2, 3)
+    {
+        // Unreplied — shows in "Needs Action"
+        facebookCommentId: 'demo_comment_11',
+        message: 'هل يوجد دورات مسائية؟',
+        fromId: 'user_11',
+        fromName: 'ياسر الشهري',
+        postIndex: 1,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+    },
+    {
+        // Resolved — was unreplied but user resolved it manually
+        facebookCommentId: 'demo_comment_12',
+        message: 'شكراً، تواصلت معكم بالواتساب',
+        fromId: 'user_12',
+        fromName: 'هند العتيبي',
+        postIndex: 0,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        resolved: true,
+    },
+
+    // ── School comments (posts 2, 3) ──
     {
         facebookCommentId: 'demo_comment_5',
         message: 'متى آخر موعد للتسجيل؟',
@@ -215,7 +254,32 @@ const DEMO_COMMENTS = [
         replyText: 'أهلاً عبدالله! رسوم المرحلة الابتدائية 18,000 ريال سنوياً شاملة الكتب. يمكن التقسيط على دفعتين 💰',
         replyMethod: 'template',
     },
-    // Electronics store comments (posts 4, 5)
+    {
+        // Flagged — needs attention, SLA breach
+        facebookCommentId: 'demo_comment_13',
+        message: 'أبي أسجل بنتي بس ما أحد رد علي من أسبوع!',
+        fromId: 'user_13',
+        fromName: 'لينا القحطاني',
+        postIndex: 2,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        needsAttention: true,
+        flagReason: 'sla_no_reply:60',
+    },
+    {
+        // Unreplied on congrats post — can be resolved (no reply needed)
+        facebookCommentId: 'demo_comment_14',
+        message: 'ما شاء الله، مبروك للطلاب المتفوقين 🎉',
+        fromId: 'user_14',
+        fromName: 'أم عبدالرحمن',
+        postIndex: 3,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+    },
+
+    // ── Electronics store comments (posts 4, 5) ──
     {
         facebookCommentId: 'demo_comment_8',
         message: 'كم سعر آيفون 15؟',
@@ -237,6 +301,7 @@ const DEMO_COMMENTS = [
         replyMethod: 'template',
     },
     {
+        // Unreplied — shipping question
         facebookCommentId: 'demo_comment_10',
         message: 'هل توصلون للدمام؟',
         fromId: 'user_10',
@@ -245,6 +310,31 @@ const DEMO_COMMENTS = [
         replied: false,
         replyText: null,
         replyMethod: null,
+    },
+    {
+        // Flagged — complaint needs human attention
+        facebookCommentId: 'demo_comment_15',
+        message: 'طلبت جوال ووصلني مكسور! أبي شكوى رسمية',
+        fromId: 'user_15',
+        fromName: 'طلال المطيري',
+        postIndex: 4,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        needsAttention: true,
+        flagReason: 'negative_sentiment,human_requested',
+    },
+    {
+        // Resolved — already handled via DM
+        facebookCommentId: 'demo_comment_16',
+        message: 'وش أفضل لابتوب للبرمجة؟',
+        fromId: 'user_16',
+        fromName: 'عمر الدوسري',
+        postIndex: 5,
+        replied: true,
+        replyText: 'أهلاً عمر! ننصح بـ MacBook Pro أو ThinkPad X1 حسب ميزانيتك. تفضل راسلنا للتفاصيل 💻',
+        replyMethod: 'ai',
+        resolved: true,
     },
 ];
 
@@ -278,7 +368,7 @@ const DEMO_NOTIFICATIONS = [
         titleAr: 'تعليقات بدون رد تحتاج انتباهك',
         bodyEn: '3 comments waiting for your reply for over 60 minutes.',
         bodyAr: '3 تعليقات بانتظار ردك منذ أكثر من 60 دقيقة.',
-        data: { deepLink: '/comments?filter=flagged' },
+        data: { deepLink: '/comments?filter=needs_action' },
         read: false,
         minutesAgo: 15,
     },
@@ -288,7 +378,7 @@ const DEMO_NOTIFICATIONS = [
         titleAr: 'تعليق جديد',
         bodyEn: 'New comment from سارة أحمد is waiting for your reply.',
         bodyAr: 'تعليق جديد من سارة أحمد بانتظار ردك.',
-        data: { deepLink: '/comments?filter=flagged' },
+        data: { deepLink: '/comments?filter=needs_action' },
         read: false,
         minutesAgo: 45,
     },
@@ -298,7 +388,7 @@ const DEMO_NOTIFICATIONS = [
         titleAr: 'رد يحتاج انتباهك',
         bodyEn: 'An AI reply to "فهد السعيد" was flagged: low confidence. Please review it.',
         bodyAr: 'تم وضع علامة على رد لـ "فهد السعيد": ثقة منخفضة. يرجى مراجعته.',
-        data: { deepLink: '/comments?filter=flagged' },
+        data: { deepLink: '/comments?filter=needs_action' },
         read: false,
         minutesAgo: 120,
     },
@@ -454,6 +544,9 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
             replyMethod: commentData.replyMethod,
             detectedLanguage: 'ar',
             replyLanguage: 'ar',
+            needsAttention: commentData.needsAttention ?? false,
+            flagReason: commentData.flagReason ?? null,
+            resolved: commentData.resolved ?? false,
             createdTime: commentCreatedTime,
             repliedAt: commentData.replied
                 ? new Date(commentCreatedTime.getTime() + (5 + Math.random() * 115) * 1000) // 5-120s after creation
