@@ -7,6 +7,7 @@ import {
   Sparkles,
   Zap,
   CheckCircle,
+  CheckCheck,
   User,
   MessageCircle,
   Send,
@@ -27,6 +28,7 @@ export interface Conversation {
 export interface MessageCardProps {
   conversation: Conversation;
   onClick: () => void;
+  onResolve?: () => void;
   animationDelay?: number;
   className?: string;
 }
@@ -34,6 +36,7 @@ export interface MessageCardProps {
 export function MessageCard({
   conversation: conv,
   onClick,
+  onResolve,
   animationDelay = 0,
   className,
 }: MessageCardProps) {
@@ -192,21 +195,29 @@ export function MessageCard({
         {lastTwoMessages.map((msg) => renderBubble(msg))}
 
         {/* Action Buttons */}
-        {conv.needsHumanAttention ? (
-          <div className="flex justify-end mt-1 animate-fade-in">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-100 text-xs font-bold uppercase tracking-wider group-hover:bg-red-100 transition-colors">
+        <div className="flex items-center justify-between mt-1">
+          {onResolve ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onResolve(); }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-surface-50 text-surface-500 border-surface-200 hover:bg-surface-100 hover:text-surface-700"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              {t('messages.resolved' as any)}
+            </button>
+          ) : <div />}
+
+          {conv.needsHumanAttention ? (
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-100 text-xs font-bold uppercase tracking-wider group-hover:bg-red-100 transition-colors animate-fade-in">
               <Send className="w-3.5 h-3.5" />
               <span>{t('comments.reply')}</span>
             </div>
-          </div>
-        ) : !hasOutgoingInLastTwo && (
-          <div className="flex justify-end mt-2 animate-fade-in">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-brand-600 opacity-60 group-hover:opacity-100 transition-opacity">
+          ) : !hasOutgoingInLastTwo && (
+            <div className="flex items-center gap-1.5 text-xs font-bold text-brand-600 opacity-60 group-hover:opacity-100 transition-opacity animate-fade-in">
               <MessageCircle className="w-3.5 h-3.5" />
               <span>{t('comments.reply')}</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

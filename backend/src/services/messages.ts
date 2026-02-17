@@ -24,6 +24,9 @@ export class MessagesService {
         limit?: number;
         cursor?: string;
         direction?: 'incoming' | 'outgoing';
+        replied?: boolean;
+        resolved?: boolean;
+        needsAttention?: boolean;
     }): Promise<{
         data: Message[];
         pagination: { hasMore: boolean; nextCursor: string | null; limit: number };
@@ -51,6 +54,21 @@ export class MessagesService {
         // Filter by direction if specified
         if (options?.direction) {
             conditions.push(eq(messages.direction, options.direction));
+        }
+
+        // Filter by replied status
+        if (options?.replied !== undefined) {
+            conditions.push(eq(messages.replied, options.replied));
+        }
+
+        // Filter by resolved status
+        if (options?.resolved !== undefined) {
+            conditions.push(eq(messages.resolved, options.resolved));
+        }
+
+        // Filter by needsAttention
+        if (options?.needsAttention !== undefined) {
+            conditions.push(eq(messages.needsAttention, options.needsAttention));
         }
 
         // Cursor-based pagination
@@ -389,6 +407,41 @@ export class MessagesService {
     }
 
     /**
+     * Resolve all unreplied incoming messages in a conversation.
+     * Returns the number of messages resolved.
+     */
+    async resolveConversation(pageId: string, senderId: string): Promise<number> {
+        const result = await db.update(messages)
+            .set({ resolved: true, updatedAt: new Date() })
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, false),
+                eq(messages.resolved, false)
+            ))
+            .returning({ id: messages.id });
+        return result.length;
+    }
+
+    /**
+     * Unresolve all resolved incoming messages in a conversation.
+     * Returns the number of messages unresolved.
+     */
+    async unresolveConversation(pageId: string, senderId: string): Promise<number> {
+        const result = await db.update(messages)
+            .set({ resolved: false, updatedAt: new Date() })
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+                eq(messages.resolved, true)
+            ))
+            .returning({ id: messages.id });
+        return result.length;
+    }
+
+    /**
      * Get message statistics
      * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query
      */
@@ -396,14 +449,17 @@ export class MessagesService {
         total: number;
         replied: number;
         pending: number;
+        resolved: number;
         needsAttention: number;
+        autoReplied: number;
         byMethod: { template: number; ai: number; manual: number };
     }> {
         const result = await db
             .select({
                 total:          sql<number>`count(*)`,
                 replied:        sql<number>`count(*) FILTER (WHERE ${messages.replied} = true)`,
-                needsAttention: sql<number>`count(*) FILTER (WHERE ${messages.needsAttention} = true)`,
+                resolved:       sql<number>`count(*) FILTER (WHERE ${messages.resolved} = true)`,
+                needsAttention: sql<number>`count(*) FILTER (WHERE ${messages.needsAttention} = true AND ${messages.resolved} = false)`,
                 ai:             sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'manual')`,
@@ -419,20 +475,25 @@ export class MessagesService {
         const total = Number(row?.total || 0);
 
         if (total === 0) {
-            return { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
+            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, autoReplied: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
         }
 
         const replied = Number(row?.replied || 0);
+        const resolved = Number(row?.resolved || 0);
+        const ai = Number(row?.ai || 0);
+        const template = Number(row?.template || 0);
 
         return {
             total,
             replied,
-            pending: total - replied,
+            pending: total - replied - resolved,
+            resolved,
             needsAttention: Number(row?.needsAttention || 0),
+            autoReplied: ai + template,
             byMethod: {
-                template: Number(row?.template || 0),
-                ai:       Number(row?.ai || 0),
-                manual:   Number(row?.manual || 0),
+                template,
+                ai,
+                manual: Number(row?.manual || 0),
             },
         };
     }
@@ -636,6 +697,7 @@ export class MessagesService {
             needsAttention: record.needsAttention ?? false,
             flagReason: record.flagReason ?? null,
             aiIntent: record.aiIntent ?? null,
+            resolved: record.resolved ?? false,
         };
     }
 }

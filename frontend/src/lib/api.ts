@@ -291,7 +291,7 @@ export const messagesApi = {
   getAll: (params?: MessagesQueryParams) =>
     api.get<MessagesPaginatedResponse>('/messages', { params }),
 
-  getStats: () => api.get<{ total: number; replied: number; pending: number; needsAttention: number; byMethod: { template: number; ai: number; manual: number } }>('/messages/stats'),
+  getStats: () => api.get<{ total: number; replied: number; pending: number; resolved: number; needsAttention: number; autoReplied: number; byMethod: { template: number; ai: number; manual: number } }>('/messages/stats'),
 
   getConversation: (senderId: string, params: { pageId: string; limit?: number }) =>
     api.get<Message[]>(`/messages/conversation/${senderId}`, { params }),
@@ -310,6 +310,12 @@ export const messagesApi = {
     api.get<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null }>(
       `/messages/conversation/${senderId}/pause-status`, { params: { pageId } }
     ),
+
+  resolveConversation: (senderId: string, pageId: string) =>
+    api.post<{ success: boolean; resolved: number }>(`/messages/conversation/${senderId}/resolve`, { pageId }),
+
+  unresolveConversation: (senderId: string, pageId: string) =>
+    api.post<{ success: boolean; unresolved: number }>(`/messages/conversation/${senderId}/unresolve`, { pageId }),
 };
 
 // AI API
@@ -339,6 +345,7 @@ export interface Message {
   needsAttention?: boolean;
   flagReason?: string | null;
   aiIntent?: string | null;
+  resolved?: boolean;
 }
 
 export interface MessagesPaginatedResponse {
@@ -354,6 +361,9 @@ export interface MessagesQueryParams {
   cursor?: string;
   limit?: number;
   direction?: 'incoming' | 'outgoing';
+  replied?: boolean;
+  resolved?: boolean;
+  needsAttention?: boolean;
 }
 
 // Admin API - Protected routes for admin users only

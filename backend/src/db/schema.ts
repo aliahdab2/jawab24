@@ -271,6 +271,7 @@ export const messages = pgTable('messages', {
     needsAttention: boolean('needs_attention').default(false),
     flagReason: varchar('flag_reason', { length: 255 }),
     aiIntent: varchar('ai_intent', { length: 50 }),
+    resolved: boolean('resolved').default(false),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -286,6 +287,7 @@ export const messages = pgTable('messages', {
         repliedIdx: index('idx_messages_replied').on(table.replied),
         createdAtIdx: index('idx_messages_created_at').on(table.createdAt),
         createdTimeIdx: index('idx_messages_created_time').on(table.createdTime),
+        resolvedFilterIdx: index('idx_messages_resolved_filter').on(table.pageId, table.direction, table.resolved, table.replied),
     };
 });
 

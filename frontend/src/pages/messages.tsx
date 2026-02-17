@@ -1,31 +1,23 @@
 import React, { useState, useEffect, useCallback, type ReactElement, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import clsx from 'clsx';
+import { useRouter } from 'next/router';
+import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Badge, Input, PageHeader, PageSkeleton } from '@/components/ui';
-import { StatCard } from '@/components/dashboard/StatCard';
+import { Button, Input, PageHeader, PageSkeleton } from '@/components/ui';
 import { MessageCard, type Conversation } from '@/components/messages';
+import { MessageDetailModal } from '@/components/messages/MessageDetailModal';
 import { useAuthStore } from '@/lib/store';
 import { messagesApi, pagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import {
   MessageCircle,
   Search,
-  Bot,
-  Clock,
   Check,
-  CheckCircle,
-  User,
-  X,
   Download,
-  AlertTriangle,
-  UserCheck,
-  Sparkles,
-  Zap,
+  MoreVertical,
   Loader2,
-  Send,
-  PauseCircle,
-  PlayCircle
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
@@ -33,7 +25,20 @@ import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
-type FilterType = 'all' | 'pending' | 'replied' | 'ai' | 'template' | 'needs_attention' | 'replied_today';
+type FilterType = 'needs_action' | 'all' | 'auto_replied';
+
+// Map frontend filters to API params
+function getApiParams(filter: FilterType): MessagesQueryParams {
+  switch (filter) {
+    case 'needs_action':
+      return { replied: false, resolved: false };
+    case 'auto_replied':
+      return { replied: true };
+    case 'all':
+    default:
+      return {};
+  }
+}
 
 // Custom hook for debounced value
 function useDebounce<T>(value: T, delay: number): T {
@@ -52,22 +57,66 @@ const MESSAGES_PER_PAGE = 50;
 const MessagesPage: NextPageWithLayout = () => {
   const { t, language, dateLocale } = useTranslation();
   const { isAuthenticated } = useAuthStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = useState<FilterType>('needs_action');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [replyText, setReplyText] = useState('');
-  const [sendError, setSendError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
   // Infinite scroll observer ref
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // ESC key to close modal
-  useEscapeKey(() => { setSelectedConversation(null); setReplyText(''); setSendError(null); }, !!selectedConversation);
+  useEscapeKey(() => setSelectedConversation(null), !!selectedConversation);
+
+  // Close overflow menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  // Sync Filter to URL
+  const updateFilter = useCallback((newFilter: FilterType) => {
+    if (newFilter === filter) return;
+
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setFilter(newFilter);
+      setIsTransitioning(false);
+    }, 120);
+
+    const params = new URLSearchParams(window.location.search);
+    if (newFilter === 'needs_action') {
+      params.delete('filter');
+    } else {
+      params.set('filter', newFilter);
+    }
+    router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
+  }, [filter, router]);
+
+  // Update internal filter when URL changes
+  useEffect(() => {
+    const currentParam = searchParams.get('filter');
+    if (currentParam && ['all', 'auto_replied'].includes(currentParam)) {
+      setFilter(currentParam as FilterType);
+    } else {
+      setFilter('needs_action');
+    }
+  }, [searchParams]);
+
+  // API params derived from current filter
+  const apiParams = useMemo(() => getApiParams(filter), [filter]);
 
   // Manual reply mutation
   const sendReplyMutation = useMutation({
@@ -83,13 +132,12 @@ const MessagesPage: NextPageWithLayout = () => {
           lastMessage: outgoingMessage,
         });
       }
-      setReplyText('');
-      setSendError(null);
       queryClient.invalidateQueries({ queryKey: ['messages'] });
       queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+      toast.success(t('messages.replySent' as TranslationKey));
     },
     onError: (error: Error) => {
-      setSendError(error.message || t('messages.replyFailed' as TranslationKey));
+      toast.error(error.message || t('messages.replyFailed' as TranslationKey));
     },
   });
 
@@ -107,6 +155,10 @@ const MessagesPage: NextPageWithLayout = () => {
           pauseStatus: { paused: true, pausedUntil: _data.pausedUntil, remainingMinutes: null },
         });
       }
+      toast.success(t('messages.pauseSuccess' as TranslationKey));
+    },
+    onError: () => {
+      toast.error(t('messages.pauseFailed' as TranslationKey));
     },
   });
 
@@ -123,23 +175,12 @@ const MessagesPage: NextPageWithLayout = () => {
           pauseStatus: { paused: false, pausedUntil: null, remainingMinutes: null },
         });
       }
+      toast.success(t('messages.resumeSuccess' as TranslationKey));
+    },
+    onError: () => {
+      toast.error(t('messages.resumeFailed' as TranslationKey));
     },
   });
-
-  const getReplyTargetMessageId = (conv: Conversation): string | null => {
-    const incoming = conv.messages
-      .filter(m => m.direction === 'incoming')
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    const unreplied = incoming.find(m => !m.replied);
-    return unreplied?.id || incoming[0]?.id || null;
-  };
-
-  const handleSendReply = () => {
-    if (!selectedConversation || !replyText.trim()) return;
-    const targetId = getReplyTargetMessageId(selectedConversation);
-    if (!targetId) return;
-    sendReplyMutation.mutate({ messageId: targetId, text: replyText.trim() });
-  };
 
   // Fetch pages for CSV page name resolution
   const { data: pagesData = [] } = useQuery({
@@ -152,7 +193,7 @@ const MessagesPage: NextPageWithLayout = () => {
   });
   const pages = pagesData as Page[];
 
-  // Fetch Stats via useQuery (matches comments pattern)
+  // Fetch Stats
   const { data: statsData } = useQuery({
     queryKey: ['messages-stats'],
     queryFn: async () => {
@@ -163,7 +204,19 @@ const MessagesPage: NextPageWithLayout = () => {
     refetchInterval: 30000,
   });
 
-  // Infinite Query
+  const stats = useMemo(() => {
+    if (statsData) {
+      return {
+        total: statsData.total,
+        pending: statsData.pending,
+        autoReplied: statsData.autoReplied ?? 0,
+        needsAction: statsData.pending + (statsData.needsAttention ?? 0),
+      };
+    }
+    return { total: 0, pending: 0, autoReplied: 0, needsAction: 0 };
+  }, [statsData]);
+
+  // Infinite Query — with server-side filter params
   const {
     data,
     fetchNextPage,
@@ -171,11 +224,12 @@ const MessagesPage: NextPageWithLayout = () => {
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ['messages'],
+    queryKey: ['messages', apiParams],
     queryFn: async ({ pageParam }) => {
       const params: MessagesQueryParams = {
         limit: MESSAGES_PER_PAGE,
         cursor: pageParam as string | undefined,
+        ...apiParams,
       };
 
       const response = await messagesApi.getAll(params);
@@ -212,9 +266,8 @@ const MessagesPage: NextPageWithLayout = () => {
     return false;
   }, []);
 
-  // Process conversations
+  // Process conversations — grouping + search filter (server handles replied/resolved filtering)
   const conversations = useMemo(() => {
-    // 1. Filter raw messages first based on Search
     let filteredMsgs = allMessages;
     if (debouncedSearch) {
       const query = debouncedSearch.toLowerCase();
@@ -224,7 +277,7 @@ const MessagesPage: NextPageWithLayout = () => {
       );
     }
 
-    // 2. Group by Sender
+    // Group by Sender
     const groups = filteredMsgs.reduce((acc, msg) => {
       const key = msg.senderId;
       if (!acc[key]) {
@@ -237,7 +290,6 @@ const MessagesPage: NextPageWithLayout = () => {
         };
       }
       acc[key].messages.push(msg);
-      // Use the first non-null sender name we find
       if (!acc[key].senderName && msg.senderName) {
         acc[key].senderName = msg.senderName;
       }
@@ -251,41 +303,19 @@ const MessagesPage: NextPageWithLayout = () => {
       return acc;
     }, {} as Record<string, Conversation>);
 
-    // 3. Apply Conversation-level filters and Sort
-    let convList = Object.values(groups).map(conv => {
+    const convList = Object.values(groups).map(conv => {
       conv.needsHumanAttention = checkConversationNeedsAttention(conv.messages);
       return conv;
     });
 
-    // Apply filter
-    if (filter === 'needs_attention') {
-      convList = convList.filter(c => c.needsHumanAttention);
-    } else if (filter === 'pending') {
-      convList = convList.filter(c => !c.lastMessage.replied && c.lastMessage.direction === 'incoming');
-    } else if (filter === 'ai') {
-      convList = convList.filter(c => c.messages.some(m => m.direction === 'outgoing' && m.replyMethod === 'ai'));
-    } else if (filter === 'template') {
-      convList = convList.filter(c => c.messages.some(m => m.direction === 'outgoing' && m.replyMethod === 'template'));
-    } else if (filter === 'replied') {
-      convList = convList.filter(c => c.lastMessage.replied);
-    } else if (filter === 'replied_today') {
-      convList = convList.filter(c => {
-        const lastOutgoing = c.messages.find(m => m.direction === 'outgoing');
-        if (!lastOutgoing?.createdAt) return false;
-        const d = new Date(lastOutgoing.createdAt);
-        const now = new Date();
-        return d.toDateString() === now.toDateString();
-      });
-    }
-
-    // 4. Sort by latest message
+    // Sort by latest message
     return convList.sort((a, b) => {
       const dateA = new Date(a.lastMessage.createdAt).getTime();
       const dateB = new Date(b.lastMessage.createdAt).getTime();
       return dateB - dateA;
     });
 
-  }, [allMessages, debouncedSearch, filter, checkConversationNeedsAttention]);
+  }, [allMessages, debouncedSearch, checkConversationNeedsAttention]);
 
   // Fetch pause status when a conversation is selected
   useEffect(() => {
@@ -317,20 +347,37 @@ const MessagesPage: NextPageWithLayout = () => {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // Resolve conversation handler
+  const handleResolve = useCallback(async (senderId: string, pageId: string) => {
+    try {
+      await messagesApi.resolveConversation(senderId, pageId);
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+      toast.success(t('messages.resolveSuccess' as TranslationKey));
+      // Close modal if the resolved conversation is open
+      if (selectedConversation?.senderId === senderId) {
+        setSelectedConversation(null);
+      }
+    } catch {
+      toast.error(t('common.error' as TranslationKey));
+    }
+  }, [queryClient, t, selectedConversation]);
+
   // CSV Export
   const exportToCSV = () => {
     setExporting(true);
     try {
       const headers = [
         t('export.pageName'), t('export.contact'), t('export.message'),
-        t('export.direction'), t('export.replied'), t('export.reply'),
-        t('export.method'), t('export.date'), t('export.repliedAt'),
+        t('export.direction'), t('export.replied'), t('messages.resolved' as TranslationKey),
+        t('export.reply'), t('export.method'), t('export.date'), t('export.repliedAt'),
       ];
       const rows = allMessages.map(msg => {
         const page = pages.find(p => p.id === msg.pageId);
         return [
           page?.name || '', msg.senderName || '', msg.message || '',
           msg.direction, msg.replied ? t('common.yes') : t('common.no'),
+          msg.resolved ? t('common.yes') : t('common.no'),
           msg.replyText || '', msg.replyMethod || '',
           formatDateForExport(msg.createdAt, language),
           formatDateForExport(msg.repliedAt, language),
@@ -344,65 +391,20 @@ const MessagesPage: NextPageWithLayout = () => {
     }
   };
 
-  const formatFullTime = (dateValue: string | Date | null | undefined) => {
-    if (!dateValue) return '-';
-    try {
-      return format(new Date(dateValue), 'PPp', { locale: dateLocale });
-    } catch {
-      return String(dateValue);
-    }
-  };
+  // Reply handler for modal
+  const handleReply = useCallback((messageId: string, text: string) => {
+    sendReplyMutation.mutate({ messageId, text });
+  }, [sendReplyMutation]);
 
-  const getSortedMessages = (conv: Conversation) => {
-    return [...conv.messages].sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return dateA - dateB;
-    });
-  };
+  // Pause handler for modal
+  const handlePause = useCallback((senderId: string, pageId: string) => {
+    pauseMutation.mutate({ senderId, pageId });
+  }, [pauseMutation]);
 
-  // Stats
-  const needsAttentionCount = useMemo(() =>
-    conversations.filter(c => c.needsHumanAttention).length
-  , [conversations]);
-
-  const stats = useMemo(() => {
-    if (statsData) {
-      return {
-        total: statsData.total,
-        pending: statsData.pending,
-        replied: statsData.replied,
-        aiReplies: statsData.byMethod?.ai ?? 0,
-        templateReplies: statsData.byMethod?.template ?? 0,
-        needsAttention: needsAttentionCount,
-        repliedToday: 0,
-      };
-    }
-    return { total: 0, pending: 0, replied: 0, aiReplies: 0, templateReplies: 0, needsAttention: 0, repliedToday: 0 };
-  }, [statsData, needsAttentionCount]);
-
-  // Filter transition
-  const updateFilter = useCallback((newFilter: FilterType) => {
-    if (newFilter === filter) return;
-    setIsTransitioning(true);
-    setTimeout(() => {
-      setFilter(newFilter);
-      setIsTransitioning(false);
-    }, 120);
-  }, [filter]);
-
-  // Filter chip label
-  const getFilterChipLabel = (filterType: FilterType) => {
-    switch (filterType) {
-      case 'template': return t('dashboard.templateReply');
-      case 'ai': return t('dashboard.aiReply');
-      case 'pending': return t('comments.pending');
-      case 'replied': return t('comments.replied');
-      case 'needs_attention': return t('comments.needsAttention');
-      case 'replied_today': return t('comments.repliedToday');
-      default: return '';
-    }
-  };
+  // Resume handler for modal
+  const handleResume = useCallback((senderId: string, pageId: string) => {
+    resumeMutation.mutate({ senderId, pageId });
+  }, [resumeMutation]);
 
   if (isLoading && !data) {
     return <PageSkeleton type="list" />;
@@ -414,143 +416,75 @@ const MessagesPage: NextPageWithLayout = () => {
         title={t('messages.title')}
         description={t('messages.description')}
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<Download className="w-[18px] h-[18px] sm:w-5 sm:h-5" />}
-            onClick={exportToCSV}
-            loading={exporting}
-          >
-            {t('comments.exportCSV')}
-          </Button>
+          <div ref={menuRef} className="relative">
+            <button
+              onClick={() => setMenuOpen(prev => !prev)}
+              className="p-2 rounded-xl text-surface-500 hover:text-surface-700 hover:bg-surface-100 transition-colors"
+              aria-label={t('common.export' as TranslationKey)}
+              aria-expanded={menuOpen}
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
+            {menuOpen && (
+              <div className="absolute end-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg ring-1 ring-surface-200/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
+                <button
+                  onClick={() => { exportToCSV(); setMenuOpen(false); }}
+                  disabled={exporting}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-surface-700 hover:bg-surface-50 transition-colors disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4" />
+                  {t('comments.exportCSV')}
+                </button>
+              </div>
+            )}
+          </div>
         }
       />
 
-      {/* Stats Grid */}
-      <div className={clsx(
-        "grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mb-12",
-        stats.pending > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"
-      )}>
-        <div onClick={() => updateFilter('all')}>
-          <StatCard
-            nameKey="messages.totalMessages"
-            value={stats.total.toLocaleString()}
-            icon={MessageCircle}
-            color="brand"
-            index={0}
-            isActive={filter === 'all'}
-          />
+      {/* Filter Chips + Search */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          {([
+            { key: 'needs_action' as FilterType, label: t('messages.needsAction' as TranslationKey), count: stats.needsAction },
+            { key: 'all' as FilterType, label: t('messages.allMessages' as TranslationKey), count: stats.total },
+            { key: 'auto_replied' as FilterType, label: t('messages.autoReplied' as TranslationKey), count: stats.autoReplied },
+          ]).map(chip => (
+            <button
+              key={chip.key}
+              onClick={() => updateFilter(chip.key)}
+              aria-pressed={filter === chip.key}
+              className={clsx(
+                "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200",
+                filter === chip.key
+                  ? "bg-brand-500 text-white shadow-sm shadow-brand-500/25"
+                  : "bg-surface-100 text-surface-600 hover:bg-surface-200"
+              )}
+            >
+              {chip.label}
+              {chip.count > 0 && (
+                <span className={clsx(
+                  "text-xs tabular-nums",
+                  filter === chip.key ? "text-white/80" : "text-surface-400"
+                )}>
+                  ({chip.count.toLocaleString()})
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-        {stats.pending > 0 && (
-          <div onClick={() => updateFilter('pending')}>
-            <StatCard
-              nameKey="comments.pending"
-              value={stats.pending.toLocaleString()}
-              icon={Clock}
-              color="amber"
-              index={1}
-              isActive={filter === 'pending'}
-            />
-          </div>
-        )}
-        <div onClick={() => updateFilter('replied')}>
-          <StatCard
-            nameKey="comments.replied"
-            value={stats.replied.toLocaleString()}
-            icon={CheckCircle}
-            color="emerald"
-            index={2}
-            isActive={filter === 'replied'}
+
+        <div className="relative group flex-1 w-full sm:w-auto">
+          <Search
+            className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4.5 h-4.5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
           />
-        </div>
-        <div onClick={() => updateFilter('ai')}>
-          <StatCard
-            nameKey="dashboard.aiReply"
-            value={stats.aiReplies.toLocaleString()}
-            icon={Bot}
-            color="violet"
-            index={3}
-            isActive={filter === 'ai'}
-          />
-        </div>
-        <div onClick={() => updateFilter('template')}>
-          <StatCard
-            nameKey="dashboard.templateReply"
-            value={stats.templateReplies.toLocaleString()}
-            icon={Zap}
-            color="brand"
-            index={4}
-            isActive={filter === 'template'}
-          />
-        </div>
-        <div onClick={() => updateFilter('needs_attention')}>
-          <StatCard
-            nameKey="comments.needsAttention"
-            value={stats.needsAttention.toLocaleString()}
-            icon={AlertTriangle}
-            color="red"
-            index={5}
-            isActive={filter === 'needs_attention'}
+          <Input
+            placeholder={t('common.search') + '...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="py-2.5 ps-10 rounded-full bg-surface-50 border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all text-sm"
           />
         </div>
       </div>
-
-      {/* Filters & Search */}
-      <Card className="mb-12 border-none shadow-md shadow-surface-200/20 overflow-visible" padding="none">
-        <div className="p-4 sm:p-5 flex flex-col md:flex-row items-center gap-4">
-          {/* Search Input */}
-          <div className="relative group flex-1 w-full">
-            <Search
-              className="absolute top-1/2 -translate-y-1/2 w-5 h-5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
-              style={{ insetInlineStart: '1.25rem' }}
-            />
-            <Input
-              placeholder={t('common.search') + '...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="py-3.5 ps-14 rounded-2xl bg-surface-50 border-none focus:ring-4 focus:ring-brand-500/10 focus:bg-white transition-all shadow-sm"
-            />
-          </div>
-
-          {/* Active Filter Chip */}
-          {filter !== 'all' && (
-            <div className="flex shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
-              <button
-                onClick={() => updateFilter('all')}
-                className={clsx(
-                  "group relative flex items-center gap-2.5 py-2.5 px-5 rounded-full shadow-sm hover:shadow-md transition-all duration-300 ring-1 ring-inset",
-                  filter === 'pending' && "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100",
-                  filter === 'ai' && "bg-violet-50 text-violet-700 ring-violet-200 hover:bg-violet-100",
-                  filter === 'needs_attention' && "bg-red-50 text-red-700 ring-red-200 hover:bg-red-100",
-                  filter === 'replied' && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100",
-                  (filter === 'template' || filter === 'replied_today') && "bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100"
-                )}
-              >
-                {filter === 'pending' && <Clock className="w-4 h-4" />}
-                {filter === 'ai' && <Bot className="w-4 h-4" />}
-                {filter === 'needs_attention' && <AlertTriangle className="w-4 h-4" />}
-                {(filter === 'replied' || filter === 'template' || filter === 'replied_today') && <CheckCircle className="w-4 h-4" />}
-
-                <span className="font-bold text-sm tracking-wide">{getFilterChipLabel(filter)}</span>
-
-                <div className="w-px h-4 mx-1 opacity-20 bg-current" />
-
-                <div className="bg-white/50 rounded-full p-0.5 group-hover:bg-white transition-colors">
-                  <X className="w-3.5 h-3.5" />
-                </div>
-              </button>
-            </div>
-          )}
-
-          {/* Conversation Counter */}
-          {conversations.length > 0 && (
-            <div className="hidden md:flex items-center gap-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest whitespace-nowrap">
-              <span>{conversations.length} {t('messages.title')}</span>
-              {hasNextPage && <span className="text-brand-500">+</span>}
-            </div>
-          )}
-        </div>
-      </Card>
 
       {/* Conversations Grid */}
       {conversations.length > 0 ? (
@@ -561,14 +495,20 @@ const MessagesPage: NextPageWithLayout = () => {
               isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
             )}
           >
-            {conversations.map((conv, i) => (
-              <MessageCard
-                key={conv.senderId}
-                conversation={conv}
-                animationDelay={i < 10 ? i * 0.05 : 0}
-                onClick={() => setSelectedConversation(conv)}
-              />
-            ))}
+            {conversations.map((conv, i) => {
+              const hasUnresolvedUnreplied = conv.messages.some(
+                m => m.direction === 'incoming' && !m.replied && !m.resolved
+              );
+              return (
+                <MessageCard
+                  key={conv.senderId}
+                  conversation={conv}
+                  animationDelay={i < 10 ? i * 0.05 : 0}
+                  onClick={() => setSelectedConversation(conv)}
+                  onResolve={hasUnresolvedUnreplied ? () => handleResolve(conv.senderId, conv.lastMessage.pageId) : undefined}
+                />
+              );
+            })}
           </div>
 
           {/* Load More Trigger */}
@@ -597,7 +537,7 @@ const MessagesPage: NextPageWithLayout = () => {
           </div>
         </>
       ) : (
-        <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl" padding="lg">
+        <div className="rounded-2xl bg-white shadow-md shadow-surface-200/20 p-10">
           <div className="py-10 text-center">
             <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
               <MessageCircle className="w-8 h-8 text-surface-300 opacity-60" />
@@ -606,174 +546,23 @@ const MessagesPage: NextPageWithLayout = () => {
               {searchQuery ? t('common.noData') : t('messages.noMessages' as TranslationKey)}
             </p>
           </div>
-        </Card>
+        </div>
       )}
 
       {/* Conversation Detail Modal */}
       {selectedConversation && (
-        <div className="fixed inset-0 bg-surface-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-surface-100">
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${selectedConversation.needsHumanAttention ? 'bg-red-100 text-red-600' : 'bg-brand-100 text-brand-600'}`}>
-                  <User className="w-6 h-6" />
-                </div>
-                <div className="text-start">
-                  <h2 className="text-xl font-bold text-surface-900 leading-tight">
-                    {selectedConversation.senderName || t('common.user' as TranslationKey)}
-                  </h2>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] font-bold text-surface-400 uppercase tracking-widest text-start">
-                      {t('messages.msgCount' as TranslationKey, { count: selectedConversation.messages.length })}
-                    </span>
-                    {selectedConversation.needsHumanAttention && (
-                      <Badge variant="warning" size="sm">
-                        <AlertTriangle className="w-3 h-3 mr-1" />
-                        {t('messages.needsHuman')}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => { setSelectedConversation(null); setReplyText(''); setSendError(null); }}
-                className="p-2.5 rounded-xl hover:bg-surface-100 text-surface-400 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-surface-50/50">
-              {getSortedMessages(selectedConversation).map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${msg.direction === 'outgoing' ? 'items-end' : 'items-start'}`}
-                >
-                  <div className={`max-w-[85%] rounded-2xl p-4 shadow-sm ${msg.direction === 'outgoing'
-                    ? 'bg-brand-600 text-white rounded-br-none'
-                    : 'bg-white text-surface-900 rounded-bl-none border border-surface-100'
-                    }`}>
-                    <p className="text-sm leading-relaxed italic-arabic">{msg.message}</p>
-                  </div>
-                  <div className={`flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter ${msg.direction === 'outgoing' ? 'text-brand-500' : 'text-surface-400'}`}>
-                    <span>{formatFullTime(msg.createdAt)}</span>
-                    {msg.direction === 'outgoing' && msg.replyMethod && (
-                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-100 text-surface-600">
-                        {msg.replyMethod === 'ai' ? (
-                          <>
-                            <Sparkles className="w-2.5 h-2.5" />
-                            {t('dashboard.aiReply')}
-                          </>
-                        ) : msg.replyMethod === 'template' ? (
-                          <>
-                            <CheckCircle className="w-2.5 h-2.5" />
-                            {t('dashboard.templateReply')}
-                          </>
-                        ) : (
-                          <>
-                            <UserCheck className="w-2.5 h-2.5" />
-                            {t('common.manual' as TranslationKey)}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Modal Footer — Reply Input */}
-            <div className="p-4 sm:p-6 border-t border-surface-100 bg-white flex-shrink-0">
-              {sendError && (
-                <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium">
-                  {sendError}
-                </div>
-              )}
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <textarea
-                    value={replyText}
-                    onChange={(e) => { setReplyText(e.target.value); setSendError(null); }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendReply();
-                      }
-                    }}
-                    placeholder={t('messages.typeReply' as TranslationKey)}
-                    rows={1}
-                    className="w-full resize-none rounded-2xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all outline-none"
-                    style={{ minHeight: '44px', maxHeight: '120px' }}
-                    disabled={sendReplyMutation.isPending}
-                  />
-                </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleSendReply}
-                  loading={sendReplyMutation.isPending}
-                  disabled={!replyText.trim() || sendReplyMutation.isPending}
-                  className="rounded-xl px-4 h-[44px] flex-shrink-0"
-                  icon={<Send className="w-4 h-4" />}
-                >
-                  {t('comments.reply')}
-                </Button>
-              </div>
-              <div className="flex items-center justify-between mt-2">
-                <div className="flex items-center gap-2">
-                  {/* Pause/Resume Smart Reply Button */}
-                  {(() => {
-                    const pageId = selectedConversation.lastMessage.pageId;
-                    const isPaused = selectedConversation.pauseStatus?.paused;
-                    return (
-                      <button
-                        onClick={() => {
-                          if (isPaused) {
-                            resumeMutation.mutate({ senderId: selectedConversation.senderId, pageId });
-                          } else {
-                            pauseMutation.mutate({ senderId: selectedConversation.senderId, pageId });
-                          }
-                        }}
-                        disabled={pauseMutation.isPending || resumeMutation.isPending}
-                        className={clsx(
-                          'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border',
-                          isPaused
-                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                            : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'
-                        )}
-                      >
-                        {isPaused ? (
-                          <>
-                            <PlayCircle className="w-3.5 h-3.5" />
-                            {t('messages.resumeSmartReply' as TranslationKey)}
-                          </>
-                        ) : (
-                          <>
-                            <PauseCircle className="w-3.5 h-3.5" />
-                            {t('messages.pauseSmartReply' as TranslationKey)}
-                          </>
-                        )}
-                      </button>
-                    );
-                  })()}
-                  {selectedConversation.pauseStatus?.paused && selectedConversation.pauseStatus.remainingMinutes != null && (
-                    <span className="text-[10px] font-medium text-violet-500">
-                      {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: selectedConversation.pauseStatus.remainingMinutes })}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => { setSelectedConversation(null); setReplyText(''); setSendError(null); }}
-                  className="text-xs text-surface-400 hover:text-surface-600 transition-colors font-medium"
-                >
-                  {t('comments.close')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <MessageDetailModal
+          conversation={selectedConversation}
+          onClose={() => setSelectedConversation(null)}
+          onReply={handleReply}
+          onResolve={handleResolve}
+          onPause={handlePause}
+          onResume={handleResume}
+          isReplying={sendReplyMutation.isPending}
+          isPausing={pauseMutation.isPending}
+          isResuming={resumeMutation.isPending}
+          dateLocale={dateLocale}
+        />
       )}
     </>
   );

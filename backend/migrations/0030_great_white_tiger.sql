@@ -1,0 +1,2 @@
+ALTER TABLE "messages" ADD COLUMN "resolved" boolean DEFAULT false;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_messages_resolved_filter" ON "messages" ("page_id","direction","resolved","replied");

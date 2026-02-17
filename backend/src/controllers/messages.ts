@@ -32,16 +32,22 @@ export class MessagesController {
             cursor?: string;
             limit?: string;
             direction?: 'incoming' | 'outgoing';
+            replied?: string;
+            resolved?: string;
+            needsAttention?: string;
         }
     }>, reply: FastifyReply) {
         try {
             const userId = (request as AuthenticatedRequest).user.userId;
-            const { cursor, limit, direction } = request.query;
+            const { cursor, limit, direction, replied, resolved, needsAttention } = request.query;
 
             const options: {
                 cursor?: string;
                 limit?: number;
                 direction?: 'incoming' | 'outgoing';
+                replied?: boolean;
+                resolved?: boolean;
+                needsAttention?: boolean;
             } = {};
 
             if (cursor) {
@@ -55,6 +61,18 @@ export class MessagesController {
 
             if (direction && ['incoming', 'outgoing'].includes(direction)) {
                 options.direction = direction;
+            }
+
+            if (replied !== undefined) {
+                options.replied = replied === 'true';
+            }
+
+            if (resolved !== undefined) {
+                options.resolved = resolved === 'true';
+            }
+
+            if (needsAttention !== undefined) {
+                options.needsAttention = needsAttention === 'true';
             }
 
             const result = await messagesService.getMessages(userId, options);
@@ -283,6 +301,71 @@ export class MessagesController {
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error getting pause status');
             return reply.status(500).send({ error: 'Failed to get pause status' });
+        }
+    }
+    /**
+     * Resolve all unreplied messages in a conversation
+     * POST /messages/conversation/:senderId/resolve
+     */
+    async resolveConversation(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Body: { pageId: string };
+        }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user.userId;
+            const { senderId } = request.params;
+            const { pageId } = request.body;
+
+            if (!pageId) {
+                return reply.status(400).send({ error: 'pageId is required' });
+            }
+
+            const page = await pagesService.getPage(userId, pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+            }
+
+            const count = await messagesService.resolveConversation(pageId, senderId);
+            return reply.send({ success: true, resolved: count });
+        } catch (error) {
+            request.log.error({ error: String(error) }, 'Error resolving conversation');
+            return reply.status(500).send({ error: 'Failed to resolve conversation' });
+        }
+    }
+
+    /**
+     * Unresolve messages in a conversation
+     * POST /messages/conversation/:senderId/unresolve
+     */
+    async unresolveConversation(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Body: { pageId: string };
+        }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user.userId;
+            const { senderId } = request.params;
+            const { pageId } = request.body;
+
+            if (!pageId) {
+                return reply.status(400).send({ error: 'pageId is required' });
+            }
+
+            const page = await pagesService.getPage(userId, pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+            }
+
+            const count = await messagesService.unresolveConversation(pageId, senderId);
+            return reply.send({ success: true, unresolved: count });
+        } catch (error) {
+            request.log.error({ error: String(error) }, 'Error unresolving conversation');
+            return reply.status(500).send({ error: 'Failed to unresolve conversation' });
         }
     }
 }

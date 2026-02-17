@@ -31,6 +31,7 @@ function makeMessage(overrides: Partial<Message>): Message {
     createdTime: null,
     repliedAt: null,
     createdAt: '2026-02-16T06:00:00Z',
+    resolved: false,
     ...overrides,
   };
 }
@@ -252,6 +253,67 @@ describe('MessageCard', () => {
       );
 
       expect(screen.getByText('comments.needsAttention')).toBeInTheDocument();
+    });
+  });
+
+  describe('resolve button', () => {
+    it('shows resolve button when onResolve is provided', () => {
+      const onResolve = vi.fn();
+      const incoming = makeMessage({ direction: 'incoming', message: 'Question' });
+
+      render(
+        <MessageCard
+          {...defaultProps}
+          onResolve={onResolve}
+          conversation={makeConversation({
+            messages: [incoming],
+            lastMessage: incoming,
+          })}
+        />
+      );
+
+      expect(screen.getByText('messages.resolved')).toBeInTheDocument();
+    });
+
+    it('does not show resolve button when onResolve is not provided', () => {
+      const incoming = makeMessage({ direction: 'incoming', message: 'Question' });
+
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [incoming],
+            lastMessage: incoming,
+          })}
+        />
+      );
+
+      expect(screen.queryByText('messages.resolved')).not.toBeInTheDocument();
+    });
+
+    it('calls onResolve without triggering onClick', async () => {
+      const onResolve = vi.fn();
+      const onClick = vi.fn();
+      const incoming = makeMessage({ direction: 'incoming', message: 'Question' });
+
+      render(
+        <MessageCard
+          onClick={onClick}
+          onResolve={onResolve}
+          animationDelay={0}
+          conversation={makeConversation({
+            messages: [incoming],
+            lastMessage: incoming,
+          })}
+        />
+      );
+
+      const resolveBtn = screen.getByText('messages.resolved');
+      resolveBtn.click();
+
+      expect(onResolve).toHaveBeenCalledTimes(1);
+      // onClick should not fire due to stopPropagation
+      expect(onClick).not.toHaveBeenCalled();
     });
   });
 

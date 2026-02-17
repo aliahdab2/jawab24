@@ -24,6 +24,7 @@ export interface Message {
   needsAttention?: boolean;
   flagReason?: string | null;
   aiIntent?: string | null;
+  resolved?: boolean;
 }
 
 // --- Comment Types ---

@@ -62,5 +62,21 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, messagesController.getPauseStatus);
+
+        protectedRoutes.post('/messages/conversation/:senderId/resolve', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Resolve all unreplied messages in a conversation',
+                security: auth,
+            },
+        }, messagesController.resolveConversation);
+
+        protectedRoutes.post('/messages/conversation/:senderId/unresolve', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Unresolve messages in a conversation',
+                security: auth,
+            },
+        }, messagesController.unresolveConversation);
     });
 }
