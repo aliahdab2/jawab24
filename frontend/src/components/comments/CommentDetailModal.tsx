@@ -49,6 +49,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   // Limit State
   const [aiLimit, setAiLimit] = useState<{ allowed: boolean; reason?: string }>({ allowed: true });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Pause state
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
@@ -63,6 +65,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       }
     }, 100);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+      if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+    };
   }, []);
 
   // Fetch pause status for the commenter
@@ -142,12 +152,19 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       });
 
       // 2. Poll for Status
-      const interval = setInterval(async () => {
+      const stopPolling = () => {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
+        pollingRef.current = null;
+        pollingTimeoutRef.current = null;
+      };
+
+      pollingRef.current = setInterval(async () => {
         try {
           const { data: status } = await aiApi.getJobStatus(job.jobId);
 
           if (status.status === 'completed' && status.result) {
-            clearInterval(interval);
+            stopPolling();
             setReplyText(status.result.reply);
             setIsGenerating(false);
             setGenerationStatus('');
@@ -155,7 +172,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             // Refresh limits after successful generation
             fetchLimits();
           } else if (status.status === 'failed') {
-            clearInterval(interval);
+            stopPolling();
             setIsGenerating(false);
             setGenerationStatus('');
             toast.error(t('common.error'));
@@ -163,20 +180,31 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             setGenerationStatus(t('common.loading'));
           }
         } catch {
-          clearInterval(interval);
+          stopPolling();
           setIsGenerating(false);
         }
       }, 1000);
 
-    } catch (error: any) {
+      // Max polling timeout (60s) to prevent infinite polling
+      pollingTimeoutRef.current = setTimeout(() => {
+        if (pollingRef.current) {
+          stopPolling();
+          setIsGenerating(false);
+          setGenerationStatus('');
+          toast.error(t('common.error'));
+        }
+      }, 60000);
+
+    } catch (error: unknown) {
       console.error('AI Generation caught error', error);
       setIsGenerating(false);
 
       // Fallback: If 403 happens (e.g. race condition), show toast and refresh limits
-      if (error.response?.status === 403) {
+      const axiosErr = error as { response?: { status?: number; data?: { error?: string } } };
+      if (axiosErr.response?.status === 403) {
         setGenerationStatus('');
         fetchLimits(); // Update UI state
-        toast.error(error.response?.data?.error || t('common.error'), {
+        toast.error(axiosErr.response?.data?.error || t('common.error'), {
           duration: 5000,
           action: {
             label: t('pricing.upgrade'),
@@ -239,6 +267,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             <button
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-surface-100 text-surface-500 transition-colors"
+              aria-label={t('common.close')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -320,7 +349,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
                     {/* Tooltip for disabled state */}
                     {!aiLimit.allowed && (
-                      <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
+                      <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
                         {aiLimit.reason || t('pricing.limitReached' as any)}
                       </div>
                     )}

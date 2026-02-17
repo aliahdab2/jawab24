@@ -104,11 +104,13 @@ describe('CommentCard', () => {
     expect(screen.getByText('عرض خاص على الدورات')).toBeInTheDocument();
   });
 
-  it('truncates long post message to 50 chars', () => {
+  it('renders long post message with truncate class', () => {
     const longMessage = 'هذا منشور طويل جداً يحتوي على نص كثير ويجب أن يتم اقتطاعه عند الخمسين حرف تقريباً';
     render(<CommentCard {...defaultProps} comment={{ ...baseComment, postMessage: longMessage }} />);
-    // Should not show the full message
-    expect(screen.queryByText(longMessage)).not.toBeInTheDocument();
+    // Full text is in the DOM; CSS truncate handles visual truncation
+    const span = screen.getByText(longMessage);
+    expect(span).toBeInTheDocument();
+    expect(span.className).toContain('truncate');
   });
 
   it('shows resolve button when onResolve is provided', () => {

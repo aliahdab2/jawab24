@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, type ReactElement, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -243,8 +244,9 @@ const CommentsPage: NextPageWithLayout = () => {
       queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
     } catch (err) {
       console.error('Failed to resolve comment:', err);
+      toast.error(t('common.error'));
     }
-  }, [queryClient]);
+  }, [queryClient, t]);
 
   const exportToCSV = () => {
     setExporting(true);
@@ -266,6 +268,7 @@ const CommentsPage: NextPageWithLayout = () => {
       downloadCSV(`comments_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
     } catch (error) {
       console.error('Export failed:', error);
+      toast.error(t('common.error'));
     } finally {
       setExporting(false);
     }
@@ -296,7 +299,6 @@ const CommentsPage: NextPageWithLayout = () => {
   }
 
   // Calculate platform visibility logic
-  const showPageName = pages.length > 1;
   const hasFacebook = pages.some(p => !!p.facebookPageId);
   const hasInstagram = pages.some(p => !!p.instagramAccountId);
   const showPlatformIcon = hasFacebook && hasInstagram;
@@ -312,6 +314,7 @@ const CommentsPage: NextPageWithLayout = () => {
               onClick={() => setMenuOpen(prev => !prev)}
               className="p-2 rounded-xl text-surface-500 hover:text-surface-700 hover:bg-surface-100 transition-colors"
               aria-label={t('common.export' as any)}
+              aria-expanded={menuOpen}
             >
               <MoreVertical className="w-5 h-5" />
             </button>
@@ -342,6 +345,7 @@ const CommentsPage: NextPageWithLayout = () => {
             <button
               key={chip.key}
               onClick={() => updateFilter(chip.key)}
+              aria-pressed={filter === chip.key}
               className={clsx(
                 "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200",
                 filter === chip.key
@@ -364,8 +368,7 @@ const CommentsPage: NextPageWithLayout = () => {
 
         <div className="relative group flex-1 w-full sm:w-auto">
           <Search
-            className="absolute top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
-            style={{ insetInlineStart: '0.875rem' }}
+            className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4.5 h-4.5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
           />
           <Input
             placeholder={t('common.search') + '...'}
@@ -393,9 +396,7 @@ const CommentsPage: NextPageWithLayout = () => {
                   comment={comment}
                   variant="full"
                   pageName={page?.name}
-                  showPageName={showPageName}
                   showPlatformIcon={showPlatformIcon}
-                  showPostInfo={true}
                   animationDelay={i < 10 ? i * 0.05 : 0}
                   onClick={() => setSelectedComment(comment)}
                   onQuickReply={() => setSelectedComment(comment)}

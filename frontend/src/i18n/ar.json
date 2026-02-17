@@ -278,7 +278,7 @@
   "comments.exportCSV": "تنزيل CSV",
   "comments.needsAction": "بحاجة إجراء",
   "comments.autoReplied": "تم الرد تلقائياً",
-  "comments.resolve": "تم المعالجة",
+  "comments.resolve": "معالجة",
   "comments.resolved": "تمت المعالجة",
   "comments.unresolve": "إعادة فتح",
   "comments.postContext": "المنشور",

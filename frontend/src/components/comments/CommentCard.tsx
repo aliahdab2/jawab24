@@ -22,9 +22,7 @@ export interface CommentCardProps {
   onResolve?: (e: React.MouseEvent) => void;
   variant?: 'compact' | 'full';
   pageName?: string;
-  showPageName?: boolean;
   showPlatformIcon?: boolean;
-  showPostInfo?: boolean;
   animationDelay?: number;
   className?: string;
 }
@@ -192,15 +190,15 @@ export function CommentCard({
              {comment.postMessage && (
                <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-surface-400 max-w-full">
                  <FileText className="w-3 h-3 flex-shrink-0" />
-                 <span className="truncate">{comment.postMessage.length > 50 ? comment.postMessage.slice(0, 50) + '…' : comment.postMessage}</span>
+                 <span className="truncate max-w-[250px]">{comment.postMessage}</span>
                </div>
              )}
 
              {/* Message Bubble */}
              <div className="relative group/bubble">
                <div className={clsx(
-                  "px-4 py-3 bg-surface-50 rounded-2xl rounded-tl-sm text-surface-700 text-sm leading-relaxed border border-surface-100",
-                  "group-hover/card:bg-surface-100/50 transition-colors"
+                  "px-4 py-3 bg-surface-50 rounded-2xl rounded-ss-sm text-surface-700 text-sm leading-relaxed border border-surface-100",
+                  "group-hover:bg-surface-100/50 transition-colors"
                )}>
                  <p className={clsx(variant === 'compact' ? "line-clamp-3" : "whitespace-pre-wrap")}>
                     {comment.message}
@@ -217,7 +215,7 @@ export function CommentCard({
 
                  {/* Bubble */}
                  <div className="relative">
-                    <div className="px-4 py-3 bg-emerald-50 rounded-2xl rounded-tr-sm text-surface-800 text-sm leading-relaxed border border-emerald-100 shadow-sm">
+                    <div className="px-4 py-3 bg-emerald-50 rounded-2xl rounded-se-sm text-surface-800 text-sm leading-relaxed border border-emerald-100 shadow-sm">
                        <p className={clsx(variant === 'compact' ? "line-clamp-2 italic" : "whitespace-pre-wrap")}>
                           {comment.replyText}
                        </p>
