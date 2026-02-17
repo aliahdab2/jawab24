@@ -21,7 +21,8 @@ vi.mock('@/lib/api', () => ({
 vi.mock('@/i18n', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
-    language: 'en'
+    language: 'en',
+    dateLocale: undefined
   })
 }));
 
@@ -61,26 +62,26 @@ describe('CommentDetailModal', () => {
   });
 
   it('disables generate button if limit reached', async () => {
-    (subscriptionApi.checkAiLimit as any).mockResolvedValue({ 
-      data: { allowed: false, reason: 'Limit reached' } 
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({
+      data: { allowed: false, reason: 'Limit reached' }
     });
 
     render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
 
     await waitFor(() => {
-      // Button text changes to "Limit Reached" when disabled
-      const button = screen.getByRole('button', { name: /Limit Reached/i });
+      // Button text shows the translation key for "Limit Reached" when disabled
+      const button = screen.getByRole('button', { name: /pricing\.limitReached/i });
       expect(button).toBeDisabled();
     });
   });
 
-  it('locks button after successful generation (one-shot)', async () => {
+  it('shows regenerate button after successful generation (allows multiple)', async () => {
     (subscriptionApi.checkAiLimit as any).mockResolvedValue({ data: { allowed: true } });
     (aiApi.generateAsync as any).mockResolvedValue({ data: { jobId: 'job1' } });
-    
+
     // Return completed immediately
-    (aiApi.getJobStatus as any).mockResolvedValue({ 
-        data: { status: 'completed', result: { reply: 'AI Reply' } } 
+    (aiApi.getJobStatus as any).mockResolvedValue({
+        data: { status: 'completed', result: { reply: 'AI Reply' } }
     });
 
     render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
@@ -89,10 +90,12 @@ describe('CommentDetailModal', () => {
 
     const generateBtn = screen.getByRole('button', { name: /dashboard.aiReply/i });
     fireEvent.click(generateBtn);
-    
-    // Wait for the interval to tick and update UI
+
+    // After generation, button shows "Regenerate" and stays enabled
     await waitFor(() => {
-      expect(screen.getByText('Generated')).toBeInTheDocument();
+      const regenBtn = screen.getByRole('button', { name: /comments\.regenerate/i });
+      expect(regenBtn).toBeInTheDocument();
+      expect(regenBtn).not.toBeDisabled();
     }, { timeout: 3000 });
   });
 
