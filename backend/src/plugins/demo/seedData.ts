@@ -1,5 +1,5 @@
 import { db } from '../../db';
-import { pages, posts, comments, templates, settings, notifications } from '../../db/schema';
+import { pages, posts, comments, templates, settings, notifications, messages } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 
@@ -338,6 +338,198 @@ const DEMO_COMMENTS: Array<{
     },
 ];
 
+const DEMO_MESSAGES: Array<{
+    facebookMessageId: string;
+    senderId: string;
+    senderName: string;
+    message: string;
+    direction: 'incoming' | 'outgoing';
+    pageIndex: number;
+    replied: boolean;
+    replyText: string | null;
+    replyMethod: string | null;
+    needsAttention?: boolean;
+    flagReason?: string;
+    resolved?: boolean;
+    minutesAgo: number;
+}> = [
+    // ── Conversation 1: Course inquiry (Institute page, replied by AI) ──
+    {
+        facebookMessageId: 'demo_msg_1a',
+        senderId: 'dm_user_1',
+        senderName: 'عبدالرحمن الشمري',
+        message: 'السلام عليكم، أبي أسأل عن دورة الإنجليزي',
+        direction: 'incoming',
+        pageIndex: 0,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 120,
+    },
+    {
+        facebookMessageId: 'demo_msg_1b',
+        senderId: 'dm_user_1',
+        senderName: 'عبدالرحمن الشمري',
+        message: 'وعليكم السلام عبدالرحمن! دورة اللغة الإنجليزية تبدأ الأسبوع القادم، 1500 ريال شهرياً مع خصم 20% للتسجيل المبكر ✨',
+        direction: 'outgoing',
+        pageIndex: 0,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        minutesAgo: 119,
+    },
+    {
+        facebookMessageId: 'demo_msg_1c',
+        senderId: 'dm_user_1',
+        senderName: 'عبدالرحمن الشمري',
+        message: 'كم مدة الدورة؟ وهل فيه أيام محددة؟',
+        direction: 'incoming',
+        pageIndex: 0,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 90,
+    },
+    {
+        facebookMessageId: 'demo_msg_1d',
+        senderId: 'dm_user_1',
+        senderName: 'عبدالرحمن الشمري',
+        message: 'مدة الدورة 3 أشهر، الأيام: الأحد والثلاثاء والخميس من 6 مساءً حتى 8 مساءً 📚',
+        direction: 'outgoing',
+        pageIndex: 0,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        minutesAgo: 89,
+    },
+
+    // ── Conversation 2: Complaint — needs attention (Electronics page) ──
+    {
+        facebookMessageId: 'demo_msg_2a',
+        senderId: 'dm_user_2',
+        senderName: 'نوف الدوسري',
+        message: 'مرحبا، طلبت لابتوب من عندكم وفيه مشكلة بالشاشة',
+        direction: 'incoming',
+        pageIndex: 2,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        needsAttention: true,
+        flagReason: 'negative_sentiment',
+        minutesAgo: 200,
+    },
+    {
+        facebookMessageId: 'demo_msg_2b',
+        senderId: 'dm_user_2',
+        senderName: 'نوف الدوسري',
+        message: 'نعتذر عن الإزعاج نوف! يرجى إرسال رقم الطلب وسنتابع معك فوراً 🙏',
+        direction: 'outgoing',
+        pageIndex: 2,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        needsAttention: true,
+        flagReason: 'negative_sentiment',
+        minutesAgo: 199,
+    },
+    {
+        facebookMessageId: 'demo_msg_2c',
+        senderId: 'dm_user_2',
+        senderName: 'نوف الدوسري',
+        message: 'الرد الآلي ما يفيد، أبي أكلم مسؤول بشري',
+        direction: 'incoming',
+        pageIndex: 2,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        needsAttention: true,
+        flagReason: 'human_requested',
+        minutesAgo: 180,
+    },
+
+    // ── Conversation 3: New unreplied inquiry (School page) ──
+    {
+        facebookMessageId: 'demo_msg_3a',
+        senderId: 'dm_user_3',
+        senderName: 'أم ريان',
+        message: 'السلام عليكم، أبي أسجل ابني بالصف الأول، كم الرسوم؟',
+        direction: 'incoming',
+        pageIndex: 1,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 30,
+    },
+
+    // ── Conversation 4: Resolved conversation (Institute page) ──
+    {
+        facebookMessageId: 'demo_msg_4a',
+        senderId: 'dm_user_4',
+        senderName: 'فيصل العنزي',
+        message: 'هل عندكم دورة PMP؟',
+        direction: 'incoming',
+        pageIndex: 0,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        resolved: true,
+        minutesAgo: 500,
+    },
+    {
+        facebookMessageId: 'demo_msg_4b',
+        senderId: 'dm_user_4',
+        senderName: 'فيصل العنزي',
+        message: 'نعم فيصل! دورة إدارة المشاريع PMP متاحة، مدتها 6 أسابيع بتكلفة 3500 ريال 🌟',
+        direction: 'outgoing',
+        pageIndex: 0,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        resolved: true,
+        minutesAgo: 499,
+    },
+
+    // ── Conversation 5: Shipping question — unreplied (Electronics page) ──
+    {
+        facebookMessageId: 'demo_msg_5a',
+        senderId: 'dm_user_5',
+        senderName: 'سعد القرني',
+        message: 'هل توصلون لأبها؟ وكم مدة التوصيل؟',
+        direction: 'incoming',
+        pageIndex: 2,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 45,
+    },
+
+    // ── Conversation 6: Auto-replied successfully (School page) ──
+    {
+        facebookMessageId: 'demo_msg_6a',
+        senderId: 'dm_user_6',
+        senderName: 'هدى الزهراني',
+        message: 'هل التسجيل مفتوح للمرحلة المتوسطة؟',
+        direction: 'incoming',
+        pageIndex: 1,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 300,
+    },
+    {
+        facebookMessageId: 'demo_msg_6b',
+        senderId: 'dm_user_6',
+        senderName: 'هدى الزهراني',
+        message: 'أهلاً هدى! نعم التسجيل مفتوح للمرحلة المتوسطة. الرسوم 20,000 ريال سنوياً ويمكن التقسيط 📚',
+        direction: 'outgoing',
+        pageIndex: 1,
+        replied: false,
+        replyText: null,
+        replyMethod: 'template',
+        minutesAgo: 299,
+    },
+];
+
 const DEMO_TEMPLATES = [
     {
         name: 'التسجيل',
@@ -555,6 +747,31 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
     }
 
     logger.debug('[DemoData] Created demo comments', { count: DEMO_COMMENTS.length });
+
+    // Create demo messages (DMs)
+    for (const msgData of DEMO_MESSAGES) {
+        const page = createdPages[msgData.pageIndex];
+        const msgTime = new Date(Date.now() - msgData.minutesAgo * 60 * 1000);
+        await db.insert(messages).values({
+            pageId: page.id,
+            facebookMessageId: msgData.facebookMessageId,
+            senderId: msgData.senderId,
+            senderName: msgData.senderName,
+            message: msgData.message,
+            direction: msgData.direction,
+            replied: msgData.replied,
+            replyText: msgData.replyText,
+            replyMethod: msgData.replyMethod,
+            needsAttention: msgData.needsAttention ?? false,
+            flagReason: msgData.flagReason ?? null,
+            resolved: msgData.resolved ?? false,
+            createdTime: msgTime,
+            createdAt: msgTime,
+            repliedAt: msgData.direction === 'outgoing' ? msgTime : null,
+        });
+    }
+
+    logger.debug('[DemoData] Created demo messages', { count: DEMO_MESSAGES.length });
 
     // Create demo templates
     for (const templateData of DEMO_TEMPLATES) {
