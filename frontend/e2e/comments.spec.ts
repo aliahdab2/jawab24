@@ -13,6 +13,8 @@ const MOCK_COMMENT_STATS = {
   unreplied: 3,
   needsAttention: 1,
   repliedToday: 5,
+  autoReplied: 6,
+  resolved: 1,
   byMethod: { ai: 4, template: 2, manual: 1 },
 };
 
@@ -28,6 +30,7 @@ const MOCK_COMMENTS = {
       replyMethod: 'ai',
       pageId: 'page_1',
       createdAt: new Date().toISOString(),
+      postMessage: 'Check out our new schedule!',
     },
     {
       id: 'c2',
@@ -39,6 +42,20 @@ const MOCK_COMMENTS = {
       replyMethod: null,
       pageId: 'page_1',
       createdAt: new Date().toISOString(),
+      postMessage: 'Special pricing this week!',
+    },
+    {
+      id: 'c3',
+      postId: 'p1',
+      message: 'I need help with my order',
+      fromName: 'Sara Ahmed',
+      replied: false,
+      replyText: null,
+      replyMethod: null,
+      pageId: 'page_1',
+      createdAt: new Date().toISOString(),
+      needsAttention: true,
+      flagReason: 'human_requested',
     },
   ],
   pagination: { nextCursor: null },
@@ -97,6 +114,44 @@ test.describe('Comments Page', () => {
   test('should show search input', async ({ page }) => {
     await page.goto('/en/comments');
     await expect(page.locator('input').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should show filter chips with counts', async ({ page }) => {
+    await page.goto('/en/comments');
+
+    // Wait for page to load
+    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+
+    // Should show "Needs Action" filter chip with unreplied count
+    await expect(page.locator('button').filter({ hasText: /Needs Action/i }).first()).toBeVisible({ timeout: 10000 });
+
+    // Should show "All" filter chip
+    await expect(page.locator('button').filter({ hasText: /All/i }).first()).toBeVisible({ timeout: 10000 });
+
+    // Should show "Auto-replied" filter chip
+    await expect(page.locator('button').filter({ hasText: /Auto-replied/i }).first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should default to Needs Action filter', async ({ page }) => {
+    await page.goto('/en/comments');
+
+    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+
+    // The "Needs Action" chip should have active styling (brand color)
+    const needsActionBtn = page.locator('button').filter({ hasText: /Needs Action/i }).first();
+    await expect(needsActionBtn).toBeVisible({ timeout: 10000 });
+
+    // URL should NOT have filter=all param (needs_action is default)
+    expect(page.url()).not.toContain('filter=all');
+  });
+
+  test('should show post context on comment cards', async ({ page }) => {
+    await page.goto('/en/comments');
+
+    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+
+    // Should show post message text from mock data
+    await expect(page.locator('text=Check out our new schedule!').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should not crash when APIs fail', async ({ page }) => {

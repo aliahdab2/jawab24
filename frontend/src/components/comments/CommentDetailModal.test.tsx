@@ -14,7 +14,11 @@ vi.mock('@/lib/api', () => ({
     getJobStatus: vi.fn()
   },
   commentsApi: {
-    reply: vi.fn()
+    reply: vi.fn(),
+    resolve: vi.fn()
+  },
+  messagesApi: {
+    getPauseStatus: vi.fn().mockRejectedValue(new Error('not found'))
   }
 }));
 
@@ -102,11 +106,112 @@ describe('CommentDetailModal', () => {
   it('closes on ESC key press', () => {
     const onClose = vi.fn();
     render(<CommentDetailModal comment={mockComment} onClose={onClose} onReplySuccess={vi.fn()} />);
-    
+
     // Simulate ESC key press
     fireEvent.keyDown(window, { key: 'Escape' });
-    
+
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows post context when postMessage is present', async () => {
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({ data: { allowed: true } });
+
+    const commentWithPost: Comment = {
+      ...mockComment,
+      postMessage: 'Special offer on all courses!',
+    };
+
+    render(<CommentDetailModal comment={commentWithPost} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
+
+    expect(screen.getByText('Special offer on all courses!')).toBeInTheDocument();
+  });
+
+  it('does not show post context when postMessage is absent', async () => {
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({ data: { allowed: true } });
+
+    render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
+
+    // The FileText icon area for post context should not be present
+    expect(screen.queryByText('Special offer')).not.toBeInTheDocument();
+  });
+
+  it('shows resolve button when onResolve is provided and comment is not replied', async () => {
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({ data: { allowed: true } });
+
+    render(
+      <CommentDetailModal
+        comment={mockComment}
+        onClose={vi.fn()}
+        onReplySuccess={vi.fn()}
+        onResolve={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /comments\.resolve/i })).toBeInTheDocument();
+    });
+  });
+
+  it('calls onResolve and onClose when resolve button is clicked', async () => {
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({ data: { allowed: true } });
+    const onResolve = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <CommentDetailModal
+        comment={mockComment}
+        onClose={onClose}
+        onReplySuccess={vi.fn()}
+        onResolve={onResolve}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /comments\.resolve/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /comments\.resolve/i }));
+    expect(onResolve).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not show resolve button when comment is already replied', async () => {
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({ data: { allowed: true } });
+
+    const repliedComment: Comment = {
+      ...mockComment,
+      replied: true,
+      replyText: 'Thanks for reaching out!',
+      replyMethod: 'ai',
+    };
+
+    render(
+      <CommentDetailModal
+        comment={repliedComment}
+        onClose={vi.fn()}
+        onReplySuccess={vi.fn()}
+        onResolve={vi.fn()}
+      />
+    );
+
+    // Reply section is hidden for replied comments, so resolve button shouldn't exist
+    expect(screen.queryByRole('button', { name: /comments\.resolve/i })).not.toBeInTheDocument();
+  });
+
+  it('shows comment message in the modal body', () => {
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({ data: { allowed: true } });
+
+    render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
+
+    expect(screen.getByText('Hello world')).toBeInTheDocument();
+  });
+
+  it('shows commenter name in the header', () => {
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({ data: { allowed: true } });
+
+    render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
+
+    expect(screen.getByText('Test User')).toBeInTheDocument();
   });
 });
 
