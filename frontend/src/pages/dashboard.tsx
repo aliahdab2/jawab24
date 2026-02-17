@@ -322,7 +322,7 @@ const DashboardPage: NextPageWithLayout = () => {
       value: statsData.messagesPending.toLocaleString(),
       icon: Clock,
       color: 'amber' as const,
-      href: '/messages?filter=pending'
+      href: '/messages'
     },
     {
       id: 'replied_today',
@@ -338,7 +338,7 @@ const DashboardPage: NextPageWithLayout = () => {
       value: statsData.messagesNeedsAttention.toLocaleString(),
       icon: AlertTriangle,
       color: 'red' as const,
-      href: '/messages?filter=needs_attention'
+      href: '/messages'
     }
   ];
 

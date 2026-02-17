@@ -210,7 +210,7 @@ const MessagesPage: NextPageWithLayout = () => {
         total: statsData.total,
         pending: statsData.pending,
         autoReplied: statsData.autoReplied ?? 0,
-        needsAction: statsData.pending + (statsData.needsAttention ?? 0),
+        needsAction: statsData.pending,
       };
     }
     return { total: 0, pending: 0, autoReplied: 0, needsAction: 0 };
