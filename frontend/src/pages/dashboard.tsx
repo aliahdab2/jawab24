@@ -552,7 +552,6 @@ const DashboardPage: NextPageWithLayout = () => {
           <div className="divide-y divide-surface-100">
             {recentComments.length > 0 ? (
               (() => {
-                const showPageName = pages.length > 1;
                 // Check if user has active pages on BOTH platforms
                 const hasFacebook = pages.some(p => !!p.facebookPageId);
                 const hasInstagram = pages.some(p => !!p.instagramAccountId);
@@ -564,7 +563,6 @@ const DashboardPage: NextPageWithLayout = () => {
                     comment={comment}
                     variant="compact"
                     pageName={getPageName(comment.pageId) || undefined}
-                    showPageName={showPageName}
                     showPlatformIcon={showPlatformIcon}
                     animationDelay={(i + 3) * 0.1}
                     onClick={() => setSelectedCommentData({ comment, mode: 'full' })}

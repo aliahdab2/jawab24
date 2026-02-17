@@ -267,7 +267,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             <button
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-surface-100 text-surface-500 transition-colors"
-              aria-label={t('common.close')}
+              aria-label={t('comments.close')}
             >
               <X className="w-5 h-5" />
             </button>
