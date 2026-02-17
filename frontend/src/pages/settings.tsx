@@ -106,9 +106,7 @@ const SettingsPage: NextPageWithLayout = () => {
         businessHoursEnd: (data.businessHoursEnd && data.businessHoursEnd !== '00:00') ? data.businessHoursEnd : '18:00',
         timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         awayMessageMulti: data.awayMessageMulti || {},
-        greetingMessageMulti: data.greetingMessageMulti && Object.keys(data.greetingMessageMulti).length > 0
-          ? data.greetingMessageMulti
-          : { [data.dashboardLanguage || language]: t('settings.greetingMessagePlaceholder'), sourceLang: data.dashboardLanguage || language },
+        greetingMessageMulti: data.greetingMessageMulti || {},
         dualReplyNudgeMulti: data.dualReplyNudgeMulti || {},
         awayMessage: data.awayMessage || '',
         greetingMessage: data.greetingMessage || '',
@@ -127,7 +125,7 @@ const SettingsPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [language, setLanguage, t]);
+  }, [language, setLanguage]);
 
   useEffect(() => {
     if (isAuthenticated) {
