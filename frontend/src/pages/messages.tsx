@@ -155,10 +155,10 @@ const MessagesPage: NextPageWithLayout = () => {
           pauseStatus: { paused: true, pausedUntil: _data.pausedUntil, remainingMinutes: null },
         });
       }
-      toast.success(t('messages.pauseSuccess' as TranslationKey));
+      toast.success(t('messages.pauseSuccess' as TranslationKey), { id: 'smart-reply-status' });
     },
     onError: () => {
-      toast.error(t('messages.pauseFailed' as TranslationKey));
+      toast.error(t('messages.pauseFailed' as TranslationKey), { id: 'smart-reply-status' });
     },
   });
 
@@ -175,10 +175,10 @@ const MessagesPage: NextPageWithLayout = () => {
           pauseStatus: { paused: false, pausedUntil: null, remainingMinutes: null },
         });
       }
-      toast.success(t('messages.resumeSuccess' as TranslationKey));
+      toast.success(t('messages.resumeSuccess' as TranslationKey), { id: 'smart-reply-status' });
     },
     onError: () => {
-      toast.error(t('messages.resumeFailed' as TranslationKey));
+      toast.error(t('messages.resumeFailed' as TranslationKey), { id: 'smart-reply-status' });
     },
   });
 
