@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { aiService } from '../services/ai';
 import { AiGenerateRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { config } from '../config';
 
 export class AiController {
     /**
@@ -36,13 +37,13 @@ export class AiController {
             return reply.status(400).send({ error: 'Comment is required' });
         }
 
-        if (user) {
-            // Check subscription limits
+        if (user && user.facebookId !== config.demo.userFacebookId) {
+            // Check subscription limits (skip for demo users)
             const { subscriptionsService } = await import('../services/subscriptions');
             const limitCheck = await subscriptionsService.canUseAiReplies(user.userId);
-            
+
             if (!limitCheck.allowed) {
-                return reply.status(403).send({ 
+                return reply.status(403).send({
                     error: limitCheck.reason || 'AI reply limit reached',
                     limit: limitCheck.limit,
                     used: limitCheck.used

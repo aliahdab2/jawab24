@@ -1,6 +1,6 @@
 import { db } from '../../db';
 import { pages, posts, comments, templates, settings, notifications, messages } from '../../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 
 /**
@@ -643,7 +643,8 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
     const hasExistingDemoPages = existingPages.some(p => demoPageIds.includes(p.facebookPageId));
 
     if (hasExistingDemoPages) {
-        logger.info('[DemoData] Demo data already exists, refreshing pages and notifications');
+        logger.info('[DemoData] Demo data already exists, refreshing all demo data');
+
         // Refresh page names/data in case seed data was updated
         for (const pageData of DEMO_PAGES) {
             await db.update(pages)
@@ -655,6 +656,91 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
                 })
                 .where(eq(pages.facebookPageId, pageData.facebookPageId));
         }
+
+        // Get demo page IDs for refresh
+        const demoExistingPages = existingPages.filter(p => demoPageIds.includes(p.facebookPageId));
+        const existingPageIds = demoExistingPages.map(p => p.id);
+
+        // Refresh messages: delete old → re-seed with fresh timestamps
+        await db.delete(messages).where(inArray(messages.pageId, existingPageIds));
+        for (const msgData of DEMO_MESSAGES) {
+            const page = demoExistingPages.find(
+                p => p.facebookPageId === DEMO_PAGES[msgData.pageIndex].facebookPageId
+            );
+            if (!page) continue;
+            const msgTime = new Date(Date.now() - msgData.minutesAgo * 60 * 1000);
+            await db.insert(messages).values({
+                pageId: page.id,
+                facebookMessageId: msgData.facebookMessageId,
+                senderId: msgData.senderId,
+                senderName: msgData.senderName,
+                message: msgData.message,
+                direction: msgData.direction,
+                replied: msgData.replied,
+                replyText: msgData.replyText,
+                replyMethod: msgData.replyMethod,
+                needsAttention: msgData.needsAttention ?? false,
+                flagReason: msgData.flagReason ?? null,
+                resolved: msgData.resolved ?? false,
+                createdTime: msgTime,
+                createdAt: msgTime,
+                repliedAt: msgData.direction === 'outgoing' ? msgTime : null,
+            });
+        }
+        logger.debug('[DemoData] Refreshed demo messages', { count: DEMO_MESSAGES.length });
+
+        // Refresh comments: delete via posts (cascade), then re-create posts + comments
+        const existingPostIds = await db.select({ id: posts.id }).from(posts)
+            .where(inArray(posts.pageId, existingPageIds));
+        if (existingPostIds.length > 0) {
+            await db.delete(comments).where(inArray(comments.postId, existingPostIds.map(p => p.id)));
+        }
+        await db.delete(posts).where(inArray(posts.pageId, existingPageIds));
+
+        // Re-create posts
+        const refreshedPosts: { id: string; facebookPostId: string; pageIndex: number }[] = [];
+        for (const postData of DEMO_POSTS) {
+            const page = demoExistingPages.find(
+                p => p.facebookPageId === DEMO_PAGES[postData.pageIndex].facebookPageId
+            );
+            if (!page) continue;
+            const [created] = await db.insert(posts).values({
+                pageId: page.id,
+                facebookPostId: postData.facebookPostId,
+                message: postData.message,
+                autoReplyEnabled: true,
+                createdTime: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000),
+            }).returning({ id: posts.id, facebookPostId: posts.facebookPostId });
+            refreshedPosts.push({ ...created, pageIndex: postData.pageIndex });
+        }
+
+        // Re-create comments
+        for (const commentData of DEMO_COMMENTS) {
+            const post = refreshedPosts[commentData.postIndex];
+            if (!post) continue;
+            const commentCreatedTime = new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000);
+            await db.insert(comments).values({
+                postId: post.id,
+                facebookCommentId: commentData.facebookCommentId,
+                message: commentData.message,
+                fromId: commentData.fromId,
+                fromName: commentData.fromName,
+                replied: commentData.replied,
+                replyText: commentData.replyText,
+                replyMethod: commentData.replyMethod,
+                detectedLanguage: 'ar',
+                replyLanguage: 'ar',
+                needsAttention: commentData.needsAttention ?? false,
+                flagReason: commentData.flagReason ?? null,
+                resolved: commentData.resolved ?? false,
+                createdTime: commentCreatedTime,
+                repliedAt: commentData.replied
+                    ? new Date(commentCreatedTime.getTime() + (5 + Math.random() * 115) * 1000)
+                    : null,
+            });
+        }
+        logger.debug('[DemoData] Refreshed demo comments', { count: DEMO_COMMENTS.length });
+
         await refreshDemoNotifications(userId, logger);
         return;
     }

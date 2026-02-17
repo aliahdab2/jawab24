@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { subscriptionsService } from '../services/subscriptions';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { auth } from '../utils/swagger';
+import { config } from '../config';
 
 interface ChangePlanBody {
     planId: string;
@@ -94,7 +95,12 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
             const { userId } = user;
-            
+
+            // Demo users always have unlimited AI access
+            if (user.facebookId === config.demo.userFacebookId) {
+                return reply.send({ success: true, data: { allowed: true } });
+            }
+
             try {
                 const result = await subscriptionsService.canUseAiReplies(userId);
 
