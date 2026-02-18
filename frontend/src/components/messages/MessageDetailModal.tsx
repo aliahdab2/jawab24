@@ -101,7 +101,7 @@ export function MessageDetailModal({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="bg-white rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl max-h-[calc(100dvh-var(--sai-top)-12px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
+        className="bg-white rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl h-[calc(100dvh-var(--sai-top)-8px)] sm:h-auto max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -188,7 +188,7 @@ export function MessageDetailModal({
         {/* Footer — Reply + Actions */}
         <div
           className="p-4 sm:p-6 border-t border-surface-100 bg-white flex-shrink-0"
-          style={{ paddingBottom: 'calc(var(--sai-bottom) + 12px)' }}
+          style={{ paddingBottom: 'calc(var(--sai-bottom) + 24px)' }}
         >
           {sendError && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium">

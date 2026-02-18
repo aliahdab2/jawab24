@@ -242,7 +242,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-[calc(100dvh-var(--sai-top)-12px)] sm:max-h-[90vh] overflow-hidden flex flex-col pb-safe landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl h-[calc(100dvh-var(--sai-top)-8px)] sm:h-auto max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pb-safe landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -409,7 +409,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         {mode === 'full' && (
           <div
             className="p-4 md:p-6 border-t border-surface-100 bg-white"
-            style={{ paddingBottom: 'calc(var(--sai-bottom) + 12px)' }}
+            style={{ paddingBottom: 'calc(var(--sai-bottom) + 24px)' }}
           >
             <div className="flex items-center justify-between">
               {comment.facebookCommentId && (
