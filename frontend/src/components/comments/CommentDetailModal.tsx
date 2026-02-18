@@ -413,7 +413,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
         {/* Modal Footer */}
         {mode === 'full' && (
-          <div className="p-4 md:p-6 border-t border-surface-100 bg-white">
+          <div
+            className="p-4 md:p-6 border-t border-surface-100 bg-white"
+            style={{ paddingBottom: 'calc(var(--sai-bottom) + 12px)' }}
+          >
             <div className="flex items-center justify-between">
               {comment.facebookCommentId && (
                 <a

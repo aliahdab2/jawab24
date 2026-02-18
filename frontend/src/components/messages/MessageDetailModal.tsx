@@ -191,7 +191,10 @@ export function MessageDetailModal({
         </div>
 
         {/* Footer — Reply + Actions */}
-        <div className="p-4 sm:p-6 border-t border-surface-100 bg-white flex-shrink-0">
+        <div
+          className="p-4 sm:p-6 border-t border-surface-100 bg-white flex-shrink-0"
+          style={{ paddingBottom: 'calc(var(--sai-bottom) + 12px)' }}
+        >
           {sendError && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium">
               {sendError}
@@ -227,7 +230,7 @@ export function MessageDetailModal({
               <span className="hidden sm:inline">{t('comments.reply')}</span>
             </Button>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+          <div className="flex flex-wrap items-center gap-2 mt-2">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               {/* Pause/Resume Smart Reply */}
               <button
@@ -280,12 +283,6 @@ export function MessageDetailModal({
                 </span>
               ) : null}
             </div>
-            <button
-              onClick={onClose}
-              className="text-[10px] sm:text-xs text-surface-400 hover:text-surface-600 transition-colors font-medium"
-            >
-              {t('comments.close')}
-            </button>
           </div>
         </div>
       </div>
