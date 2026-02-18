@@ -7,6 +7,7 @@ import { useTranslation } from '@/i18n';
 import { commentsApi, aiApi, subscriptionApi, messagesApi } from '@/lib/api';
 import type { Comment } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import {
   MessageSquare,
   Bot,
@@ -40,6 +41,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   
   // Close on ESC
   useEscapeKey(onClose);
+  useBodyScrollLock(true);
 
   const [replyText, setReplyText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -65,14 +67,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       }
     }, 100);
     return () => clearTimeout(timer);
-  }, []);
-
-  // Lock background scroll + hide floating helpers while modal is open
-  useEffect(() => {
-    document.body.classList.add('modal-open');
-    return () => {
-      document.body.classList.remove('modal-open');
-    };
   }, []);
 
   // Cleanup polling on unmount
