@@ -157,9 +157,8 @@ IGNORED_GHSA="GHSA-3ppc-4f35-3m26"
 run_audit() {
     local workspace_name="$1"
     local workspace_label="$2"
-    local output
-    output=$(npm audit --workspace="$workspace_name" --audit-level=high --omit=dev 2>&1)
-    local exit_code=$?
+    local output exit_code=0
+    output=$(npm audit --workspace="$workspace_name" --audit-level=high --omit=dev 2>&1) || exit_code=$?
 
     if [ $exit_code -eq 0 ]; then
         echo -e "${GREEN}   ✅ ${workspace_label}: no high/critical vulnerabilities${NC}"
