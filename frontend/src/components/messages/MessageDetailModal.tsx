@@ -139,6 +139,7 @@ export function MessageDetailModal({
           </div>
           <button
             onClick={onClose}
+            aria-label={t('comments.close' as TranslationKey)}
             className="p-2 sm:p-2.5 rounded-xl hover:bg-surface-100 text-surface-400 transition-colors flex-shrink-0"
           >
             <X className="w-5 h-5 sm:w-6 sm:h-6" />

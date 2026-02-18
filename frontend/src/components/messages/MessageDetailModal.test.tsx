@@ -281,7 +281,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('comments.close'));
+    fireEvent.click(screen.getByLabelText('comments.close'));
     expect(onClose).toHaveBeenCalled();
   });
 
