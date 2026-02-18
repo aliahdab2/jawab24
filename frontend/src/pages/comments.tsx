@@ -13,6 +13,7 @@ import { commentsApi, pagesApi, type CommentsQueryParams } from '@/lib/api';
 import {
   MessageSquare,
   Search,
+  X,
   Check,
   Download,
   AlertTriangle,
@@ -128,9 +129,8 @@ const CommentsPage: NextPageWithLayout = () => {
 
   // Client-side filtering for search
   const filteredComments = useMemo(() => {
-    if (!debouncedSearch) return allComments;
-
-    const query = debouncedSearch.toLowerCase();
+    const query = debouncedSearch.trim().toLowerCase();
+    if (!query) return allComments;
     return allComments.filter(c =>
       c.message.toLowerCase().includes(query) ||
       (c.fromName || '').toLowerCase().includes(query)
@@ -367,16 +367,30 @@ const CommentsPage: NextPageWithLayout = () => {
           ))}
         </div>
 
-        <div className="relative group w-full sm:w-[280px] sm:flex-none">
+        <div role="search" aria-label={t('common.search')} className="relative group w-full sm:w-[300px] sm:flex-none">
           <Search
             className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4.5 h-4.5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
           />
           <Input
+            type="search"
+            inputMode="search"
+            autoComplete="off"
+            aria-label={t('common.search')}
             placeholder={t('common.search') + '...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="py-2.5 ps-10 rounded-full bg-surface-50 border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all text-sm"
+            className="py-2.5 ps-10 pe-10 rounded-full bg-surface-50 border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all text-sm"
           />
+          {searchQuery.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
+              className="absolute top-1/2 -translate-y-1/2 end-2.5 p-1 rounded-full text-surface-400 hover:text-surface-600 hover:bg-surface-100 transition-colors z-10"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
