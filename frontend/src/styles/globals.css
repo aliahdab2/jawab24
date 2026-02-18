@@ -837,6 +837,21 @@ html, body {
   padding: 0;
 }
 
+/* Global modal state: freeze background app scrolling and hide floating helpers */
+body.modal-open {
+  overflow: hidden;
+}
+
+body.modal-open .dashboard-scroll-root {
+  overflow: hidden !important;
+}
+
+body.modal-open .whatsapp-help-fab {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(24px) !important;
+}
+
 /* Step 2: AppShell fills body height */
 .app-shell {
   height: 100%;
@@ -1005,4 +1020,3 @@ body.is-native .pt-hero {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(200%); }
 }
-

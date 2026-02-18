@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -48,6 +48,14 @@ export function MessageDetailModal({
   const [sendError, setSendError] = useState<string | null>(null);
 
   useEscapeKey(() => onClose(), true);
+
+  // Lock background scroll + hide floating helpers while modal is open
+  useEffect(() => {
+    document.body.classList.add('modal-open');
+    return () => {
+      document.body.classList.remove('modal-open');
+    };
+  }, []);
 
   const sortedMessages = useMemo(() => {
     return [...conversation.messages].sort((a, b) => {

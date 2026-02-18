@@ -67,6 +67,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
+  // Lock background scroll + hide floating helpers while modal is open
+  useEffect(() => {
+    document.body.classList.add('modal-open');
+    return () => {
+      document.body.classList.remove('modal-open');
+    };
+  }, []);
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {

@@ -103,7 +103,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
         {!skipTitle && <title>{pageTitle} | Jawab24</title>}
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh">
+      <div className="dashboard-scroll-root flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh">
         {/* Sidebar - hidden on mobile and on clean layouts */}
         {!isCleanLayout && (
           <div className="hidden lg:block">
