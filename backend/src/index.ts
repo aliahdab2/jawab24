@@ -46,6 +46,7 @@ import demoPlugin from "./plugins/demo";
 import swaggerPlugin from "./plugins/swagger";
 import { ensureAdminUsers } from "./utils/adminSetup";
 import { facebookService } from "./services/facebook";
+import { sanitizeRequestHeaders } from "./utils/logSanitizer";
 
 // ⚡ Validate environment variables on startup
 try {
@@ -64,7 +65,9 @@ const server = fastify({
         return {
           method: request.method,
           url: request.url,
-          headers: request.headers,
+          headers: sanitizeRequestHeaders(
+            request.headers as Record<string, string | string[] | undefined>,
+          ),
           hostname: request.hostname,
           remoteAddress: request.ip,
           remotePort: request.socket.remotePort,
