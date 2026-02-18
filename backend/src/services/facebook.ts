@@ -242,30 +242,52 @@ export class FacebookService {
         }
     }
     /**
-     * Fetch a Messenger sender's profile (name, profile pic) using the page access token.
-     * Must be called within 24 hours of the user's last message.
+     * Fetch a Messenger sender's name using the page access token.
+     * Tries User Profile API first, then falls back to Conversations API.
+     * pageId is required for the Conversations API fallback.
      */
-    async getSenderProfile(senderId: string, pageAccessToken: string): Promise<{ name: string; profilePic?: string } | null> {
+    async getSenderProfile(senderId: string, pageAccessToken: string, pageId?: string): Promise<{ name: string } | null> {
+        // Try User Profile API first
         try {
             const response = await axios.get(`${FACEBOOK_GRAPH_API}/${senderId}`, {
                 params: {
-                    fields: 'first_name,last_name,profile_pic',
+                    fields: 'name',
                     access_token: pageAccessToken,
                 },
             });
-
-            const { first_name, last_name, profile_pic } = response.data;
-            const name = [first_name, last_name].filter(Boolean).join(' ');
-            return { name: name || senderId, profilePic: profile_pic };
+            const { name } = response.data;
+            if (name) return { name };
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                this.logger.warn('[Facebook] Could not fetch sender profile', {
+                this.logger.warn('[Facebook] Could not fetch sender profile via User API', {
                     senderId,
                     error: error.response?.data?.error?.message || error.message,
                 });
             }
-            return null;
         }
+
+        // Fallback: Conversations API — returns participant names even when User API is restricted
+        if (pageId) {
+            try {
+                const convResponse = await axios.get(`${FACEBOOK_GRAPH_API}/${pageId}/conversations`, {
+                    params: {
+                        user_id: senderId,
+                        fields: 'participants',
+                        access_token: pageAccessToken,
+                    },
+                });
+                const conversations = convResponse.data?.data as Array<{ participants?: { data?: Array<{ id: string; name?: string }> } }> | undefined;
+                if (conversations && conversations.length > 0) {
+                    const participants = conversations[0].participants?.data ?? [];
+                    const sender = participants.find(p => p.id === senderId);
+                    if (sender?.name) return { name: sender.name };
+                }
+            } catch {
+                // Both approaches failed — return null
+            }
+        }
+
+        return null;
     }
 
     /**

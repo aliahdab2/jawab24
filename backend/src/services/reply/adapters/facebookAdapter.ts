@@ -34,9 +34,9 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
             if (cached) return cached;
         }
 
-        // Cache miss — call Facebook API
+        // Cache miss — call Facebook API (pageId enables Conversations API fallback)
         try {
-            const profile = await facebookService.getSenderProfile(senderId, accessToken);
+            const profile = await facebookService.getSenderProfile(senderId, accessToken, pageId);
             return profile?.name;
         } catch {
             return undefined;
