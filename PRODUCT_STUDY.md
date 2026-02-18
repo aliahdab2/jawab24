@@ -1,6 +1,6 @@
 # Jawab24 - Complete Product Study
 
-> **Last updated**: 2026-02-17
+> **Last updated**: 2026-02-18
 > **Purpose**: Comprehensive reference for the entire Jawab24 product — architecture, features, data flow, and capabilities.
 
 ---
@@ -16,7 +16,7 @@ Jawab24 is an **AI-powered auto-reply platform for Facebook & Instagram**. It au
 | Layer | Technology | Port | Purpose |
 |-------|-----------|------|---------|
 | **Frontend** | Next.js 15 + Capacitor 8 | 3001 | Web + Native mobile app |
-| **Backend** | Express + Drizzle ORM + PostgreSQL | 3000 | API, webhooks, business logic |
+| **Backend** | Fastify + Drizzle ORM + PostgreSQL | 3000 | API, webhooks, business logic |
 | **AI Worker** | Fastify + OpenAI GPT-4o-mini | 3002 | Reply generation, translation |
 | **Queue** | BullMQ + Redis | 6379 | Async job processing |
 | **Search** | pgvector (PostgreSQL) | — | Semantic KB retrieval |
@@ -28,7 +28,7 @@ Jawab24 is an **AI-powered auto-reply platform for Facebook & Instagram**. It au
 ```
 /
 ├── frontend/           # Next.js 15 + Tailwind + Capacitor 8
-├── backend/            # Express + Drizzle ORM + PostgreSQL
+├── backend/            # Fastify + Drizzle ORM + PostgreSQL
 ├── ai-worker/          # Fastify + OpenAI
 └── packages/
     └── shared/         # Shared TypeScript types & utilities
@@ -368,7 +368,7 @@ Merchant writes business info
                    │
                    ▼
 ┌──────────────────────────────────────────┐
-│            BACKEND (Express)              │
+│            BACKEND (Fastify)              │
 │  Webhook → Validate → Store → Queue      │
 └─────────┬────────────────────┬───────────┘
           │                    │
