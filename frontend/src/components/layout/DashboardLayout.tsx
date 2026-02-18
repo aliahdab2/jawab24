@@ -201,7 +201,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             }}
           >
             {/* Demo Mode Banner - self-contained, only renders when user is in demo mode */}
-            <DemoBanner className="mb-4 -mx-4 -mt-4 md:-mx-8 md:-mt-8 lg:-mx-16 lg:-mt-10 xl:-mx-20 rounded-none" />
+            <DemoBanner className="mb-4 -mx-4 md:-mx-8 lg:-mx-16 xl:-mx-20 rounded-none" />
             {children}
           </div>
         </main>

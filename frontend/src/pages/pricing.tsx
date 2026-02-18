@@ -407,7 +407,7 @@ const PricingPage: NextPageWithLayout = () => {
         <meta property="og:description" content={t('pricing.ogDescription')} />
         <meta property="og:url" content="https://jawab24.com/pricing" />
       </Head>
-        <div>
+        <div className="lg:-mt-4">
         {/* Fallback Disclaimer - Only shown when using offline plans */}
         {usingFallback && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
@@ -429,7 +429,7 @@ const PricingPage: NextPageWithLayout = () => {
 
         {/* Usage Summary if subscribed - Inline */}
         {usage?.subscription?.plan && (
-          <div className="max-w-4xl mx-auto mb-8">
+          <div className="max-w-4xl mx-auto mt-2 lg:mt-3 mb-6">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 py-3.5 px-6 bg-white rounded-2xl border border-brand-100 shadow-sm">
               {/* Plan Info */}
               <div className="flex items-center gap-3">
@@ -479,17 +479,17 @@ const PricingPage: NextPageWithLayout = () => {
         )}
 
         {/* Page title */}
-        <div className="text-center px-4 pt-6 sm:pt-10 md:pt-12">
+        <div className="text-center px-4 pt-4 sm:pt-7 md:pt-8">
           <h1 className="text-3xl sm:text-5xl font-display font-bold text-surface-900 leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
-          <p className="text-base sm:text-xl text-surface-500 leading-relaxed mt-4 mb-8 max-w-xl mx-auto">
+          <p className="text-base sm:text-xl text-surface-500 leading-relaxed mt-3 mb-6 max-w-xl mx-auto">
             {t('pricing.tryFullService')}
           </p>
         </div>
 
         {/* Billing interval toggle */}
-        <div className="flex items-center justify-center gap-3 mb-12">
+        <div className="flex items-center justify-center gap-3 mb-8 lg:mb-9">
           <button
             type="button"
             onClick={() => setBillingInterval('month')}
@@ -532,7 +532,7 @@ const PricingPage: NextPageWithLayout = () => {
         </div>
 
         {/* FAQ Section */}
-        <div className="max-w-3xl mx-auto px-4 pb-12 pt-16">
+        <div className="max-w-3xl mx-auto px-4 pb-12 pt-10 sm:pt-12">
           <h2 className="text-xl font-bold text-surface-900 text-center mb-6">
             {t('pricing.faqTitle' as TranslationKey)}
           </h2>
