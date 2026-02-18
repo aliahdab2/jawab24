@@ -226,6 +226,7 @@
   "pages.characters": "characters",
   "pages.savedStatus": "Saved!",
   "pages.reconnectFacebook": "Reconnect with Facebook",
+  "pages.missingPage": "Missing a page?",
   "pages.createPage": "Create a Page",
   "pages.noPagesFoundTitle": "No Pages Found",
   "pages.noPagesFoundDesc": "We couldn't find any Facebook or Instagram pages you manage.",

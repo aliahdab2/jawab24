@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
+import { FB_CALLBACK_PATH } from '@/constants/auth';
 import {
   FileText,
   RefreshCw,
@@ -20,7 +22,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 
 const PagesPage: NextPageWithLayout = () => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { isAuthenticated, fbToken } = useAuthStore();
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +84,56 @@ const PagesPage: NextPageWithLayout = () => {
 
   // Keep ref updated
   handleSyncRef.current = handleSync;
+
+  const handleReconnectFacebook = useCallback(async () => {
+    const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
+    if (!fbAppId) return;
+
+    const isMobile = Capacitor.isNativePlatform();
+    const platform = Capacitor.getPlatform();
+
+    if (isMobile && platform === 'android') {
+      // Android: re-trigger native login to force page re-selection
+      try {
+        setSyncing(true);
+        const { FacebookLogin } = await import('@capacitor-community/facebook-login');
+        await FacebookLogin.initialize({ appId: fbAppId }).catch(() => {});
+
+        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging', 'instagram_basic', 'instagram_manage_messages'];
+        const result = await FacebookLogin.login({ permissions, tracking: 'enabled' } as any);
+
+        if (!result.accessToken) {
+          setSyncing(false);
+          return;
+        }
+
+        await api.post('/pages/sync', { accessToken: result.accessToken.token });
+        await fetchPages();
+      } catch (error) {
+        captureError(error, 'Reconnect failed', { tags: { page: 'pages', action: 'reconnect-android' } });
+      } finally {
+        setSyncing(false);
+      }
+    } else {
+      // Web/iOS: open Facebook OAuth with auth_type=rerequest to force page selection dialog
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+      const localePath = language === 'ar' ? '' : `/${language}`;
+      const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
+      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages');
+      const state = encodeURIComponent(`/pages|web|${language}|reconnect`);
+      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page&auth_type=rerequest`;
+
+      if (isMobile) {
+        // iOS: open in in-app browser
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: oauthUrl });
+      } else {
+        window.location.href = oauthUrl;
+      }
+    }
+  }, [language, fetchPages]);
 
   useEffect(() => {
     if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncing && !syncAttemptedRef.current) {
@@ -178,13 +230,23 @@ const PagesPage: NextPageWithLayout = () => {
         title={t('pages.title')}
         description={t('pages.description')}
         action={
-          <Button
-            onClick={handleSync}
-            disabled={syncing}
-            icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
-          >
-            {syncing ? t('pages.syncing' as TranslationKey) : t('pages.connectPage')}
-          </Button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleReconnectFacebook}
+              disabled={syncing}
+              className="text-sm font-medium text-surface-400 hover:text-brand-600 transition-colors disabled:opacity-40 whitespace-nowrap"
+            >
+              {t('pages.missingPage' as TranslationKey)}{' '}
+              <span className="underline underline-offset-2">{t('pages.reconnectFacebook' as TranslationKey)}</span>
+            </button>
+            <Button
+              onClick={handleSync}
+              disabled={syncing}
+              icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
+            >
+              {syncing ? t('pages.syncing' as TranslationKey) : t('pages.connectPage')}
+            </Button>
+          </div>
         }
       />
 

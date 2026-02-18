@@ -225,6 +225,7 @@
   "pages.characters": "حرف",
   "pages.savedStatus": "تم الحفظ!",
   "pages.reconnectFacebook": "إعادة الاتصال بفيسبوك",
+  "pages.missingPage": "هل تفتقد صفحة؟",
   "pages.createPage": "إنشاء صفحة",
   "pages.noPagesFoundTitle": "لم يتم العثور على صفحات",
   "pages.noPagesFoundDesc": "لم نتمكن من العثور على أي صفحات فيسبوك أو إنستغرام تديرها.",

@@ -28,13 +28,14 @@ export default function AuthCallback() {
 
     const { code, error: fbError, state } = routerRef.current.query;
 
-    // Parse state: format is "returnUrl|platform" (e.g., "/dashboard|mobile")
-    // or legacy "returnUrl"
+    // Parse state: format is "returnUrl|platform|locale[|reconnect]"
+    // e.g. "/dashboard|mobile|ar" or "/pages|web|ar|reconnect"
     const stateStr = state ? decodeURIComponent(state as string) : '/dashboard|web|ar';
     const parts = stateStr.split('|');
     const returnUrlRaw = parts[0] || '/dashboard';
     const platform = parts.length > 1 ? parts[1] : 'web';
     const preferredLocale = parts.length > 2 ? parts[2] : 'ar';
+    const isReconnect = parts[3] === 'reconnect';
     const safeUrl = returnUrlRaw.startsWith('/') ? returnUrlRaw : '/dashboard';
     
     if (fbError) {
@@ -106,6 +107,39 @@ export default function AuthCallback() {
       // Priority: 1. User Profile Settings, 2. Preferred Locale from State, 3. Default
       const finalLocale = data.settings?.dashboardLanguage || preferredLocale || 'ar';
       useUIStore.getState().setLanguage(finalLocale as any);
+
+      // Reconnect flow: sync pages with the fresh token then redirect back to pages
+      if (isReconnect && data.fbAccessToken) {
+        try {
+          await fetch(`${apiUrl}/pages/sync`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${data.token}`,
+            },
+            body: JSON.stringify({ accessToken: data.fbAccessToken }),
+            signal: abortSignal,
+          });
+        } catch {
+          // Non-fatal — pages will still show, user can manually sync
+        }
+
+        if (platform === 'mobile') {
+          const isNative = isNativePlatform();
+          if (isNative) {
+            routerRef.current.push('/pages');
+            return;
+          }
+          // iOS: deep link back to the app pointing at /pages
+          const tokenStr = encodeURIComponent(data.token);
+          const fbTokenStr = encodeURIComponent(data.fbAccessToken);
+          window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}`;
+          return;
+        }
+
+        routerRef.current.push('/pages');
+        return;
+      }
 
       // Check if Shopify onboarding is needed (Shopify-first install flow)
       if (data.shopifyOnboarding) {
