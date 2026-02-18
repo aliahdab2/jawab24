@@ -152,7 +152,6 @@ const PagesPage: NextPageWithLayout = () => {
     try {
       await pagesApi.toggle(pageId, enabled);
     } catch (error) {
-      captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
       // Revert on error
       setPages(pages.map(page =>
         page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
@@ -161,6 +160,7 @@ const PagesPage: NextPageWithLayout = () => {
       if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t('pages.pageLimitReached' as TranslationKey));
       } else {
+        captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
         toast.error(t('common.error'));
       }
     }
@@ -175,7 +175,6 @@ const PagesPage: NextPageWithLayout = () => {
     try {
       await api.patch(`/pages/${pageId}/instagram-auto-reply`, { enabled });
     } catch (error) {
-      captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
       // Revert on error
       setPages(pages.map(page =>
         page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
@@ -184,6 +183,7 @@ const PagesPage: NextPageWithLayout = () => {
       if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t('pages.pageLimitReached' as TranslationKey));
       } else {
+        captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
         toast.error(t('common.error'));
       }
     }

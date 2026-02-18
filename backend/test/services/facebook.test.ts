@@ -235,6 +235,114 @@ describe('Facebook Service', () => {
         });
     });
 
+    describe('getSenderProfile', () => {
+        const SENDER_ID = 'psid_123456';
+        const PAGE_TOKEN = 'page-access-token';
+        const PAGE_ID = 'page_999';
+
+        it('returns name from User Profile API when available', async () => {
+            vi.mocked(axios.get).mockResolvedValue({ data: { name: 'Ali Ahdab', id: SENDER_ID } });
+
+            const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN);
+
+            expect(result).toEqual({ name: 'Ali Ahdab' });
+            expect(axios.get).toHaveBeenCalledWith(
+                expect.stringContaining(SENDER_ID),
+                expect.objectContaining({ params: expect.objectContaining({ fields: 'name' }) })
+            );
+        });
+
+        it('returns null when User Profile API returns no name and no pageId provided', async () => {
+            vi.mocked(axios.get).mockResolvedValue({ data: { id: SENDER_ID } });
+
+            const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN);
+
+            expect(result).toBeNull();
+        });
+
+        it('falls back to Conversations API when User Profile API throws an error', async () => {
+            const axiosError = Object.assign(new Error('Forbidden'), {
+                isAxiosError: true,
+                response: { data: { error: { message: 'Permission denied' } } },
+            });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+            vi.mocked(axios.get)
+                .mockRejectedValueOnce(axiosError)
+                .mockResolvedValueOnce({
+                    data: {
+                        data: [{
+                            participants: {
+                                data: [
+                                    { id: PAGE_ID, name: 'My Page' },
+                                    { id: SENDER_ID, name: 'Ali Ahdab' },
+                                ],
+                            },
+                        }],
+                    },
+                });
+
+            const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
+
+            expect(result).toEqual({ name: 'Ali Ahdab' });
+        });
+
+        it('falls back to Conversations API when User Profile API returns no name', async () => {
+            vi.mocked(axios.get)
+                .mockResolvedValueOnce({ data: { id: SENDER_ID } })
+                .mockResolvedValueOnce({
+                    data: {
+                        data: [{
+                            participants: {
+                                data: [{ id: SENDER_ID, name: 'Ali via Conversations' }],
+                            },
+                        }],
+                    },
+                });
+
+            const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
+
+            expect(result).toEqual({ name: 'Ali via Conversations' });
+        });
+
+        it('returns null when both APIs fail', async () => {
+            const axiosError = Object.assign(new Error('Forbidden'), { isAxiosError: true });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+            vi.mocked(axios.get)
+                .mockRejectedValueOnce(axiosError)
+                .mockRejectedValueOnce(new Error('Network error'));
+
+            const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
+
+            expect(result).toBeNull();
+        });
+
+        it('returns null when Conversations API returns no matching participant', async () => {
+            vi.mocked(axios.get)
+                .mockResolvedValueOnce({ data: { id: SENDER_ID } })
+                .mockResolvedValueOnce({
+                    data: {
+                        data: [{
+                            participants: { data: [{ id: 'other-user', name: 'Someone Else' }] },
+                        }],
+                    },
+                });
+
+            const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
+
+            expect(result).toBeNull();
+        });
+
+        it('returns null when Conversations API returns empty conversations list', async () => {
+            vi.mocked(axios.get)
+                .mockResolvedValueOnce({ data: { id: SENDER_ID } })
+                .mockResolvedValueOnce({ data: { data: [] } });
+
+            const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
+
+            expect(result).toBeNull();
+        });
+    });
+
     describe('getLongLivedToken', () => {
         it('should exchange short-lived token for long-lived token', async () => {
             const mockResponse = {

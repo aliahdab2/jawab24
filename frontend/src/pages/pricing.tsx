@@ -66,14 +66,15 @@ function PlanCard({
     }).format(price / 100);
   };
 
-  const isHighlighted = isCurrentPlan || (isPopular && !isCurrentPlan);
+  const highlightClasses = isCurrentPlan
+    ? 'ring-2 ring-emerald-400 shadow-[0_20px_40px_rgba(16,185,129,0.18)] md:scale-105 z-10'
+    : (isPopular && !isCurrentPlan)
+      ? 'ring-2 ring-brand-500 shadow-[0_20px_40px_rgba(13,148,136,0.18)] md:scale-105 z-10'
+      : 'border-surface-200 shadow-[0_4px_6px_rgba(0,0,0,0.07)]';
 
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${isHighlighted
-        ? 'ring-2 ring-brand-500 shadow-[0_20px_40px_rgba(0,0,0,0.15)] md:scale-105 z-10'
-        : 'border-surface-200 shadow-[0_4px_6px_rgba(0,0,0,0.07)]'
-        } ${isCurrentPlan ? 'bg-brand-50/50' : 'bg-white'}`}
+      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${highlightClasses} ${isCurrentPlan ? 'bg-emerald-50/40' : 'bg-white'}`}
     >
       {/* Popular badge */}
       {isPopular && (
