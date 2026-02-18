@@ -91,7 +91,20 @@ else
 fi
 
 # =============================================
-# 0.7. Fastify plugin compatibility check
+# 0.7. OpenAI SDK version parity check
+# =============================================
+echo ""
+echo "🤖 Checking OpenAI SDK version parity..."
+if npm run check:openai-sync > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ OpenAI SDK versions are pinned and in sync${NC}"
+else
+    echo -e "${RED}   ❌ OpenAI SDK version parity check failed!${NC}"
+    npm run check:openai-sync
+    exit 1
+fi
+
+# =============================================
+# 0.8. Fastify plugin compatibility check
 # =============================================
 echo ""
 echo "🔌 Checking Fastify plugin compatibility..."
@@ -129,7 +142,7 @@ else
 fi
 
 # =============================================
-# 0.8. Dependency security audit
+# 0.9. Dependency security audit
 # =============================================
 echo ""
 echo "🔒 Running dependency security audit..."

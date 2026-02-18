@@ -25,6 +25,7 @@ function PlanCard({
   subscriptionStatus,
   isSanctioned,
   billingInterval,
+  locale,
 }: {
   plan: Plan;
   isCurrentPlan: boolean;
@@ -36,6 +37,7 @@ function PlanCard({
   subscriptionStatus?: string;
   isSanctioned: boolean;
   billingInterval: 'month' | 'year';
+  locale?: string;
 }) {
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
@@ -56,7 +58,11 @@ function PlanCard({
 
   // Format price
   const formatPrice = (price: number) => {
-    return `$${(price / 100).toFixed(0)}`;
+    return new Intl.NumberFormat(locale === 'ar' ? 'ar-u-nu-latn' : locale || 'en', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(price / 100);
   };
 
   const isHighlighted = isCurrentPlan || (isPopular && !isCurrentPlan);
@@ -85,7 +91,7 @@ function PlanCard({
             <Check className="w-2.5 h-2.5" />
             {t('pricing.currentPlan')}
             {subscriptionStatus === 'trialing' && (
-              <span className="px-1.5 py-0.5 bg-amber-500 text-white rounded text-[8px] font-black uppercase tracking-wider shadow-sm">
+              <span className="px-1.5 py-0.5 bg-amber-500 text-white rounded text-[10px] font-black uppercase tracking-wider shadow-sm">
                 {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
               </span>
             )}
@@ -211,7 +217,7 @@ function PlanCard({
                 <Check className="w-4 h-4" />
                 <span className="font-bold">{t('pricing.currentPlan')}</span>
                 {(subscriptionStatus === 'trialing' || (isCurrentPlan && plan.price === 0 && plan.trialDays > 0)) && (
-                  <span className="text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-black border border-amber-200 uppercase tracking-tighter">
+                  <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-black border border-amber-200 uppercase tracking-tighter">
                     {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
                   </span>
                 )}
@@ -274,6 +280,7 @@ function FeatureRow({
 
 const PricingPage: NextPageWithLayout = () => {
   const router = useRouter();
+  const locale = router.locale;
   const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -484,13 +491,17 @@ const PricingPage: NextPageWithLayout = () => {
         {/* Billing interval toggle */}
         <div className="flex items-center justify-center gap-3 mb-12">
           <button
+            type="button"
             onClick={() => setBillingInterval('month')}
+            aria-pressed={billingInterval === 'month'}
             className={`min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-[10px] transition-all duration-200 ${billingInterval === 'month' ? 'bg-brand-600 text-white shadow-md hover:scale-[1.02]' : 'bg-surface-100 text-surface-700 hover:bg-surface-200'}`}
           >
             {t('pricing.monthly')}
           </button>
           <button
+            type="button"
             onClick={() => setBillingInterval('year')}
+            aria-pressed={billingInterval === 'year'}
             className={`min-h-[44px] px-5 py-2.5 text-sm font-semibold rounded-[10px] transition-all duration-200 flex items-center gap-2 ${billingInterval === 'year' ? 'bg-brand-600 text-white shadow-md hover:scale-[1.02]' : 'bg-surface-100 text-surface-700 hover:bg-surface-200'}`}
           >
             {t('pricing.yearly')}
@@ -515,6 +526,7 @@ const PricingPage: NextPageWithLayout = () => {
               t={t}
               isSanctioned={isSanctioned === true}
               billingInterval={billingInterval}
+              locale={locale}
             />
           ))}
         </div>
@@ -528,20 +540,24 @@ const PricingPage: NextPageWithLayout = () => {
             {[1, 2, 3, 4, 5].map((i) => {
               const qKey = `pricing.faq${i}Q` as TranslationKey;
               const aKey = `pricing.faq${i}A` as TranslationKey;
+              const faqPanelId = `pricing-faq-panel-${i}`;
               const question = t(qKey);
               // Skip if translation key is missing (returns the key itself)
               if (question === qKey) return null;
               return (
                 <div key={i} className="border border-surface-200 rounded-xl overflow-hidden">
                   <button
+                    type="button"
                     onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    aria-expanded={openFaq === i}
+                    aria-controls={faqPanelId}
                     className="w-full flex items-center justify-between gap-3 px-5 py-4 text-start hover:bg-surface-50 transition-colors"
                   >
                     <span className="text-sm font-semibold text-surface-800">{question}</span>
                     <ChevronDown className={`w-4 h-4 text-surface-400 flex-shrink-0 transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`} />
                   </button>
                   {openFaq === i && (
-                    <div className="px-5 pb-4 text-sm text-surface-600 leading-relaxed">
+                    <div id={faqPanelId} className="px-5 pb-4 text-sm text-surface-600 leading-relaxed">
                       {t(aKey)}
                     </div>
                   )}
