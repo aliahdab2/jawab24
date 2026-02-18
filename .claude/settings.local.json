@@ -107,7 +107,8 @@
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:ui-avatars.com)",
       "Bash(npx next build)",
-      "Bash(npx playwright test)"
+      "Bash(npx playwright test)",
+      "Bash(bash /Users/aliahdab/Documents/AutoReply/scripts/pre-deploy-check.sh)"
     ]
   }
 }

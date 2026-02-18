@@ -149,6 +149,10 @@ echo "🔒 Running dependency security audit..."
 
 AUDIT_FAILED=false
 
+# GHSA-3ppc-4f35-3m26 — minimatch ReDoS inside @sentry/node's bundler tooling.
+# Patterns are developer-supplied (not user input); no upstream fix yet.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26"
+
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
     local workspace_name="$1"
@@ -162,9 +166,16 @@ run_audit() {
     elif echo "$output" | grep -q "ENOTFOUND\|ECONNREFUSED\|ETIMEDOUT\|EAI_AGAIN\|audit endpoint"; then
         echo -e "${YELLOW}   ⚠️  ${workspace_label}: audit skipped (npm registry unreachable)${NC}"
     else
-        echo -e "${RED}   ❌ ${workspace_label}: high/critical vulnerabilities found!${NC}"
-        echo "$output" | tail -20
-        AUDIT_FAILED=true
+        # Check if any unignored GHSA advisories remain
+        local unignored
+        unignored=$(echo "$output" | grep -oE "GHSA-[A-Za-z0-9-]+" | grep -v "$IGNORED_GHSA" | sort -u)
+        if [ -z "$unignored" ]; then
+            echo -e "${GREEN}   ✅ ${workspace_label}: no actionable vulnerabilities (${IGNORED_GHSA} acknowledged)${NC}"
+        else
+            echo -e "${RED}   ❌ ${workspace_label}: high/critical vulnerabilities found!${NC}"
+            echo "$output" | tail -20
+            AUDIT_FAILED=true
+        fi
     fi
 }
 
