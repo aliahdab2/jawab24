@@ -12,7 +12,6 @@ import {
   Sparkles,
   CheckCircle,
   UserCheck,
-  CheckCheck,
   PauseCircle,
   PlayCircle,
 } from 'lucide-react';
@@ -88,6 +87,9 @@ export function MessageDetailModal({
   const isPaused = conversation.pauseStatus?.paused;
   const hasUnresolvedUnreplied = conversation.messages.some(
     m => m.direction === 'incoming' && !m.replied && !m.resolved
+  );
+  const hasResolvedIncoming = conversation.messages.some(
+    m => m.direction === 'incoming' && !!m.resolved
   );
 
   return (
@@ -247,15 +249,20 @@ export function MessageDetailModal({
               )}
 
               {/* Resolve button */}
-              {hasUnresolvedUnreplied && (
+              {hasUnresolvedUnreplied ? (
                 <button
                   onClick={() => onResolve(conversation.senderId, pageId)}
                   className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-all border bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100"
                 >
-                  <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  {t('messages.resolved' as TranslationKey)}
+                  <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  {t('comments.resolve' as TranslationKey)}
                 </button>
-              )}
+              ) : hasResolvedIncoming ? (
+                <span className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-200">
+                  <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                  {t('messages.resolved' as TranslationKey)}
+                </span>
+              ) : null}
             </div>
             <button
               onClick={onClose}

@@ -7,7 +7,6 @@ import {
   Sparkles,
   Zap,
   CheckCircle,
-  CheckCheck,
   User,
   MessageCircle,
   Send,
@@ -201,8 +200,8 @@ export function MessageCard({
               onClick={(e) => { e.stopPropagation(); onResolve(); }}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-surface-50 text-surface-500 border-surface-200 hover:bg-surface-100 hover:text-surface-700"
             >
-              <CheckCheck className="w-3.5 h-3.5" />
-              {t('messages.resolved' as any)}
+              <CheckCircle className="w-3.5 h-3.5" />
+              {t('comments.resolve' as any)}
             </button>
           ) : <div />}
 

@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   X,
   ExternalLink,
-  CheckCheck,
+  CheckCircle,
   PauseCircle,
   PlayCircle,
   FileText,
@@ -371,7 +371,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     variant="secondary"
                     onClick={() => { onResolve(); onClose(); }}
                     disabled={isSending}
-                    icon={<CheckCheck className="w-4 h-4" />}
+                    icon={<CheckCircle className="w-4 h-4" />}
                   >
                     {t('comments.resolve' as any)}
                   </Button>
