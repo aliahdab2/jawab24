@@ -426,13 +426,13 @@ const MessagesPage: NextPageWithLayout = () => {
               <MoreVertical className="w-5 h-5" />
             </button>
             {menuOpen && (
-              <div className="absolute end-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg ring-1 ring-surface-200/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="absolute end-0 top-full mt-1 w-44 sm:w-48 bg-white rounded-xl shadow-lg ring-1 ring-surface-200/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
                 <button
                   onClick={() => { exportToCSV(); setMenuOpen(false); }}
                   disabled={exporting}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-surface-700 hover:bg-surface-50 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 text-sm text-surface-700 hover:bg-surface-50 transition-colors disabled:opacity-50"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-4 h-4 flex-shrink-0" />
                   {t('comments.exportCSV')}
                 </button>
               </div>
@@ -491,7 +491,7 @@ const MessagesPage: NextPageWithLayout = () => {
         <>
           <div
             className={clsx(
-              "grid grid-cols-1 lg:grid-cols-2 gap-8 pb-8 transition-all duration-300 ease-out",
+              "grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 pb-8 transition-all duration-300 ease-out",
               isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
             )}
           >
@@ -537,8 +537,8 @@ const MessagesPage: NextPageWithLayout = () => {
           </div>
         </>
       ) : (
-        <div className="rounded-2xl bg-white shadow-md shadow-surface-200/20 p-10">
-          <div className="py-10 text-center">
+        <div className="rounded-2xl bg-white shadow-md shadow-surface-200/20 p-6 sm:p-10">
+          <div className="py-6 sm:py-10 text-center">
             <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
               <MessageCircle className="w-8 h-8 text-surface-300 opacity-60" />
             </div>

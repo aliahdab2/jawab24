@@ -319,13 +319,13 @@ const CommentsPage: NextPageWithLayout = () => {
               <MoreVertical className="w-5 h-5" />
             </button>
             {menuOpen && (
-              <div className="absolute end-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg ring-1 ring-surface-200/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="absolute end-0 top-full mt-1 w-44 sm:w-48 bg-white rounded-xl shadow-lg ring-1 ring-surface-200/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
                 <button
                   onClick={() => { exportToCSV(); setMenuOpen(false); }}
                   disabled={exporting}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-surface-700 hover:bg-surface-50 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 text-sm text-surface-700 hover:bg-surface-50 transition-colors disabled:opacity-50"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-4 h-4 flex-shrink-0" />
                   {t('comments.exportCSV')}
                 </button>
               </div>
