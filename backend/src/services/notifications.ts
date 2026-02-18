@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { deviceTokens, notifications, settings } from '../db/schema';
 import { eq, and, desc, count } from 'drizzle-orm';
+import { captureError } from '../utils/sentryHelpers';
 
 // Notification types
 export type NotificationType =
@@ -340,7 +341,7 @@ class NotificationService {
                 }
             }
         } catch (error) {
-            console.error('[Notifications] Failed to send push notification:', error);
+            captureError(error, 'Failed to send push notification', { tags: { service: 'notifications' } });
             // Don't throw - push notification failure shouldn't break the main flow
         }
     }

@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import * as Sentry from '@sentry/nextjs';
 import { getPersistStorage } from './zustandStorage';
 import { isNativePlatform } from './capacitor';
+import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
 
 export type Language = 'ar' | 'en';
 
@@ -36,7 +38,7 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (user, token, fbToken) => {
         // Defensive validation
         if (!user?.id || !token || token.trim() === '') {
-          console.error('Invalid auth data provided to setAuth:', { hasUser: !!user, hasUserId: !!user?.id, hasToken: !!token });
+          Sentry.captureMessage('Invalid auth data provided to setAuth', { level: 'error', extra: { hasUser: !!user, hasUserId: !!user?.id, hasToken: !!token } });
           return;
         }
 
@@ -84,7 +86,7 @@ export const useAuthStore = create<AuthState>()(
               await FacebookLogin.logout();
             }
           } catch (e) {
-            console.error('Failed to logout from Facebook SDK:', e);
+            addErrorBreadcrumb('auth', 'Facebook SDK logout failed', { error: String(e) });
           }
         }
       },

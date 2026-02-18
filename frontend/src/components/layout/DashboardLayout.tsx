@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell } from '@/components/ui';
+import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { DemoBanner } from '@/features/demo';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -58,10 +59,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                      // Dynamic import to avoid circular dependencies
                      const { authApi } = await import('@/lib/api');
                      await authApi.getProfile();
-                 } catch (error) {
+                 } catch {
                      // If 401, the interceptor will handle redirect
                      // But if network error or other, we might want to log it
-                     console.error('Session verification failed', error);
+                     addErrorBreadcrumb('auth', 'Session verification failed');
                  }
             }
         }

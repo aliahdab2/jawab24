@@ -14,6 +14,7 @@ import { dmSans, cairo, tajawal } from '@/lib/fonts';
 import { Toaster } from 'sonner';
 import { AppSkeleton } from '@/components/ui';
 import { isNativePlatform } from '@/lib/capacitor';
+import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
 
@@ -124,7 +125,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         await StatusBar.setStyle({ style: Style.Default });
         // Safe areas handled by CSS env() with hardcoded fallbacks (24px/20px)
       } catch (err) {
-        console.error('StatusBar Setup Error:', err);
+        addErrorBreadcrumb('capacitor', 'StatusBar setup failed', { error: String(err) });
       }
 
       try {
@@ -213,7 +214,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     };
 
     if (hasHydrated) {
-      initNativePlatform().catch(console.error);
+      initNativePlatform().catch((err: unknown) => { captureError(err, 'Native platform init failed', { tags: { context: 'native-init' } }); });
     }
 
     return () => {
@@ -233,7 +234,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
     // 1. Set up listeners if permission already granted (returning users)
     import('@/lib/notifications').then(({ initPushNotifications, shouldShowNotificationPrePrompt }) => {
-      initPushNotifications(authToken).catch(console.error);
+      initPushNotifications(authToken).catch((err: unknown) => { captureError(err, 'Push notification init failed', { tags: { context: 'push-init' } }); });
 
       // 2. Check if we should show the pre-prompt (deferred by 5 seconds)
       // shouldShowNotificationPrePrompt is sync (localStorage only, no Capacitor API)
@@ -248,7 +249,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     setShowPushPrompt(false);
     if (!authToken) return;
     import('@/lib/notifications').then(({ requestAndRegisterPush }) => {
-      requestAndRegisterPush(authToken).catch(console.error);
+      requestAndRegisterPush(authToken).catch((err: unknown) => { captureError(err, 'Push notification register failed', { tags: { context: 'push-register' } }); });
     });
   }, [authToken]);
 

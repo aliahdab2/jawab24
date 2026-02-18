@@ -4,6 +4,7 @@ import { PushNotifications, Token, ActionPerformed, PushNotificationSchema } fro
 import axios from 'axios';
 import { toast } from 'sonner';
 import { api } from './api';
+import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -59,6 +60,7 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
         return true;
     } catch (error) {
         console.error('[Push] Permission request error:', error);
+        captureError(error, 'Push permission request error', { tags: { context: 'push' } });
         return false;
     }
 }
@@ -78,6 +80,7 @@ export async function initPushNotifications(token: string): Promise<void> {
         await registerPushListeners(token);
     } catch (error) {
         console.error('[Push] Init error:', error);
+        captureError(error, 'Push init error', { tags: { context: 'push' } });
     }
 }
 
@@ -92,7 +95,7 @@ async function registerPushListeners(authToken: string): Promise<void> {
     });
 
     PushNotifications.addListener('registrationError', (error) => {
-        console.error('[Push] Registration error:', error);
+        captureError(error, 'Push registration error', { tags: { context: 'push-registration' } });
     });
 
     PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
@@ -122,7 +125,7 @@ async function registerTokenWithBackend(authToken: string, fcmToken: string): Pr
             localStorage.setItem('fcm_token', fcmToken);
         }
     } catch (error) {
-        console.error('[Push] Failed to register token with backend:', error);
+        captureError(error, 'Failed to register push token with backend', { tags: { context: 'push' } });
     }
 }
 
@@ -144,8 +147,8 @@ export async function removePushToken(authToken: string): Promise<void> {
             );
             localStorage.removeItem('fcm_token');
         }
-    } catch (error) {
-        console.error('[Push] Failed to remove token:', error);
+    } catch {
+        addErrorBreadcrumb('push', 'Failed to remove push token');
     }
 }
 
@@ -216,8 +219,8 @@ export async function getUnreadCount(): Promise<number> {
     try {
         const response = await api.get('/notifications/unread-count');
         return response.data.count || 0;
-    } catch (error) {
-        console.error('[Notifications] Failed to get unread count:', error);
+    } catch {
+        addErrorBreadcrumb('notifications', 'Failed to get unread count');
         return 0;
     }
 }
@@ -245,8 +248,8 @@ export async function getNotifications(
         const lang = localStorage.getItem('dashboard_language') || 'ar';
         const response = await api.get('/notifications', { params: { limit, offset, lang } });
         return response.data;
-    } catch (error) {
-        console.error('[Notifications] Failed to get notifications:', error);
+    } catch {
+        addErrorBreadcrumb('notifications', 'Failed to get notifications');
         return { notifications: [], unreadCount: 0 };
     }
 }
@@ -257,8 +260,8 @@ export async function getNotifications(
 export async function markNotificationAsRead(notificationId: string): Promise<void> {
     try {
         await api.patch(`/notifications/${notificationId}/read`);
-    } catch (error) {
-        console.error('[Notifications] Failed to mark as read:', error);
+    } catch {
+        addErrorBreadcrumb('notifications', 'Failed to mark as read');
     }
 }
 
@@ -268,7 +271,7 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
 export async function markAllNotificationsAsRead(): Promise<void> {
     try {
         await api.post('/notifications/mark-all-read');
-    } catch (error) {
-        console.error('[Notifications] Failed to mark all as read:', error);
+    } catch {
+        addErrorBreadcrumb('notifications', 'Failed to mark all as read');
     }
 }

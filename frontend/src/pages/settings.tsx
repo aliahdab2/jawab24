@@ -17,6 +17,7 @@ import {
   Settings2,
 } from 'lucide-react';
 import { useTranslation, useLanguage } from '@/i18n';
+import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import {
   SimpleToggle,
@@ -121,7 +122,7 @@ const SettingsPage: NextPageWithLayout = () => {
       setSettings(newSettings);
       setInitialSettings(newSettings);
     } catch (error) {
-      console.error('Failed to fetch settings:', error);
+      captureError(error, 'Failed to fetch settings', { tags: { page: 'settings' } });
     } finally {
       setLoading(false);
     }
@@ -152,7 +153,7 @@ const SettingsPage: NextPageWithLayout = () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
-      console.error('Failed to save settings:', error);
+      captureError(error, 'Failed to save settings', { tags: { page: 'settings', action: 'save' } });
       toast.error(t('common.error'));
     } finally {
       setSaving(false);
@@ -172,8 +173,7 @@ const SettingsPage: NextPageWithLayout = () => {
     } catch (error: unknown) {
       const axiosErr = error as { response?: { data?: { error?: string; code?: string }; status?: number } };
       const status = axiosErr.response?.status;
-      const code = axiosErr.response?.data?.code;
-      console.error('Failed to delete account:', { status, code, error });
+      captureError(error, 'Failed to delete account', { tags: { page: 'settings', action: 'delete-account' } });
       setSaving(false);
       if (status === 404) {
         setTimeout(async () => {

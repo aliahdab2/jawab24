@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import * as Sentry from '@sentry/node';
 import { config } from '../config';
 
 // Token budget constants
@@ -152,11 +153,7 @@ export class OpenAIService {
                 flags: parsed.flags,
             };
         } catch (error) {
-            // Log error using proper structure (will be handled by Fastify logger in production)
-            // eslint-disable-next-line no-console
-            if (process.env.NODE_ENV !== 'production') {
-                console.error('OpenAI API error:', error);
-            }
+            Sentry.captureException(error instanceof Error ? error : new Error('OpenAI API error'), { tags: { service: 'openai' } });
             return this.getFallbackReply(request);
         }
     }

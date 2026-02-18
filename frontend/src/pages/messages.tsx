@@ -22,6 +22,7 @@ import {
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
+import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -385,7 +386,7 @@ const MessagesPage: NextPageWithLayout = () => {
       });
       downloadCSV(`messages_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
     } catch (error) {
-      console.error('Export failed:', error);
+      captureError(error, 'Message export failed', { tags: { page: 'messages', action: 'export' } });
     } finally {
       setExporting(false);
     }

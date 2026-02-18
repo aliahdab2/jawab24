@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import { config } from '../config';
+import * as Sentry from '@sentry/node';
 
 // Create a shared Redis instance
 // We use lazy connection or just global connection from config
@@ -15,7 +16,9 @@ export const redis = new Redis({
 });
 
 redis.on('error', (err) => {
+    // eslint-disable-next-line no-console
     console.error('Redis Client Error:', err);
+    Sentry.captureException(err, { tags: { service: 'redis' } });
 });
 
 // eslint-disable-next-line no-console

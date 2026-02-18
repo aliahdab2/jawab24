@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Button } from '@/components/ui';
 import { commentsApi } from '@/lib/api';
+import { captureError } from '@/lib/sentryHelpers';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
 interface ReplyFeedbackProps {
@@ -30,7 +31,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
         });
         toast.success(t('feedback.thanks' as TranslationKey) || 'Thanks for your feedback!', { duration: 1500 });
       } catch (error) {
-        console.error('Failed to submit positive feedback', error);
+        captureError(error, 'Failed to submit positive feedback', { tags: { component: 'reply-feedback' } });
         toast.error(t('feedback.error' as TranslationKey) || "Couldn't save feedback. Try again.");
         setFeedback(null); // Allow retry
       }
@@ -51,7 +52,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
       toast.success(t('feedback.thanks' as TranslationKey) || 'Thanks for your feedback!', { duration: 1500 });
       setShowFollowUp(false);
     } catch (error) {
-      console.error('Failed to submit negative feedback', error);
+      captureError(error, 'Failed to submit negative feedback', { tags: { component: 'reply-feedback' } });
       toast.error(t('feedback.error' as TranslationKey) || "Couldn't save feedback. Try again.");
       // Don't reset feedback state here? User specs say "Buttons remain active" if fail.
       // But specs also say "Buttons become disabled" *after submission*.

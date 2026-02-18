@@ -101,7 +101,7 @@ export function MessageDetailModal({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="bg-white rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl h-[calc(100dvh-var(--sai-top)-8px)] sm:h-auto max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
+        className="bg-white rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -141,48 +141,50 @@ export function MessageDetailModal({
         </div>
 
         {/* Message Thread */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 bg-surface-50/50">
-          {sortedMessages.map((msg) => (
-            <div
-              key={msg.id}
-              className={clsx("flex flex-col", msg.direction === 'outgoing' ? 'items-end' : 'items-start')}
-            >
-              <div className={clsx(
-                "max-w-[90%] sm:max-w-[85%] rounded-2xl p-3 sm:p-4 shadow-sm",
-                msg.direction === 'outgoing'
-                  ? 'bg-brand-600 text-white rounded-be-none'
-                  : 'bg-white text-surface-900 rounded-bs-none border border-surface-100'
-              )}>
-                <p className="text-sm leading-relaxed italic-arabic">{msg.message}</p>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-surface-50/50">
+          <div className="min-h-full flex flex-col justify-end gap-4 sm:gap-6">
+            {sortedMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={clsx("flex flex-col", msg.direction === 'outgoing' ? 'items-end' : 'items-start')}
+              >
+                <div className={clsx(
+                  "max-w-[90%] sm:max-w-[85%] rounded-2xl p-3 sm:p-4 shadow-sm",
+                  msg.direction === 'outgoing'
+                    ? 'bg-brand-600 text-white rounded-be-none'
+                    : 'bg-white text-surface-900 rounded-bs-none border border-surface-100'
+                )}>
+                  <p className="text-sm leading-relaxed italic-arabic">{msg.message}</p>
+                </div>
+                <div className={clsx(
+                  "flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter",
+                  msg.direction === 'outgoing' ? 'text-brand-500' : 'text-surface-400'
+                )}>
+                  <span>{formatFullTime(msg.createdAt)}</span>
+                  {msg.direction === 'outgoing' && msg.replyMethod && (
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-100 text-surface-600">
+                      {msg.replyMethod === 'ai' ? (
+                        <>
+                          <Sparkles className="w-2.5 h-2.5" />
+                          {t('dashboard.aiReply')}
+                        </>
+                      ) : msg.replyMethod === 'template' ? (
+                        <>
+                          <CheckCircle className="w-2.5 h-2.5" />
+                          {t('dashboard.templateReply')}
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className="w-2.5 h-2.5" />
+                          {t('common.manual' as TranslationKey)}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className={clsx(
-                "flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter",
-                msg.direction === 'outgoing' ? 'text-brand-500' : 'text-surface-400'
-              )}>
-                <span>{formatFullTime(msg.createdAt)}</span>
-                {msg.direction === 'outgoing' && msg.replyMethod && (
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-100 text-surface-600">
-                    {msg.replyMethod === 'ai' ? (
-                      <>
-                        <Sparkles className="w-2.5 h-2.5" />
-                        {t('dashboard.aiReply')}
-                      </>
-                    ) : msg.replyMethod === 'template' ? (
-                      <>
-                        <CheckCircle className="w-2.5 h-2.5" />
-                        {t('dashboard.templateReply')}
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck className="w-2.5 h-2.5" />
-                        {t('common.manual' as TranslationKey)}
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* Footer — Reply + Actions */}

@@ -20,6 +20,7 @@ import { FB_CALLBACK_PATH } from '@/constants/auth';
 
 import { authApi } from '@/lib/api';
 import { useAuthStore, useUIStore } from '@/lib/store';
+import { captureError } from '@/lib/sentryHelpers';
 import { DemoLoginButton } from '@/features/demo';
 
 export default function LoginPage() {
@@ -138,7 +139,7 @@ export default function LoginPage() {
         await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
       } catch (error: any) {
-        console.error('Android login error:', error);
+        captureError(error, 'Android login error', { tags: { page: 'login', platform: 'android' } });
         setIsProcessing(false);
 
         if (error.message === 'TIMEOUT') {
@@ -176,7 +177,7 @@ export default function LoginPage() {
 
         await Browser.open({ url: oauthUrl });
       } catch (error: any) {
-        console.error('iOS login error:', error);
+        captureError(error, 'iOS login error', { tags: { page: 'login', platform: 'ios' } });
         toast.error(t('auth.loginError'));
       }
 

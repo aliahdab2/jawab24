@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
+import { captureError } from '@/lib/sentryHelpers';
 
 export default function AuthSync() {
   const router = useRouter();
@@ -51,7 +52,7 @@ export default function AuthSync() {
         }, 100);
 
       } catch (err) {
-        console.error('Auth Sync Error:', err);
+        captureError(err, 'Auth sync error', { tags: { page: 'auth-sync' } });
         setStatus('Sync failed. Please log in again.');
         // Give user a chance to read the error before redirecting
         setTimeout(() => router.replace('/login'), 2500);

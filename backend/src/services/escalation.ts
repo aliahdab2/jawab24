@@ -2,6 +2,7 @@ import { db } from '../db';
 import { comments, messages, pages, posts, settings } from '../db/schema';
 import { eq, and, lte, sql } from 'drizzle-orm';
 import { notificationService } from './notifications';
+import { captureError } from '../utils/sentryHelpers';
 
 const DEFAULT_COMMENT_ESCALATION_MINUTES = 60;
 const DEFAULT_MESSAGE_ESCALATION_MINUTES = 30;
@@ -46,7 +47,7 @@ export async function runEscalationSweep(): Promise<void> {
         await escalateComments();
         await escalateMessages();
     } catch (error) {
-        console.error('[Escalation] Sweep failed:', error);
+        captureError(error, 'Escalation sweep failed', { tags: { service: 'escalation' } });
     }
 }
 
@@ -106,7 +107,7 @@ async function escalateComments(): Promise<void> {
             bodyEn: `${formatCommentCountEn(count)} waiting for your reply for over ${thresholdMinutes} minutes.`,
             bodyAr: `${formatCommentCountAr(count)} بانتظار ردك منذ أكثر من ${thresholdMinutes} دقيقة.`,
             data: { deepLink: '/comments?filter=flagged' },
-        }).catch(err => console.error('[Escalation] Notification failed:', err));
+        }).catch(err => captureError(err, 'Escalation comment notification failed', { tags: { service: 'escalation', type: 'comment' } }));
     }
 }
 
@@ -161,7 +162,7 @@ async function escalateMessages(): Promise<void> {
             bodyEn: `${formatMessageCountEn(msgCount)} waiting for your reply for over ${thresholdMinutes} minutes.`,
             bodyAr: `${formatMessageCountAr(msgCount)} بانتظار ردك منذ أكثر من ${thresholdMinutes} دقيقة.`,
             data: { deepLink: '/messages?filter=flagged' },
-        }).catch(err => console.error('[Escalation] Message notification failed:', err));
+        }).catch(err => captureError(err, 'Escalation message notification failed', { tags: { service: 'escalation', type: 'message' } }));
     }
 }
 

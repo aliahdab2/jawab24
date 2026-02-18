@@ -5,6 +5,7 @@ import { useTranslation } from '@/i18n';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { AppSkeleton } from '@/components/ui';
 import { isNativePlatform } from '@/lib/capacitor';
+import { captureError } from '@/lib/sentryHelpers';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -146,7 +147,7 @@ export default function AuthCallback() {
       if (err instanceof Error && err.name === 'AbortError') {
         return;
       }
-      console.error('Auth error:', err);
+      captureError(err, 'Auth callback error', { tags: { page: 'auth-callback' } });
       
       // Provide user-friendly error messages
       let errorMessage = t('auth.loginError');

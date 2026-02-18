@@ -7,6 +7,7 @@ import { useTranslation } from '@/i18n';
 import { Card, Button } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
+import { captureError } from '@/lib/sentryHelpers';
 
 interface CustomerDetail {
     id: string;
@@ -103,7 +104,7 @@ export default function AdminCustomerDetailPage() {
                 }
             } catch (err) {
                 setError('Failed to load customer');
-                console.error(err);
+                captureError(err, 'Failed to load customer', { tags: { page: 'admin-customer-detail' } });
             } finally {
                 setLoading(false);
             }
@@ -150,7 +151,7 @@ export default function AdminCustomerDetailPage() {
             }
         } catch (err) {
             setUpgradeError('Failed to upgrade customer');
-            console.error(err);
+            captureError(err, 'Failed to upgrade customer', { tags: { page: 'admin-customer-detail', action: 'upgrade' } });
         } finally {
             setUpgradeLoading(false);
         }

@@ -11,6 +11,7 @@ import { Check, X, Zap, Crown, Sparkles, AlertCircle, Store, ChevronDown } from 
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
+import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 
 
@@ -325,7 +326,7 @@ const PricingPage: NextPageWithLayout = () => {
           setUsage(extractObjectData<UsageSummary>(usageResult.data));
         }
       } catch (error) {
-        console.error('Failed to load pricing data:', error);
+        captureError(error, 'Failed to load pricing data', { tags: { page: 'pricing' } });
         // Even on error, show fallback plans
         setPlans(FALLBACK_PLANS);
         setUsingFallback(true);

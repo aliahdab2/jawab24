@@ -5,6 +5,7 @@ import { Button, Badge } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { useTranslation } from '@/i18n';
 import { commentsApi, aiApi, subscriptionApi, messagesApi } from '@/lib/api';
+import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -110,7 +111,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       const { data } = await subscriptionApi.checkAiLimit();
       setAiLimit(data);
     } catch (error) {
-      console.error('Failed to fetch AI limits', error);
+      captureError(error, 'Failed to fetch AI limits', { tags: { component: 'comment-detail' } });
     }
   }, []);
 
@@ -198,7 +199,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       }, 60000);
 
     } catch (error: unknown) {
-      console.error('AI Generation caught error', error);
+      captureError(error, 'AI generation error', { tags: { component: 'comment-detail', action: 'ai-generate' } });
       setIsGenerating(false);
 
       // Fallback: If 403 happens (e.g. race condition), show toast and refresh limits
@@ -226,7 +227,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       onReplySuccess();
       onClose();
     } catch (error) {
-      console.error('Failed to send reply', error);
+      captureError(error, 'Failed to send reply', { tags: { component: 'comment-detail', action: 'send-reply' } });
       toast.error(t('common.error'));
     } finally {
       setIsSending(false);
@@ -242,7 +243,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl h-[calc(100dvh-var(--sai-top)-8px)] sm:h-auto max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pb-safe landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pb-safe landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >

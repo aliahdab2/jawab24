@@ -3,6 +3,7 @@ dotenv.config();
 
 // Initialize Sentry FIRST
 import { initSentry } from './lib/sentry';
+import * as Sentry from '@sentry/node';
 initSentry();
 
 import { config, validateConfig } from './config';
@@ -14,11 +15,13 @@ try {
     validateConfig();
 } catch (err) {
     console.error(err instanceof Error ? err.message : err);
-    process.exit(1);
+    Sentry.captureException(err instanceof Error ? err : new Error(String(err)));
+    (async () => { await Sentry.flush(2000); process.exit(1); })();
 }
 if (!config.openai.apiKey) {
     console.error('FATAL: OPENAI_API_KEY environment variable is required. AI worker cannot function without it.');
-    process.exit(1);
+    Sentry.captureMessage('FATAL: OPENAI_API_KEY not set', { level: 'fatal' });
+    (async () => { await Sentry.flush(2000); process.exit(1); })();
 }
 
 let server: Awaited<ReturnType<typeof buildServer>>;
@@ -32,6 +35,8 @@ const start = async () => {
         startWorker(server.log);
     } catch (err) {
         console.error('Failed to start AI Worker:', err);
+        Sentry.captureException(err instanceof Error ? err : new Error('Failed to start AI Worker'));
+        await Sentry.flush(2000);
         process.exit(1);
     }
 };

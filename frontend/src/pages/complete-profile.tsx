@@ -6,6 +6,7 @@ import { Button } from '@/components/ui';
 import { Loader2, Mail, CheckCircle2, AlertCircle, Shield, Lock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { captureError } from '@/lib/sentryHelpers';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -99,7 +100,7 @@ export default function CompleteProfilePage() {
       }, 2000);
       
     } catch (err: any) {
-      console.error('Save email error:', err);
+      captureError(err, 'Save email error', { tags: { page: 'complete-profile' } });
       setError(err.response?.data?.error || t('profile.saveFailed'));
       setSaving(false);
     }

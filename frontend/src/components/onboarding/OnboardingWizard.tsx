@@ -16,6 +16,7 @@ import {
 import { Button, Toggle } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { pagesApi, api } from '@/lib/api';
+import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import type { Page } from '@jawab24/shared';
 
@@ -338,7 +339,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         setKnowledgeBase(selected.knowledgeBase || selected.suggestedKnowledgeBase || '');
       }
     } catch (error) {
-      console.error('Failed to fetch pages:', error);
+      captureError(error, 'Onboarding: failed to fetch pages', { tags: { component: 'onboarding' } });
       setFetchError(true);
     } finally {
       setLoading(false);
@@ -383,7 +384,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     try {
       await pagesApi.toggle(pageId, enabled);
     } catch (error: unknown) {
-      console.error('Failed to toggle page:', error);
+      captureError(error, 'Onboarding: failed to toggle page', { tags: { component: 'onboarding' } });
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t('onboarding.pageLimitReached' as TranslationKey, { limit: pageLimit ?? 1 }));
@@ -404,7 +405,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       try {
         await api.put(`/pages/${selectedPageId}`, { knowledgeBase });
       } catch (error) {
-        console.error('Failed to save knowledge base:', error);
+        captureError(error, 'Onboarding: failed to save knowledge base', { tags: { component: 'onboarding' } });
       } finally {
         setSaving(false);
       }

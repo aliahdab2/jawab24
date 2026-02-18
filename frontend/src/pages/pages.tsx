@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseModal';
+import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 
 const PagesPage: NextPageWithLayout = () => {
@@ -39,7 +40,7 @@ const PagesPage: NextPageWithLayout = () => {
         : (Array.isArray(response.data?.data) ? response.data.data : []);
       setPages(data);
     } catch (error) {
-      console.error('Failed to fetch pages:', error);
+      captureError(error, 'Failed to fetch pages', { tags: { page: 'pages' } });
     } finally {
       setLoading(false);
     }
@@ -73,7 +74,7 @@ const PagesPage: NextPageWithLayout = () => {
       await fetchPages();
 
     } catch (error) {
-      console.error('Sync failed:', error);
+      captureError(error, 'Page sync failed', { tags: { page: 'pages', action: 'sync' } });
     } finally {
       setSyncing(false);
     }
@@ -99,7 +100,7 @@ const PagesPage: NextPageWithLayout = () => {
     try {
       await pagesApi.toggle(pageId, enabled);
     } catch (error) {
-      console.error('Failed to toggle auto-reply:', error);
+      captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
       // Revert on error
       setPages(pages.map(page =>
         page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
@@ -122,7 +123,7 @@ const PagesPage: NextPageWithLayout = () => {
     try {
       await api.patch(`/pages/${pageId}/instagram-auto-reply`, { enabled });
     } catch (error) {
-      console.error('Failed to toggle Instagram auto-reply:', error);
+      captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
       // Revert on error
       setPages(pages.map(page =>
         page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
@@ -384,7 +385,7 @@ const PagesPage: NextPageWithLayout = () => {
               setSaved(true);
               setTimeout(() => setSaved(false), 3000);
             } catch (error) {
-              console.error('Failed to save knowledge base:', error);
+              captureError(error, 'Failed to save knowledge base', { tags: { page: 'pages', action: 'save-kb' } });
             } finally {
               setSaving(false);
             }

@@ -1,3 +1,5 @@
+import { captureError } from '@/lib/sentryHelpers';
+
 /**
  * Geo Check Utility for Frontend
  * 
@@ -200,7 +202,7 @@ export async function isUserSanctioned(): Promise<boolean> {
         return data.sanctioned;
     } catch (error) {
         // Payment mode: strict (block if error)
-        console.error('Geo check error, defaulting to blocked for payment:', error);
+        captureError(error, 'Geo check error - defaulting to blocked for payment', { tags: { context: 'payment' } });
         return true;
     }
 }

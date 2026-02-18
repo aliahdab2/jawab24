@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as Sentry from '@sentry/nextjs';
 import { useAuthStore } from '@/lib/store';
+
+vi.mock('@sentry/nextjs', () => ({
+    captureMessage: vi.fn(),
+    captureException: vi.fn(),
+    addBreadcrumb: vi.fn(),
+}));
 
 describe('useAuthStore - setAuth validation', () => {
     beforeEach(() => {
@@ -26,7 +33,6 @@ describe('useAuthStore - setAuth validation', () => {
     });
 
     it('should reject auth data with empty token', () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
         const mockUser = { id: 'user123', name: 'Test User', email: 'test@example.com', facebookId: 'fb123' };
 
         useAuthStore.getState().setAuth(mockUser, '', 'fb-token');
@@ -35,16 +41,13 @@ describe('useAuthStore - setAuth validation', () => {
         expect(state.user).toBeNull();
         expect(state.token).toBeNull();
         expect(state.isAuthenticated).toBe(false);
-        expect(consoleSpy).toHaveBeenCalledWith(
-            'Invalid auth data provided to setAuth:',
-            expect.objectContaining({ hasToken: false })
+        expect(Sentry.captureMessage).toHaveBeenCalledWith(
+            'Invalid auth data provided to setAuth',
+            expect.objectContaining({ level: 'error', extra: expect.objectContaining({ hasToken: false }) })
         );
-
-        consoleSpy.mockRestore();
     });
 
     it('should reject auth data with whitespace-only token', () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
         const mockUser = { id: 'user123', name: 'Test User', email: 'test@example.com', facebookId: 'fb123' };
 
         useAuthStore.getState().setAuth(mockUser, '   ', 'fb-token');
@@ -52,13 +55,10 @@ describe('useAuthStore - setAuth validation', () => {
         const state = useAuthStore.getState();
         expect(state.user).toBeNull();
         expect(state.isAuthenticated).toBe(false);
-        expect(consoleSpy).toHaveBeenCalled();
-
-        consoleSpy.mockRestore();
+        expect(Sentry.captureMessage).toHaveBeenCalled();
     });
 
     it('should reject auth data with missing user ID', () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
         const mockUser = { id: '', name: 'Test User', email: 'test@example.com', facebookId: 'fb123' } as any;
 
         useAuthStore.getState().setAuth(mockUser, 'valid-token', 'fb-token');
@@ -66,32 +66,25 @@ describe('useAuthStore - setAuth validation', () => {
         const state = useAuthStore.getState();
         expect(state.user).toBeNull();
         expect(state.isAuthenticated).toBe(false);
-        expect(consoleSpy).toHaveBeenCalledWith(
-            'Invalid auth data provided to setAuth:',
-            expect.objectContaining({ hasUserId: false })
+        expect(Sentry.captureMessage).toHaveBeenCalledWith(
+            'Invalid auth data provided to setAuth',
+            expect.objectContaining({ level: 'error', extra: expect.objectContaining({ hasUserId: false }) })
         );
-
-        consoleSpy.mockRestore();
     });
 
     it('should reject null user', () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
-
         useAuthStore.getState().setAuth(null as any, 'valid-token', 'fb-token');
 
         const state = useAuthStore.getState();
         expect(state.user).toBeNull();
         expect(state.isAuthenticated).toBe(false);
-        expect(consoleSpy).toHaveBeenCalledWith(
-            'Invalid auth data provided to setAuth:',
-            expect.objectContaining({ hasUser: false, hasUserId: false })
+        expect(Sentry.captureMessage).toHaveBeenCalledWith(
+            'Invalid auth data provided to setAuth',
+            expect.objectContaining({ level: 'error', extra: expect.objectContaining({ hasUser: false, hasUserId: false }) })
         );
-
-        consoleSpy.mockRestore();
     });
 
     it('should reject undefined token', () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
         const mockUser = { id: 'user123', name: 'Test User', email: 'test@example.com', facebookId: 'fb123' };
 
         useAuthStore.getState().setAuth(mockUser, undefined as any, 'fb-token');
@@ -99,13 +92,10 @@ describe('useAuthStore - setAuth validation', () => {
         const state = useAuthStore.getState();
         expect(state.user).toBeNull();
         expect(state.isAuthenticated).toBe(false);
-        expect(consoleSpy).toHaveBeenCalled();
-
-        consoleSpy.mockRestore();
+        expect(Sentry.captureMessage).toHaveBeenCalled();
     });
 
     it('should not modify localStorage when validation fails', () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
         const mockUser = { id: 'user123', name: 'Test User', email: 'test@example.com', facebookId: 'fb123' };
 
         // Set initial valid token
@@ -116,7 +106,5 @@ describe('useAuthStore - setAuth validation', () => {
 
         // Token should remain unchanged
         expect(localStorage.getItem('token')).toBe('existing-token');
-
-        consoleSpy.mockRestore();
     });
 });

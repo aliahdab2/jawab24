@@ -1,5 +1,6 @@
 import type { StateStorage } from "zustand/middleware";
 import { isNativePlatform } from "./capacitor";
+import { captureError } from "@/lib/sentryHelpers";
 
 /**
  * Web storage (fast, synchronous)
@@ -48,7 +49,7 @@ const getSecureStorage = async (): Promise<StateStorage> => {
       try {
         await SecureStoragePlugin.set({ key: name, value });
       } catch (err) {
-        console.error('SecureStorage set error:', err);
+        captureError(err, 'SecureStorage set error', { tags: { context: 'storage' } });
       }
     },
     removeItem: async (name) => {

@@ -1,6 +1,7 @@
 import { FastifyReply } from 'fastify';
 import { notificationService } from '../services/notifications';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { captureError } from '../utils/sentryHelpers';
 
 /**
  * Register a device token for push notifications
@@ -29,7 +30,7 @@ export async function registerToken(
         await notificationService.registerDeviceToken(userId, token, platform as 'android' | 'ios' | 'web');
         return reply.send({ success: true });
     } catch (error) {
-        console.error('Failed to register device token:', error);
+        captureError(error, 'Failed to register device token', { tags: { controller: 'notifications', action: 'register-token' } });
         return reply.status(500).send({ error: 'Failed to register device token' });
     }
 }
@@ -57,7 +58,7 @@ export async function removeToken(
         await notificationService.removeDeviceToken(userId, token);
         return reply.send({ success: true });
     } catch (error) {
-        console.error('Failed to remove device token:', error);
+        captureError(error, 'Failed to remove device token', { tags: { controller: 'notifications', action: 'remove-token' } });
         return reply.status(500).send({ error: 'Failed to remove device token' });
     }
 }
@@ -83,7 +84,7 @@ export async function getNotifications(
         const result = await notificationService.getNotifications(userId, limit, offset, lang);
         return reply.send(result);
     } catch (error) {
-        console.error('Failed to get notifications:', error);
+        captureError(error, 'Failed to get notifications', { tags: { controller: 'notifications', action: 'get-notifications' } });
         return reply.status(500).send({ error: 'Failed to get notifications' });
     }
 }
@@ -104,7 +105,7 @@ export async function getUnreadCount(
         const count = await notificationService.getUnreadCount(userId);
         return reply.send({ count });
     } catch (error) {
-        console.error('Failed to get unread count:', error);
+        captureError(error, 'Failed to get unread count', { tags: { controller: 'notifications', action: 'get-unread-count' } });
         return reply.status(500).send({ error: 'Failed to get unread count' });
     }
 }
@@ -132,7 +133,7 @@ export async function markAsRead(
         await notificationService.markAsRead(id, userId);
         return reply.send({ success: true });
     } catch (error) {
-        console.error('Failed to mark notification as read:', error);
+        captureError(error, 'Failed to mark notification as read', { tags: { controller: 'notifications', action: 'mark-as-read' } });
         return reply.status(500).send({ error: 'Failed to mark notification as read' });
     }
 }
@@ -153,7 +154,7 @@ export async function markAllAsRead(
         await notificationService.markAllAsRead(userId);
         return reply.send({ success: true });
     } catch (error) {
-        console.error('Failed to mark all notifications as read:', error);
+        captureError(error, 'Failed to mark all notifications as read', { tags: { controller: 'notifications', action: 'mark-all-read' } });
         return reply.status(500).send({ error: 'Failed to mark all notifications as read' });
     }
 }

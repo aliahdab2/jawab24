@@ -6,6 +6,7 @@ import type { BusinessProfile } from '@jawab24/shared';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
+import { captureError } from '../utils/sentryHelpers';
 
 /**
  * Format Facebook hours object into readable text
@@ -220,7 +221,7 @@ export class PagesService {
                 });
             }
         } catch (err) {
-            console.error('[PagesService] Stats query failed, returning pages without stats:', err);
+            captureError(err, 'Pages stats query failed', { level: 'warning', tags: { service: 'pages' } });
         }
 
         return userPages.map(page => {

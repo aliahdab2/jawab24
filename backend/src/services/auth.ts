@@ -11,6 +11,7 @@ import { config } from '../config';
 import crypto from 'crypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
 import { subscriptionsService } from './subscriptions';
+import { captureError } from '../utils/sentryHelpers';
 // Secure JWT-like implementation using HMAC
 const ALGORITHM = 'sha256';
 const LEGACY_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (Keep for backward compatibility)
@@ -92,12 +93,12 @@ export class AuthService {
         try {
             await subscriptionsService.createSubscription(userId);
         } catch (error) {
-            console.error('Failed to create subscription for new user', { userId, error: String(error) });
+            captureError(error, 'Failed to create subscription for new user', { tags: { context: 'auth', action: 'create-subscription' }, extra: { userId } });
             // Retry once before giving up
             try {
                 await subscriptionsService.createSubscription(userId);
             } catch (retryError) {
-                console.error('Subscription creation retry also failed', { userId, error: String(retryError) });
+                captureError(retryError, 'Subscription creation retry also failed', { level: 'fatal', tags: { context: 'auth', action: 'create-subscription-retry' }, extra: { userId } });
             }
         }
     }
@@ -112,7 +113,7 @@ export class AuthService {
                 await subscriptionsService.createSubscription(userId);
             }
         } catch (error) {
-            console.error('Failed to ensure subscription', { userId, error: String(error) });
+            captureError(error, 'Failed to ensure subscription', { tags: { context: 'auth', action: 'ensure-subscription' }, extra: { userId } });
         }
     }
 

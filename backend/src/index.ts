@@ -283,7 +283,10 @@ const gracefulShutdown = async (signal: string) => {
     console.log("✅ Server closed successfully");
     process.exit(0);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error("❌ Error during shutdown:", err);
+    Sentry.captureException(err instanceof Error ? err : new Error(String(err)), { tags: { context: 'shutdown' } });
+    await Sentry.flush(2000);
     process.exit(1);
   }
 };
@@ -294,12 +297,16 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Handle uncaught errors
 process.on("uncaughtException", (error) => {
+  // eslint-disable-next-line no-console
   console.error("❌ Uncaught Exception:", error);
+  Sentry.captureException(error, { tags: { context: 'uncaught-exception' } });
   gracefulShutdown("UNCAUGHT_EXCEPTION");
 });
 
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Unhandled Rejection at:", promise, "reason:", reason);
+process.on("unhandledRejection", (reason) => {
+  // eslint-disable-next-line no-console
+  console.error("❌ Unhandled Rejection:", reason);
+  Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)), { tags: { context: 'unhandled-rejection' } });
   gracefulShutdown("UNHANDLED_REJECTION");
 });
 

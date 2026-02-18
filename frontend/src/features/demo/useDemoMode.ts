@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { publicApi } from '@/lib/api';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
+import { captureError } from '@/lib/sentryHelpers';
 
 export function useDemoMode() {
   const router = useRouter();
@@ -49,7 +50,7 @@ export function useDemoMode() {
       await router.push(returnUrl, returnUrl, { locale: finalLocale });
       
     } catch (error: unknown) {
-      console.error('Demo login error:', error);
+      captureError(error, 'Demo login error', { level: 'warning', tags: { context: 'demo' } });
       toast.error(t('auth.demoError'));
     } finally {
       setIsLoading(false);

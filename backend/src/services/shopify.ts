@@ -5,6 +5,7 @@ import { shopifyStores, shopifyProducts, pages, pendingShopifyInstalls } from '.
 import { config } from '../config';
 import { encrypt, decrypt } from './shopifyCrypto';
 import type { ShopifyStore, ShopifyProduct } from '@jawab24/shared';
+import { captureError } from '../utils/sentryHelpers';
 
 const SHOPIFY_API_VERSION = '2024-10';
 const KB_MAX_CHARS = 1500; // Must match ai-worker's KB_MAX_CHARS
@@ -85,11 +86,11 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
                 const text = await response.text();
                 // 422 = webhook already exists, which is fine
                 if (response.status !== 422) {
-                    console.error(`[Shopify] Failed to register webhook ${topic}: ${response.status} ${text}`);
+                    captureError(new Error(`Shopify webhook registration failed: ${topic} ${response.status}`), `Shopify webhook registration failed: ${topic}`, { tags: { service: 'shopify' }, extra: { topic, status: response.status, body: text } });
                 }
             }
         } catch (err) {
-            console.error(`[Shopify] Error registering webhook ${topic}:`, err);
+            captureError(err, `Shopify webhook registration error: ${topic}`, { tags: { service: 'shopify' } });
         }
     }
 }
@@ -642,7 +643,7 @@ export async function claimPendingInstall(pendingId: string, userId: string) {
 
     // Register webhooks (non-blocking)
     registerWebhooks(pending.shopDomain, accessToken).catch(err => {
-        console.error('[Shopify] Failed to register webhooks after claim:', err);
+        captureError(err, 'Shopify webhook registration after claim failed', { tags: { service: 'shopify' } });
     });
 
     return store;

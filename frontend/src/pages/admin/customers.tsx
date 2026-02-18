@@ -7,6 +7,7 @@ import { useTranslation } from '@/i18n';
 import { Card } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
+import { captureError } from '@/lib/sentryHelpers';
 
 interface Customer {
     id: string;
@@ -76,7 +77,7 @@ export default function AdminCustomersPage() {
                     setPlans(response.data);
                 }
             } catch (err) {
-                console.error('Failed to load plans', err);
+                captureError(err, 'Failed to load plans', { tags: { page: 'admin-customers' } });
             }
         };
         loadPlans();
@@ -103,7 +104,7 @@ export default function AdminCustomersPage() {
             }
         } catch (err) {
             setError('Failed to load customers');
-            console.error(err);
+            captureError(err, 'Failed to load customers', { tags: { page: 'admin-customers' } });
         } finally {
             setLoading(false);
         }

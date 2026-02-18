@@ -11,6 +11,7 @@ import { useAuthStore } from '@/lib/store';
 import { Button, BrandLogo } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
+import { captureError } from '@/lib/sentryHelpers';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -60,7 +61,7 @@ export default function CheckoutPage() {
 
         setPlan(planData);
       } catch (err) {
-        console.error('Failed to fetch plan:', err);
+        captureError(err, 'Failed to fetch plan', { tags: { page: 'checkout', action: 'fetch-plan' } });
         setFetchError(true);
         setError(errorLoadPlanMessage);
       }
@@ -108,7 +109,7 @@ export default function CheckoutPage() {
       // Redirect to Stripe Checkout
       window.location.href = url;
     } catch (err: any) {
-      console.error('Checkout error:', err);
+      captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session' } });
 
       // Handle specific error cases
       const errorData = err.response?.data;

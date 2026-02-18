@@ -32,6 +32,7 @@ import { isToday } from 'date-fns';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
+import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
 import { formatDuration } from '@/lib/formatDuration';
@@ -222,7 +223,7 @@ const DashboardPage: NextPageWithLayout = () => {
       });
 
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
+      captureError(error, 'Failed to fetch dashboard data', { tags: { page: 'dashboard' } });
       toast.error(t('dashboard.fetchError'));
     } finally {
       setLoading(false);
@@ -239,7 +240,7 @@ const DashboardPage: NextPageWithLayout = () => {
           fetchDashboardData();
         })
         .catch(err => {
-          console.error('Dashboard: Auto-sync failed', err);
+          captureError(err, 'Dashboard auto-sync failed', { tags: { page: 'dashboard', action: 'auto-sync' } });
           toast.error(t('dashboard.syncError'));
         });
     }

@@ -9,6 +9,7 @@ import { extractArrayData } from '@/lib/api-utils';
 import { BookTemplate, Plus } from 'lucide-react';
 import { TemplateCard } from '@/components/templates';
 import type { Template, Rule } from '@jawab24/shared';
+import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 
 const TemplatesPage: NextPageWithLayout = () => {
@@ -51,7 +52,7 @@ const TemplatesPage: NextPageWithLayout = () => {
       setTemplates(extractArrayData<Template>(templatesRes.data));
       setRules(extractArrayData<Rule>(rulesRes.data));
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      captureError(error, 'Failed to fetch templates', { tags: { page: 'templates' } });
     } finally {
       setLoading(false);
     }
@@ -99,7 +100,7 @@ const TemplatesPage: NextPageWithLayout = () => {
       }
       setIsModalOpen(false);
     } catch (error) {
-      console.error('Failed to save template:', error);
+      captureError(error, 'Failed to save template', { tags: { page: 'templates', action: 'save' } });
     }
   };
 
@@ -117,7 +118,7 @@ const TemplatesPage: NextPageWithLayout = () => {
     try {
       await templatesApi.update(id, { active });
     } catch (error) {
-      console.error('Failed to toggle template:', error);
+      captureError(error, 'Failed to toggle template', { tags: { page: 'templates', action: 'toggle' } });
       setTemplates(templates.map(t => t.id === id ? { ...t, active: !active } : t));
     }
   };
@@ -131,7 +132,7 @@ const TemplatesPage: NextPageWithLayout = () => {
       setTemplates(templates.filter(t => t.id !== deleteConfirmationId));
       setDeleteConfirmationId(null);
     } catch (error) {
-      console.error('Failed to delete template:', error);
+      captureError(error, 'Failed to delete template', { tags: { page: 'templates', action: 'delete' } });
     }
   };
 

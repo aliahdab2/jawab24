@@ -2,6 +2,7 @@
 import { db } from '../db';
 import { users } from '../db/schema';
 import { eq, ilike } from 'drizzle-orm';
+import { captureError } from './sentryHelpers';
 
 /**
  * Ensure admin users are set up based on environment variables
@@ -58,6 +59,7 @@ export async function ensureAdminUsers(): Promise<void> {
             console.log(`🔑 Promoted to admin: ${email}`);
         } catch (error) {
             console.error(`❌ Failed to check/set admin for ${email}:`, error);
+            captureError(error, `Admin setup failed for ${email}`, { tags: { context: 'startup' } });
         }
     }
 }

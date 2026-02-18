@@ -33,6 +33,13 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
+// Mock sentryHelpers
+const mockCaptureError = vi.fn();
+vi.mock('../lib/sentryHelpers', () => ({
+  captureError: (...args: unknown[]) => mockCaptureError(...args),
+  addErrorBreadcrumb: vi.fn(),
+}));
+
 describe('AuthManager', () => {
   let authManager: typeof import('../lib/authManager').authManager;
 
@@ -141,15 +148,15 @@ describe('AuthManager', () => {
         throw new Error('Listener error');
       });
       const successCallback = vi.fn();
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
+      mockCaptureError.mockClear();
+
       authManager.onAuthStateChange(errorCallback);
       authManager.onAuthStateChange(successCallback);
-      
+
       await authManager.logout({ redirect: false });
-      
-      // Error should be logged
-      expect(consoleSpy).toHaveBeenCalledWith('Auth state listener error:', expect.any(Error));
+
+      // Error should be captured via Sentry
+      expect(mockCaptureError).toHaveBeenCalledWith(expect.any(Error), 'Auth state listener error');
       // Other listeners should still be called
       expect(successCallback).toHaveBeenCalledWith(false);
     });

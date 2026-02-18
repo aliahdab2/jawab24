@@ -24,6 +24,7 @@ import { useTranslation } from '@/i18n';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { Comment, Page } from '@jawab24/shared';
+import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -243,7 +244,7 @@ const CommentsPage: NextPageWithLayout = () => {
       queryClient.invalidateQueries({ queryKey: ['comments'] });
       queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
     } catch (err) {
-      console.error('Failed to resolve comment:', err);
+      captureError(err, 'Failed to resolve comment', { tags: { page: 'comments', action: 'resolve' } });
       toast.error(t('common.error'));
     }
   }, [queryClient, t]);
@@ -267,7 +268,7 @@ const CommentsPage: NextPageWithLayout = () => {
       });
       downloadCSV(`comments_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
     } catch (error) {
-      console.error('Export failed:', error);
+      captureError(error, 'Comment export failed', { tags: { page: 'comments', action: 'export' } });
       toast.error(t('common.error'));
     } finally {
       setExporting(false);

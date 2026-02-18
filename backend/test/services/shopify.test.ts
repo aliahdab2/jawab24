@@ -48,6 +48,11 @@ vi.mock('drizzle-orm', () => ({
     and: vi.fn((...args) => ({ op: 'and', args })),
 }));
 
+const mockCaptureError = vi.fn();
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: (...args: unknown[]) => mockCaptureError(...args),
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         shopify: {
@@ -202,7 +207,7 @@ describe('Shopify Service', () => {
         });
 
         it('should log error on non-422 failure but not throw', async () => {
-            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            mockCaptureError.mockClear();
             mockFetch.mockResolvedValue({
                 ok: false,
                 status: 500,
@@ -210,8 +215,7 @@ describe('Shopify Service', () => {
             });
 
             await registerWebhooks('test-store.myshopify.com', 'token123');
-            expect(consoleSpy).toHaveBeenCalled();
-            consoleSpy.mockRestore();
+            expect(mockCaptureError).toHaveBeenCalled();
         });
     });
 

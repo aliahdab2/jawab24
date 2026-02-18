@@ -8,6 +8,7 @@ import { extractArrayData } from '@/lib/api-utils';
 import { Zap, Plus, BookTemplate, AlertTriangle } from 'lucide-react';
 import { RuleCard } from '@/components/rules';
 import type { Rule, Template } from '@jawab24/shared';
+import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 
 const RulesPage: NextPageWithLayout = () => {
@@ -44,7 +45,7 @@ const RulesPage: NextPageWithLayout = () => {
       setRules(sortedRules);
       setTemplates(templatesData);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      captureError(error, 'Failed to fetch rules', { tags: { page: 'rules' } });
     } finally {
       setLoading(false);
     }
@@ -105,7 +106,7 @@ const RulesPage: NextPageWithLayout = () => {
       }
       setIsModalOpen(false);
     } catch (error) {
-      console.error('Failed to save rule:', error);
+      captureError(error, 'Failed to save rule', { tags: { page: 'rules', action: 'save' } });
     }
   };
 
@@ -123,7 +124,7 @@ const RulesPage: NextPageWithLayout = () => {
       setShowQuickCreate(false);
       setQuickTemplate({ name: '', text: '' });
     } catch (error) {
-      console.error('Failed to create template:', error);
+      captureError(error, 'Failed to create template from rule', { tags: { page: 'rules', action: 'quick-create' } });
     } finally {
       setSavingTemplate(false);
     }
@@ -145,7 +146,7 @@ const RulesPage: NextPageWithLayout = () => {
     try {
       await rulesApi.update(id, { active });
     } catch (error) {
-      console.error('Failed to toggle rule:', error);
+      captureError(error, 'Failed to toggle rule', { tags: { page: 'rules', action: 'toggle' } });
       setRules(rules.map(r => r.id === id ? { ...r, active: !active } : r));
     }
   };
@@ -167,7 +168,7 @@ const RulesPage: NextPageWithLayout = () => {
         remaining.map(r => rulesApi.update(r.id, { priority: r.priority ?? undefined }))
       );
     } catch (error) {
-      console.error('Failed to delete rule:', error);
+      captureError(error, 'Failed to delete rule', { tags: { page: 'rules', action: 'delete' } });
     }
   };
 
@@ -193,7 +194,7 @@ const RulesPage: NextPageWithLayout = () => {
         rulesApi.update(newRules[swapIndex].id, { priority: newRules[swapIndex].priority ?? undefined })
       ]);
     } catch (error) {
-      console.error("Failed to update priority", error);
+      captureError(error, 'Failed to update rule priority', { tags: { page: 'rules', action: 'reorder' } });
       fetchData();
     }
   };

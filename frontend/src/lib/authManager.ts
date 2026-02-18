@@ -14,6 +14,7 @@
  */
 
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { captureError } from '@/lib/sentryHelpers';
 
 // Types
 interface AuthStateChangeCallback {
@@ -76,7 +77,7 @@ class AuthManager {
       try {
         callback(isAuthenticated);
       } catch (e) {
-        console.error('Auth state listener error:', e);
+        captureError(e, 'Auth state listener error');
       }
     });
   }
@@ -146,7 +147,7 @@ class AuthManager {
           isAuthenticated: false,
         });
       } catch (e) {
-        console.error('Failed to clear auth store:', e);
+        captureError(e, 'Failed to clear auth store', { tags: { context: 'auth-logout' } });
       }
 
       // 3. Notify listeners
