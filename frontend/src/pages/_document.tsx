@@ -5,8 +5,7 @@ export default function Document() {
     // Default to LTR, client-side will update based on user preference
     <Html lang="ar" dir="rtl">
       <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        {/* Early detection of Capacitor native platform - runs BEFORE React hydrates 
+        {/* Early detection of Capacitor native platform - runs BEFORE React hydrates
             Industry standard: Check Capacitor.isNativePlatform() first (most reliable) */}
         <script
           dangerouslySetInnerHTML={{

@@ -163,7 +163,7 @@ function PlanCard({
         />
 
         <FeatureRow
-          included={!plan.showBranding}
+          included={plan.showBranding === false}
           text={t('pricing.brandingHidden' as TranslationKey)}
         />
 
@@ -386,8 +386,8 @@ const PricingPage: NextPageWithLayout = () => {
   const currentPlanId = usage?.subscription?.plan?.id;
   const hasActiveSubscription = Boolean(currentPlanId);
 
-  // Filter out inactive plans
-  const activePlans = plans.filter(p => p.slug !== 'free' || p.isActive !== false);
+  // Filter out inactive plans (keep only plans where isActive is true)
+  const activePlans = plans.filter(p => p.isActive !== false);
 
   return (
     <>
@@ -421,7 +421,7 @@ const PricingPage: NextPageWithLayout = () => {
         )}
 
         {/* Usage Summary if subscribed - Inline */}
-        {usage && (
+        {usage?.subscription?.plan && (
           <div className="max-w-4xl mx-auto mb-8">
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 py-3.5 px-6 bg-white rounded-2xl border border-brand-100 shadow-sm">
               {/* Plan Info */}
