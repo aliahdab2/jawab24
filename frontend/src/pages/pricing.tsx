@@ -76,7 +76,7 @@ function PlanCard({
     >
       {/* Popular badge */}
       {isPopular && (
-        <div className="absolute -top-4 start-1/2 -translate-x-1/2 z-20">
+        <div className="absolute -top-4 start-0 end-0 flex justify-center z-20">
           <span className="bg-gradient-to-r from-blue-500 to-brand-500 text-white text-[13px] font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-[0_4px_8px_rgba(0,0,0,0.2)] whitespace-nowrap uppercase tracking-wider">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             {t('pricing.popular')}
