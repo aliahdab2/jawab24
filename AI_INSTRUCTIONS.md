@@ -362,6 +362,48 @@ cd android && ./gradlew assembleDebug
 
 ---
 
+## 🚀 CI/CD Pipeline
+
+The project uses **GitHub Actions** for continuous integration and deployment.
+
+### Workflows (`.github/workflows/`)
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| **ci.yml** | Push to `main`/`develop`, PRs to `main` | 4-stage pipeline: secrets check → pre-deploy checks (lint, test, build with Postgres) → Docker image build + container smoke tests → deploy gate |
+| **deploy.yml** | After CI passes on `main`, or manual trigger | Blue-green zero-downtime deployment with pre-validation, migration check, 6-point health verification, automatic rollback on failure |
+| **rollback.yml** | Manual trigger | Emergency rollback to previous environment |
+| **smoke-tests.yml** | Post-deploy | Smoke tests against live deployment |
+| **validate-deployment.yml** | Post-deploy | Comprehensive deployment validation |
+
+### CI Pipeline Stages
+
+1. **Preflight** — Verify GitHub secrets and deployment scripts exist
+2. **Checks** — `npm ci` → OpenAI SDK version parity → `pre-deploy-check.sh` (lint, test, build) with Postgres service
+3. **Docker** — Build all 3 Docker images (backend, frontend, ai-worker) + smoke test each container starts without crashing
+4. **Summary** — Gate: blocks deployment if any stage fails
+
+### Deploy Pipeline
+
+- Runs only after CI passes on `main`
+- Pre-deployment: validates env vars on server, checks DB connectivity, manages disk space
+- Validates migrations locally before deploying
+- Creates backup point, then runs blue-green deploy via `deploy-on-server.sh`
+- Post-deploy: 6-point verification (backend health, frontend, DB, API endpoints, HTTPS/SSL, container health)
+- **Automatic rollback** if any verification fails
+
+### Key Commands
+
+```bash
+# CI runs this automatically — you can run it locally too:
+./scripts/pre-deploy-check.sh
+
+# Manual deployment (emergency/hotfix):
+# Go to Actions tab → Deploy → Run workflow
+```
+
+---
+
 ## ⚠️ Known Issues & Technical Debt
 
 This section documents known issues, technical debt, and production readiness gaps in the codebase. AI assistants should be aware of these when making changes.
@@ -381,11 +423,13 @@ This section documents known issues, technical debt, and production readiness ga
 
 ### Production Readiness
 
-3. **No centralized error reporting**
-   - Status: Frontend uses `console.error()` throughout
-   - Examples: `'Failed to fetch settings:', error` in multiple places
-   - Impact: Production errors not tracked or monitored
-   - Recommendation: Add Sentry or similar error tracking service
+3. **~~No centralized error reporting~~ — RESOLVED**
+   - Sentry (`@sentry/nextjs` + `@sentry/node` v10.35.0) is integrated across all workspaces
+   - All critical `console.error()` calls replaced with `captureError()` from `sentryHelpers.ts`
+   - Helper utilities: `frontend/src/lib/sentryHelpers.ts` and `backend/src/utils/sentryHelpers.ts`
+   - Errors are tagged by context (e.g. `{ tags: { page: 'settings', action: 'save' } }`)
+   - Infrastructure errors (Redis, shutdown) use DUAL logging (console + Sentry)
+   - Non-critical errors use `Sentry.addBreadcrumb()` for context without noise
 
 ### Performance & Cost
 
