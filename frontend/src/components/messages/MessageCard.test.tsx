@@ -272,7 +272,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('messages.resolved')).toBeInTheDocument();
+      expect(screen.getByText('comments.resolve')).toBeInTheDocument();
     });
 
     it('does not show resolve button when onResolve is not provided', () => {
@@ -288,7 +288,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.queryByText('messages.resolved')).not.toBeInTheDocument();
+      expect(screen.queryByText('comments.resolve')).not.toBeInTheDocument();
     });
 
     it('calls onResolve without triggering onClick', async () => {
@@ -308,7 +308,7 @@ describe('MessageCard', () => {
         />
       );
 
-      const resolveBtn = screen.getByText('messages.resolved');
+      const resolveBtn = screen.getByText('comments.resolve');
       resolveBtn.click();
 
       expect(onResolve).toHaveBeenCalledTimes(1);

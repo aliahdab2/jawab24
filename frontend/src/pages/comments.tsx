@@ -336,7 +336,7 @@ const CommentsPage: NextPageWithLayout = () => {
 
       {/* Filter Chips + Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+        <div className="w-full flex flex-wrap sm:flex-nowrap items-center gap-2 sm:overflow-x-auto pb-1 sm:pb-0">
           {([
             { key: 'needs_action' as FilterType, label: t('comments.needsAction' as any), count: stats.unreplied },
             { key: 'all' as FilterType, label: t('comments.allComments'), count: stats.total },
@@ -347,7 +347,7 @@ const CommentsPage: NextPageWithLayout = () => {
               onClick={() => updateFilter(chip.key)}
               aria-pressed={filter === chip.key}
               className={clsx(
-                "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-200",
+                "flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200",
                 filter === chip.key
                   ? "bg-brand-500 text-white shadow-sm shadow-brand-500/25"
                   : "bg-surface-100 text-surface-600 hover:bg-surface-200"

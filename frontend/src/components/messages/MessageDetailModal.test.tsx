@@ -192,7 +192,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('messages.resolved')).toBeInTheDocument();
+    expect(screen.getByText('comments.resolve')).toBeInTheDocument();
   });
 
   it('hides resolve button when all messages are resolved', () => {
@@ -208,9 +208,9 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    // The resolve button in the footer should not appear
-    const resolveButtons = screen.queryAllByText('messages.resolved');
-    expect(resolveButtons.length).toBe(0);
+    // The clickable resolve button should not appear (only the resolved badge)
+    expect(screen.queryByText('comments.resolve')).not.toBeInTheDocument();
+    expect(screen.getByText('messages.resolved')).toBeInTheDocument();
   });
 
   it('calls onResolve with senderId and pageId', () => {
@@ -229,7 +229,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('messages.resolved'));
+    fireEvent.click(screen.getByText('comments.resolve'));
     expect(onResolve).toHaveBeenCalledWith('sender1', 'page1');
   });
 
