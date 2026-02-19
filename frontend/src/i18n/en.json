@@ -128,7 +128,6 @@
   "auth.loginCancelled": "Login was cancelled",
   "auth.loginTimeout": "Facebook is not responding. Please try again.",
   "auth.networkError": "Network error. Please check your connection.",
-
   "auth.redirecting": "Redirecting...",
   "auth.systemsActive": "Systems Active",
   "auth.nextGenAutoReplies": "Next-Gen Auto Replies",
@@ -246,7 +245,6 @@
   "comments.replied_today": "Replied Today",
   "comments.needs_attention": "Needs Attention",
   "comments.flagged": "Needs Attention",
-
   "comments.author": "Author",
   "comments.comment": "Comment",
   "comments.page": "Page",
@@ -285,7 +283,6 @@
   "comments.pendingDesc": "Comments waiting in queue",
   "comments.autoRepliesDesc": "Automatically replied",
   "comments.latestCommentsDesc": "Latest activity",
-
   "comments.latestComments": "Latest Comments",
   "comments.quickReply": "Quick Reply ⚡",
   "comments.noPendingComments": "No comments need reply right now 🎉",
@@ -302,7 +299,6 @@
   "comments.replyModeDual": "Public + Private",
   "comments.regenerate": "Regenerate",
   "common.export": "Export",
-
   "export.pageName": "Page Name",
   "export.commenter": "Commenter",
   "export.comment": "Comment",
@@ -315,7 +311,6 @@
   "export.contact": "Contact",
   "export.message": "Message",
   "export.direction": "Direction",
-
   "comments.aiReplies": "Smart Replies",
   "comments.aiRepliesDesc": "Replied by Jawab",
   "comments.commentDetails": "Comment Details",
@@ -962,12 +957,10 @@
   "profile.saveFailed": "Failed to save email. Please try again.",
   "profile.encrypted": "Encrypted",
   "profile.neverShared": "Never shared",
-
   "admin.title": "Admin",
   "admin.backToDashboard": "Back to Dashboard",
   "admin.nav.customers": "Customers",
   "admin.nav.auditLogs": "Audit Logs",
-
   "admin.customers.title": "Customers",
   "admin.customers.subtitle": "Manage customer subscriptions and accounts",
   "admin.customers.totalCustomers": "customers",
@@ -989,7 +982,6 @@
   "admin.customers.table.periodEnd": "Period End",
   "admin.customers.table.signedUp": "Signed Up",
   "admin.customers.pagination.showing": "Showing {from}-{to} of {total}",
-
   "admin.customer.title": "Customer Details",
   "admin.customer.backToList": "Back to Customers",
   "admin.customer.noName": "No name",
@@ -1025,7 +1017,6 @@
   "admin.customer.upgradeForm.note": "Admin Note",
   "admin.customer.upgradeForm.notePlaceholder": "Optional note for audit log",
   "admin.customer.upgradeForm.submit": "Upgrade Customer",
-
   "kb.title": "Your Business Info",
   "kb.description": "Tell Jawab about your business so it can reply accurately.",
   "kb.progress": "{filled} of {total} filled",
@@ -1047,7 +1038,6 @@
   "kb.customSection.placeholder": "Type your info here...",
   "kb.customSection.deleteConfirm": "Delete this section and its content?",
   "kb.defaultSectionTitle": "New Section",
-
   "notifications.title": "Notifications",
   "notifications.markAllRead": "Mark all read",
   "notifications.markAsRead": "Mark as read",
@@ -1063,7 +1053,6 @@
   "notifications.prePrompt.body": "Get notified when comments need your attention or when something important happens with your pages.",
   "notifications.prePrompt.enable": "Enable notifications",
   "notifications.prePrompt.later": "Not now",
-
   "shopify.title": "Shopify Integration",
   "shopify.desc": "Connect your Shopify store to let AI answer product questions automatically",
   "shopify.notConnected": "No Shopify store connected",
@@ -1088,7 +1077,6 @@
   "shopify.pageLinked": "Page linked to Shopify store",
   "shopify.pageLinkError": "Failed to link page",
   "shopify.integration": "Shopify Integration",
-
   "shopify.installDetected": "Shopify store detected!",
   "shopify.loginToConnect": "Log in with Facebook to connect your store and start auto-replying with product data.",
   "shopify.errorAlreadyConnected": "This Shopify store is already connected to another account.",
@@ -1105,5 +1093,8 @@
   "shopify.onboarding.skipForNow": "Skip for now",
   "shopify.onboarding.done": "You're all set!",
   "shopify.onboarding.doneDesc": "Jawab will now reply to your customers with accurate product info from your Shopify store.",
-  "shopify.onboarding.goToDashboard": "Go to Dashboard"
+  "shopify.onboarding.goToDashboard": "Go to Dashboard",
+  "landing.footer.whatsappAriaLabel": "Contact us on WhatsApp",
+  "landing.footer.facebookAriaLabel": "Visit us on Facebook",
+  "landing.footer.emailAriaLabel": "Send us an email"
 }

@@ -294,7 +294,6 @@
   "comments.replyModeDual": "عام + خاص",
   "comments.regenerate": "إعادة التوليد",
   "common.export": "تصدير",
-
   "export.pageName": "اسم الصفحة",
   "export.commenter": "المعلّق",
   "export.comment": "التعليق",
@@ -958,12 +957,10 @@
   "profile.saveFailed": "فشل حفظ البريد الإلكتروني. يرجى المحاولة مرة أخرى.",
   "profile.encrypted": "تشفير آمن",
   "profile.neverShared": "لن نشارك بريدك",
-
   "admin.title": "الإدارة",
   "admin.backToDashboard": "العودة للوحة التحكم",
   "admin.nav.customers": "العملاء",
   "admin.nav.auditLogs": "سجل العمليات",
-
   "admin.customers.title": "العملاء",
   "admin.customers.subtitle": "إدارة اشتراكات وحسابات العملاء",
   "admin.customers.totalCustomers": "عميل",
@@ -985,7 +982,6 @@
   "admin.customers.table.periodEnd": "نهاية الفترة",
   "admin.customers.table.signedUp": "تاريخ التسجيل",
   "admin.customers.pagination.showing": "عرض {from}-{to} من {total}",
-
   "admin.customer.title": "تفاصيل العميل",
   "admin.customer.backToList": "العودة للعملاء",
   "admin.customer.noName": "بدون اسم",
@@ -1021,7 +1017,6 @@
   "admin.customer.upgradeForm.note": "ملاحظة المسؤول",
   "admin.customer.upgradeForm.notePlaceholder": "ملاحظة اختيارية لسجل العمليات",
   "admin.customer.upgradeForm.submit": "ترقية العميل",
-
   "kb.title": "معلومات النشاط التجاري",
   "kb.description": "أخبر جواب عن عملك حتى يرد على العملاء بدقة.",
   "kb.progress": "{filled} من {total} مكتمل",
@@ -1043,7 +1038,6 @@
   "kb.customSection.placeholder": "اكتب معلوماتك هنا...",
   "kb.customSection.deleteConfirm": "حذف هذا القسم ومحتواه؟",
   "kb.defaultSectionTitle": "قسم جديد",
-
   "notifications.title": "الإشعارات",
   "notifications.markAllRead": "تحديد الكل كمقروء",
   "notifications.markAsRead": "تحديد كمقروء",
@@ -1059,7 +1053,6 @@
   "notifications.prePrompt.body": "احصل على إشعار عندما تحتاج التعليقات انتباهك أو عند حدوث شيء مهم في صفحاتك.",
   "notifications.prePrompt.enable": "تفعيل الإشعارات",
   "notifications.prePrompt.later": "ليس الآن",
-
   "shopify.title": "ربط Shopify",
   "shopify.desc": "اربط متجرك على Shopify ليرد الذكاء الاصطناعي على أسئلة المنتجات تلقائياً",
   "shopify.notConnected": "لا يوجد متجر Shopify مربوط",
@@ -1084,7 +1077,6 @@
   "shopify.pageLinked": "تم ربط الصفحة بمتجر شوبيفاي",
   "shopify.pageLinkError": "فشل ربط الصفحة",
   "shopify.integration": "تكامل شوبيفاي",
-
   "shopify.installDetected": "تم اكتشاف متجر شوبيفاي!",
   "shopify.loginToConnect": "سجّل دخولك بفيسبوك لربط متجرك والبدء بالرد التلقائي على الزبائن.",
   "shopify.errorAlreadyConnected": "هذا المتجر مربوط بحساب جواب آخر.",
@@ -1101,5 +1093,8 @@
   "shopify.onboarding.skipForNow": "تخطي الآن",
   "shopify.onboarding.done": "تم الإعداد!",
   "shopify.onboarding.doneDesc": "جواب رح يرد على زبائنك بمعلومات المنتجات الصحيحة من متجرك.",
-  "shopify.onboarding.goToDashboard": "الذهاب للوحة التحكم"
+  "shopify.onboarding.goToDashboard": "الذهاب للوحة التحكم",
+  "landing.footer.whatsappAriaLabel": "تواصل معنا عبر واتساب",
+  "landing.footer.facebookAriaLabel": "زورونا على فيسبوك",
+  "landing.footer.emailAriaLabel": "راسلنا عبر البريد الإلكتروني"
 }

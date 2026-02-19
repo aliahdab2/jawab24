@@ -118,7 +118,9 @@
       "Bash(npx @lhci/cli:*)",
       "Bash(npx @lhci/cli@0.15.1 collect:*)",
       "Bash(sort ls frontend/e2e/*.spec.ts)",
-      "Bash(comm:*)"
+      "Bash(comm:*)",
+      "Bash(npx @lhci/cli@latest autorun:*)",
+      "Bash(kill:*)"
     ]
   }
 }

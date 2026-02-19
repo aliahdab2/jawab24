@@ -370,9 +370,9 @@ export default function LoginPage() {
                   size="lg"
                   className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg lg:text-xl group transition-all active:scale-95"
                 >
-                  <div className="flex items-center justify-center gap-3">
-                    <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" />
-                    <span>{t('auth.loginWithFacebook')}</span>
+                  <div className="flex items-center justify-center gap-3 text-white">
+                    <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
+                    <span className="text-white">{t('auth.loginWithFacebook')}</span>
                   </div>
                 </Button>
 
@@ -385,7 +385,7 @@ export default function LoginPage() {
                       <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-brand-600" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-surface-900 text-base mb-1">{t('auth.didYouKnow')}</h4>
+                      <h3 className="font-bold text-surface-900 text-base mb-1">{t('auth.didYouKnow')}</h3>
                       <p className="text-surface-600 text-sm sm:text-base font-medium leading-relaxed">
                         {t('auth.didYouKnowDesc')}
                       </p>

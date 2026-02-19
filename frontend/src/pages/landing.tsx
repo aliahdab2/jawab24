@@ -460,7 +460,7 @@ export default function LandingPage() {
             </h2>
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 sm:border-4 border-white/30 mb-2 sm:mb-4 shadow-xl bg-white flex items-center justify-center">
-                <span className="text-brand-500 font-bold text-sm sm:text-xl select-none">AS</span>
+                <span className="text-brand-700 font-bold text-sm sm:text-xl select-none">AS</span>
               </div>
               <div className="text-white font-bold text-base sm:text-xl">{t('landing.testimonials.author1')}</div>
             </div>
@@ -502,7 +502,7 @@ export default function LandingPage() {
 
               {/* Business */}
               <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl bg-brand-50 border sm:border-2 border-brand-200 relative">
-                <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-600 text-white text-[8px] sm:text-xs font-bold rounded-full whitespace-nowrap">
+                <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-700 text-white text-[10px] sm:text-xs font-bold rounded-full whitespace-nowrap">
                   {t('pricing.popular')}
                 </div>
                 <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center mt-2 sm:mt-0">
@@ -546,7 +546,7 @@ export default function LandingPage() {
                   </span>
                 </Button>
               </Link>
-              <p className="text-xs sm:text-sm text-surface-400 mt-3 sm:mt-4">
+              <p className="text-xs sm:text-sm text-surface-600 mt-3 sm:mt-4">
                 {t('landing.cta.note')}
               </p>
             </div>
@@ -613,29 +613,32 @@ export default function LandingPage() {
                     href={`https://wa.me/46700224720?text=${encodeURIComponent(t('landing.footer.whatsappMessage' as TranslationKey))}`}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={t('landing.footer.whatsappAriaLabel' as TranslationKey)}
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
                   >
-                    <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hover:scale-110 transition-all" />
+                    <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hover:scale-110 transition-all" aria-hidden="true" />
                   </a>
                   <a
                     href="https://facebook.com/jawab24app"
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={t('landing.footer.facebookAriaLabel' as TranslationKey)}
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#1877F2]/10 flex items-center justify-center hover:bg-[#1877F2] transition-colors border border-[#1877F2]/20 group"
                   >
-                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-[#1877F2] group-hover:text-white group-hover:scale-110 transition-all" />
+                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-[#1877F2] group-hover:text-white group-hover:scale-110 transition-all" aria-hidden="true" />
                   </a>
                   <a
                     href="mailto:support@jawab24.com"
+                    aria-label={t('landing.footer.emailAriaLabel' as TranslationKey)}
                     className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group"
                   >
-                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
                   </a>
                 </div>
               </div>
 
               <div>
-                <h4 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.quickLinks')}</h4>
+                <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.quickLinks')}</h3>
                 <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
                   <li><Link href="/pricing" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.pricingPlans')}</Link></li>
                   <li><Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="text-surface-400 hover:text-brand-400 transition-colors">{isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.footer.startTrial')}</Link></li>
@@ -645,7 +648,7 @@ export default function LandingPage() {
               </div>
 
               <div>
-                <h4 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.support')}</h4>
+                <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.support')}</h3>
                 <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
                   <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
                     <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
