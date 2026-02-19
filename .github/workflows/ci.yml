@@ -160,9 +160,8 @@ jobs:
   # ==========================================
   # Step 3a: Lighthouse CI (parallel with Docker)
   # Audits public pages for accessibility, CLS, and performance.
-  # All assertions are currently "warn" — Lighthouse data is collected and reported
-  # but does NOT block CI. Once baseline scores are confirmed from first runs,
-  # tighten accessibility and CLS to "error" in .lighthouserc.json.
+  # Hard errors (block CI): accessibility < 90, CLS > 0.1
+  # Soft warnings (visible, don't block): performance < 70, best-practices < 80, SEO < 80, LCP > 5s, FCP > 3s
   # ==========================================
   lighthouse:
     name: "3️⃣a Lighthouse CI"

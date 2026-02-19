@@ -6,6 +6,7 @@ build/
 .next/
 *.log
 .DS_Store
+.lighthouseci/
 data/postgres/*
 data/redis/*
 !data/.gitkeep

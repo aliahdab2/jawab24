@@ -313,6 +313,7 @@ Lighthouse CI runs automatically on every push/PR via GitHub Actions. It audits 
 
 **Soft warnings (visible in CI, do not block):**
 - `categories:performance` < 70
+- `categories:best-practices` < 80
 - `categories:seo` < 80
 - `largest-contentful-paint` > 5s
 - `first-contentful-paint` > 3s
