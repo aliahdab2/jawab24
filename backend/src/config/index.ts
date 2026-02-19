@@ -29,6 +29,7 @@ export const config = {
         redirectUri: process.env.FACEBOOK_REDIRECT_URI || '',
         webhookVerifyToken: process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || '',
         graphApiVersion: process.env.FACEBOOK_GRAPH_API_VERSION || 'v18.0',
+        tokenEncryptionKey: process.env.FACEBOOK_TOKEN_ENCRYPTION_KEY || '',
     },
 
     // JWT (validated by validateEnv — no insecure fallbacks)

@@ -382,7 +382,7 @@ describe('Settings Routes', () => {
 
             expect(response.statusCode).toBe(400);
             const body = JSON.parse(response.body);
-            expect(body.error).toBe('Invalid request');
+            expect(body.error).toBe('Bad Request');
         });
 
         it('should update business hours settings', async () => {
@@ -666,7 +666,7 @@ describe('Settings Routes', () => {
 
             expect(response.statusCode).toBe(400);
             const body = JSON.parse(response.body);
-            expect(body.error).toBe('Invalid request');
+            expect(body.error).toBe('Bad Request');
         });
 
         it('should validate away message length', async () => {
@@ -692,7 +692,7 @@ describe('Settings Routes', () => {
 
             expect(response.statusCode).toBe(400);
             const body = JSON.parse(response.body);
-            expect(body.error).toBe('Invalid request');
+            expect(body.error).toBe('Bad Request');
         });
     });
 

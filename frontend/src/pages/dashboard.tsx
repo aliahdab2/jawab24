@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type ReactElement } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -252,11 +252,21 @@ const DashboardPage: NextPageWithLayout = () => {
     }
   }, [isAuthenticated, fetchDashboardData]);
 
-  // Helper to get page name from pageId
+  // Pre-build a Map for O(1) page name lookups (avoids O(n×m) find() in render loops)
+  const pageNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const page of pages) {
+      if (page.name) {
+        map.set(page.id, page.name);
+        map.set(page.facebookPageId, page.name);
+      }
+    }
+    return map;
+  }, [pages]);
+
   const getPageName = (pageId: string | null): string | null => {
     if (!pageId) return null;
-    const page = pages.find(p => p.id === pageId || p.facebookPageId === pageId);
-    return page?.name || null;
+    return pageNameMap.get(pageId) ?? null;
   };
 
   // Calculate trend for today vs yesterday

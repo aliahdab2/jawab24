@@ -58,6 +58,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
             tags: ['Auth'],
             summary: 'Update current user profile',
             security: auth,
+            body: {
+                type: 'object',
+                properties: {
+                    email: { type: 'string', format: 'email', maxLength: 255 },
+                    name: { type: 'string', minLength: 1, maxLength: 255 },
+                },
+                additionalProperties: false,
+            },
         },
         preHandler: [authenticate],
     }, authController.updateProfile);

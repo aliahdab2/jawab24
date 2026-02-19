@@ -201,7 +201,7 @@ export default function CompleteProfilePage() {
                   onChange={handleEmailChange}
                   onBlur={handleEmailBlur}
                   placeholder={t('profile.emailPlaceholder')}
-                  className={`w-full px-4 py-3 ${isRTL ? 'pl-12' : 'pr-12'} border rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:border-transparent ${
+                  className={`w-full px-4 py-3 pe-12 border rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:border-transparent ${
                     showEmailError 
                       ? 'border-red-300 focus:ring-red-500 bg-red-50' 
                       : showEmailSuccess 

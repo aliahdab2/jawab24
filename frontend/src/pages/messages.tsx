@@ -321,6 +321,14 @@ const MessagesPage: NextPageWithLayout = () => {
 
   }, [allMessages, debouncedSearch, checkConversationNeedsAttention]);
 
+  // Resolved page name for modal — avoids pages.find() in JSX on every render
+  const selectedPageName = useMemo(
+    () => selectedConversation
+      ? pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.name
+      : undefined,
+    [selectedConversation, pages]
+  );
+
   // Fetch pause status when a conversation is selected
   useEffect(() => {
     if (!selectedConversation) return;
@@ -611,7 +619,7 @@ const MessagesPage: NextPageWithLayout = () => {
           isPausing={pauseMutation.isPending}
           isResuming={resumeMutation.isPending}
           dateLocale={dateLocale}
-          pageName={pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.name ?? undefined}
+          pageName={selectedPageName}
         />
       )}
     </>

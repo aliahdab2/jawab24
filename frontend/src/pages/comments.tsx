@@ -310,6 +310,15 @@ const CommentsPage: NextPageWithLayout = () => {
     return { ...config[filter], showConnectCta: false };
   }, [debouncedSearch, pages, filter, t]);
 
+  // Lookup map: O(1) page resolution inside comment list render
+  const pageById = useMemo(() => new Map(pages.map(p => [p.id, p])), [pages]);
+
+  // Platform visibility — only recomputes when pages data changes
+  const showPlatformIcon = useMemo(
+    () => pages.some(p => !!p.facebookPageId) && pages.some(p => !!p.instagramAccountId),
+    [pages]
+  );
+
   if ((isLoading || isPending) && allComments.length === 0) {
     return <PageSkeleton type="list" />;
   }
@@ -333,11 +342,6 @@ const CommentsPage: NextPageWithLayout = () => {
       </div>
     );
   }
-
-  // Calculate platform visibility logic
-  const hasFacebook = pages.some(p => !!p.facebookPageId);
-  const hasInstagram = pages.some(p => !!p.instagramAccountId);
-  const showPlatformIcon = hasFacebook && hasInstagram;
 
   return (
     <>
@@ -439,7 +443,7 @@ const CommentsPage: NextPageWithLayout = () => {
             )}
           >
             {filteredComments.map((comment, i) => {
-              const page = pages.find(p => p.id === comment.pageId);
+              const page = comment.pageId ? pageById.get(comment.pageId) : undefined;
               return (
                 <CommentCard
                   key={comment.id}
@@ -510,7 +514,7 @@ const CommentsPage: NextPageWithLayout = () => {
           onClose={() => setSelectedComment(null)}
           onReplySuccess={() => refetch()}
           onResolve={!selectedComment.replied && !selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
-          pageName={pages.find(p => p.id === selectedComment.pageId)?.name || undefined}
+          pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
         />
       )}
     </>

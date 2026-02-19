@@ -33,7 +33,7 @@ describe('MessagesPage', () => {
 
     render(<MessagesPage />);
 
-    expect(await screen.findByText(/messages.noMessages/i)).toBeInTheDocument();
+    expect(await screen.findByText('messages.emptyNeedsAction')).toBeInTheDocument();
   });
 
   it('renders messages list', async () => {

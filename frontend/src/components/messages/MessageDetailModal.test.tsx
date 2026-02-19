@@ -241,7 +241,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('messages.pauseSmartReply')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'messages.pauseSmartReply' })).toBeInTheDocument();
   });
 
   it('shows resume button when conversation is paused', () => {
@@ -254,7 +254,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('messages.resumeSmartReply')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'messages.resumeSmartReply' })).toBeInTheDocument();
   });
 
   it('shows remaining minutes when paused', () => {

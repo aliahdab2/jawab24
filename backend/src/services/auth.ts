@@ -9,6 +9,7 @@ import {
 import { eq, inArray, sql } from 'drizzle-orm';
 import { config } from '../config';
 import crypto from 'crypto';
+import { encryptFbToken, decryptFbToken } from './facebookCrypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
 import { subscriptionsService } from './subscriptions';
 import { captureError } from '../utils/sentryHelpers';
@@ -19,6 +20,18 @@ const LEGACY_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (Keep for back
 export const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15 minutes
 
 export class AuthService {
+    /** Encrypt token only when FACEBOOK_TOKEN_ENCRYPTION_KEY is configured. */
+    private maybeEncrypt(token: string | undefined): string | undefined {
+        if (!token || !config.facebook.tokenEncryptionKey) return token;
+        return encryptFbToken(token);
+    }
+
+    /** Decrypt token — falls back gracefully to plaintext for legacy rows. */
+    private maybeDecrypt(stored: string | null | undefined): string | null | undefined {
+        if (!stored || !config.facebook.tokenEncryptionKey) return stored;
+        return decryptFbToken(stored);
+    }
+
     /**
      * Find or create user by Facebook ID
      */
@@ -38,13 +51,14 @@ export class AuthService {
             const user = existingUsers[0];
             // Update only if data changed to minimize writes
             // Always update access token if provided
+            const tokenToStore = this.maybeEncrypt(facebookAccessToken) ?? user.facebookAccessToken;
             await db
                 .update(users)
                 .set({
                     name,
                     email,
                     picture: picture || user.picture,
-                    facebookAccessToken: facebookAccessToken || user.facebookAccessToken,
+                    facebookAccessToken: tokenToStore,
                     facebookTokenExpiresAt: facebookTokenExpiresAt || user.facebookTokenExpiresAt,
                     updatedAt: new Date(),
                 })
@@ -59,7 +73,8 @@ export class AuthService {
                 name,
                 email: email ?? null,
                 picture: picture || user.picture,
-                facebookAccessToken: facebookAccessToken || user.facebookAccessToken,
+                // Return the plaintext token in memory — callers never see the encrypted form
+                facebookAccessToken: facebookAccessToken ?? this.maybeDecrypt(user.facebookAccessToken),
                 facebookTokenExpiresAt: facebookTokenExpiresAt || user.facebookTokenExpiresAt,
                 updatedAt: new Date()
             };
@@ -73,7 +88,7 @@ export class AuthService {
                 name,
                 email,
                 picture,
-                facebookAccessToken,
+                facebookAccessToken: this.maybeEncrypt(facebookAccessToken),
                 facebookTokenExpiresAt,
             })
             .returning();
@@ -83,7 +98,11 @@ export class AuthService {
         // Create subscription for new user (with free trial)
         await this.createSubscriptionForNewUser(newUser.id);
 
-        return newUser;
+        // Return plaintext token in memory — the DB row holds the encrypted form
+        return {
+            ...newUser,
+            facebookAccessToken: this.maybeDecrypt(newUser.facebookAccessToken),
+        };
     }
 
     /**

@@ -19,7 +19,6 @@ beforeAll(async () => {
     // Run migrations on the test database instead of using push:pg.
     // push:pg can hang on interactive prompts even with strict:false (known drizzle-kit v0.20 bug).
     // Using migrations is more reliable and matches production deployment process.
-    const { execSync } = await import('child_process');
     const { drizzle } = await import('drizzle-orm/postgres-js');
     const { migrate } = await import('drizzle-orm/postgres-js/migrator');
     const postgres = (await import('postgres')).default;
@@ -127,4 +126,38 @@ export async function insertPause(pageId: string, senderId: string, pausedUntil:
         .values({ pageId, senderId, pausedUntil })
         .returning();
     return pause;
+}
+
+export async function insertPost(
+    pageId: string,
+    overrides: Partial<typeof schema.posts.$inferInsert> = {},
+) {
+    const [post] = await testDb
+        .insert(schema.posts)
+        .values({
+            pageId,
+            facebookPostId: overrides.facebookPostId ?? `post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            message: overrides.message ?? 'Test post',
+            autoReplyEnabled: overrides.autoReplyEnabled ?? true,
+            ...overrides,
+        })
+        .returning();
+    return post;
+}
+
+export async function insertComment(
+    postId: string,
+    overrides: Partial<typeof schema.comments.$inferInsert> = {},
+) {
+    const [comment] = await testDb
+        .insert(schema.comments)
+        .values({
+            postId,
+            facebookCommentId: overrides.facebookCommentId ?? `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            message: overrides.message ?? 'Test comment',
+            replied: overrides.replied ?? false,
+            ...overrides,
+        })
+        .returning();
+    return comment;
 }

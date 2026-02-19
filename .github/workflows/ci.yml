@@ -251,6 +251,42 @@ jobs:
             exit 1
           fi
 
+      - name: Performance Benchmark — Backend Health Endpoints
+        run: |
+          echo "⚡ Running performance benchmark against backend..."
+
+          docker rm -f backend-perf 2>/dev/null || true
+
+          docker run -d --name backend-perf \
+            -p 3000:3000 \
+            -e DATABASE_URL=postgres://test:test@localhost:5432/test \
+            -e JWT_SECRET=this_is_a_test_jwt_secret_that_is_at_least_32_chars_long \
+            -e NODE_ENV=production \
+            -e PORT=3000 \
+            -e SKIP_MIGRATIONS=true \
+            -e FACEBOOK_APP_ID=test_app_id \
+            -e FACEBOOK_APP_SECRET=test_app_secret \
+            -e FACEBOOK_REDIRECT_URI=http://localhost:3001/auth/callback \
+            -e FACEBOOK_WEBHOOK_VERIFY_TOKEN=test_webhook_token \
+            -e REDIS_HOST=localhost \
+            -e REDIS_PORT=6379 \
+            -e COOKIE_SECRET=test_cookie_secret_at_least_32_chars_long_for_ci_smoke_test \
+            jawab24-backend:test
+
+          echo "Waiting for backend to be ready..."
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+              echo "✅ Backend is ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+          node scripts/perf-benchmark.js http://localhost:3000
+
+          docker stop backend-perf
+          docker rm backend-perf
+
       - name: Smoke Test - AI Worker Container
         run: |
           echo "🧪 Testing AI worker container can start..."

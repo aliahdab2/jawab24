@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactElement } from 'react';
+import { useState, useEffect, useMemo, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -385,18 +385,24 @@ const PricingPage: NextPageWithLayout = () => {
     router.push(`/checkout?planId=${planId}`);
   };
 
+  // Filter out inactive plans (keep only plans where isActive is true)
+  const activePlans = useMemo(() => plans.filter(p => p.isActive !== false), [plans]);
+
+  const currentPlanId = usage?.subscription?.plan?.id;
+  const hasActiveSubscription = Boolean(currentPlanId);
+
+  // Current plan price for upgrade/downgrade comparison — O(1) lookup per render
+  const currentPlanPrice = useMemo(
+    () => activePlans.find(p => p.id === currentPlanId)?.price ?? 0,
+    [activePlans, currentPlanId]
+  );
+
   // Show loading skeleton
   if (loading) {
     return <PageSkeleton />;
   }
 
   // NORMAL PRICING FLOW
-
-  const currentPlanId = usage?.subscription?.plan?.id;
-  const hasActiveSubscription = Boolean(currentPlanId);
-
-  // Filter out inactive plans (keep only plans where isActive is true)
-  const activePlans = plans.filter(p => p.isActive !== false);
 
   return (
     <>
@@ -523,7 +529,7 @@ const PricingPage: NextPageWithLayout = () => {
               hasActiveSubscription={hasActiveSubscription}
               onSelect={() => handleSelectPlan(plan.id)}
               loading={changingPlan === plan.id}
-              currentPlanPrice={activePlans.find(p => p.id === currentPlanId)?.price || 0}
+              currentPlanPrice={currentPlanPrice}
               subscriptionStatus={usage?.subscription?.status}
               t={t}
               isSanctioned={isSanctioned === true}
