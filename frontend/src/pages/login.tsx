@@ -168,7 +168,7 @@ export default function LoginPage() {
         const normalizedOrigin = siteUrl.replace(/\/$/, '');
         const localePath = language === 'ar' ? '' : `/${language}`;
         const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
-        const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages');
+        const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
         const returnUrl = router.query.redirect as string || '/dashboard';
         const state = encodeURIComponent(`${returnUrl}|mobile|${language}`);
@@ -188,7 +188,7 @@ export default function LoginPage() {
       const localePath = language === 'ar' ? '' : `/${language}`;
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages');
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
       const urlParams = new URLSearchParams(window.location.search);
       const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
