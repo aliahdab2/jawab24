@@ -738,6 +738,21 @@
   padding-bottom: 0px;
 }
 
+/* Modal/sheet footer: content padding + safe area bottom on native */
+.pb-safe-content {
+  padding-bottom: 24px;
+}
+
+.is-native .pb-safe-content {
+  padding-bottom: calc(var(--sai-bottom) + 24px);
+}
+
+@media (orientation: landscape) {
+  .is-native .pb-safe-content {
+    padding-bottom: 24px;
+  }
+}
+
 .px-safe {
   padding-left: var(--sai-left);
   padding-right: var(--sai-right);

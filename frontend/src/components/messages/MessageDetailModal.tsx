@@ -211,8 +211,7 @@ export function MessageDetailModal({
 
         {/* Footer — Reply + Actions */}
         <div
-          className="p-4 sm:p-6 border-t border-surface-100 bg-white flex-shrink-0"
-          style={{ paddingBottom: 'calc(var(--sai-bottom) + 24px)' }}
+          className="p-4 sm:p-6 pb-safe-content border-t border-surface-100 bg-white flex-shrink-0"
         >
           {sendError && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium">

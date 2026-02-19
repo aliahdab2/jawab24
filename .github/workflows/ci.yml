@@ -158,7 +158,67 @@ jobs:
           retention-days: 1
 
   # ==========================================
-  # Step 3: Build and test Docker images
+  # Step 3a: Lighthouse CI (parallel with Docker)
+  # Audits public pages for accessibility, CLS, and performance.
+  # All assertions are currently "warn" — Lighthouse data is collected and reported
+  # but does NOT block CI. Once baseline scores are confirmed from first runs,
+  # tighten accessibility and CLS to "error" in .lighthouserc.json.
+  # ==========================================
+  lighthouse:
+    name: "3️⃣a Lighthouse CI"
+    runs-on: ubuntu-latest
+    needs: checks
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/.next
+
+      - name: Start frontend server
+        working-directory: frontend
+        run: npx next start -p 3001 &
+        env:
+          PORT: 3001
+          NEXT_PUBLIC_API_URL: https://jawab24.com/api
+          NEXT_PUBLIC_FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+
+      - name: Wait for frontend to be ready
+        run: |
+          echo "⏳ Waiting for frontend to start on port 3001..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001 > /dev/null 2>&1; then
+              echo "✅ Frontend ready after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "❌ Frontend failed to start in 30 seconds"
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Run Lighthouse CI
+        run: npx @lhci/cli@0.14.x autorun
+        env:
+          LHCI_BUILD_CONTEXT__CURRENT_HASH: ${{ github.sha }}
+
+  # ==========================================
+  # Step 3b: Build and test Docker images
   # ==========================================
   docker:
     name: "3️⃣ Build Docker Images"
@@ -347,7 +407,7 @@ jobs:
   ci-summary:
     name: "4️⃣ Ready to Deploy?"
     runs-on: ubuntu-latest
-    needs: [preflight, checks, docker]
+    needs: [preflight, checks, docker, lighthouse]
     if: always()
 
     steps:
@@ -358,12 +418,14 @@ jobs:
           # Check if any job failed
           if [ "${{ needs.preflight.result }}" = "failure" ] || \
              [ "${{ needs.checks.result }}" = "failure" ] || \
-             [ "${{ needs.docker.result }}" = "failure" ]; then
+             [ "${{ needs.docker.result }}" = "failure" ] || \
+             [ "${{ needs.lighthouse.result }}" = "failure" ]; then
             echo "❌ CI CHECKS FAILED"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "Preflight: ${{ needs.preflight.result }}"
-            echo "Checks: ${{ needs.checks.result }}"
-            echo "Docker: ${{ needs.docker.result }}"
+            echo "Preflight:  ${{ needs.preflight.result }}"
+            echo "Checks:     ${{ needs.checks.result }}"
+            echo "Docker:     ${{ needs.docker.result }}"
+            echo "Lighthouse: ${{ needs.lighthouse.result }}"
             echo ""
             echo "🚫 Deployment has been BLOCKED"
             echo "Please fix the failing checks above before deploying."
@@ -372,9 +434,10 @@ jobs:
           else
             echo "✅ ALL CI CHECKS PASSED"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "Preflight: ✅"
-            echo "Checks: ✅"
-            echo "Docker: ✅"
+            echo "Preflight:  ✅"
+            echo "Checks:     ✅"
+            echo "Docker:     ✅"
+            echo "Lighthouse: ✅"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo ""
             echo "🚀 DEPLOYMENT STARTING..."

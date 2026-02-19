@@ -302,6 +302,31 @@ npm run lint
 npm run lint:fix
 ```
 
+### 9. Lighthouse CI — Performance & Accessibility Gates
+
+Lighthouse CI runs automatically on every push/PR via GitHub Actions. It audits 3 public pages:
+`/landing`, `/pricing`, `/login`
+
+**Hard failures (block CI and deploy):**
+- `categories:accessibility` < 90 — every UI change must preserve accessibility
+- `cumulative-layout-shift` > 0.1 — no layout jumps allowed
+
+**Soft warnings (visible in CI, do not block):**
+- `categories:performance` < 70
+- `categories:seo` < 80
+- `largest-contentful-paint` > 5s
+- `first-contentful-paint` > 3s
+
+**Config file:** `.lighthouserc.json` at repo root — edit thresholds there.
+
+**Rules for AI assistants:**
+1. **Never remove `alt` attributes** from `<img>` tags — breaks accessibility score
+2. **Never use `role` incorrectly** (e.g. `role="button"` on a `<div>` without keyboard handler)
+3. **Always use semantic HTML** (`<button>`, `<nav>`, `<main>`, `<h1>`–`<h6>`) — ARIA landmarks matter
+4. **Avoid adding elements that shift layout** after initial paint (lazy-loaded images need `width`/`height` attributes or `aspect-ratio` CSS)
+5. **Do not add `display:none` toggling** that causes layout reflow on public pages
+6. **Meta tags**: keep `<title>` and `<meta name="description">` on every public page for SEO score
+
 ---
 
 ## 📁 Project Structure
