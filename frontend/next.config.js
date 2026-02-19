@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const path = require('path');
 const { withSentryConfig } = require('@sentry/nextjs');
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+});
 
 const isMobile = process.env.IS_MOBILE_BUILD === 'true';
 
@@ -61,7 +64,9 @@ const sentryWebpackPluginOptions = {
   disableLogger: true,
 };
 
-// Wrap with Sentry only if DSN is configured
-module.exports = process.env.NEXT_PUBLIC_SENTRY_DSN
+// Wrap with Sentry only if DSN is configured, then with bundle analyzer
+const configWithSentry = process.env.NEXT_PUBLIC_SENTRY_DSN
   ? withSentryConfig(nextConfig, sentryWebpackPluginOptions)
   : nextConfig;
+
+module.exports = withBundleAnalyzer(configWithSentry);

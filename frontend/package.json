@@ -21,7 +21,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "translation:validate": "node scripts/validate-translations.js"
+    "translation:validate": "node scripts/validate-translations.js",
+    "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
     "@capacitor-community/facebook-login": "^8.0.0",
