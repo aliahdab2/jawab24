@@ -321,13 +321,20 @@ const MessagesPage: NextPageWithLayout = () => {
 
   }, [allMessages, debouncedSearch, checkConversationNeedsAttention]);
 
-  // Resolved page name for modal — avoids pages.find() in JSX on every render
+  // Resolved page name + URL for modal — avoids pages.find() in JSX on every render
   const selectedPageName = useMemo(
     () => selectedConversation
       ? pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.name
       : undefined,
     [selectedConversation, pages]
   );
+
+  const selectedPageUrl = useMemo(() => {
+    if (!selectedConversation) return undefined;
+    const page = pages.find(p => p.id === selectedConversation.lastMessage.pageId);
+    if (!page) return undefined;
+    return `https://facebook.com/${page.facebookPageId}`;
+  }, [selectedConversation, pages]);
 
   // Fetch pause status when a conversation is selected
   useEffect(() => {
@@ -620,6 +627,7 @@ const MessagesPage: NextPageWithLayout = () => {
           isResuming={resumeMutation.isPending}
           dateLocale={dateLocale}
           pageName={selectedPageName}
+          pageUrl={selectedPageUrl}
         />
       )}
     </>

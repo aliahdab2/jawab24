@@ -9,6 +9,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import {
   MessageSquare,
   Bot,
@@ -31,6 +32,7 @@ interface CommentDetailModalProps {
   onResolve?: () => void;
   mode?: 'full' | 'quick';
   pageName?: string;
+  pageUrl?: string;
 }
 
 export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
@@ -40,6 +42,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   onResolve,
   mode = 'full',
   pageName,
+  pageUrl,
 }) => {
   const { t, dateLocale } = useTranslation();
   
@@ -251,6 +254,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   };
 
   const needsAttention = checkNeedsAttention(comment);
+  // Prefer specific comment URL (Facebook); fall back to page URL (e.g. Instagram pages)
+  const externalUrl = comment.facebookCommentId
+    ? `https://facebook.com/${comment.facebookCommentId}`
+    : pageUrl;
 
   return (
     <div
@@ -277,10 +284,21 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 {comment.fromName || t('common.unknownUser')}
               </p>
               {pageName && (
-                <span className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5">
-                  <Globe className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">{pageName}</span>
-                </span>
+                externalUrl ? (
+                  <button
+                    onClick={() => openExternalUrl(externalUrl)}
+                    className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5 hover:text-brand-500 transition-colors py-1 -my-1 cursor-pointer"
+                  >
+                    <Globe className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate">{pageName}</span>
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5">
+                    <Globe className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate">{pageName}</span>
+                  </span>
+                )
               )}
             </div>
           </div>
@@ -434,17 +452,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             className="p-4 md:p-6 pb-safe-content border-t border-surface-100 bg-white"
           >
             <div className="flex items-center justify-between">
-              {comment.facebookCommentId && (
-                <a
-                  href={`https://facebook.com/${comment.facebookCommentId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-brand-600 hover:text-brand-700 flex items-center gap-1"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  {t('comments.viewOnFacebook')}
-                </a>
-              )}
               {comment.fromId && (
                 <button
                   onClick={handleTogglePause}

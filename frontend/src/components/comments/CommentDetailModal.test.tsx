@@ -2,7 +2,12 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { CommentDetailModal } from '@/components/comments/CommentDetailModal';
 import { subscriptionApi, aiApi } from '@/lib/api';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import { Comment } from '@jawab24/shared';
+
+vi.mock('@/lib/openExternalUrl', () => ({
+  openExternalUrl: vi.fn()
+}));
 
 // Mock dependencies
 vi.mock('@/lib/api', () => ({
@@ -212,6 +217,86 @@ describe('CommentDetailModal', () => {
     render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
 
     expect(screen.getByText('Test User')).toBeInTheDocument();
+  });
+
+  describe('page name link', () => {
+    it('shows clickable page name button when facebookCommentId is present', () => {
+      const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
+
+      render(
+        <CommentDetailModal
+          comment={comment}
+          onClose={vi.fn()}
+          onReplySuccess={vi.fn()}
+          pageName="My Page"
+        />
+      );
+
+      expect(screen.getByRole('button', { name: /my page/i })).toBeInTheDocument();
+    });
+
+    it('opens facebook comment URL when page name is clicked', () => {
+      const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
+
+      render(
+        <CommentDetailModal
+          comment={comment}
+          onClose={vi.fn()}
+          onReplySuccess={vi.fn()}
+          pageName="My Page"
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /my page/i }));
+      expect(openExternalUrl).toHaveBeenCalledWith('https://facebook.com/fb_comment_123');
+    });
+
+    it('falls back to pageUrl for Instagram comments without facebookCommentId', () => {
+      const comment: Comment = { ...mockComment, facebookCommentId: undefined, source: 'instagram' };
+
+      render(
+        <CommentDetailModal
+          comment={comment}
+          onClose={vi.fn()}
+          onReplySuccess={vi.fn()}
+          pageName="My Page"
+          pageUrl="https://instagram.com/mypageusername"
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /my page/i }));
+      expect(openExternalUrl).toHaveBeenCalledWith('https://instagram.com/mypageusername');
+    });
+
+    it('shows non-clickable page name when no URL available', () => {
+      const comment: Comment = { ...mockComment, facebookCommentId: undefined };
+
+      render(
+        <CommentDetailModal
+          comment={comment}
+          onClose={vi.fn()}
+          onReplySuccess={vi.fn()}
+          pageName="My Page"
+        />
+      );
+
+      expect(screen.getByText('My Page')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /my page/i })).not.toBeInTheDocument();
+    });
+
+    it('does not render page name row when pageName is not provided', () => {
+      const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
+
+      render(
+        <CommentDetailModal
+          comment={comment}
+          onClose={vi.fn()}
+          onReplySuccess={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByText('My Page')).not.toBeInTheDocument();
+    });
   });
 });
 

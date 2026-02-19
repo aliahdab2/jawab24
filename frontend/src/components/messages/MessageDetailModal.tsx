@@ -4,6 +4,7 @@ import { Button, Badge } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Conversation } from './MessageCard';
 import {
   User,
@@ -16,6 +17,7 @@ import {
   PauseCircle,
   PlayCircle,
   Globe,
+  ExternalLink,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Locale } from 'date-fns';
@@ -32,6 +34,7 @@ interface MessageDetailModalProps {
   isResuming: boolean;
   dateLocale?: Locale;
   pageName?: string;
+  pageUrl?: string;
 }
 
 export function MessageDetailModal({
@@ -46,6 +49,7 @@ export function MessageDetailModal({
   isResuming,
   dateLocale,
   pageName,
+  pageUrl,
 }: MessageDetailModalProps) {
   const { t } = useTranslation();
   const [replyText, setReplyText] = useState('');
@@ -146,10 +150,21 @@ export function MessageDetailModal({
                 )}
               </div>
               {pageName && (
-                <span className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5">
-                  <Globe className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">{pageName}</span>
-                </span>
+                pageUrl ? (
+                  <button
+                    onClick={() => openExternalUrl(pageUrl)}
+                    className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5 hover:text-brand-500 transition-colors py-1 -my-1 cursor-pointer"
+                  >
+                    <Globe className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate">{pageName}</span>
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5">
+                    <Globe className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate">{pageName}</span>
+                  </span>
+                )
               )}
             </div>
           </div>

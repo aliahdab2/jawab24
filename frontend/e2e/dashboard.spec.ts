@@ -232,6 +232,36 @@ test.describe('Dashboard Page', () => {
     await expect(page.locator('text=حدث خطأ ما')).not.toBeVisible();
   });
 
+  test('should not crash when user has no active subscription', async ({ page }) => {
+    // Regression test for: "Cannot read properties of null (reading 'status')"
+    // Happens when usage.subscription is null (new user without a plan yet)
+    await page.route('**/api/subscription/usage**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            subscription: null,
+            aiReplies: { used: 0, limit: 0, percentUsed: 0 },
+            pages: { used: 0, limit: 0, percentUsed: 0 },
+          },
+        }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+
+    // Page should render without crashing
+    await expect(page).toHaveTitle(/Dashboard.*Jawab24/i, { timeout: 15000 });
+    await expect(page.locator('text=Something went wrong')).not.toBeVisible();
+    await expect(page.locator('text=Cannot read properties')).not.toBeVisible();
+
+    // Header should be visible
+    await expect(
+      page.locator('h1').filter({ hasText: /Home|الرئيسية/i }).first()
+    ).toBeVisible({ timeout: 15000 });
+  });
+
   test('should show empty state gracefully when APIs fail', async ({ page }) => {
     // Override API mocks to return errors
     await page.route('**/api/**', async (route) => {

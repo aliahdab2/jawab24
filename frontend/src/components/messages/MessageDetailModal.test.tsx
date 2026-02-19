@@ -1,8 +1,13 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect } from 'vitest';
 import { MessageDetailModal } from './MessageDetailModal';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Conversation } from './MessageCard';
 import type { Message } from '@/lib/api';
+
+vi.mock('@/lib/openExternalUrl', () => ({
+  openExternalUrl: vi.fn()
+}));
 
 // Mock translation hook
 vi.mock('@/i18n', () => ({
@@ -309,6 +314,60 @@ describe('MessageDetailModal', () => {
     );
 
     expect(screen.getByText('messages.needsHuman')).toBeInTheDocument();
+  });
+
+  describe('page name link', () => {
+    it('shows clickable page name button when pageName and pageUrl are provided', () => {
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation()}
+          pageName="My Page"
+          pageUrl="https://facebook.com/123456"
+        />
+      );
+
+      expect(screen.getByRole('button', { name: /my page/i })).toBeInTheDocument();
+    });
+
+    it('opens page URL when page name is clicked', () => {
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation()}
+          pageName="My Page"
+          pageUrl="https://facebook.com/123456"
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /my page/i }));
+      expect(openExternalUrl).toHaveBeenCalledWith('https://facebook.com/123456');
+    });
+
+    it('shows non-clickable page name when pageUrl is not provided', () => {
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation()}
+          pageName="My Page"
+        />
+      );
+
+      expect(screen.getByText('My Page')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /my page/i })).not.toBeInTheDocument();
+    });
+
+    it('does not render page name row when pageName is not provided', () => {
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation()}
+          pageUrl="https://facebook.com/123456"
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: /my page/i })).not.toBeInTheDocument();
+    });
   });
 
   it('shows reply method badge for outgoing messages', () => {

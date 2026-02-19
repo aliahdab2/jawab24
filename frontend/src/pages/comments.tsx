@@ -313,6 +313,17 @@ const CommentsPage: NextPageWithLayout = () => {
   // Lookup map: O(1) page resolution inside comment list render
   const pageById = useMemo(() => new Map(pages.map(p => [p.id, p])), [pages]);
 
+  // Page URL for selected comment modal — Instagram pages use instagram.com, Facebook use facebook.com
+  const selectedCommentPageUrl = useMemo(() => {
+    if (!selectedComment?.pageId) return undefined;
+    const page = pageById.get(selectedComment.pageId);
+    if (!page) return undefined;
+    if (selectedComment.source === 'instagram' && page.instagramUsername) {
+      return `https://instagram.com/${page.instagramUsername}`;
+    }
+    return `https://facebook.com/${page.facebookPageId}`;
+  }, [selectedComment, pageById]);
+
   // Platform visibility — only recomputes when pages data changes
   const showPlatformIcon = useMemo(
     () => pages.some(p => !!p.facebookPageId) && pages.some(p => !!p.instagramAccountId),
@@ -515,6 +526,7 @@ const CommentsPage: NextPageWithLayout = () => {
           onReplySuccess={() => refetch()}
           onResolve={!selectedComment.replied && !selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
+          pageUrl={selectedCommentPageUrl}
         />
       )}
     </>
