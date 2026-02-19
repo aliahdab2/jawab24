@@ -15,13 +15,15 @@ import {
   Search,
   X,
   Check,
+  CheckCircle,
+  Sparkles,
   Download,
   AlertTriangle,
   ExternalLink,
   MoreVertical,
   Loader2
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { Comment, Page } from '@jawab24/shared';
@@ -275,6 +277,39 @@ const CommentsPage: NextPageWithLayout = () => {
     }
   };
 
+  const emptyStateContent = useMemo(() => {
+    if (debouncedSearch) {
+      return { icon: Search, iconClass: 'text-surface-300', bgClass: 'bg-surface-100', title: t('common.noData'), subtitle: t('comments.tryDifferentSearch' as TranslationKey), showConnectCta: false };
+    }
+    if (pages.length === 0) {
+      return { icon: MessageSquare, iconClass: 'text-surface-300', bgClass: 'bg-surface-100', title: t('comments.noComments'), subtitle: t('comments.noCommentsDesc' as TranslationKey), showConnectCta: true };
+    }
+    const config: Record<FilterType, { icon: React.ElementType; iconClass: string; bgClass: string; title: string; subtitle: string }> = {
+      needs_action: {
+        icon: CheckCircle,
+        iconClass: 'text-emerald-400',
+        bgClass: 'bg-emerald-50',
+        title: t('comments.emptyNeedsAction' as TranslationKey),
+        subtitle: t('comments.emptyNeedsActionSub' as TranslationKey),
+      },
+      all: {
+        icon: MessageSquare,
+        iconClass: 'text-surface-300',
+        bgClass: 'bg-surface-100',
+        title: t('comments.emptyAll' as TranslationKey),
+        subtitle: t('comments.emptyAllSub' as TranslationKey),
+      },
+      auto_replied: {
+        icon: Sparkles,
+        iconClass: 'text-violet-400',
+        bgClass: 'bg-violet-50',
+        title: t('comments.emptyAutoReplied' as TranslationKey),
+        subtitle: t('comments.emptyAutoRepliedSub' as TranslationKey),
+      },
+    };
+    return { ...config[filter], showConnectCta: false };
+  }, [debouncedSearch, pages, filter, t]);
+
   if ((isLoading || isPending) && allComments.length === 0) {
     return <PageSkeleton type="list" />;
   }
@@ -449,21 +484,21 @@ const CommentsPage: NextPageWithLayout = () => {
       ) : (
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl" padding="lg">
           <div className="py-10 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
-              <MessageSquare className="w-8 h-8 text-surface-300 opacity-60" />
+            <div className={`w-20 h-20 rounded-2xl ${emptyStateContent.bgClass} flex items-center justify-center mx-auto mb-5`}>
+              <emptyStateContent.icon className={`w-10 h-10 ${emptyStateContent.iconClass}`} />
             </div>
-            <p className="text-base font-semibold text-surface-600 mb-2">
-              {debouncedSearch ? t('common.noData') : t('comments.noComments')}
-            </p>
-            <p className="text-sm text-surface-500 mb-5">
-              {debouncedSearch ? t('comments.tryDifferentSearch') : (pages.length > 0) ? t('comments.noCommentsForFilter') : t('comments.noCommentsDesc')}
-            </p>
-            {!debouncedSearch && pages.length === 0 && (
-              <Link href="/pages">
-                <Button variant="primary" size="sm" icon={<ExternalLink className="w-[18px] h-[18px]" />}>
-                  {t('comments.connectPage')}
-                </Button>
-              </Link>
+            <p className="text-base font-semibold text-surface-700">{emptyStateContent.title}</p>
+            {emptyStateContent.subtitle && (
+              <p className="text-sm text-surface-400 mt-1">{emptyStateContent.subtitle}</p>
+            )}
+            {emptyStateContent.showConnectCta && (
+              <div className="mt-5">
+                <Link href="/pages">
+                  <Button variant="primary" size="sm" icon={<ExternalLink className="w-[18px] h-[18px]" />}>
+                    {t('comments.connectPage')}
+                  </Button>
+                </Link>
+              </div>
             )}
           </div>
         </Card>
@@ -475,6 +510,7 @@ const CommentsPage: NextPageWithLayout = () => {
           onClose={() => setSelectedComment(null)}
           onReplySuccess={() => refetch()}
           onResolve={!selectedComment.replied && !selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
+          pageName={pages.find(p => p.id === selectedComment.pageId)?.name || undefined}
         />
       )}
     </>

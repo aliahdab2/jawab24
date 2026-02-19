@@ -15,8 +15,9 @@ import {
   UserCheck,
   PauseCircle,
   PlayCircle,
+  Globe,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import type { Locale } from 'date-fns';
 
 interface MessageDetailModalProps {
@@ -30,6 +31,7 @@ interface MessageDetailModalProps {
   isPausing: boolean;
   isResuming: boolean;
   dateLocale?: Locale;
+  pageName?: string;
 }
 
 export function MessageDetailModal({
@@ -43,6 +45,7 @@ export function MessageDetailModal({
   isPausing,
   isResuming,
   dateLocale,
+  pageName,
 }: MessageDetailModalProps) {
   const { t } = useTranslation();
   const [replyText, setReplyText] = useState('');
@@ -80,6 +83,19 @@ export function MessageDetailModal({
     if (!dateValue) return '-';
     try {
       return format(new Date(dateValue), 'PPp', { locale: dateLocale });
+    } catch {
+      return String(dateValue);
+    }
+  };
+
+  const formatMessageTime = (dateValue: string | Date | null | undefined) => {
+    if (!dateValue) return '-';
+    try {
+      const d = new Date(dateValue);
+      const isRecent = Date.now() - d.getTime() < 24 * 60 * 60 * 1000;
+      return isRecent
+        ? formatDistanceToNow(d, { addSuffix: true, locale: dateLocale })
+        : format(d, 'PPp', { locale: dateLocale });
     } catch {
       return String(dateValue);
     }
@@ -129,6 +145,12 @@ export function MessageDetailModal({
                   </Badge>
                 )}
               </div>
+              {pageName && (
+                <span className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5">
+                  <Globe className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{pageName}</span>
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -160,7 +182,7 @@ export function MessageDetailModal({
                   "flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter",
                   msg.direction === 'outgoing' ? 'text-brand-500' : 'text-surface-400'
                 )}>
-                  <span>{formatFullTime(msg.createdAt)}</span>
+                  <span title={formatFullTime(msg.createdAt)}>{formatMessageTime(msg.createdAt)}</span>
                   {msg.direction === 'outgoing' && msg.replyMethod && (
                     <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-100 text-surface-600">
                       {msg.replyMethod === 'ai' ? (
@@ -198,6 +220,27 @@ export function MessageDetailModal({
             </div>
           )}
           <div className="flex items-end gap-2 sm:gap-3">
+            {/* Pause/Resume — icon button in input row to avoid accidental keyboard taps */}
+            <button
+              onClick={() => {
+                if (isPaused) {
+                  onResume(conversation.senderId, pageId);
+                } else {
+                  onPause(conversation.senderId, pageId);
+                }
+              }}
+              disabled={isPausing || isResuming}
+              aria-label={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
+              title={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
+              className={clsx(
+                'flex-shrink-0 p-2 rounded-xl border transition-all h-[40px] sm:h-[44px] w-[40px] sm:w-[44px] flex items-center justify-center disabled:opacity-50',
+                isPaused
+                  ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'
+              )}
+            >
+              {isPaused ? <PlayCircle className="w-5 h-5" /> : <PauseCircle className="w-5 h-5" />}
+            </button>
             <div className="flex-1">
               <textarea
                 value={replyText}
@@ -227,59 +270,28 @@ export function MessageDetailModal({
               <span className="hidden sm:inline">{t('comments.reply')}</span>
             </Button>
           </div>
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              {/* Pause/Resume Smart Reply */}
-              <button
-                onClick={() => {
-                  if (isPaused) {
-                    onResume(conversation.senderId, pageId);
-                  } else {
-                    onPause(conversation.senderId, pageId);
-                  }
-                }}
-                disabled={isPausing || isResuming}
-                className={clsx(
-                  'flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-all border',
-                  isPaused
-                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                    : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'
-                )}
-              >
-                {isPaused ? (
-                  <>
-                    <PlayCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                    {t('messages.resumeSmartReply' as TranslationKey)}
-                  </>
-                ) : (
-                  <>
-                    <PauseCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                    {t('messages.pauseSmartReply' as TranslationKey)}
-                  </>
-                )}
-              </button>
-              {conversation.pauseStatus?.paused && conversation.pauseStatus.remainingMinutes != null && (
-                <span className="text-[9px] sm:text-[10px] font-medium text-violet-500">
-                  {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: conversation.pauseStatus.remainingMinutes })}
-                </span>
-              )}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-2">
+            {conversation.pauseStatus?.paused && conversation.pauseStatus.remainingMinutes != null && (
+              <span className="text-[9px] sm:text-[10px] font-medium text-violet-500">
+                {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: conversation.pauseStatus.remainingMinutes })}
+              </span>
+            )}
 
-              {/* Resolve button */}
-              {hasUnresolvedUnreplied ? (
-                <button
-                  onClick={() => onResolve(conversation.senderId, pageId)}
-                  className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-all border bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100"
-                >
-                  <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  {t('comments.resolve' as TranslationKey)}
-                </button>
-              ) : hasResolvedIncoming ? (
-                <span className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-200">
-                  <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  {t('messages.resolved' as TranslationKey)}
-                </span>
-              ) : null}
-            </div>
+            {/* Resolve button */}
+            {hasUnresolvedUnreplied ? (
+              <button
+                onClick={() => onResolve(conversation.senderId, pageId)}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-all border bg-surface-50 text-surface-600 border-surface-200 hover:bg-surface-100"
+              >
+                <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                {t('comments.resolve' as TranslationKey)}
+              </button>
+            ) : hasResolvedIncoming ? (
+              <span className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-200">
+                <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                {t('messages.resolved' as TranslationKey)}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>

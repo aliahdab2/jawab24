@@ -69,7 +69,7 @@ function PlanCard({
   const highlightClasses = isCurrentPlan
     ? 'ring-2 ring-emerald-400 shadow-[0_20px_40px_rgba(16,185,129,0.18)] md:scale-105 z-10'
     : (isPopular && !isCurrentPlan)
-      ? 'ring-2 ring-brand-500 shadow-[0_20px_40px_rgba(13,148,136,0.18)] md:scale-105 z-10'
+      ? 'ring-2 ring-blue-500 shadow-[0_20px_40px_rgba(59,130,246,0.18)] md:scale-105 z-10'
       : 'border-surface-200 shadow-[0_4px_6px_rgba(0,0,0,0.07)]';
 
   return (

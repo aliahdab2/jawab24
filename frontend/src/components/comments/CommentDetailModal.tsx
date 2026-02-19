@@ -20,8 +20,9 @@ import {
   PauseCircle,
   PlayCircle,
   FileText,
+  Globe,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 
 interface CommentDetailModalProps {
   comment: Comment;
@@ -29,6 +30,7 @@ interface CommentDetailModalProps {
   onReplySuccess: () => void;
   onResolve?: () => void;
   mode?: 'full' | 'quick';
+  pageName?: string;
 }
 
 export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
@@ -37,6 +39,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   onReplySuccess,
   onResolve,
   mode = 'full',
+  pageName,
 }) => {
   const { t, dateLocale } = useTranslation();
   
@@ -135,6 +138,19 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     if (!dateValue) return '-';
     try {
       return format(new Date(dateValue), 'PPp', { locale: dateLocale });
+    } catch {
+      return String(dateValue);
+    }
+  };
+
+  const formatMessageTime = (dateValue: string | Date | null | undefined) => {
+    if (!dateValue) return '-';
+    try {
+      const d = new Date(dateValue);
+      const isRecent = Date.now() - d.getTime() < 24 * 60 * 60 * 1000;
+      return isRecent
+        ? formatDistanceToNow(d, { addSuffix: true, locale: dateLocale })
+        : format(d, 'PPp', { locale: dateLocale });
     } catch {
       return String(dateValue);
     }
@@ -260,6 +276,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <p className="text-sm text-surface-500">
                 {comment.fromName || t('common.unknownUser')}
               </p>
+              {pageName && (
+                <span className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5">
+                  <Globe className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{pageName}</span>
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -299,7 +321,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           <div className="bg-surface-50 rounded-xl p-4">
             <p className="text-surface-900 whitespace-pre-wrap">{comment.message}</p>
             <div className="flex items-center gap-3 mt-3 text-xs text-surface-400">
-              <span>{formatFullTime(comment.createdAt)}</span>
+              <span title={formatFullTime(comment.createdAt)}>{formatMessageTime(comment.createdAt)}</span>
             </div>
           </div>
 
@@ -312,7 +334,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <div className="bg-brand-50 rounded-xl p-4 border-s-4 border-brand-500">
                 <p className="text-surface-900 whitespace-pre-wrap">{comment.replyText}</p>
                 <div className="flex items-center gap-3 mt-3 text-xs text-surface-500">
-                  <span>{formatFullTime(comment.repliedAt)}</span>
+                  <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>
                   <Badge size="sm" variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>
                     {comment.replyMethod === 'ai' ? (
                       <span className="flex items-center gap-1">

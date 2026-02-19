@@ -16,6 +16,8 @@ import {
   Search,
   X,
   Check,
+  CheckCircle,
+  Sparkles,
   Download,
   MoreVertical,
   Loader2,
@@ -408,6 +410,36 @@ const MessagesPage: NextPageWithLayout = () => {
     resumeMutation.mutate({ senderId, pageId });
   }, [resumeMutation]);
 
+  const emptyStateContent = useMemo(() => {
+    if (searchQuery) {
+      return { icon: Search, iconClass: 'text-surface-300', bgClass: 'bg-surface-100', title: t('common.noData'), subtitle: '' };
+    }
+    const config: Record<FilterType, { icon: React.ElementType; iconClass: string; bgClass: string; title: string; subtitle: string }> = {
+      needs_action: {
+        icon: CheckCircle,
+        iconClass: 'text-emerald-400',
+        bgClass: 'bg-emerald-50',
+        title: t('messages.emptyNeedsAction' as TranslationKey),
+        subtitle: t('messages.emptyNeedsActionSub' as TranslationKey),
+      },
+      all: {
+        icon: MessageCircle,
+        iconClass: 'text-surface-300',
+        bgClass: 'bg-surface-100',
+        title: t('messages.emptyAll' as TranslationKey),
+        subtitle: t('messages.emptyAllSub' as TranslationKey),
+      },
+      auto_replied: {
+        icon: Sparkles,
+        iconClass: 'text-violet-400',
+        bgClass: 'bg-violet-50',
+        title: t('messages.emptyAutoReplied' as TranslationKey),
+        subtitle: t('messages.emptyAutoRepliedSub' as TranslationKey),
+      },
+    };
+    return config[filter];
+  }, [filter, searchQuery, t]);
+
   if (isLoading && !data) {
     return <PageSkeleton type="list" />;
   }
@@ -555,12 +587,13 @@ const MessagesPage: NextPageWithLayout = () => {
       ) : (
         <div className="rounded-2xl bg-white shadow-md shadow-surface-200/20 p-6 sm:p-10">
           <div className="py-6 sm:py-10 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-4">
-              <MessageCircle className="w-8 h-8 text-surface-300 opacity-60" />
+            <div className={`w-20 h-20 rounded-2xl ${emptyStateContent.bgClass} flex items-center justify-center mx-auto mb-5`}>
+              <emptyStateContent.icon className={`w-10 h-10 ${emptyStateContent.iconClass}`} />
             </div>
-            <p className="text-base font-semibold text-surface-600 mb-2">
-              {searchQuery ? t('common.noData') : t('messages.noMessages' as TranslationKey)}
-            </p>
+            <p className="text-base font-semibold text-surface-700">{emptyStateContent.title}</p>
+            {emptyStateContent.subtitle && (
+              <p className="text-sm text-surface-400 mt-1">{emptyStateContent.subtitle}</p>
+            )}
           </div>
         </div>
       )}
@@ -578,6 +611,7 @@ const MessagesPage: NextPageWithLayout = () => {
           isPausing={pauseMutation.isPending}
           isResuming={resumeMutation.isPending}
           dateLocale={dateLocale}
+          pageName={pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.name ?? undefined}
         />
       )}
     </>
