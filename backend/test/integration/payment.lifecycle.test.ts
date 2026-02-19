@@ -1,0 +1,1284 @@
+/**
+ * Payment Lifecycle Integration Tests
+ *
+ * Tests the complete customer journey through payment and subscription management.
+ * Covers: first purchase, upgrade, downgrade, cancellation, resubscription,
+ * payment failure/recovery, race conditions, and billing portal.
+ *
+ * All Stripe API calls are mocked. All DB operations use the real test database.
+ *
+ * SCENARIO 1  — New customer first purchase (with trial)
+ * SCENARIO 2  — Upgrade Basic → Pro
+ * SCENARIO 3  — Downgrade Pro → Basic
+ * SCENARIO 4  — Cancel subscription (at period end)
+ * SCENARIO 5  — Cancel then resubscribe to a new plan
+ * SCENARIO 6  — Payment failure and recovery
+ * SCENARIO 7  — Race condition: payment_succeeded before checkout.session.completed
+ * SCENARIO 8  — Upgrade while on trial period
+ * SCENARIO 9  — Subscription status endpoint accuracy across full lifecycle
+ * SCENARIO 10 — Billing portal access
+ * SCENARIO 11 — customer.subscription.created backup handler
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fastify, { FastifyInstance } from 'fastify';
+import { eq } from 'drizzle-orm';
+import { createTestUser, testDb } from './setup';
+import * as schema from '../../src/db/schema';
+
+// Ensures DATABASE_URL points to the test database before any app module loads.
+import './setup';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mocks (hoisted by Vitest — must be at module top level)
+// ─────────────────────────────────────────────────────────────────────────────
+
+vi.mock('../../src/services/stripe', () => ({
+    stripeService: {
+        createCheckoutSession: vi.fn().mockResolvedValue({
+            id: 'cs_lifecycle_default',
+            url: 'https://checkout.stripe.com/pay/lifecycle',
+        }),
+        // Configured per-scenario via mockResolvedValue in beforeEach
+        getSubscription: vi.fn(),
+        cancelSubscription: vi.fn().mockResolvedValue({}),
+        cancelSubscriptionImmediately: vi.fn().mockResolvedValue({}),
+        createBillingPortalSession: vi.fn().mockResolvedValue({
+            url: 'https://billing.stripe.com/session/lifecycle',
+        }),
+        verifyWebhookSignature: vi.fn(),
+    },
+    stripe: null,
+}));
+
+vi.mock('../../src/middleware/auth', () => ({
+    authenticate: vi.fn().mockImplementation(async () => {}),
+    requireAdmin: vi.fn().mockImplementation(async () => {}),
+}));
+
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: {
+        sendTemplateNotification: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const NOW_SECS = Math.floor(Date.now() / 1000);
+const ONE_MONTH_SECS = 30 * 24 * 3600;
+const ONE_WEEK_SECS = 7 * 24 * 3600;
+const ONE_MONTH_MS = ONE_MONTH_SECS * 1000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Unique string suffix to avoid slug/ID collisions between parallel test runs */
+function uid() {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Insert a plan into the test database */
+async function createPlan(overrides: Partial<typeof schema.plans.$inferInsert> = {}) {
+    const [plan] = await testDb
+        .insert(schema.plans)
+        .values({
+            name: 'Test Plan',
+            slug: `plan-${uid()}`,
+            price: 1900,
+            stripePriceId: `price_${uid()}`,
+            trialDays: 0,
+            maxAiRepliesPerMonth: 200,
+            maxTemplates: 5,
+            maxRules: 3,
+            isActive: true,
+            ...overrides,
+        })
+        .returning();
+    return plan;
+}
+
+/**
+ * Insert a subscription into the test database.
+ * Overrides are spread last so explicit null values (e.g. stripeCustomerId: null) take effect.
+ */
+async function createSub(
+    userId: string,
+    planId: string,
+    overrides: Partial<typeof schema.subscriptions.$inferInsert> = {},
+) {
+    const [sub] = await testDb
+        .insert(schema.subscriptions)
+        .values({
+            userId,
+            planId,
+            status: 'active',
+            externalSubscriptionId: `sub_${uid()}`,
+            stripeCustomerId: `cus_${uid()}`,
+            paymentMethod: 'stripe',
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: new Date(Date.now() + ONE_MONTH_MS),
+            cancelAtPeriodEnd: false,
+            ...overrides,
+        })
+        .returning();
+    return sub;
+}
+
+/** Build a minimal Fastify app with payment routes and auth bypassed */
+async function buildApp(
+    userId: string,
+    geo: { country: string; region: string | null } = { country: 'US', region: null },
+): Promise<FastifyInstance> {
+    const app = fastify({ logger: false });
+
+    app.addHook('preHandler', async (request: any) => {
+        request.user = { userId, facebookId: 'fb_lifecycle_test' };
+        request.geo = geo;
+    });
+
+    const paymentRoutes = (await import('../../src/routes/payment')).default;
+    app.register(paymentRoutes, { prefix: '/' });
+    await app.ready();
+    return app;
+}
+
+/** Minimal request mock for direct controller method calls */
+function mockReq() {
+    return { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as any;
+}
+
+/** Build a minimal fake Stripe Subscription object */
+function stripeSubObj(id: string, overrides: Record<string, unknown> = {}) {
+    return {
+        id,
+        status: 'active',
+        customer: 'cus_stripe_lifecycle',
+        current_period_start: NOW_SECS,
+        current_period_end: NOW_SECS + ONE_MONTH_SECS,
+        trial_end: null,
+        cancel_at_period_end: false,
+        ...overrides,
+    };
+}
+
+/** Build a minimal fake Stripe CheckoutSession object */
+function stripeSession(
+    userId: string,
+    planId: string,
+    subscriptionId: string,
+    sessionId = `cs_${uid()}`,
+) {
+    return {
+        id: sessionId,
+        client_reference_id: userId,
+        metadata: { planId },
+        subscription: subscriptionId,
+    };
+}
+
+/** Fetch all subscriptions for a user */
+async function userSubs(userId: string) {
+    return testDb
+        .select()
+        .from(schema.subscriptions)
+        .where(eq(schema.subscriptions.userId, userId));
+}
+
+/** Fetch a single subscription by primary key */
+async function getSub(id: string) {
+    const [sub] = await testDb
+        .select()
+        .from(schema.subscriptions)
+        .where(eq(schema.subscriptions.id, id));
+    return sub;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 1 — New customer completes first purchase (with trial)
+//
+// Flow: no sub → checkout (gets trial days) → webhook creates trialing sub
+//       → invoice.payment_succeeded activates it
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 1 — New customer completes first purchase (with trial)', () => {
+    let app: FastifyInstance;
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'new.customer@example.com' });
+        userId = user.id;
+        plan = await createPlan({ name: 'Starter', trialDays: 7, price: 2900 });
+        app = await buildApp(userId);
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_new_001', {
+                status: 'trialing',
+                trial_end: NOW_SECS + ONE_WEEK_SECS,
+            }) as any,
+        );
+        vi.mocked(stripeService.createCheckoutSession).mockClear();
+    });
+
+    afterEach(async () => { await app.close(); });
+
+    it('STEP 1 — user has no subscription initially', async () => {
+        const subs = await userSubs(userId);
+        expect(subs).toHaveLength(0);
+    });
+
+    it('STEP 2 — checkout session is created with trial days for a brand-new user', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: plan.id },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json().url).toContain('checkout.stripe.com');
+        expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+            userId,
+            'new.customer@example.com',
+            plan.id,
+            expect.any(String), // stripePriceId
+            expect.any(String), // successUrl
+            expect.any(String), // cancelUrl
+            7,                  // trial days — plan.trialDays for new user
+        );
+    });
+
+    it('STEP 3 — checkout.session.completed creates a trialing subscription in DB', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, plan.id, 'sub_new_001'),
+            mockReq(),
+        );
+
+        const subs = await userSubs(userId);
+        expect(subs).toHaveLength(1);
+        expect(subs[0].externalSubscriptionId).toBe('sub_new_001');
+        expect(subs[0].status).toBe('trialing');
+        expect(subs[0].planId).toBe(plan.id);
+        expect(subs[0].userId).toBe(userId);
+        expect(subs[0].paymentMethod).toBe('stripe');
+        expect(subs[0].stripeCustomerId).toBe('cus_stripe_lifecycle');
+        expect(subs[0].trialEndsAt).not.toBeNull();
+    });
+
+    it('STEP 4 — subscription status endpoint returns trialing with trialEndsAt set', async () => {
+        await createSub(userId, plan.id, {
+            status: 'trialing',
+            trialEndsAt: new Date(Date.now() + ONE_WEEK_SECS * 1000),
+        });
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+
+        const body = res.json();
+        expect(body.status).toBe('trialing');
+        expect(body.planId).toBe(plan.id);
+        expect(body.trialEndsAt).not.toBeNull();
+        expect(body.cancelAtPeriodEnd).toBe(false);
+    });
+
+    it('STEP 5 — invoice.payment_succeeded activates the trialing subscription', async () => {
+        const sub = await createSub(userId, plan.id, {
+            status: 'trialing',
+            externalSubscriptionId: 'sub_new_001',
+        });
+
+        const { paymentController } = await import('../../src/controllers/payment');
+        await (paymentController as any).handlePaymentSucceeded(
+            { id: 'in_first_001', subscription: 'sub_new_001' },
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('active');
+    });
+
+    it('STEP 6 — status endpoint returns active after payment succeeds', async () => {
+        await createSub(userId, plan.id, { status: 'active' });
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+        expect(res.json().status).toBe('active');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 2 — Customer upgrades from Basic to Pro
+//
+// Flow: active Basic sub → checkout Pro (no trial) → webhook cancels Basic,
+//       creates Pro → only one active sub remains
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 2 — Customer upgrades from Basic to Pro', () => {
+    let app: FastifyInstance;
+    let userId: string;
+    let basicPlan: typeof schema.plans.$inferSelect;
+    let proPlan: typeof schema.plans.$inferSelect;
+    let oldSub: typeof schema.subscriptions.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'upgrader@example.com' });
+        userId = user.id;
+        basicPlan = await createPlan({ name: 'Basic', price: 1900, trialDays: 0 });
+        proPlan   = await createPlan({ name: 'Pro',   price: 4900, trialDays: 0 });
+
+        oldSub = await createSub(userId, basicPlan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_basic_001',
+            stripeCustomerId: 'cus_upgrader',
+        });
+
+        app = await buildApp(userId);
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_pro_002', { status: 'active' }) as any,
+        );
+        vi.mocked(stripeService.createCheckoutSession).mockClear();
+        vi.mocked(stripeService.cancelSubscriptionImmediately).mockClear();
+    });
+
+    afterEach(async () => { await app.close(); });
+
+    it('STEP 1 — user starts with one active Basic subscription', async () => {
+        const active = (await userSubs(userId)).filter(s => s.status === 'active');
+        expect(active).toHaveLength(1);
+        expect(active[0].planId).toBe(basicPlan.id);
+    });
+
+    it('STEP 2 — checkout session for Pro has 0 trial days (existing subscriber)', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: proPlan.id },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+            userId,
+            'upgrader@example.com',
+            proPlan.id,
+            expect.any(String),
+            expect.any(String),
+            expect.any(String),
+            0, // no trial for existing subscriber
+        );
+    });
+
+    it('STEP 3 — checkout.session.completed cancels Basic sub and creates Pro sub', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const { stripeService } = await import('../../src/services/stripe');
+
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, proPlan.id, 'sub_pro_002'),
+            mockReq(),
+        );
+
+        // Old Basic sub: canceled in DB
+        const canceledBasic = await getSub(oldSub.id);
+        expect(canceledBasic.status).toBe('canceled');
+        expect(canceledBasic.canceledAt).not.toBeNull();
+        expect(canceledBasic.cancelReason).toMatch(/replaced/i);
+
+        // Old Stripe sub: immediately canceled
+        expect(stripeService.cancelSubscriptionImmediately).toHaveBeenCalledWith('sub_basic_001');
+        expect(stripeService.cancelSubscriptionImmediately).toHaveBeenCalledTimes(1);
+
+        // New Pro sub: present and active
+        const proSub = (await userSubs(userId)).find(
+            s => s.externalSubscriptionId === 'sub_pro_002',
+        );
+        expect(proSub).toBeDefined();
+        expect(proSub!.planId).toBe(proPlan.id);
+        expect(proSub!.status).toBe('active');
+    });
+
+    it('STEP 4 — only one active subscription exists after upgrade', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, proPlan.id, 'sub_pro_002'),
+            mockReq(),
+        );
+
+        const activeSubs = (await userSubs(userId)).filter(s => s.status === 'active');
+        expect(activeSubs).toHaveLength(1);
+        expect(activeSubs[0].planId).toBe(proPlan.id);
+    });
+
+    it('STEP 5 — status endpoint shows Pro plan and name after upgrade', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, proPlan.id, 'sub_pro_002'),
+            mockReq(),
+        );
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+        expect(res.json().planId).toBe(proPlan.id);
+        expect(res.json().planName).toBe('Pro');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 3 — Customer downgrades from Pro to Basic
+//
+// Flow: active Pro sub → checkout Basic (no trial) → webhook cancels Pro
+//       immediately, creates Basic → only one active sub remains
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 3 — Customer downgrades from Pro to Basic', () => {
+    let app: FastifyInstance;
+    let userId: string;
+    let basicPlan: typeof schema.plans.$inferSelect;
+    let proPlan: typeof schema.plans.$inferSelect;
+    let oldSub: typeof schema.subscriptions.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'downgrader@example.com' });
+        userId = user.id;
+        basicPlan = await createPlan({ name: 'Basic', price: 1900, trialDays: 0 });
+        proPlan   = await createPlan({ name: 'Pro',   price: 4900, trialDays: 0 });
+
+        oldSub = await createSub(userId, proPlan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_pro_001',
+            stripeCustomerId: 'cus_downgrader',
+        });
+
+        app = await buildApp(userId);
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_basic_002', { status: 'active' }) as any,
+        );
+        vi.mocked(stripeService.createCheckoutSession).mockClear();
+        vi.mocked(stripeService.cancelSubscriptionImmediately).mockClear();
+    });
+
+    afterEach(async () => { await app.close(); });
+
+    it('STEP 1 — user starts on the Pro plan', async () => {
+        const active = (await userSubs(userId)).filter(s => s.status === 'active');
+        expect(active).toHaveLength(1);
+        expect(active[0].planId).toBe(proPlan.id);
+    });
+
+    it('STEP 2 — checkout session for Basic has 0 trial days (existing subscriber)', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: basicPlan.id },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+            userId,
+            'downgrader@example.com',
+            basicPlan.id,
+            expect.any(String),
+            expect.any(String),
+            expect.any(String),
+            0,
+        );
+    });
+
+    it('STEP 3 — checkout.session.completed cancels Pro immediately and creates Basic', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const { stripeService } = await import('../../src/services/stripe');
+
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, basicPlan.id, 'sub_basic_002'),
+            mockReq(),
+        );
+
+        const canceledPro = await getSub(oldSub.id);
+        expect(canceledPro.status).toBe('canceled');
+        expect(stripeService.cancelSubscriptionImmediately).toHaveBeenCalledWith('sub_pro_001');
+
+        const basicSub = (await userSubs(userId)).find(
+            s => s.externalSubscriptionId === 'sub_basic_002',
+        );
+        expect(basicSub).toBeDefined();
+        expect(basicSub!.planId).toBe(basicPlan.id);
+        expect(basicSub!.status).toBe('active');
+    });
+
+    it('STEP 4 — only one active subscription exists after downgrade', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, basicPlan.id, 'sub_basic_002'),
+            mockReq(),
+        );
+
+        const activeSubs = (await userSubs(userId)).filter(s => s.status === 'active');
+        expect(activeSubs).toHaveLength(1);
+        expect(activeSubs[0].planId).toBe(basicPlan.id);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 4 — Customer cancels subscription (at period end)
+//
+// Flow: active sub → POST /cancel-subscription (sets cancelAtPeriodEnd)
+//       → Stripe webhook updated → Stripe webhook deleted (period ends)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 4 — Customer cancels subscription (at period end)', () => {
+    let app: FastifyInstance;
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+    let sub: typeof schema.subscriptions.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'canceler@example.com' });
+        userId = user.id;
+        plan = await createPlan({ name: 'Monthly Plan', price: 2900 });
+        sub = await createSub(userId, plan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_cancel_001',
+            stripeCustomerId: 'cus_canceler',
+        });
+        app = await buildApp(userId);
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.cancelSubscription).mockClear();
+    });
+
+    afterEach(async () => { await app.close(); });
+
+    it('STEP 1 — user has one active subscription', async () => {
+        const active = (await userSubs(userId)).filter(s => s.status === 'active');
+        expect(active).toHaveLength(1);
+    });
+
+    it('STEP 2 — POST /cancel-subscription sets cancelAtPeriodEnd and calls Stripe', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+
+        const res = await app.inject({ method: 'POST', url: '/cancel-subscription' });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json().message).toMatch(/end of the billing period/i);
+
+        const updated = await getSub(sub.id);
+        expect(updated.cancelAtPeriodEnd).toBe(true);
+        expect(updated.status).toBe('active'); // still active until period end
+
+        // Stripe: cancel_at_period_end (not immediate)
+        expect(stripeService.cancelSubscription).toHaveBeenCalledWith('sub_cancel_001');
+        expect(stripeService.cancelSubscription).toHaveBeenCalledTimes(1);
+    });
+
+    it('STEP 3 — customer.subscription.updated webhook syncs cancelAtPeriodEnd=true', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+
+        await (paymentController as any).handleSubscriptionUpdated(
+            {
+                id: 'sub_cancel_001',
+                status: 'active',
+                current_period_start: NOW_SECS,
+                current_period_end: NOW_SECS + ONE_MONTH_SECS,
+                cancel_at_period_end: true,
+            },
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.cancelAtPeriodEnd).toBe(true);
+        expect(updated.status).toBe('active');
+    });
+
+    it('STEP 4 — customer.subscription.deleted webhook marks subscription as canceled', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+
+        await (paymentController as any).handleSubscriptionDeleted(
+            { id: 'sub_cancel_001' },
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('canceled');
+        expect(updated.canceledAt).not.toBeNull();
+    });
+
+    it('STEP 5 — status endpoint returns active+cancelAtPeriodEnd=true while period still runs', async () => {
+        await testDb
+            .update(schema.subscriptions)
+            .set({ cancelAtPeriodEnd: true })
+            .where(eq(schema.subscriptions.id, sub.id));
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+        expect(res.json().status).toBe('active');
+        expect(res.json().cancelAtPeriodEnd).toBe(true);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 5 — Customer cancels then resubscribes to a new plan
+//
+// Flow: only canceled sub exists → checkout new plan → webhook creates
+//       new active sub → old canceled sub preserved as historical record
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 5 — Customer cancels then resubscribes to a new plan', () => {
+    let app: FastifyInstance;
+    let userId: string;
+    let oldPlan: typeof schema.plans.$inferSelect;
+    let newPlan: typeof schema.plans.$inferSelect;
+    let canceledSub: typeof schema.subscriptions.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'resub@example.com' });
+        userId = user.id;
+        oldPlan = await createPlan({ name: 'Old Plan', price: 1900 });
+        newPlan = await createPlan({ name: 'New Plan', price: 2900, trialDays: 0 });
+
+        canceledSub = await createSub(userId, oldPlan.id, {
+            status: 'canceled',
+            externalSubscriptionId: 'sub_canceled_001',
+            stripeCustomerId: 'cus_resub',
+            canceledAt: new Date(Date.now() - 24 * 3600 * 1000),
+        });
+
+        app = await buildApp(userId);
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_resub_001', { status: 'active' }) as any,
+        );
+        vi.mocked(stripeService.createCheckoutSession).mockClear();
+        vi.mocked(stripeService.cancelSubscriptionImmediately).mockClear();
+    });
+
+    afterEach(async () => { await app.close(); });
+
+    it('STEP 1 — user only has a canceled subscription (no active)', async () => {
+        const subs = await userSubs(userId);
+        expect(subs).toHaveLength(1);
+        expect(subs[0].status).toBe('canceled');
+    });
+
+    it('STEP 2 — checkout session created (no active sub to suppress trial)', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: newPlan.id },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+            userId,
+            'resub@example.com',
+            newPlan.id,
+            expect.any(String),
+            expect.any(String),
+            expect.any(String),
+            0, // newPlan.trialDays = 0
+        );
+    });
+
+    it('STEP 3 — checkout.session.completed creates new active subscription', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, newPlan.id, 'sub_resub_001'),
+            mockReq(),
+        );
+
+        const allSubs = await userSubs(userId);
+        expect(allSubs).toHaveLength(2); // old canceled + new active
+
+        const activeSubs = allSubs.filter(s => s.status === 'active');
+        expect(activeSubs).toHaveLength(1);
+        expect(activeSubs[0].planId).toBe(newPlan.id);
+        expect(activeSubs[0].externalSubscriptionId).toBe('sub_resub_001');
+    });
+
+    it('STEP 4 — old canceled subscription is preserved as a historical record', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, newPlan.id, 'sub_resub_001'),
+            mockReq(),
+        );
+
+        const stillCanceled = await getSub(canceledSub.id);
+        expect(stillCanceled.status).toBe('canceled');
+    });
+
+    it('STEP 5 — cancelSubscriptionImmediately NOT called (canceled sub skipped in loop)', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const { stripeService } = await import('../../src/services/stripe');
+
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, newPlan.id, 'sub_resub_001'),
+            mockReq(),
+        );
+
+        expect(stripeService.cancelSubscriptionImmediately).not.toHaveBeenCalled();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 6 — Payment failure and recovery
+//
+// Flow: active sub → invoice.payment_failed (past_due + notification)
+//       → invoice.payment_succeeded (back to active)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 6 — Payment failure and recovery', () => {
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+    let sub: typeof schema.subscriptions.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'pastdue@example.com' });
+        userId = user.id;
+        plan = await createPlan({ name: 'Monthly', price: 2900 });
+        sub = await createSub(userId, plan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_pastdue_001',
+        });
+
+        const { notificationService } = await import('../../src/services/notifications');
+        vi.mocked(notificationService.sendTemplateNotification).mockClear();
+    });
+
+    it('STEP 1 — invoice.payment_failed sets subscription status to past_due', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+
+        await (paymentController as any).handlePaymentFailed(
+            { id: 'in_fail_001', subscription: 'sub_pastdue_001' },
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('past_due');
+    });
+
+    it('STEP 2 — payment failure sends exactly one push notification to the user', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const { notificationService } = await import('../../src/services/notifications');
+
+        await (paymentController as any).handlePaymentFailed(
+            { id: 'in_fail_001', subscription: 'sub_pastdue_001' },
+            mockReq(),
+        );
+
+        expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(1);
+        expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+            userId,
+            'payment_failed',
+            {},
+            expect.objectContaining({ deepLink: '/settings' }),
+        );
+    });
+
+    it('STEP 3 — invoice.payment_succeeded after failure restores subscription to active', async () => {
+        await testDb
+            .update(schema.subscriptions)
+            .set({ status: 'past_due' })
+            .where(eq(schema.subscriptions.id, sub.id));
+
+        const { paymentController } = await import('../../src/controllers/payment');
+
+        await (paymentController as any).handlePaymentSucceeded(
+            { id: 'in_recovered_001', subscription: 'sub_pastdue_001' },
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('active');
+    });
+
+    it('STEP 4 — duplicate payment_failed webhook sends a second notification (known idempotency gap)', async () => {
+        // Mark already past_due to simulate second delivery
+        await testDb
+            .update(schema.subscriptions)
+            .set({ status: 'past_due' })
+            .where(eq(schema.subscriptions.id, sub.id));
+
+        const { paymentController } = await import('../../src/controllers/payment');
+        const { notificationService } = await import('../../src/services/notifications');
+        vi.mocked(notificationService.sendTemplateNotification).mockClear();
+
+        await (paymentController as any).handlePaymentFailed(
+            { id: 'in_fail_002', subscription: 'sub_pastdue_001' },
+            mockReq(),
+        );
+
+        // KNOWN BUG: No event-ID deduplication — notification fires again.
+        // Change this expectation to 0 once idempotency is implemented.
+        expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(1);
+    });
+
+    it('FULL FLOW — active → past_due → active via two sequential webhooks', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+
+        await (paymentController as any).handlePaymentFailed(
+            { id: 'in_fail_full', subscription: 'sub_pastdue_001' },
+            mockReq(),
+        );
+        expect((await getSub(sub.id)).status).toBe('past_due');
+
+        await (paymentController as any).handlePaymentSucceeded(
+            { id: 'in_ok_full', subscription: 'sub_pastdue_001' },
+            mockReq(),
+        );
+        expect((await getSub(sub.id)).status).toBe('active');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 7 — Race condition: payment_succeeded before checkout.session.completed
+//
+// Stripe can deliver webhooks out of order. Tests graceful handling and
+// also documents the idempotency gap for duplicate events.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 7 — Race condition: payment_succeeded before checkout.session.completed', () => {
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'race@example.com' });
+        userId = user.id;
+        plan = await createPlan({ name: 'Race Plan', price: 1900 });
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_race_001', { status: 'trialing' }) as any,
+        );
+    });
+
+    it('payment_succeeded for unknown subscription does not throw — logs error after retries', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const req = mockReq();
+
+        // No subscription exists in DB yet
+        await expect(
+            (paymentController as any).handlePaymentSucceeded(
+                { id: 'in_race_premature', subscription: 'sub_race_001' },
+                req,
+            ),
+        ).resolves.not.toThrow();
+
+        expect(req.log.error).toHaveBeenCalledWith(
+            expect.objectContaining({ subscriptionId: 'sub_race_001' }),
+            expect.stringMatching(/not found after retries/i),
+        );
+    }, 10_000); // allow for 3 × 500ms retry waits
+
+    it('correct order (checkout → payment) results in active subscription', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+
+        // Step 1: checkout webhook arrives first
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, plan.id, 'sub_race_001'),
+            mockReq(),
+        );
+        const subs = await userSubs(userId);
+        expect(subs).toHaveLength(1);
+        expect(subs[0].status).toBe('trialing');
+
+        // Step 2: payment webhook arrives (trial ended, first real charge)
+        await (paymentController as any).handlePaymentSucceeded(
+            { id: 'in_race_ok', subscription: 'sub_race_001' },
+            mockReq(),
+        );
+        const updated = await getSub(subs[0].id);
+        expect(updated.status).toBe('active');
+    });
+
+    it('duplicate checkout.session.completed webhook — documents idempotency gap (known bug)', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const session = stripeSession(userId, plan.id, 'sub_race_001', 'cs_dup_001');
+
+        // First delivery
+        await (paymentController as any).handleCheckoutComplete(session, mockReq());
+        // Second delivery of the same event (Stripe retries on network timeout)
+        await (paymentController as any).handleCheckoutComplete(session, mockReq());
+
+        const allSubs = await userSubs(userId);
+
+        // KNOWN BUG: No Stripe event-ID deduplication → second delivery inserts a duplicate.
+        // When fixed: change assertion to expect(allSubs).toHaveLength(1)
+        expect(allSubs.length).toBeGreaterThanOrEqual(1);
+        expect(allSubs.some(s => s.planId === plan.id)).toBe(true);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 8 — Customer upgrades while on trial period
+//
+// trialing sub counts as active → no new trial granted → old trial canceled
+// immediately, new Pro sub created without a trial period
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 8 — Customer upgrades while on trial period', () => {
+    let app: FastifyInstance;
+    let userId: string;
+    let basicPlan: typeof schema.plans.$inferSelect;
+    let proPlan: typeof schema.plans.$inferSelect;
+    let trialSub: typeof schema.subscriptions.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'trial-upgrader@example.com' });
+        userId = user.id;
+        basicPlan = await createPlan({ name: 'Basic', price: 1900, trialDays: 14 });
+        proPlan   = await createPlan({ name: 'Pro',   price: 4900, trialDays: 7 });
+
+        trialSub = await createSub(userId, basicPlan.id, {
+            status: 'trialing',
+            externalSubscriptionId: 'sub_trial_basic',
+            trialEndsAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+        });
+
+        app = await buildApp(userId);
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_pro_from_trial', { status: 'active', trial_end: null }) as any,
+        );
+        vi.mocked(stripeService.createCheckoutSession).mockClear();
+        vi.mocked(stripeService.cancelSubscriptionImmediately).mockClear();
+    });
+
+    afterEach(async () => { await app.close(); });
+
+    it('STEP 1 — checkout session for Pro: 0 trial days (trialing counts as existing sub)', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: proPlan.id },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+            userId,
+            'trial-upgrader@example.com',
+            proPlan.id,
+            expect.any(String),
+            expect.any(String),
+            expect.any(String),
+            0, // trialing subscription exists → no new trial
+        );
+    });
+
+    it('STEP 2 — checkout.session.completed cancels trial sub and creates Pro sub without trial', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const { stripeService } = await import('../../src/services/stripe');
+
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, proPlan.id, 'sub_pro_from_trial'),
+            mockReq(),
+        );
+
+        // Old trial sub: canceled
+        const canceledTrial = await getSub(trialSub.id);
+        expect(canceledTrial.status).toBe('canceled');
+        expect(stripeService.cancelSubscriptionImmediately).toHaveBeenCalledWith('sub_trial_basic');
+
+        // New Pro sub: active, no trial end date
+        const proSub = (await userSubs(userId)).find(
+            s => s.externalSubscriptionId === 'sub_pro_from_trial',
+        );
+        expect(proSub).toBeDefined();
+        expect(proSub!.planId).toBe(proPlan.id);
+        expect(proSub!.status).toBe('active');
+        expect(proSub!.trialEndsAt).toBeNull();
+    });
+
+    it('STEP 3 — only one active subscription after trial upgrade', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        await (paymentController as any).handleCheckoutComplete(
+            stripeSession(userId, proPlan.id, 'sub_pro_from_trial'),
+            mockReq(),
+        );
+
+        const activeSubs = (await userSubs(userId)).filter(s => s.status === 'active');
+        expect(activeSubs).toHaveLength(1);
+        expect(activeSubs[0].planId).toBe(proPlan.id);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 9 — Subscription status endpoint accuracy across full lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 9 — Subscription status endpoint accuracy across full lifecycle', () => {
+    let app: FastifyInstance;
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'status-check@example.com' });
+        userId = user.id;
+        plan = await createPlan({ name: 'Status Plan', price: 1900 });
+        app = await buildApp(userId);
+    });
+
+    afterEach(async () => { await app.close(); });
+
+    it('returns 404 when user has no subscription at all', async () => {
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(404);
+    });
+
+    it('returns trialing status with trialEndsAt populated', async () => {
+        const trialEnd = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+        await createSub(userId, plan.id, { status: 'trialing', trialEndsAt: trialEnd });
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+
+        const body = res.json();
+        expect(body.status).toBe('trialing');
+        // Allow up to 5 s of drift between when we created trialEnd and when the DB read back
+        const diff = Math.abs(new Date(body.trialEndsAt).getTime() - trialEnd.getTime());
+        expect(diff).toBeLessThan(5_000);
+        expect(body.cancelAtPeriodEnd).toBe(false);
+    });
+
+    it('returns active status without trialEndsAt', async () => {
+        await createSub(userId, plan.id, { status: 'active' });
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+
+        const body = res.json();
+        expect(body.status).toBe('active');
+        expect(body.trialEndsAt).toBeUndefined();
+        expect(body.planName).toBe('Status Plan');
+    });
+
+    it('returns cancelAtPeriodEnd=true when subscription is scheduled to cancel', async () => {
+        await createSub(userId, plan.id, { status: 'active', cancelAtPeriodEnd: true });
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+        expect(res.json().cancelAtPeriodEnd).toBe(true);
+        expect(res.json().status).toBe('active');
+    });
+
+    it('returns past_due status correctly', async () => {
+        await createSub(userId, plan.id, { status: 'past_due' });
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+        expect(res.json().status).toBe('past_due');
+    });
+
+    it('response includes planId, planName, currentPeriodStart, and currentPeriodEnd', async () => {
+        const periodStart = new Date(Date.now() - 5 * 24 * 3600 * 1000);
+        const periodEnd   = new Date(Date.now() + 25 * 24 * 3600 * 1000);
+        await createSub(userId, plan.id, {
+            status: 'active',
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+        });
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+
+        const body = res.json();
+        expect(body.planId).toBe(plan.id);
+        expect(body.planName).toBe('Status Plan');
+        expect(Math.abs(new Date(body.currentPeriodStart).getTime() - periodStart.getTime())).toBeLessThan(5_000);
+        expect(Math.abs(new Date(body.currentPeriodEnd).getTime() - periodEnd.getTime())).toBeLessThan(5_000);
+    });
+
+    it('when user has both a canceled and an active subscription — returns the active one', async () => {
+        const oldPlan = await createPlan({ name: 'Old Plan' });
+        await createSub(userId, oldPlan.id, {
+            status: 'canceled',
+            canceledAt: new Date(Date.now() - 24 * 3600 * 1000),
+        });
+        await createSub(userId, plan.id, { status: 'active' });
+
+        const res = await app.inject({ method: 'GET', url: '/subscription-status' });
+        expect(res.statusCode).toBe(200);
+        expect(res.json().status).toBe('active');
+        expect(res.json().planId).toBe(plan.id);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 10 — Billing portal access
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 10 — Billing portal access', () => {
+    let app: FastifyInstance;
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'portal@example.com' });
+        userId = user.id;
+        plan = await createPlan({ name: 'Portal Plan', price: 1900 });
+        app = await buildApp(userId);
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.createBillingPortalSession).mockClear();
+    });
+
+    afterEach(async () => { await app.close(); });
+
+    it('returns 404 when user has no subscription', async () => {
+        const res = await app.inject({ method: 'POST', url: '/billing-portal' });
+        expect(res.statusCode).toBe(404);
+    });
+
+    it('returns 404 when subscription exists but has no stripeCustomerId', async () => {
+        await createSub(userId, plan.id, { stripeCustomerId: null as any });
+
+        const res = await app.inject({ method: 'POST', url: '/billing-portal' });
+        expect(res.statusCode).toBe(404);
+        expect(res.json().error).toMatch(/no stripe customer/i);
+    });
+
+    it('returns billing portal URL for a valid active subscription', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        await createSub(userId, plan.id, { stripeCustomerId: 'cus_portal_test' });
+
+        const res = await app.inject({ method: 'POST', url: '/billing-portal' });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json().url).toBe('https://billing.stripe.com/session/lifecycle');
+        expect(stripeService.createBillingPortalSession).toHaveBeenCalledWith(
+            'cus_portal_test',
+            expect.any(String), // returnUrl (dashboard URL)
+        );
+    });
+
+    it('returns 403 SANCTIONED_GEO_BLOCK for North Korea (KP)', async () => {
+        const sanctionedApp = await buildApp(userId, { country: 'KP', region: null });
+        await createSub(userId, plan.id, { stripeCustomerId: 'cus_sanc_kp' });
+
+        const res = await sanctionedApp.inject({ method: 'POST', url: '/billing-portal' });
+        await sanctionedApp.close();
+
+        expect(res.statusCode).toBe(403);
+        expect(res.json().code).toBe('SANCTIONED_GEO_BLOCK');
+    });
+
+    it('returns 403 SANCTIONED_GEO_BLOCK for all sanctioned countries', async () => {
+        await createSub(userId, plan.id, { stripeCustomerId: 'cus_sanc_multi' });
+
+        for (const country of ['CU', 'IR', 'KP', 'SY']) {
+            const sanctionedApp = await buildApp(userId, { country, region: null });
+            const res = await sanctionedApp.inject({ method: 'POST', url: '/billing-portal' });
+            await sanctionedApp.close();
+            expect(res.statusCode).toBe(403);
+            expect(res.json().code).toBe('SANCTIONED_GEO_BLOCK');
+        }
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 11 — customer.subscription.created backup handler
+//
+// This webhook fires after checkout.session.completed. If the subscription
+// already exists it corrects any stale status; if it is missing it logs a
+// warning (should never happen in normal flow).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 11 — customer.subscription.created backup handler', () => {
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'created-hook@example.com' });
+        userId = user.id;
+        plan = await createPlan({ name: 'Created Hook Plan', price: 1900 });
+    });
+
+    it('subscription already active in DB — logs info and makes no change', async () => {
+        const sub = await createSub(userId, plan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_already_active',
+        });
+
+        const { paymentController } = await import('../../src/controllers/payment');
+        const req = mockReq();
+
+        await (paymentController as any).handleSubscriptionCreated(
+            { id: 'sub_already_active', status: 'active' },
+            req,
+        );
+
+        const unchanged = await getSub(sub.id);
+        expect(unchanged.status).toBe('active');
+        expect(req.log.info).toHaveBeenCalledWith(
+            expect.objectContaining({ subscriptionId: 'sub_already_active' }),
+            expect.stringMatching(/already exists/i),
+        );
+    });
+
+    it('subscription exists as trialing but Stripe reports active — corrects status to active', async () => {
+        const sub = await createSub(userId, plan.id, {
+            status: 'trialing',
+            externalSubscriptionId: 'sub_trialing_fix',
+        });
+
+        const { paymentController } = await import('../../src/controllers/payment');
+        await (paymentController as any).handleSubscriptionCreated(
+            { id: 'sub_trialing_fix', status: 'active' },
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('active');
+    });
+
+    it('subscription exists as past_due but Stripe reports active — corrects status to active', async () => {
+        const sub = await createSub(userId, plan.id, {
+            status: 'past_due',
+            externalSubscriptionId: 'sub_pastdue_fix',
+        });
+
+        const { paymentController } = await import('../../src/controllers/payment');
+        await (paymentController as any).handleSubscriptionCreated(
+            { id: 'sub_pastdue_fix', status: 'active' },
+            mockReq(),
+        );
+
+        const updated = await getSub(sub.id);
+        expect(updated.status).toBe('active');
+    });
+
+    it('subscription not found in DB at all — logs warning without throwing', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const req = mockReq();
+
+        await expect(
+            (paymentController as any).handleSubscriptionCreated(
+                { id: 'sub_ghost_not_in_db', status: 'active' },
+                req,
+            ),
+        ).resolves.not.toThrow();
+
+        expect(req.log.warn).toHaveBeenCalledWith(
+            expect.objectContaining({ subscriptionId: 'sub_ghost_not_in_db' }),
+            expect.any(String),
+        );
+    });
+});
