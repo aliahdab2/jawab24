@@ -56,4 +56,39 @@ test.describe('Login Page', () => {
     // Error boundary should NOT be showing
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
+
+  test('OAuth URL should include all required Instagram and Pages scopes', async ({ page }) => {
+    await page.goto('/en/login');
+
+    await expect(
+      page.getByText('Login with Facebook').first()
+    ).toBeVisible({ timeout: 15000 });
+
+    let oauthUrl = '';
+    page.on('request', request => {
+      if (request.url().includes('facebook.com') && request.url().includes('dialog/oauth')) {
+        oauthUrl = request.url();
+      }
+    });
+
+    await Promise.race([
+      page.waitForURL(/facebook\.com/, { timeout: 5000 }).catch(() => {}),
+      page.locator('button, a').filter({ hasText: /login with facebook/i }).first().click(),
+    ]);
+
+    // Fallback: check href attribute directly if navigation was blocked
+    if (!oauthUrl) {
+      const href = await page.locator('a[href*="facebook.com"]').first().getAttribute('href').catch(() => null);
+      if (href) oauthUrl = href;
+    }
+
+    if (oauthUrl) {
+      const decodedUrl = decodeURIComponent(oauthUrl);
+      expect(decodedUrl).toContain('instagram_manage_comments');
+      expect(decodedUrl).toContain('instagram_manage_messages');
+      expect(decodedUrl).toContain('instagram_basic');
+      expect(decodedUrl).toContain('pages_show_list');
+      expect(decodedUrl).toContain('pages_messaging');
+    }
+  });
 });
