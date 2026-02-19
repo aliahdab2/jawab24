@@ -604,7 +604,7 @@ const DashboardPage: NextPageWithLayout = () => {
         {/* Top Pages & Usage Column */}
         <div className="space-y-8">
           {/* Usage Card (Same as before) */}
-          {usage && (
+          {usage && usage.subscription && (
             <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-white relative group" padding="lg">
               <div className="absolute top-0 end-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-brand-500/10"></div>
 
