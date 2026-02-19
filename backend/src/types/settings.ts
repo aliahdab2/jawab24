@@ -16,7 +16,7 @@ export interface UserSettings {
     commentReplyMode: 'public' | 'private' | 'dual';
     commentsAutoReply: boolean;
     messagesAutoReply: boolean;
-    dualReplyNudge: string;
+    dualReplyNudge: string | null;
     businessHoursOnly: boolean;
     businessHoursStart: string;
     businessHoursEnd: string;

@@ -1,7 +1,7 @@
-import { render, screen } from '../test-utils';
+import { render, screen, waitFor } from '../test-utils';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import MessagesPage from '../../src/pages/messages';
-import { messagesApi } from '../../src/lib/api';
+import { messagesApi, pagesApi } from '../../src/lib/api';
 import { useAuthStore } from '../../src/lib/store';
 
 // Specific mocks can be overridden or added here if not covered by test-utils
@@ -30,10 +30,13 @@ describe('MessagesPage', () => {
          pagination: { hasMore: false, nextCursor: null, limit: 50 }
        }
     });
+    (pagesApi.getAll as any).mockResolvedValue({ data: [] });
 
     render(<MessagesPage />);
 
-    expect(await screen.findByText('messages.emptyNeedsAction')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('messages.emptyNeedsAction')).toBeInTheDocument();
+    });
   });
 
   it('renders messages list', async () => {
@@ -58,6 +61,7 @@ describe('MessagesPage', () => {
          pagination: { hasMore: false, nextCursor: null, limit: 50 }
        }
     });
+    (pagesApi.getAll as any).mockResolvedValue({ data: [] });
 
     render(<MessagesPage />);
 

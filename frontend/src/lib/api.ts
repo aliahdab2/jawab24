@@ -186,7 +186,7 @@ export const commentsApi = {
   getStats: () => api.get<CommentStats>('/comments/stats'),
   getByPost: (postId: string) => api.get(`/posts/${postId}/comments`),
   reply: (id: string, text: string) =>
-    api.post(`/comments/${id}/reply`, { text }),
+    api.post(`/comments/${id}/reply`, { replyText: text }),
   submitFeedback: (id: string, data: { feedback: 'positive' | 'negative'; reason?: string[]; source: string }) =>
     api.post(`/comments/${id}/feedback`, {
       helpful: data.feedback === 'positive',

@@ -109,7 +109,9 @@
       "Bash(npx next build)",
       "Bash(npx playwright test)",
       "Bash(bash /Users/aliahdab/Documents/AutoReply/scripts/pre-deploy-check.sh)",
-      "Bash(ssh -i ~/.ssh/id_jawab24_deploy root@91.99.95.196 \"cat /var/www/jawab24/current_env 2>/dev/null; ls /var/www/jawab24/*.env 2>/dev/null; docker inspect jawab24-backend-green --format ''{{.Config.Env}}'' 2>/dev/null | tr '','' ''\\\\n'' | grep FACEBOOK_TOKEN || echo ''not set in green container''\")"
+      "Bash(ssh -i ~/.ssh/id_jawab24_deploy root@91.99.95.196 \"cat /var/www/jawab24/current_env 2>/dev/null; ls /var/www/jawab24/*.env 2>/dev/null; docker inspect jawab24-backend-green --format ''{{.Config.Env}}'' 2>/dev/null | tr '','' ''\\\\n'' | grep FACEBOOK_TOKEN || echo ''not set in green container''\")",
+      "Bash(wc:*)",
+      "Bash(lsof:*)"
     ]
   }
 }

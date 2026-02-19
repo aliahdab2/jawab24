@@ -83,6 +83,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -129,6 +134,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -198,6 +208,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -247,6 +262,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -293,6 +313,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -341,6 +366,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -413,6 +443,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -463,6 +498,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -603,6 +643,10 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -725,6 +769,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
@@ -773,6 +822,11 @@ describe('Settings Routes', () => {
                 awayMessage: null,
                 greetingMessage: null,
                 replyDelay: 0,
+                timezone: 'UTC',
+                commentEscalationMinutes: 60,
+                messageEscalationMinutes: 60,
+                handoffPauseDurationMinutes: 30,
+                notificationsEnabled: true,
             });
 
             const response = await app.inject({
