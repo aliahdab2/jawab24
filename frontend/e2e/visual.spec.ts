@@ -126,8 +126,9 @@ test.describe('RTL Layout — Arabic', () => {
 
   test('bottom nav is mirrored in Arabic (RTL)', async ({ page }) => {
     await page.goto('/ar/dashboard');
-    await page.waitForSelector('nav', { timeout: 15000 });
-    const nav = page.locator('nav').last(); // bottom nav
+    await page.waitForSelector('h1', { timeout: 15000 });
+    await page.waitForTimeout(500);
+    const nav = page.locator('.bottom-nav-position');
     await expect(nav).toHaveScreenshot('bottom-nav-ar.png', SNAP_OPTS);
   });
 });
@@ -189,9 +190,10 @@ test.describe('Landscape Mode', () => {
 
   test('dashboard bottom nav has side padding (landscape:px-6) in landscape', async ({ page }) => {
     await page.goto('/en/dashboard');
-    await page.waitForSelector('nav', { timeout: 15000 });
+    await page.waitForSelector('h1', { timeout: 15000 });
     await page.waitForTimeout(500);
-    await expect(page).toHaveScreenshot('dashboard-en-landscape-nav.png', SNAP_OPTS);
+    const nav = page.locator('.bottom-nav-position');
+    await expect(nav).toHaveScreenshot('dashboard-en-landscape-nav.png', SNAP_OPTS);
   });
 
   test('comments page is scrollable and not cut off in landscape', async ({ page }) => {
