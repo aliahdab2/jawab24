@@ -116,7 +116,9 @@
       "Bash(git -C /Users/aliahdab/Documents/AutoReply add frontend/e2e/visual.spec.ts-snapshots/)",
       "Bash(git -C /Users/aliahdab/Documents/AutoReply status --short frontend/e2e/)",
       "Bash(npx @lhci/cli:*)",
-      "Bash(npx @lhci/cli@0.15.1 collect:*)"
+      "Bash(npx @lhci/cli@0.15.1 collect:*)",
+      "Bash(sort ls frontend/e2e/*.spec.ts)",
+      "Bash(comm:*)"
     ]
   }
 }
