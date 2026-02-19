@@ -3,6 +3,11 @@ import { db } from '../db';
 import { settings } from '../db/schema';
 import { UserSettings, UpdateSettingsDTO } from '../types';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
+import { redis } from '../lib/redis';
+
+/** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
+const SETTINGS_CACHE_TTL = 300;
+const cacheKey = (userId: string) => `settings:v1:${userId}`;
 
 // Re-export for backward compatibility
 export type { UserSettings, UpdateSettingsDTO };
@@ -15,27 +20,52 @@ const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
 
 export class SettingsService {
     /**
-     * Get user settings, creating default settings if they don't exist
+     * Get user settings, creating default settings if they don't exist.
+     * Results are cached in Redis for 5 minutes to reduce DB load on the
+     * reply pipeline, which calls this multiple times per incoming message.
      */
     async getSettings(userId: string): Promise<UserSettings> {
+        const key = cacheKey(userId);
+
+        // Try cache first — fail open so a Redis outage never blocks replies
+        try {
+            const cached = await redis.get(key);
+            if (cached) {
+                return JSON.parse(cached) as UserSettings;
+            }
+        } catch {
+            // Redis unavailable — fall through to DB
+        }
+
+        // DB fetch
         const existing = await db.query.settings.findFirst({
             where: eq(settings.userId, userId),
         });
 
+        let result: UserSettings;
         if (existing) {
-            return this.mapToUserSettings(existing);
+            result = this.mapToUserSettings(existing);
+        } else {
+            // Create default settings
+            const [newSettings] = await db.insert(settings)
+                .values({ userId })
+                .returning();
+            result = this.mapToUserSettings(newSettings);
         }
 
-        // Create default settings
-        const [newSettings] = await db.insert(settings)
-            .values({ userId })
-            .returning();
+        // Populate cache — fail open
+        try {
+            await redis.set(key, JSON.stringify(result), 'EX', SETTINGS_CACHE_TTL);
+        } catch {
+            // Redis unavailable — continue without caching
+        }
 
-        return this.mapToUserSettings(newSettings);
+        return result;
     }
 
     /**
-     * Update user settings
+     * Update user settings and invalidate the cache so the next read
+     * reflects the change immediately.
      */
     async updateSettings(userId: string, updates: UpdateSettingsDTO): Promise<UserSettings> {
         // Ensure settings exist
@@ -49,7 +79,16 @@ export class SettingsService {
             .where(eq(settings.userId, userId))
             .returning();
 
-        return this.mapToUserSettings(updated);
+        const result = this.mapToUserSettings(updated);
+
+        // Invalidate cache — next getSettings call will re-populate from DB
+        try {
+            await redis.del(cacheKey(userId));
+        } catch {
+            // Redis unavailable — cache expires naturally via TTL
+        }
+
+        return result;
     }
 
     /**

@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { settingsService } from '../../src/services/settings';
 
+// Mock Redis — default to cache miss so existing DB-path tests are unaffected
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+        del: vi.fn().mockResolvedValue(1),
+    },
+}));
+
 // Mock database
 vi.mock('../../src/db', () => ({
     db: {
@@ -439,6 +448,118 @@ describe('Settings Service', () => {
             const result = await settingsService.getReplyDelay('user_123');
 
             expect(result).toBe(0);
+        });
+    });
+
+    // =========================================================
+    // Redis cache behaviour
+    // =========================================================
+
+    describe('Redis caching', () => {
+        it('getSettings: returns cached value and skips DB when cache hits', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { db } = await import('../../src/db');
+
+            const cached = { ...baseSettings, replyDelay: 99 };
+            vi.mocked(redis.get).mockResolvedValueOnce(JSON.stringify(cached));
+
+            const result = await settingsService.getSettings('user_123');
+
+            expect(result.replyDelay).toBe(99);
+            // DB should NOT have been queried
+            expect(db.query.settings.findFirst).not.toHaveBeenCalled();
+        });
+
+        it('getSettings: populates cache after a DB miss', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { db } = await import('../../src/db');
+
+            vi.mocked(redis.get).mockResolvedValueOnce(null); // cache miss
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+
+            await settingsService.getSettings('user_123');
+
+            expect(redis.set).toHaveBeenCalledWith(
+                'settings:v1:user_123',
+                expect.any(String),
+                'EX',
+                300,
+            );
+        });
+
+        it('getSettings: uses correct cache key per user', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { db } = await import('../../src/db');
+
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+
+            await settingsService.getSettings('user_abc');
+
+            expect(redis.get).toHaveBeenCalledWith('settings:v1:user_abc');
+        });
+
+        it('updateSettings: invalidates cache after update', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { db } = await import('../../src/db');
+
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+
+            const mockReturning = vi.fn().mockResolvedValue([{ ...baseSettings, dashboardLanguage: 'en' }]);
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            await settingsService.updateSettings('user_123', { dashboardLanguage: 'en' });
+
+            expect(redis.del).toHaveBeenCalledWith('settings:v1:user_123');
+        });
+
+        it('getSettings: falls back to DB when Redis.get throws', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { db } = await import('../../src/db');
+
+            vi.mocked(redis.get).mockRejectedValueOnce(new Error('Redis down'));
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+
+            const result = await settingsService.getSettings('user_123');
+
+            // Should still return correct data from DB despite Redis failure
+            expect(result.userId).toBe('user_123');
+            expect(db.query.settings.findFirst).toHaveBeenCalled();
+        });
+
+        it('getSettings: continues without error when Redis.set throws', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { db } = await import('../../src/db');
+
+            vi.mocked(redis.get).mockResolvedValueOnce(null);
+            vi.mocked(redis.set).mockRejectedValueOnce(new Error('Redis down'));
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+
+            // Should not throw even though cache write failed
+            const result = await settingsService.getSettings('user_123');
+            expect(result.userId).toBe('user_123');
+        });
+
+        it('updateSettings: continues without error when Redis.del throws', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { db } = await import('../../src/db');
+
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(redis.del).mockRejectedValueOnce(new Error('Redis down'));
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
+
+            const mockReturning = vi.fn().mockResolvedValue([baseSettings]);
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            // Should not throw even though cache invalidation failed
+            await expect(
+                settingsService.updateSettings('user_123', { dashboardLanguage: 'en' }),
+            ).resolves.not.toThrow();
         });
     });
 });
