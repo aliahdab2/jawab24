@@ -6,17 +6,6 @@ import { z } from 'zod';
  */
 
 // ==========================================
-// AI Generation
-// ==========================================
-export const AiGenerateSchema = z.object({
-    comment: z.string()
-        .min(1, 'Comment cannot be empty')
-        .max(5000, 'Comment must be less than 5000 characters'),
-    language: z.enum(['ar', 'en']).optional(),
-    context: z.string().max(1000, 'Context must be less than 1000 characters').optional(),
-});
-
-// ==========================================
 // Templates
 // ==========================================
 export const CreateTemplateSchema = z.object({
@@ -49,15 +38,6 @@ export const CreateRuleSchema = z.object({
 export const UpdateRuleSchema = CreateRuleSchema.partial();
 
 // ==========================================
-// Pages
-// ==========================================
-export const UpdatePageSchema = z.object({
-    autoReplyEnabled: z.boolean().optional(),
-    instagramAutoReplyEnabled: z.boolean().optional(),
-    knowledgeBase: z.string().max(10000, 'Knowledge base must be less than 10000 characters').optional(),
-});
-
-// ==========================================
 // Settings
 // ==========================================
 export const UpdateSettingsSchema = z.object({
@@ -88,24 +68,6 @@ export const UpdateSettingsSchema = z.object({
     commentEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     messageEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     notificationsEnabled: z.boolean().optional(),
-});
-
-// ==========================================
-// Payment
-// ==========================================
-export const CreateCheckoutSessionSchema = z.object({
-    planId: z.string().uuid('Invalid plan ID'),
-    successUrl: z.string().url('Invalid success URL').optional(),
-    cancelUrl: z.string().url('Invalid cancel URL').optional(),
-});
-
-// ==========================================
-// Webhook
-// ==========================================
-export const WebhookVerificationSchema = z.object({
-    'hub.mode': z.literal('subscribe'),
-    'hub.verify_token': z.string(),
-    'hub.challenge': z.string(),
 });
 
 // ==========================================
@@ -174,14 +136,11 @@ export function validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): { succ
 // ==========================================
 // Export Types
 // ==========================================
-export type AiGenerateInput = z.infer<typeof AiGenerateSchema>;
 export type CreateTemplateInput = z.infer<typeof CreateTemplateSchema>;
 export type UpdateTemplateInput = z.infer<typeof UpdateTemplateSchema>;
 export type CreateRuleInput = z.infer<typeof CreateRuleSchema>;
 export type UpdateRuleInput = z.infer<typeof UpdateRuleSchema>;
-export type UpdatePageInput = z.infer<typeof UpdatePageSchema>;
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsSchema>;
-export type CreateCheckoutSessionInput = z.infer<typeof CreateCheckoutSessionSchema>;
 export type PaginationInput = z.infer<typeof PaginationSchema>;
 export type CreatePlanInput = z.infer<typeof CreatePlanSchema>;
 export type UpdatePlanInput = z.infer<typeof UpdatePlanSchema>;

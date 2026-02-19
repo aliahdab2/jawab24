@@ -347,21 +347,21 @@ fi
 echo ""
 echo "5️⃣  Running tests..."
 
-echo "   Testing Backend (Unit)..."
-if npm test --workspace=jawab24-backend -- --run > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ Backend tests pass${NC}"
+echo "   Testing Backend (Unit + coverage thresholds)..."
+if npm run test:coverage --workspace=jawab24-backend > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Backend tests pass (coverage thresholds met)${NC}"
 else
-    echo -e "${RED}   ❌ Backend tests failed!${NC}"
-    npm test --workspace=jawab24-backend -- --run
+    echo -e "${RED}   ❌ Backend tests or coverage thresholds failed!${NC}"
+    npm run test:coverage --workspace=jawab24-backend
     exit 1
 fi
 
-echo "   Testing Frontend (Unit)..."
-if npm test --workspace=jawab24-frontend -- --run > /dev/null 2>&1; then
-    echo -e "${GREEN}   ✅ Frontend unit tests pass${NC}"
+echo "   Testing Frontend (Unit + coverage thresholds)..."
+if npm run test:coverage --workspace=jawab24-frontend > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Frontend unit tests pass (coverage thresholds met)${NC}"
 else
-    echo -e "${RED}   ❌ Frontend unit tests failed!${NC}"
-    npm test --workspace=jawab24-frontend -- --run
+    echo -e "${RED}   ❌ Frontend tests or coverage thresholds failed!${NC}"
+    npm run test:coverage --workspace=jawab24-frontend
     exit 1
 fi
 

@@ -26,5 +26,3 @@ redis.on('connect', () => {
     // eslint-disable-next-line no-console
     console.log('✅ Redis Client Connected');
 });
-
-export default redis;

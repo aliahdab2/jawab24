@@ -219,7 +219,7 @@ export function MessageDetailModal({
               {sendError}
             </div>
           )}
-          <div className="flex items-end gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Pause/Resume — icon button in input row to avoid accidental keyboard taps */}
             <button
               onClick={() => {
