@@ -46,6 +46,13 @@ vi.mock('@/components/layout/DashboardLayout', () => ({
     DashboardLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
+vi.mock('@capacitor/core', () => ({
+    Capacitor: {
+        isNativePlatform: vi.fn().mockReturnValue(false),
+        getPlatform: vi.fn().mockReturnValue('web'),
+    },
+}));
+
 vi.mock('@/components/ui', () => ({
     Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     Button: ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => (
@@ -57,6 +64,15 @@ vi.mock('@/components/ui', () => ({
     EmptyState: ({ title }: { title: string }) => <div>{title}</div>,
     PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
     PageSkeleton: () => <div data-testid="page-skeleton">Loading...</div>,
+    ConfirmationModal: ({ isOpen, onClose, onConfirm, title, message, confirmText }: any) =>
+        isOpen ? (
+            <div data-testid="confirmation-modal">
+                <p>{title}</p>
+                <p>{message}</p>
+                <button onClick={onClose}>common.cancel</button>
+                <button onClick={onConfirm}>{confirmText}</button>
+            </div>
+        ) : null,
 }));
 
 vi.mock('@/components/knowledge-base/KnowledgeBaseModal', () => ({

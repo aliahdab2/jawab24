@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import PagesPage from '@/pages/pages';
 
 // Mock @/lib/api
@@ -18,6 +18,14 @@ vi.mock('@/lib/api', () => ({
     post: (url: string, data: any) => mockApiPost(url, data),
     patch: (url: string, data: any) => mockApiPatch(url, data),
     put: (url: string, data: any) => mockApiPut(url, data),
+  },
+}));
+
+// Mock Capacitor
+vi.mock('@capacitor/core', () => ({
+  Capacitor: {
+    isNativePlatform: vi.fn().mockReturnValue(false),
+    getPlatform: vi.fn().mockReturnValue('web'),
   },
 }));
 
@@ -145,10 +153,9 @@ describe('PagesPage', () => {
     });
   });
 
-  describe('Sync Functionality', () => {
-    it('should call sync API when connect button is clicked', async () => {
+  describe('Connect Page Flow', () => {
+    it('should show confirmation dialog when connect button is clicked', async () => {
       mockPagesApiGetAll.mockResolvedValue({ data: [] });
-      mockApiPost.mockResolvedValue({ data: { success: true } });
 
       render(<PagesPage />);
 
@@ -156,15 +163,40 @@ describe('PagesPage', () => {
         expect(screen.getByText('pages.noPages')).toBeInTheDocument();
       });
 
-      // Click connect button in header or empty state
+      // Click connect button
+      const connectButtons = screen.getAllByText('pages.connectPage');
+      fireEvent.click(connectButtons[0]);
+
+      // Confirmation dialog should appear
+      await waitFor(() => {
+        expect(screen.getByText('pages.connectDialogTitle')).toBeInTheDocument();
+        expect(screen.getByText('pages.connectDialogBody')).toBeInTheDocument();
+        expect(screen.getByText('pages.continueToFacebook')).toBeInTheDocument();
+      });
+    });
+
+    it('should close dialog when cancel is clicked', async () => {
+      mockPagesApiGetAll.mockResolvedValue({ data: [] });
+
+      render(<PagesPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('pages.noPages')).toBeInTheDocument();
+      });
+
+      // Open dialog
       const connectButtons = screen.getAllByText('pages.connectPage');
       fireEvent.click(connectButtons[0]);
 
       await waitFor(() => {
-        expect(mockApiPost).toHaveBeenCalledWith(
-          '/pages/sync',
-          expect.objectContaining({ accessToken: 'test-fb-token' })
-        );
+        expect(screen.getByText('pages.connectDialogTitle')).toBeInTheDocument();
+      });
+
+      // Click cancel
+      fireEvent.click(screen.getByText('common.cancel'));
+
+      await waitFor(() => {
+        expect(screen.queryByText('pages.connectDialogTitle')).not.toBeInTheDocument();
       });
     });
   });

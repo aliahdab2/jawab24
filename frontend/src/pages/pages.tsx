@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
@@ -30,6 +30,7 @@ const PagesPage: NextPageWithLayout = () => {
   const [editingPage, setEditingPage] = useState<Page | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showConnectDialog, setShowConnectDialog] = useState(false);
 
   // ESC key handled inside KnowledgeBaseModal
 
@@ -234,23 +235,13 @@ const PagesPage: NextPageWithLayout = () => {
         title={t('pages.title')}
         description={t('pages.description')}
         action={
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleReconnectFacebook}
-              disabled={syncing}
-              className="text-sm font-medium text-surface-400 hover:text-brand-600 transition-colors disabled:opacity-40 whitespace-nowrap"
-            >
-              {t('pages.missingPage' as TranslationKey)}{' '}
-              <span className="underline underline-offset-2">{t('pages.reconnectFacebook' as TranslationKey)}</span>
-            </button>
-            <Button
-              onClick={handleSync}
-              disabled={syncing}
-              icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
-            >
-              {syncing ? t('pages.syncing' as TranslationKey) : t('pages.connectPage')}
-            </Button>
-          </div>
+          <Button
+            onClick={() => setShowConnectDialog(true)}
+            disabled={syncing}
+            icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
+          >
+            {syncing ? t('pages.syncing' as TranslationKey) : t('pages.connectPage')}
+          </Button>
         }
       />
 
@@ -427,7 +418,7 @@ const PagesPage: NextPageWithLayout = () => {
             title={t('pages.noPages')}
             description={t('pages.noPagesDesc')}
             action={
-              <Button onClick={handleSync}>
+              <Button onClick={() => setShowConnectDialog(true)}>
                 {t('pages.connectPage')}
               </Button>
             }
@@ -460,6 +451,20 @@ const PagesPage: NextPageWithLayout = () => {
           saved={saved}
         />
       )}
+
+      {/* Connect Page confirmation dialog */}
+      <ConfirmationModal
+        isOpen={showConnectDialog}
+        onClose={() => setShowConnectDialog(false)}
+        onConfirm={() => {
+          setShowConnectDialog(false);
+          handleReconnectFacebook();
+        }}
+        title={t('pages.connectDialogTitle' as TranslationKey)}
+        message={t('pages.connectDialogBody' as TranslationKey)}
+        confirmText={t('pages.continueToFacebook' as TranslationKey)}
+        variant="info"
+      />
     </>
   );
 };
