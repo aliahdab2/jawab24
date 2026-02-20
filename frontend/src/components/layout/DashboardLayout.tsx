@@ -186,7 +186,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           <div 
             className={clsx(
               // Padding around content - top padding is minimal since sticky header is in document flow
-              'px-4 pb-4 pt-6 px-safe-landscape landscape:pt-2 md:px-8 md:pb-8 md:pt-8 lg:px-16 lg:pb-16 lg:pt-14 xl:px-20 max-w-[1600px] mx-auto',
+              'px-4 pb-4 pt-5 px-safe-landscape max-lg:landscape:pt-2 md:px-8 md:pb-8 md:pt-8 lg:px-16 lg:pb-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
               isCleanLayout ? 'pb-12' : 'lg:pb-12'
             )}
             style={{
