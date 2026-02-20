@@ -4,7 +4,13 @@ import { config } from '../config';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { messagesService } from '../services/messages';
 import { pagesService } from '../services/pages';
+import { authService } from '../services/auth';
+import { auditLog } from '../services/auditLog';
+import { captureError } from '../utils/sentryHelpers';
 import { Logger, noopLogger, createRequestLogger } from '../types';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Verify Facebook/Instagram webhook signature using X-Hub-Signature-256 header.
@@ -437,6 +443,103 @@ export class WebhookController {
                 error: String(error) 
             });
         }
+    }
+
+    // ================== GDPR Data Deletion ==================
+
+    /**
+     * Facebook Data Deletion Callback
+     * POST /webhook/data-deletion
+     *
+     * Required by Facebook Platform for GDPR compliance.
+     * When a user requests data deletion through Facebook's Data Download
+     * Center, this endpoint processes the request and returns a confirmation
+     * URL and a tracking code.
+     *
+     * Reference: https://developers.facebook.com/docs/development/create-an-app/app-dashboard/data-deletion-callback
+     */
+    async handleDataDeletion(request: FastifyRequest, reply: FastifyReply) {
+        this.setLogger(request);
+
+        // Verify the signed_request (same HMAC as webhook but base64url-encoded)
+        const { signed_request } = request.body as { signed_request?: string };
+        if (!signed_request) {
+            return reply.status(400).send({ error: 'Missing signed_request' });
+        }
+
+        const [encodedSig, encodedPayload] = signed_request.split('.');
+        if (!encodedSig || !encodedPayload) {
+            return reply.status(400).send({ error: 'Malformed signed_request' });
+        }
+
+        // Verify HMAC-SHA256 signature
+        const expectedSig = crypto
+            .createHmac('sha256', config.facebook.appSecret)
+            .update(encodedPayload)
+            .digest('base64url');
+
+        // Use timingSafeEqual with equal-length buffers
+        const sigBuf = Buffer.from(encodedSig, 'base64url');
+        const expectedBuf = Buffer.from(expectedSig, 'base64url');
+        if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+            return reply.status(403).send({ error: 'Invalid signature' });
+        }
+
+        // Decode payload
+        let payload: { user_id?: string };
+        try {
+            payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf-8'));
+        } catch {
+            return reply.status(400).send({ error: 'Invalid payload' });
+        }
+
+        const facebookUserId = payload.user_id;
+        if (!facebookUserId) {
+            return reply.status(400).send({ error: 'Missing user_id in payload' });
+        }
+
+        // Generate a unique confirmation code
+        const confirmationCode = crypto.randomBytes(16).toString('hex');
+
+        this.log().info('Facebook data deletion request received', { facebookUserId, confirmationCode });
+
+        // Process deletion asynchronously (don't block the response)
+        (async () => {
+            try {
+                // Find user by Facebook ID
+                const [user] = await db.select({ id: users.id })
+                    .from(users)
+                    .where(eq(users.facebookId, facebookUserId))
+                    .limit(1);
+
+                if (user) {
+                    await auditLog({
+                        userId: user.id,
+                        action: 'account.fb_data_deletion',
+                        entityType: 'user',
+                        metadata: { facebookUserId, confirmationCode },
+                    });
+
+                    await authService.deleteUser(user.id);
+                    this.log().info('User data deleted per Facebook request', { userId: user.id, confirmationCode });
+                } else {
+                    this.log().info('No user found for Facebook data deletion request', { facebookUserId });
+                }
+            } catch (error) {
+                captureError(error, 'Facebook data deletion failed', {
+                    tags: { service: 'gdpr', source: 'facebook' },
+                    extra: { facebookUserId, confirmationCode },
+                });
+            }
+        })();
+
+        // Return the required response format per Facebook's docs
+        const statusUrl = `https://${config.shopify?.hostName || 'jawab24.com'}/gdpr/deletion-status?code=${confirmationCode}`;
+
+        return reply.send({
+            url: statusUrl,
+            confirmation_code: confirmationCode,
+        });
     }
 }
 

@@ -20,6 +20,16 @@ vi.mock('../../src/services/shopifyCrypto', () => ({
     decrypt: vi.fn().mockReturnValue('decrypted_access_token'),
 }));
 
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        scan: vi.fn().mockResolvedValue(['0', []]),
+        del: vi.fn().mockResolvedValue(0),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+        quit: vi.fn(),
+    },
+}));
+
 // Use vi.hoisted for shared mock state
 const { mockSelectLimit, mockInsertReturning, mockUpdateWhere, mockDeleteReturning } = vi.hoisted(() => {
     const mockSelectLimit = vi.fn().mockResolvedValue([]);

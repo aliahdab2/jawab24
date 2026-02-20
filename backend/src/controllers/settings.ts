@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
 import { translateText } from '../services/translation';
 import type { UpdateSettingsDTO } from '../types/settings';
+import { auditLog } from '../services/auditLog';
 
 /** Default messages restored when the source language is cleared (matches frontend i18n) */
 const DEFAULT_MESSAGES: Record<string, Record<string, string>> = {
@@ -198,6 +199,15 @@ export class SettingsController {
             }
 
             const settings = await settingsService.updateSettings(userId, updates);
+
+            // Audit trail (fire-and-forget)
+            auditLog({
+                userId,
+                action: 'settings.updated',
+                entityType: 'settings',
+                metadata: { fields: Object.keys(updates) },
+            });
+
             return reply.send(settings);
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error updating settings');

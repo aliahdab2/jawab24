@@ -1,11 +1,12 @@
 import crypto from 'crypto';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq, and, lt, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { shopifyStores, shopifyProducts, pages, pendingShopifyInstalls } from '../db/schema';
 import { config } from '../config';
 import { encrypt, decrypt } from './shopifyCrypto';
 import type { ShopifyStore, ShopifyProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
+import { redis } from '../lib/redis';
 
 const SHOPIFY_API_VERSION = '2024-10';
 const KB_MAX_CHARS = 1500; // Must match ai-worker's KB_MAX_CHARS
@@ -406,7 +407,89 @@ export async function syncProducts(storeId: string) {
         updatedAt: new Date(),
     }).where(eq(shopifyStores.id, storeId));
 
+    // Invalidate AI caches so stale product info is never served
+    await invalidateCachesForStore(storeId);
+
     return { synced: products.length };
+}
+
+/**
+ * Invalidate AI reply caches for all pages linked to a Shopify store.
+ *
+ * When product data changes (price, stock, availability), any cached AI
+ * replies that reference the old data become stale. This function:
+ *
+ *   1. Bumps `kbActiveVersion` on every linked page — the semantic cache
+ *      scopes lookups by version, so old entries are automatically skipped.
+ *   2. Flushes Redis exact-match AI cache keys for each affected page —
+ *      these are keyed as `cache:ai_reply:<sha256(text:lang:pageId)>`, and
+ *      we use SCAN to delete them by pageId prefix pattern.
+ *   3. Deletes semantic_cache rows for affected pages to reclaim storage.
+ *
+ * All operations are best-effort: failures are logged but never block the
+ * sync pipeline.
+ */
+export async function invalidateCachesForStore(storeId: string): Promise<number> {
+    try {
+        // Find all pages linked to this store
+        const linkedPages = await db.select({ id: pages.id })
+            .from(pages)
+            .where(eq(pages.shopifyStoreId, storeId));
+
+        if (linkedPages.length === 0) return 0;
+
+        const pageIds = linkedPages.map(p => p.id);
+
+        // 1. Bump kbActiveVersion on linked pages (invalidates semantic cache lookups)
+        for (const pageId of pageIds) {
+            await db.update(pages).set({
+                kbActiveVersion: sql`COALESCE(${pages.kbActiveVersion}, 1) + 1`,
+                updatedAt: new Date(),
+            }).where(eq(pages.id, pageId));
+        }
+
+        // 2. Flush Redis exact AI cache entries for affected pages
+        // Keys follow pattern: cache:ai_reply:<sha256> but the hash includes pageId,
+        // so we cannot pattern-match by pageId. Instead we use a scan on the full
+        // keyspace and check a secondary index, OR we accept a full flush of
+        // ai_reply keys (safe because they're just a performance cache with 30-day TTL).
+        // For correctness > performance, flush all ai_reply keys when product data changes.
+        try {
+            let cursor = '0';
+            const keysToDelete: string[] = [];
+            do {
+                const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:ai_reply:*', 'COUNT', 200);
+                cursor = nextCursor;
+                keysToDelete.push(...keys);
+            } while (cursor !== '0');
+
+            if (keysToDelete.length > 0) {
+                // Delete in batches of 100 to avoid blocking Redis
+                for (let i = 0; i < keysToDelete.length; i += 100) {
+                    await redis.del(...keysToDelete.slice(i, i + 100));
+                }
+            }
+        } catch {
+            // Redis unavailable — semantic cache version bump is sufficient
+        }
+
+        // 3. Delete semantic_cache rows for affected pages (reclaim storage)
+        for (const pageId of pageIds) {
+            try {
+                await db.execute(sql`DELETE FROM semantic_cache WHERE page_id = ${pageId}`);
+            } catch {
+                // Table may not exist in test environments
+            }
+        }
+
+        return pageIds.length;
+    } catch (error) {
+        captureError(error, 'Shopify cache invalidation failed', {
+            tags: { service: 'shopify' },
+            extra: { storeId },
+        });
+        return 0;
+    }
 }
 
 /**
@@ -442,6 +525,9 @@ export async function syncPolicies(storeId: string) {
         policiesSummary,
         updatedAt: new Date(),
     }).where(eq(shopifyStores.id, storeId));
+
+    // Invalidate AI caches so stale policy info is never served
+    await invalidateCachesForStore(storeId);
 
     return { policiesSummary };
 }

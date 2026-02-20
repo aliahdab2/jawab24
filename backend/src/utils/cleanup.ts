@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { aiCache, logs, usageLogs } from '../db/schema';
+import { aiCache, logs, usageLogs, refreshTokens } from '../db/schema';
 import { lt, sql } from 'drizzle-orm';
 import { Logger, noopLogger, CleanupResult } from '../types';
 
@@ -118,6 +118,42 @@ export async function cleanupUsageLogs(daysOld: number = 180, batchSize: number 
 }
 
 /**
+ * Clean up expired or revoked refresh tokens
+ * Removes tokens that are expired or were revoked more than 7 days ago
+ */
+export async function cleanupRefreshTokens(): Promise<CleanupResult> {
+    const now = new Date();
+    let totalDeleted = 0;
+
+    try {
+        // Delete expired tokens
+        const expired = await db
+            .delete(refreshTokens)
+            .where(lt(refreshTokens.expiresAt, now))
+            .returning({ id: refreshTokens.id });
+        totalDeleted += expired.length;
+
+        // Delete tokens revoked more than 7 days ago
+        // revokedAt is non-null when revoked (no boolean column)
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 7);
+        const revoked = await db
+            .delete(refreshTokens)
+            .where(lt(refreshTokens.revokedAt, cutoff))
+            .returning({ id: refreshTokens.id });
+        totalDeleted += revoked.length;
+
+        return { table: 'refresh_tokens', deletedCount: totalDeleted };
+    } catch (error) {
+        return {
+            table: 'refresh_tokens',
+            deletedCount: totalDeleted,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        };
+    }
+}
+
+/**
  * Run all cleanup tasks
  * @param options - Configuration options including retention days
  * @param logger - Optional logger (pass Fastify request.log for proper logging)
@@ -142,6 +178,7 @@ export async function runAllCleanupTasks(
         cleanupAiCache(aiCacheDays),
         cleanupLogs(logsDays),
         cleanupUsageLogs(usageLogsDays),
+        cleanupRefreshTokens(),
     ]);
     
     // Log results

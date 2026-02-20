@@ -12,6 +12,7 @@ vi.mock('../../src/db/schema', () => ({
     aiCache: { id: 'ai_cache.id', lastUsedAt: 'ai_cache.last_used_at', createdAt: 'ai_cache.created_at' },
     logs: { id: 'logs.id', createdAt: 'logs.created_at' },
     usageLogs: { id: 'usage_logs.id', createdAt: 'usage_logs.created_at' },
+    refreshTokens: { id: 'refresh_tokens.id', expiresAt: 'refresh_tokens.expires_at', revokedAt: 'refresh_tokens.revoked_at' },
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -19,7 +20,7 @@ vi.mock('drizzle-orm', () => ({
     sql: vi.fn((strings: TemplateStringsArray, ...values: any[]) => ({ strings, values })),
 }));
 
-import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
+import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
 import { db } from '../../src/db';
 
 function mockDeleteChain(batches: Array<Array<{ id: string }>>) {
@@ -89,6 +90,26 @@ describe('cleanup utilities', () => {
         });
     });
 
+    describe('cleanupRefreshTokens', () => {
+        it('should delete expired and revoked tokens', async () => {
+            mockDeleteChain([[{ id: 'rt-1' }], []]);
+
+            const result = await cleanupRefreshTokens();
+            expect(result.table).toBe('refresh_tokens');
+            expect(result.deletedCount).toBe(1);
+        });
+
+        it('should handle errors gracefully', async () => {
+            vi.mocked(db.delete).mockImplementation(() => {
+                throw new Error('connection refused');
+            });
+
+            const result = await cleanupRefreshTokens();
+            expect(result.error).toBe('connection refused');
+            expect(result.deletedCount).toBe(0);
+        });
+    });
+
     describe('runAllCleanupTasks', () => {
         it('should run all cleanup tasks and log results', async () => {
             mockDeleteChain([[]]);
@@ -96,7 +117,7 @@ describe('cleanup utilities', () => {
 
             const results = await runAllCleanupTasks(undefined, logger);
 
-            expect(results).toHaveLength(3);
+            expect(results).toHaveLength(4);
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting'));
         });
 

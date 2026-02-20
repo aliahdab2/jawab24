@@ -17,4 +17,9 @@ export default async function webhookRoutes(fastify: FastifyInstance) {
     fastify.post('/webhook', {
         schema: { tags: ['Webhooks'], summary: 'Handle incoming Facebook webhook events' },
     }, (req, reply) => webhookController.handleWebhook(req, reply));
+
+    // Facebook Data Deletion Callback (GDPR compliance)
+    fastify.post('/webhook/data-deletion', {
+        schema: { tags: ['Webhooks'], summary: 'Facebook data deletion callback (GDPR)' },
+    }, (req, reply) => webhookController.handleDataDeletion(req, reply));
 }

@@ -15,12 +15,15 @@ const txProxy = {
     delete: () => mockDelete(),
 };
 
+const mockExecute = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('../../src/db', () => ({
     db: {
         select: () => mockSelect(),
         insert: () => mockInsert(),
         update: () => mockUpdate(),
         delete: () => mockDelete(),
+        execute: (...args: unknown[]) => mockExecute(...args),
         transaction: async (fn: (tx: typeof txProxy) => Promise<void>) => fn(txProxy),
     },
 }));
@@ -40,12 +43,24 @@ vi.mock('../../src/db/schema', () => ({
         id: 'id',
         userId: 'user_id',
         shopifyStoreId: 'shopify_store_id',
+        kbActiveVersion: 'kb_active_version',
+    },
+    pendingShopifyInstalls: {
+        id: 'id',
+        shopDomain: 'shop_domain',
+        status: 'status',
+        expiresAt: 'expires_at',
     },
 }));
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...args) => ({ op: 'and', args })),
+    lt: vi.fn((field, value) => ({ field, value, op: 'lt' })),
+    sql: Object.assign(
+        (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values, _tag: 'sql' }),
+        { raw: (s: string) => ({ raw: s, _tag: 'sql_raw' }) },
+    ),
 }));
 
 const mockCaptureError = vi.fn();
@@ -64,6 +79,19 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
+// Mock Redis
+const mockRedisScan = vi.fn().mockResolvedValue(['0', []]);
+const mockRedisDel = vi.fn().mockResolvedValue(0);
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        scan: (...args: unknown[]) => mockRedisScan(...args),
+        del: (...args: unknown[]) => mockRedisDel(...args),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+        quit: vi.fn(),
+    },
+}));
+
 // Mock global fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -78,6 +106,7 @@ import {
     exchangeCodeForToken,
     registerWebhooks,
     linkStoreToPage,
+    invalidateCachesForStore,
 } from '../../src/services/shopify';
 
 describe('Shopify Service', () => {
@@ -467,6 +496,127 @@ describe('Shopify Service', () => {
             const result = mapToShopifyStore(row as any);
             expect(result.productCount).toBe(0);
             expect(result.isActive).toBe(true);
+        });
+    });
+
+    // --- invalidateCachesForStore ---
+
+    describe('invalidateCachesForStore', () => {
+        /** Helper: mock db.select().from(pages).where(...) to return linked pages */
+        function mockLinkedPages(pageIds: string[]) {
+            mockSelect.mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(pageIds.map(id => ({ id }))),
+                }),
+            });
+        }
+
+        it('should return 0 and skip work when no pages linked', async () => {
+            mockLinkedPages([]);
+
+            const result = await invalidateCachesForStore('store-1');
+
+            expect(result).toBe(0);
+            expect(mockUpdate).not.toHaveBeenCalled();
+            expect(mockRedisScan).not.toHaveBeenCalled();
+        });
+
+        it('should bump kbActiveVersion on all linked pages', async () => {
+            mockLinkedPages(['page-1', 'page-2']);
+
+            const mockSet = vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+            });
+            mockUpdate.mockReturnValue({ set: mockSet });
+
+            await invalidateCachesForStore('store-1');
+
+            // Should have called update for each page
+            expect(mockUpdate).toHaveBeenCalledTimes(2);
+        });
+
+        it('should scan and delete Redis ai_reply cache keys', async () => {
+            mockLinkedPages(['page-1']);
+
+            mockUpdate.mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(undefined),
+                }),
+            });
+
+            // Simulate Redis scan returning some cache keys
+            mockRedisScan
+                .mockResolvedValueOnce(['42', ['cache:ai_reply:abc123', 'cache:ai_reply:def456']])
+                .mockResolvedValueOnce(['0', ['cache:ai_reply:ghi789']]);
+
+            await invalidateCachesForStore('store-1');
+
+            // Should have called scan with the right pattern
+            expect(mockRedisScan).toHaveBeenCalledWith('0', 'MATCH', 'cache:ai_reply:*', 'COUNT', 200);
+            // Should have deleted all found keys
+            expect(mockRedisDel).toHaveBeenCalledWith('cache:ai_reply:abc123', 'cache:ai_reply:def456', 'cache:ai_reply:ghi789');
+        });
+
+        it('should delete semantic_cache rows for affected pages', async () => {
+            mockLinkedPages(['page-1', 'page-2']);
+
+            mockUpdate.mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(undefined),
+                }),
+            });
+
+            await invalidateCachesForStore('store-1');
+
+            // Should have called db.execute for each page (semantic_cache delete)
+            expect(mockExecute).toHaveBeenCalledTimes(2);
+        });
+
+        it('should return the count of invalidated pages', async () => {
+            mockLinkedPages(['page-1', 'page-2', 'page-3']);
+
+            mockUpdate.mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(undefined),
+                }),
+            });
+
+            const result = await invalidateCachesForStore('store-1');
+            expect(result).toBe(3);
+        });
+
+        it('should not throw when Redis is unavailable', async () => {
+            mockLinkedPages(['page-1']);
+
+            mockUpdate.mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(undefined),
+                }),
+            });
+
+            // Simulate Redis failure
+            mockRedisScan.mockRejectedValueOnce(new Error('Connection refused'));
+
+            // Should not throw — best-effort
+            const result = await invalidateCachesForStore('store-1');
+            expect(result).toBe(1);
+        });
+
+        it('should capture error and return 0 when DB query fails', async () => {
+            mockSelect.mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockRejectedValue(new Error('DB down')),
+                }),
+            });
+
+            const result = await invalidateCachesForStore('store-1');
+
+            expect(result).toBe(0);
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                'Shopify cache invalidation failed',
+                expect.objectContaining({ tags: { service: 'shopify' } }),
+            );
         });
     });
 });

@@ -11,6 +11,7 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { auditLog } from '../services/auditLog';
 
 export class AuthController {
     /**
@@ -276,6 +277,9 @@ export class AuthController {
         }
 
         try {
+            // Audit BEFORE deletion (user row will be gone after)
+            await auditLog({ userId, action: 'account.deleted', entityType: 'user' });
+
             await authService.deleteUser(userId);
             return reply.send({ success: true, message: 'Account deleted successfully' });
         } catch (error: unknown) {

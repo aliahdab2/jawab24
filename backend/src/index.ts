@@ -243,6 +243,22 @@ const start = async () => {
     // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
     startEscalationCron();
 
+    // Database cleanup scheduler — runs every 6 hours to enforce data retention
+    // AI cache: 30 days, logs: 90 days, usage logs: 180 days
+    const { runAllCleanupTasks } = await import("./utils/cleanup");
+    const cleanupLogger = createRequestLogger(server.log);
+    setInterval(() => {
+      runAllCleanupTasks(undefined, cleanupLogger).catch(err => {
+        server.log.error(err, 'Scheduled cleanup failed');
+      });
+    }, 6 * 60 * 60 * 1000); // Every 6 hours
+    // Run once on startup (delayed 60s to let DB connections settle)
+    setTimeout(() => {
+      runAllCleanupTasks(undefined, cleanupLogger).catch(err => {
+        server.log.error(err, 'Initial cleanup failed');
+      });
+    }, 60_000);
+
     // Verify app-level webhook subscription with Facebook on startup
     // This ensures the callback URL is verified after every deploy
     facebookService.setLogger(createRequestLogger(server.log));
