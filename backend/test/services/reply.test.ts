@@ -78,6 +78,10 @@ vi.mock('../../src/config', () => ({
         facebook: {
             graphApiVersion: 'v18.0',
         },
+        circuitBreaker: {
+            failureThreshold: 5,
+            openDurationSeconds: 30,
+        },
     },
 }));
 
