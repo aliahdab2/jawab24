@@ -31,7 +31,7 @@ export function NotificationsCard({ settings, setSettings }: SettingsCardProps) 
             <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.reminders.desc')}</p>
           </div>
         </div>
-        <Toggle enabled={settings.notificationsEnabled} onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })} />
+        <Toggle enabled={settings.notificationsEnabled} onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })} aria-label={t('settings.reminders.title')} />
       </div>
       <div
         className={clsx(

@@ -6,7 +6,7 @@ import { useRouter } from 'next/router';
 import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Input, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
 import { useAuthStore } from '@/lib/store';
 import { commentsApi, pagesApi, type CommentsQueryParams } from '@/lib/api';
@@ -279,30 +279,29 @@ const CommentsPage: NextPageWithLayout = () => {
 
   const emptyStateContent = useMemo(() => {
     if (debouncedSearch) {
-      return { icon: Search, iconClass: 'text-surface-300', bgClass: 'bg-surface-100', title: t('common.noData'), subtitle: t('comments.tryDifferentSearch' as TranslationKey), showConnectCta: false };
+      return { icon: Search, variant: 'search' as const, title: t('common.noData'), subtitle: t('comments.tryDifferentSearch' as TranslationKey), showConnectCta: false };
     }
     if (pages.length === 0) {
-      return { icon: MessageSquare, iconClass: 'text-surface-300', bgClass: 'bg-surface-100', title: t('comments.noComments'), subtitle: t('comments.noCommentsDesc' as TranslationKey), showConnectCta: true };
+      return { icon: MessageSquare, variant: 'empty' as const, title: t('comments.noComments'), subtitle: t('comments.noCommentsDesc' as TranslationKey), showConnectCta: true };
     }
-    const config: Record<FilterType, { icon: React.ElementType; iconClass: string; bgClass: string; title: string; subtitle: string }> = {
+    const config: Record<FilterType, { icon: React.ElementType; variant: 'success' | 'empty'; title: string; subtitle: string; iconColorClass?: string; iconBgClass?: string }> = {
       needs_action: {
         icon: CheckCircle,
-        iconClass: 'text-emerald-400',
-        bgClass: 'bg-emerald-50',
+        variant: 'success',
         title: t('comments.emptyNeedsAction' as TranslationKey),
         subtitle: t('comments.emptyNeedsActionSub' as TranslationKey),
       },
       all: {
         icon: MessageSquare,
-        iconClass: 'text-surface-300',
-        bgClass: 'bg-surface-100',
+        variant: 'empty',
         title: t('comments.emptyAll' as TranslationKey),
         subtitle: t('comments.emptyAllSub' as TranslationKey),
       },
       auto_replied: {
         icon: Sparkles,
-        iconClass: 'text-violet-400',
-        bgClass: 'bg-violet-50',
+        variant: 'empty',
+        iconColorClass: 'text-violet-500',
+        iconBgClass: 'bg-violet-50',
         title: t('comments.emptyAutoReplied' as TranslationKey),
         subtitle: t('comments.emptyAutoRepliedSub' as TranslationKey),
       },
@@ -495,25 +494,22 @@ const CommentsPage: NextPageWithLayout = () => {
           </div>
         </>
       ) : (
-        <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl" padding="lg">
-          <div className="py-10 text-center">
-            <div className={`w-20 h-20 rounded-2xl ${emptyStateContent.bgClass} flex items-center justify-center mx-auto mb-5`}>
-              <emptyStateContent.icon className={`w-10 h-10 ${emptyStateContent.iconClass}`} />
-            </div>
-            <p className="text-base font-semibold text-surface-700">{emptyStateContent.title}</p>
-            {emptyStateContent.subtitle && (
-              <p className="text-sm text-surface-400 mt-1">{emptyStateContent.subtitle}</p>
-            )}
-            {emptyStateContent.showConnectCta && (
-              <div className="mt-5">
-                <Link href="/pages">
-                  <Button variant="primary" size="sm" icon={<ExternalLink className="w-[18px] h-[18px]" />}>
-                    {t('comments.connectPage')}
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </div>
+        <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
+          <EmptyState
+            icon={emptyStateContent.icon}
+            variant={emptyStateContent.variant}
+            title={emptyStateContent.title}
+            description={emptyStateContent.subtitle || ''}
+            iconColorClass={'iconColorClass' in emptyStateContent ? emptyStateContent.iconColorClass : undefined}
+            iconBgClass={'iconBgClass' in emptyStateContent ? emptyStateContent.iconBgClass : undefined}
+            action={emptyStateContent.showConnectCta ? (
+              <Link href="/pages">
+                <Button variant="primary" size="sm" icon={<ExternalLink className="w-[18px] h-[18px]" />}>
+                  {t('comments.connectPage')}
+                </Button>
+              </Link>
+            ) : undefined}
+          />
         </Card>
       )}
 

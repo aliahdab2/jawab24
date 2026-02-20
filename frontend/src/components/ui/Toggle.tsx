@@ -6,9 +6,10 @@ interface ToggleProps {
   onChange: (enabled: boolean) => void;
   disabled?: boolean;
   size?: 'sm' | 'md';
+  'aria-label'?: string;
 }
 
-export function Toggle({ enabled, onChange, disabled = false, size = 'md' }: ToggleProps) {
+export function Toggle({ enabled, onChange, disabled = false, size = 'md', 'aria-label': ariaLabel }: ToggleProps) {
   const { language } = useTranslation();
   const isRTL = language === 'ar';
   
@@ -45,6 +46,7 @@ export function Toggle({ enabled, onChange, disabled = false, size = 'md' }: Tog
       type="button"
       role="switch"
       aria-checked={enabled}
+      aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange(!enabled)}
       className={clsx(

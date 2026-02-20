@@ -30,6 +30,7 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
           type="number"
           min={0}
           max={60}
+          aria-label={t('settings.replyDelay.title')}
           value={settings.replyDelay}
           onChange={(e) => setSettings({ ...settings, replyDelay: Math.min(60, Math.max(0, parseInt(e.target.value) || 0)) })}
           className="w-full py-4 landscape:py-2.5 text-center font-bold text-lg border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"

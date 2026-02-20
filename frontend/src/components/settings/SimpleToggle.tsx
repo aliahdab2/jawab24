@@ -29,7 +29,7 @@ export function SimpleToggle({
           <p className="text-xs font-medium text-surface-500 leading-relaxed">{description}</p>
         </div>
       </div>
-      <Toggle enabled={enabled} onChange={onChange} />
+      <Toggle enabled={enabled} onChange={onChange} aria-label={title} />
     </div>
   );
 }

@@ -36,6 +36,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
         <Toggle
           enabled={settings.commentsAutoReply}
           onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
+          aria-label={t('settings.commentsAutoReply')}
         />
       </div>
 
@@ -46,13 +47,14 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
           !settings.commentsAutoReply && "opacity-50 pointer-events-none"
         )}
       >
-          <h4 className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-3 landscape:mb-2 flex items-center gap-2">
+          <h4 id="comment-reply-mode-label" className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-3 landscape:mb-2 flex items-center gap-2">
             <Settings2 className="w-4 h-4" />
             {t('settings.commentReplyMode.question')}
           </h4>
 
           <Select
             value={settings.commentReplyMode}
+            aria-labelledby="comment-reply-mode-label"
             onChange={(value) => {
               setSettings({ ...settings, commentReplyMode: value });
               setDiagramKey(prev => prev + 1);
@@ -149,6 +151,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
               <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
               <p className="text-xs text-brand-700 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
               <Input
+                aria-label={t('settings.dualReplyConfigTitle.improved')}
                 value={(() => {
                   const currentLang = settings.dashboardLanguage;
                   const value = settings.dualReplyNudgeMulti?.[currentLang] || '';

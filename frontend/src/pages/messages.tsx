@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Button, Input, PageHeader, PageSkeleton } from '@/components/ui';
+import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import { MessageCard, type Conversation } from '@/components/messages';
 import { MessageDetailModal } from '@/components/messages/MessageDetailModal';
 import { useAuthStore } from '@/lib/store';
@@ -427,27 +427,26 @@ const MessagesPage: NextPageWithLayout = () => {
 
   const emptyStateContent = useMemo(() => {
     if (searchQuery) {
-      return { icon: Search, iconClass: 'text-surface-300', bgClass: 'bg-surface-100', title: t('common.noData'), subtitle: '' };
+      return { icon: Search, variant: 'search' as const, title: t('common.noData'), subtitle: '' };
     }
-    const config: Record<FilterType, { icon: React.ElementType; iconClass: string; bgClass: string; title: string; subtitle: string }> = {
+    const config: Record<FilterType, { icon: React.ElementType; variant: 'success' | 'empty'; title: string; subtitle: string; iconColorClass?: string; iconBgClass?: string }> = {
       needs_action: {
         icon: CheckCircle,
-        iconClass: 'text-emerald-400',
-        bgClass: 'bg-emerald-50',
+        variant: 'success',
         title: t('messages.emptyNeedsAction' as TranslationKey),
         subtitle: t('messages.emptyNeedsActionSub' as TranslationKey),
       },
       all: {
         icon: MessageCircle,
-        iconClass: 'text-surface-300',
-        bgClass: 'bg-surface-100',
+        variant: 'empty',
         title: t('messages.emptyAll' as TranslationKey),
         subtitle: t('messages.emptyAllSub' as TranslationKey),
       },
       auto_replied: {
         icon: Sparkles,
-        iconClass: 'text-violet-400',
-        bgClass: 'bg-violet-50',
+        variant: 'empty',
+        iconColorClass: 'text-violet-500',
+        iconBgClass: 'bg-violet-50',
         title: t('messages.emptyAutoReplied' as TranslationKey),
         subtitle: t('messages.emptyAutoRepliedSub' as TranslationKey),
       },
@@ -608,16 +607,15 @@ const MessagesPage: NextPageWithLayout = () => {
           </div>
         </>
       ) : (
-        <div className="rounded-2xl bg-white shadow-md shadow-surface-200/20 p-6 sm:p-10">
-          <div className="py-6 sm:py-10 text-center">
-            <div className={`w-20 h-20 rounded-2xl ${emptyStateContent.bgClass} flex items-center justify-center mx-auto mb-5`}>
-              <emptyStateContent.icon className={`w-10 h-10 ${emptyStateContent.iconClass}`} />
-            </div>
-            <p className="text-base font-semibold text-surface-700">{emptyStateContent.title}</p>
-            {emptyStateContent.subtitle && (
-              <p className="text-sm text-surface-400 mt-1">{emptyStateContent.subtitle}</p>
-            )}
-          </div>
+        <div className="rounded-2xl bg-white shadow-md shadow-surface-200/20">
+          <EmptyState
+            icon={emptyStateContent.icon}
+            variant={emptyStateContent.variant}
+            title={emptyStateContent.title}
+            description={emptyStateContent.subtitle || ''}
+            iconColorClass={emptyStateContent.iconColorClass}
+            iconBgClass={emptyStateContent.iconBgClass}
+          />
         </div>
       )}
 

@@ -593,8 +593,17 @@
   50% { transform: translateY(-0.5rem); }
 }
 
+@keyframes empty-state-icon {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
 .animate-fade-in {
   animation: fade-in 0.3s ease-out forwards;
+}
+
+.animate-empty-state-icon {
+  animation: empty-state-icon 2s ease-in-out infinite;
 }
 
 .animate-bounce-subtle {

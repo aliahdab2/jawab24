@@ -6,7 +6,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { templatesApi, rulesApi } from '@/lib/api';
 import { extractArrayData } from '@/lib/api-utils';
-import { BookTemplate, Plus } from 'lucide-react';
+import { FileText, Plus } from 'lucide-react';
 import { TemplateCard } from '@/components/templates';
 import type { Template, Rule } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
@@ -170,18 +170,16 @@ const TemplatesPage: NextPageWithLayout = () => {
           ))}
         </div>
       ) : (
-        <Card>
+        <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
           <EmptyState
-            icon={BookTemplate}
+            icon={FileText}
             title={t('templates.noTemplates')}
             description={t('templates.noTemplatesDesc')}
             action={
-              <div className="hidden sm:block">
               <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
                 {t('templates.addTemplate')}
               </Button>
-            </div>
-          }
+            }
           />
         </Card>
       )}

@@ -1,30 +1,80 @@
 import React from 'react';
 import { LucideIcon } from 'lucide-react';
+import clsx from 'clsx';
+
+type EmptyStateVariant = 'empty' | 'success' | 'search';
 
 interface EmptyStateProps {
   icon: LucideIcon;
   title: string;
   description: string;
   action?: React.ReactNode;
+  secondaryAction?: React.ReactNode;
+  variant?: EmptyStateVariant;
+  iconColorClass?: string;
+  iconBgClass?: string;
 }
 
-export function EmptyState({ icon: Icon, title, description, action }: EmptyStateProps) {
+const variantStyles: Record<EmptyStateVariant, { iconBg: string; iconColor: string }> = {
+  empty: {
+    iconBg: 'bg-brand-50',
+    iconColor: 'text-brand-600',
+  },
+  success: {
+    iconBg: 'bg-emerald-50',
+    iconColor: 'text-emerald-500',
+  },
+  search: {
+    iconBg: 'bg-surface-100',
+    iconColor: 'text-surface-400',
+  },
+};
+
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  secondaryAction,
+  variant = 'empty',
+  iconColorClass,
+  iconBgClass,
+}: EmptyStateProps) {
+  const styles = variantStyles[variant];
+  const bgClass = iconBgClass || styles.iconBg;
+  const colorClass = iconColorClass || styles.iconColor;
+
   return (
-    <div className="flex flex-col items-center justify-center py-4 sm:py-8 md:py-20 px-6 text-center animate-fade-in">
-      <div className="relative mb-4 sm:mb-6 md:mb-8">
-        <div className="absolute inset-0 bg-brand-500/20 rounded-full blur-[40px] animate-pulse"></div>
-        <div className="relative w-14 h-14 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-2xl md:rounded-[2rem] bg-gradient-to-br from-surface-50 to-white shadow-xl shadow-surface-200/50 flex items-center justify-center border border-white/50 transition-transform hover:scale-105 duration-500 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-tr from-brand-50 to-transparent opacity-50"></div>
-          <Icon className="w-5 h-5 sm:w-8 sm:h-8 md:w-10 md:h-10 text-brand-600 relative z-10" />
-        </div>
+    <div
+      role="region"
+      aria-label={title}
+      className="flex flex-col items-center justify-center py-8 sm:py-12 md:py-16 px-5 sm:px-6 text-center animate-fade-in"
+    >
+      <div className={clsx(
+        'w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center mb-5 sm:mb-6',
+        'animate-empty-state-icon',
+        bgClass,
+      )}>
+        <Icon className={clsx('w-7 h-7 sm:w-9 sm:h-9', colorClass)} aria-hidden="true" />
       </div>
-      <h3 className="text-lg sm:text-xl md:text-2xl font-display font-extrabold text-surface-900 mb-1 md:mb-3 tracking-tight">{title}</h3>
-      <p className="text-xs sm:text-base md:text-lg font-medium text-surface-500 max-w-sm mb-4 sm:mb-8 md:mb-10 leading-relaxed px-4 sm:px-0">
+
+      <h2 className="text-xl sm:text-2xl font-display font-bold text-surface-900 mb-2 sm:mb-3 tracking-tight">
+        {title}
+      </h2>
+
+      <p className="text-sm sm:text-base text-surface-500 max-w-md mb-6 sm:mb-8 leading-relaxed">
         {description}
       </p>
+
       {action && (
-        <div className="transition-transform hover:scale-105 active:scale-95 duration-300">
+        <div className="transition-transform hover:scale-[1.02] active:scale-95 duration-200">
           {action}
+        </div>
+      )}
+
+      {secondaryAction && (
+        <div className="mt-3 sm:mt-4 text-sm text-surface-400">
+          {secondaryAction}
         </div>
       )}
     </div>

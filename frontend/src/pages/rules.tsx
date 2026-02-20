@@ -265,18 +265,16 @@ const RulesPage: NextPageWithLayout = () => {
           ))}
         </div>
       ) : (
-        <Card className="border-none shadow-xl shadow-surface-200/50 rounded-3xl">
+        <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
           <EmptyState
             icon={Zap}
             title={t('rules.noRules')}
             description={t('rules.noRulesDesc')}
             action={
-              <div className="hidden sm:block">
               <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
                 {t('rules.addRule')}
               </Button>
-            </div>
-          }
+            }
           />
         </Card>
       )}

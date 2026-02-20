@@ -328,6 +328,67 @@ Lighthouse CI runs automatically on every push/PR via GitHub Actions. It audits 
 5. **Do not add `display:none` toggling** that causes layout reflow on public pages
 6. **Meta tags**: keep `<title>` and `<meta name="description">` on every public page for SEO score
 
+### 10. Accessibility (All Pages) - CRITICAL
+
+**Every page must be accessible — not just the public pages audited by Lighthouse CI.**
+
+Dashboard pages (`/settings`, `/comments`, `/messages`, etc.) are used daily and must meet WCAG 2.1 AA.
+
+**Rules:**
+
+1. **Every form input MUST have an associated `<label>`** (or `aria-label` / `aria-labelledby`)
+   ```tsx
+   // ❌ WRONG - input without label
+   <input type="text" placeholder="Search..." />
+
+   // ✅ CORRECT - visible label
+   <label htmlFor="search">{t('common.search')}</label>
+   <input id="search" type="text" />
+
+   // ✅ CORRECT - visually hidden label (for icon-only inputs)
+   <label htmlFor="search" className="sr-only">{t('common.search')}</label>
+   <input id="search" type="text" placeholder="Search..." />
+
+   // ✅ CORRECT - aria-label (when no visible label needed)
+   <input type="text" aria-label={t('common.search')} />
+   ```
+
+2. **Color contrast must meet 4.5:1** for normal text, 3:1 for large text
+   - Don't use `text-surface-300` or lighter on white backgrounds
+   - Placeholder text (`text-surface-400`) is exempt but keep it readable
+
+3. **Interactive elements must be keyboard accessible**
+   - Clickable `<div>`/`<span>` must have `role="button"`, `tabIndex={0}`, and `onKeyDown` handler
+   - Prefer `<button>` and `<a>` — they get keyboard support for free
+   - Custom toggles/switches need `role="switch"` and `aria-checked`
+
+4. **Heading hierarchy must be logical** — never skip levels
+   ```tsx
+   // ❌ WRONG - skips h2
+   <h1>Settings</h1>
+   <h3>Notifications</h3>
+
+   // ✅ CORRECT
+   <h1>Settings</h1>
+   <h2>Notifications</h2>
+   ```
+
+5. **Images and icons**
+   - Decorative icons: `aria-hidden="true"` (lucide icons in buttons with text)
+   - Meaningful icons: add `aria-label` or adjacent screen-reader text
+   - All `<img>` tags must have `alt` attribute
+
+6. **Dynamic content** — notify screen readers of updates
+   - Toast notifications: handled by `sonner` (already accessible)
+   - Loading states: use `aria-busy="true"` on the container
+   - Live regions: use `aria-live="polite"` for async updates
+
+**Before committing, spot-check accessibility:**
+```bash
+# Quick audit (works for any page, not just public ones)
+npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility --output=json --chrome-flags="--headless" | jq '.categories.accessibility.score'
+```
+
 ---
 
 ## 📁 Project Structure
@@ -610,3 +671,4 @@ refactor(css): consolidate safe areas
 - [ ] **Works in portrait mode** (bottom safe area visible)
 - [ ] **Works in landscape mode** (no bottom gap, side padding correct)
 - [ ] Modals don't overflow screen in landscape
+- [ ] **Accessibility**: form inputs have labels, interactive elements are keyboard accessible, heading hierarchy is logical

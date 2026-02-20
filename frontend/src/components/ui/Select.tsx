@@ -13,6 +13,8 @@ interface SelectProps {
   options: SelectOption[];
   placeholder?: string;
   label?: string;
+  'aria-label'?: string;
+  'aria-labelledby'?: string;
   className?: string;
   disabled?: boolean;
 }
@@ -21,7 +23,7 @@ interface SelectProps {
  * Custom Select component that works correctly on iOS
  * Native selects have issues inside modals on iOS Safari
  */
-export function Select({ value, onChange, options, placeholder, label, className, disabled = false }: SelectProps) {
+export function Select({ value, onChange, options, placeholder, label, 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy, className, disabled = false }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -79,6 +81,10 @@ export function Select({ value, onChange, options, placeholder, label, className
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
         className={clsx(
           "input !py-2.5 sm:!py-3 w-full text-start flex items-center justify-between gap-2",
           !selectedOption && "text-surface-400",

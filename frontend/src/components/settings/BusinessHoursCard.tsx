@@ -89,7 +89,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
             <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.businessHoursDesc')}</p>
           </div>
         </div>
-        <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} />
+        <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} aria-label={t('settings.businessHours')} />
       </div>
 
       <div
@@ -209,6 +209,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               return (
                 <textarea
                   disabled={!settings.businessHoursOnly}
+                  aria-label={t('settings.awayMessage.title')}
                   className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'rtl' : 'ltr'}`}
                   placeholder={placeholder}
                   dir={currentLang === 'ar' ? "rtl" : "ltr"}
