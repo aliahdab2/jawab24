@@ -69,7 +69,9 @@ export interface AiGenerateRequest {
     comment: string;
     language?: string;
     context?: {
+        userId?: string;
         pageId?: string;
+        pipeline?: string;
         postMessage?: string;
         pageName?: string;
         previousReplies?: string[];

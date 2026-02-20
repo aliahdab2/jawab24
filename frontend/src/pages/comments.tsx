@@ -405,14 +405,12 @@ const CommentsPage: NextPageWithLayout = () => {
               )}
             >
               {chip.label}
-              {chip.count > 0 && (
-                <span className={clsx(
-                  "text-xs tabular-nums",
-                  filter === chip.key ? "text-white/80" : "text-surface-400"
-                )}>
-                  ({chip.count.toLocaleString()})
-                </span>
-              )}
+              <span className={clsx(
+                "text-xs tabular-nums",
+                filter === chip.key ? "text-white/80" : "text-surface-400"
+              )}>
+                ({chip.count.toLocaleString()})
+              </span>
             </button>
           ))}
         </div>

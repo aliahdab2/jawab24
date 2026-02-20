@@ -2,7 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
 import { db } from '../db';
-import { aiCache } from '../db/schema';
+import { aiCache, aiUsageLog } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
@@ -11,6 +11,7 @@ import { normalizeArabic } from '@jawab24/shared';
 import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
+import { estimateCostUsd } from '../config/aiPricing';
 
 /** Lazy-init embedding provider for semantic cache (only when OPENAI_API_KEY exists) */
 let _embeddingProvider: OpenAIEmbeddingProvider | null = null;
@@ -176,9 +177,16 @@ export class AiService {
     async generateReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
         const pageId = request.context?.pageId;
 
+        const userId = request.context?.userId;
+        const pipeline = request.context?.pipeline;
+
         // Layer 1: Exact cache (scoped per page to avoid cross-page collisions)
         const cachedData = await this.checkCache(request.comment, request.language, pageId);
         if (cachedData) {
+            // Fire-and-forget: log zero-cost cache hit
+            if (userId) {
+                this.logUsage({ userId, pageId, model: config.ai.model || 'gpt-4o-mini', tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch(() => {});
+            }
             return {
                 reply: cachedData.reply,
                 language: request.language || 'auto',
@@ -256,6 +264,8 @@ export class AiService {
                     confidence?: string;
                     flags?: string[];
                     tokensUsed?: number;
+                    tokensIn?: number;
+                    tokensOut?: number;
                 }>(
                     `${config.ai.serviceUrl}/generate`,
                     {
@@ -279,6 +289,13 @@ export class AiService {
 
             // Save to exact cache
             await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, aiMetadata);
+
+            // Fire-and-forget: log real token usage
+            if (userId) {
+                const tokensIn = response.data.tokensIn ?? 0;
+                const tokensOut = response.data.tokensOut ?? 0;
+                this.logUsage({ userId, pageId, model: config.ai.model || 'gpt-4o-mini', tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
+            }
 
             // Save to semantic cache (fire-and-forget, non-blocking)
             if (pageId && queryEmbedding && detectedPreGptIntent && kbActiveVersion !== null && kbActiveVersion !== undefined) {
@@ -319,6 +336,41 @@ export class AiService {
                 cached: false,
                 model: 'fallback',
             };
+        }
+    }
+
+    /**
+     * Write one row to ai_usage_log. Fire-and-forget — on failure increments
+     * a Redis drop counter so we can alert without blocking the reply pipeline.
+     */
+    private async logUsage(opts: {
+        userId: string;
+        pageId?: string;
+        model: string;
+        tokensIn: number;
+        tokensOut: number;
+        cached: boolean;
+        pipeline?: string;
+    }): Promise<void> {
+        const costUsd = estimateCostUsd(opts.model, opts.tokensIn, opts.tokensOut);
+        try {
+            await db.insert(aiUsageLog).values({
+                userId: opts.userId,
+                pageId: opts.pageId ?? null,
+                model: opts.model,
+                tokensIn: opts.tokensIn,
+                tokensOut: opts.tokensOut,
+                costUsd,
+                cached: opts.cached,
+                pipeline: opts.pipeline ?? null,
+            });
+        } catch {
+            // Never block the reply pipeline — count dropped rows in Redis for alerting
+            try {
+                await redis.incr('metrics:pipeline:ai_usage_log.dropped');
+            } catch {
+                // Redis also unavailable — silently discard
+            }
         }
     }
 

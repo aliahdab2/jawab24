@@ -472,7 +472,7 @@ const PricingPage: NextPageWithLayout = () => {
                   </span>
                 </div>
 
-                {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
+                {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 ? (
                   <>
                     <div className="w-px h-4 bg-surface-200" />
                     <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-100 font-bold">
@@ -480,7 +480,17 @@ const PricingPage: NextPageWithLayout = () => {
                       {t('pricing.daysLeftCount', { count: usage.subscription.trialDaysRemaining })}
                     </div>
                   </>
-                )}
+                ) : usage.subscription.renewsAt ? (
+                  <>
+                    <div className="w-px h-4 bg-surface-200" />
+                    <div className="flex items-center gap-1.5 text-surface-500">
+                      <span className="font-medium">{t('subscription.renewsOn')}</span>
+                      <span className="font-bold text-surface-700">
+                        {new Date(usage.subscription.renewsAt).toLocaleDateString(locale === 'ar' ? 'ar-u-nu-latn' : 'en', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </div>
           </div>

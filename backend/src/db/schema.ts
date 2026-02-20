@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, real } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 
@@ -676,6 +676,28 @@ export const kbGaps = pgTable('kb_gaps', {
         unresolvedIdx: index('idx_kb_gaps_unresolved').on(table.pageId, table.resolved),
     };
 });
+
+// ============================================
+// AI COST TRACKING
+// ============================================
+
+// AI Usage Log — one row per LLM call or cache hit, for cost analytics
+export const aiUsageLog = pgTable('ai_usage_log', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),
+    model: varchar('model', { length: 100 }).notNull(),     // e.g. 'gpt-4o-mini'
+    tokensIn: integer('tokens_in').notNull().default(0),
+    tokensOut: integer('tokens_out').notNull().default(0),
+    costUsd: real('cost_usd').notNull().default(0),          // pre-computed from pricing table
+    cached: boolean('cached').notNull().default(false),      // true = cache hit (zero cost)
+    pipeline: varchar('pipeline', { length: 50 }),           // 'facebook_comment', 'instagram_message', …
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdIdx: index('idx_ai_usage_log_user_id').on(table.userId),
+    createdAtIdx: index('idx_ai_usage_log_created_at').on(table.createdAt),
+    userDateIdx: index('idx_ai_usage_log_user_date').on(table.userId, table.createdAt),
+}));
 
 // ============================================
 // ADMIN TABLES

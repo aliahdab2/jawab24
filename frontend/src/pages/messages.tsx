@@ -510,14 +510,12 @@ const MessagesPage: NextPageWithLayout = () => {
               )}
             >
               {chip.label}
-              {chip.count > 0 && (
-                <span className={clsx(
-                  "text-xs tabular-nums",
-                  filter === chip.key ? "text-white/80" : "text-surface-400"
-                )}>
-                  ({chip.count.toLocaleString()})
-                </span>
-              )}
+              <span className={clsx(
+                "text-xs tabular-nums",
+                filter === chip.key ? "text-white/80" : "text-surface-400"
+              )}>
+                ({chip.count.toLocaleString()})
+              </span>
             </button>
           ))}
         </div>
@@ -548,6 +546,16 @@ const MessagesPage: NextPageWithLayout = () => {
           )}
         </div>
       </div>
+
+      {/* Conversations count hint - clarifies that tab counts refer to messages, not conversations */}
+      {conversations.length > 0 && conversations.length !== allMessages.length && (
+        <p className="text-xs text-surface-400 mb-3 -mt-2">
+          {conversations.length === 1
+            ? t('messages.oneConversation' as TranslationKey)
+            : t('messages.conversationCount' as TranslationKey).replace('{count}', String(conversations.length))
+          }
+        </p>
+      )}
 
       {/* Conversations Grid */}
       {conversations.length > 0 ? (

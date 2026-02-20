@@ -62,6 +62,8 @@ export interface GenerateResponse {
     reply: string;
     language: string;
     tokensUsed?: number;
+    tokensIn?: number;
+    tokensOut?: number;
     intent?: string;
     confidence?: string;
     flags?: string[];
@@ -151,6 +153,8 @@ export class OpenAIService {
                 reply: parsed.reply || this.getFallbackReply(request).reply,
                 language: request.language || detectedLanguage,
                 tokensUsed: completion.usage?.total_tokens,
+                tokensIn: completion.usage?.prompt_tokens,
+                tokensOut: completion.usage?.completion_tokens,
                 intent: parsed.intent,
                 confidence: parsed.confidence,
                 flags: parsed.flags,

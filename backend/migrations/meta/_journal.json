@@ -218,6 +218,13 @@
       "when": 1771354045398,
       "tag": "0030_great_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1771551607211,
+      "tag": "0031_opposite_william_stryker",
+      "breakpoints": true
     }
   ]
 }

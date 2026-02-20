@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AiService } from '../../src/services/ai';
 import axios from 'axios';
 import { db } from '../../src/db';
+import * as sentry from '@sentry/node';
 
 // Mock axios
 vi.mock('axios');
@@ -455,46 +456,30 @@ describe('AI Service', () => {
         });
     });
     describe('Sentry spans', () => {
-        // getJobStatus tests call vi.resetModules() which corrupts the
-        // module-level db mock chain.  Fresh imports per-test avoid stale refs.
-        let freshService: InstanceType<typeof AiService>;
-        let sentryMod: typeof import('@sentry/node');
-
         beforeEach(async () => {
-            vi.resetModules();
-
-            // Re-wire db mock after module reset
-            const dbMod = await import('../../src/db');
-            vi.mocked(dbMod.db.select).mockReturnValue({
+            // Re-init db mock chain: getCacheStats tests set db.select to return a Promise
+            // directly from from() (no .where). Sentry span tests need the full chain.
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue([]),
                 }),
             } as any);
-
-            const { AiService: FreshAiService } = await import('../../src/services/ai');
-            sentryMod = await import('@sentry/node');
-            const { redis } = await import('../../src/lib/redis');
-
-            freshService = new FreshAiService();
-
-            // Default: cache miss → falls through to AI call
-            vi.mocked(redis.get).mockResolvedValue(null);
-            vi.mocked(axios.post).mockResolvedValue({ data: { reply: 'ok', language: 'en' } });
         });
 
         it('should instrument exact cache lookup with ai.cache.exact span', async () => {
-            await freshService.generateReply({ comment: 'test' });
+            await service.generateReply({ comment: 'test' });
 
-            expect(vi.mocked(sentryMod.startSpan)).toHaveBeenCalledWith(
+            expect(vi.mocked(sentry.startSpan)).toHaveBeenCalledWith(
                 expect.objectContaining({ name: 'ai.cache.exact' }),
                 expect.any(Function),
             );
         });
 
         it('should instrument AI worker HTTP call with ai.worker.http span', async () => {
-            await freshService.generateReply({ comment: 'test' });
+            await service.generateReply({ comment: 'test' });
 
-            expect(vi.mocked(sentryMod.startSpan)).toHaveBeenCalledWith(
+            expect(vi.mocked(sentry.startSpan)).toHaveBeenCalledWith(
                 expect.objectContaining({ name: 'ai.worker.http' }),
                 expect.any(Function),
             );

@@ -337,6 +337,18 @@ export default function LoginPage() {
                 </p>
               </div>
 
+              {/* Mobile marketing highlights - visible only on small screens */}
+              <div className="flex gap-3 lg:hidden mb-2">
+                {features.map((f, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-surface-50 border border-surface-100">
+                    <div className={`w-8 h-8 rounded-lg ${f.bg} flex items-center justify-center`}>
+                      <f.icon className={`w-4 h-4 ${f.color}`} />
+                    </div>
+                    <span className="text-[11px] font-bold text-surface-700 text-center leading-tight">{f.title}</span>
+                  </div>
+                ))}
+              </div>
+
               <div className="space-y-5">
                 {/* Shopify-first install banner */}
                 {router.query.shopify_pending === 'true' && (

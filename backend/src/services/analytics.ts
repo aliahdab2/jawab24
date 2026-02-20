@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { comments, posts, instagramComments, instagramMedia, messages, pages } from '../db/schema';
+import { comments, posts, instagramComments, instagramMedia, messages, pages, aiUsageLog } from '../db/schema';
 import { eq, and, gte, sql } from 'drizzle-orm';
 
 interface AnalyticsOverview {
@@ -253,6 +253,92 @@ export class AnalyticsService {
             .filter(s => s > 0 && isFinite(s));
     }
 
+    async getAiUsage(userId: string, days: number = 30): Promise<AiUsageReport> {
+        const now = new Date();
+        const since = new Date(now);
+        since.setDate(since.getDate() - days);
+
+        const rows = await db
+            .select({
+                model: aiUsageLog.model,
+                day: sql<string>`DATE(${aiUsageLog.createdAt})`,
+                calls: sql<number>`count(*)`,
+                llmCalls: sql<number>`count(*) filter (where ${aiUsageLog.cached} = false)`,
+                cacheHits: sql<number>`count(*) filter (where ${aiUsageLog.cached} = true)`,
+                tokensIn: sql<number>`COALESCE(SUM(${aiUsageLog.tokensIn}), 0)`,
+                tokensOut: sql<number>`COALESCE(SUM(${aiUsageLog.tokensOut}), 0)`,
+                costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+            })
+            .from(aiUsageLog)
+            .where(and(
+                eq(aiUsageLog.userId, userId),
+                gte(aiUsageLog.createdAt, since),
+            ))
+            .groupBy(aiUsageLog.model, sql`DATE(${aiUsageLog.createdAt})`)
+            .orderBy(sql`DATE(${aiUsageLog.createdAt})`);
+
+        const totals: AiUsageModelStats = { calls: 0, llmCalls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
+        const byModel: Record<string, AiUsageModelStats> = {};
+        const byDayMap: Record<string, { calls: number; tokensIn: number; tokensOut: number; costUsd: number }> = {};
+
+        for (const row of rows) {
+            const calls = Number(row.calls);
+            const llmCalls = Number(row.llmCalls);
+            const cacheHits = Number(row.cacheHits);
+            const tokensIn = Number(row.tokensIn);
+            const tokensOut = Number(row.tokensOut);
+            const costUsd = Number(row.costUsd);
+
+            totals.calls += calls;
+            totals.llmCalls += llmCalls;
+            totals.cacheHits += cacheHits;
+            totals.tokensIn += tokensIn;
+            totals.tokensOut += tokensOut;
+            totals.costUsd += costUsd;
+
+            if (!byModel[row.model]) {
+                byModel[row.model] = { calls: 0, llmCalls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
+            }
+            byModel[row.model].calls += calls;
+            byModel[row.model].llmCalls += llmCalls;
+            byModel[row.model].cacheHits += cacheHits;
+            byModel[row.model].tokensIn += tokensIn;
+            byModel[row.model].tokensOut += tokensOut;
+            byModel[row.model].costUsd += costUsd;
+
+            const day = String(row.day);
+            if (!byDayMap[day]) {
+                byDayMap[day] = { calls: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
+            }
+            byDayMap[day].calls += calls;
+            byDayMap[day].tokensIn += tokensIn;
+            byDayMap[day].tokensOut += tokensOut;
+            byDayMap[day].costUsd += costUsd;
+        }
+
+        // Round cost to avoid floating-point noise
+        const roundCost = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
+        totals.costUsd = roundCost(totals.costUsd);
+        for (const m of Object.keys(byModel)) {
+            byModel[m].costUsd = roundCost(byModel[m].costUsd);
+        }
+
+        const byDay = Object.entries(byDayMap)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, data]) => ({ date, ...data, costUsd: roundCost(data.costUsd) }));
+
+        return {
+            period: {
+                from: since.toISOString().split('T')[0],
+                to: now.toISOString().split('T')[0],
+                days,
+            },
+            totals,
+            byModel,
+            byDay,
+        };
+    }
+
     private computePercentiles(times: number[]): { avg: number | null; p50: number | null; p95: number | null } {
         if (times.length === 0) {
             return { avg: null, p50: null, p95: null };
@@ -265,6 +351,22 @@ export class AnalyticsService {
 
         return { avg, p50, p95 };
     }
+}
+
+interface AiUsageModelStats {
+    calls: number;
+    llmCalls: number;
+    cacheHits: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number;
+}
+
+interface AiUsageReport {
+    period: { from: string; to: string; days: number };
+    totals: AiUsageModelStats;
+    byModel: Record<string, AiUsageModelStats>;
+    byDay: Array<{ date: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
 }
 
 interface GroupedRow {

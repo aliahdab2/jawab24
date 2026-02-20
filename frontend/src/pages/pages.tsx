@@ -194,10 +194,13 @@ const PagesPage: NextPageWithLayout = () => {
     const diffMs = Date.now() - epochMs;
     const minutes = Math.floor(diffMs / 60000);
     if (minutes < 1) return t('time.justNow' as TranslationKey);
+    if (minutes === 1) return t('time.minuteAgo' as TranslationKey);
     if (minutes < 60) return t('time.minutesAgo').replace('{count}', String(minutes));
     const hours = Math.floor(minutes / 60);
+    if (hours === 1) return t('time.hourAgo' as TranslationKey);
     if (hours < 24) return t('time.hoursAgo').replace('{count}', String(hours));
     const days = Math.floor(hours / 24);
+    if (days === 1) return t('time.dayAgo' as TranslationKey);
     return t('time.daysAgo' as TranslationKey).replace('{count}', String(days));
   };
 
@@ -206,6 +209,7 @@ const PagesPage: NextPageWithLayout = () => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
     const days = Math.floor(diffMs / 86400000);
     if (days < 1) return t('pages.connectedToday' as TranslationKey);
+    if (days === 1) return t('pages.connectedDayAgo' as TranslationKey);
     return t('pages.connectedAgo' as TranslationKey).replace('{count}', String(days));
   };
 
@@ -267,7 +271,7 @@ const PagesPage: NextPageWithLayout = () => {
                     <FileText className="w-7 h-7" />
                   </div>
                   <div className="text-start min-w-0">
-                    <h3 className="text-lg font-bold text-surface-900 truncate">{page.name}</h3>
+                    <h3 className="text-lg font-bold text-surface-900 truncate" title={page.name}>{page.name}</h3>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
                         Facebook
@@ -303,7 +307,7 @@ const PagesPage: NextPageWithLayout = () => {
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
                           <FileText className="w-4 h-4" />
                         </div>
-                        <span className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
+                        <span className={`text-sm font-bold whitespace-nowrap ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
                       </div>
                       <div className="flex-shrink-0">
                         <Toggle
@@ -326,7 +330,7 @@ const PagesPage: NextPageWithLayout = () => {
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
                           <Instagram className="w-4 h-4" />
                         </div>
-                        <span className={`text-sm font-bold ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
+                        <span className={`text-sm font-bold whitespace-nowrap ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
                       </div>
                       <div className="flex-shrink-0">
                         {page.instagramUsername ? (

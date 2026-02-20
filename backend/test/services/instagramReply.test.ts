@@ -103,29 +103,29 @@ vi.mock('../../src/services/messages', () => ({
     },
 }));
 
-vi.mock('../../src/lib/pipelineMetrics', () => {
-    const counters: Record<string, number> = {};
-    return {
-        pipelineMetrics: {
-            record: vi.fn((pipeline: string, outcome: string) => {
-                const key = `${pipeline}.${outcome}`;
-                counters[key] = (counters[key] || 0) + 1;
-            }),
-            getMetrics: vi.fn(() => ({ counters: { ...counters }, since: new Date().toISOString() })),
-            reset: vi.fn(() => {
-                for (const k of Object.keys(counters)) delete counters[k];
-            }),
-        },
-        PipelineMetrics: class {},
-    };
-});
 
-vi.mock('drizzle-orm', () => ({
-    eq: vi.fn((...args: unknown[]) => args),
-    and: vi.fn((...args: unknown[]) => args),
-    desc: vi.fn((col: unknown) => col),
-    sql: vi.fn().mockReturnValue('sql-mock'),
+// In-memory pipelineMetrics mock (Redis-backed in production; use counters map in tests)
+const pipelineCounters = vi.hoisted<Record<string, number>>(() => ({}));
+vi.mock('../../src/lib/pipelineMetrics', () => ({
+    pipelineMetrics: {
+        record: vi.fn((pipeline: string, outcome: string) => {
+            const key = `${pipeline}.${outcome}`;
+            pipelineCounters[key] = (pipelineCounters[key] || 0) + 1;
+            return Promise.resolve();
+        }),
+        getMetrics: vi.fn(() => Promise.resolve({
+            since: '2025-01-01T00:00:00.000Z',
+            counters: { ...pipelineCounters },
+        })),
+        reset: vi.fn(() => {
+            Object.keys(pipelineCounters).forEach(k => delete pipelineCounters[k]);
+            return Promise.resolve();
+        }),
+    },
+    PipelineMetrics: class {},
 }));
+
+
 
 import { InstagramReplyService } from '../../src/services/instagramReply';
 import { pagesService } from '../../src/services/pages';
@@ -223,9 +223,9 @@ describe('InstagramReplyService', () => {
         vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
     }
 
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
-        pipelineMetrics.reset();
+        await pipelineMetrics.reset();
         service = new InstagramReplyService();
 
         // Default happy-path mocks
@@ -275,7 +275,7 @@ describe('InstagramReplyService', () => {
                 commentId: 'comment-1',
                 error: 'Page not found',
             });
-            expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_comment', 'page_not_found');
+            expect((await pipelineMetrics.getMetrics()).counters['instagram_comment.page_not_found']).toBe(1);
         });
 
         it('should return error when Instagram auto-reply is disabled', async () => {
@@ -291,7 +291,7 @@ describe('InstagramReplyService', () => {
                 commentId: 'comment-1',
                 error: 'Auto-reply disabled for this page',
             });
-            expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_comment', 'auto_reply_disabled');
+            expect((await pipelineMetrics.getMetrics()).counters['instagram_comment.auto_reply_disabled']).toBe(1);
         });
 
         it('should return error when page has no userId', async () => {
@@ -317,7 +317,7 @@ describe('InstagramReplyService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Comments auto-reply disabled');
-            expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_comment', 'settings_disabled');
+            expect((await pipelineMetrics.getMetrics()).counters['instagram_comment.settings_disabled']).toBe(1);
         });
 
         it('should return error when Instagram reply posting fails', async () => {
@@ -526,7 +526,7 @@ describe('InstagramReplyService', () => {
                 expect.objectContaining({ reason: 'offensive_or_abusive' }),
                 expect.objectContaining({ type: 'message' }),
             );
-            expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_message', 'skipped_risky');
+            expect((await pipelineMetrics.getMetrics()).counters['instagram_message.skipped_risky']).toBe(1);
         });
 
         it('should replace AI text with safe fallback for price_not_in_kb in messages', async () => {

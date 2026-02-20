@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useVersion } from '@/lib/useVersion';
 
-const PUBLIC_PATHS = ['/', '/pricing', '/login', '/register'];
+const PUBLIC_PATHS = ['/', '/pricing', '/login', '/register', '/landing', '/terms', '/privacy'];
 
 export function VersionBadge() {
   const { versionInfo, displayVersion, environment } = useVersion();
@@ -9,6 +9,11 @@ export function VersionBadge() {
 
   // Hide badge on public-facing pages
   if (PUBLIC_PATHS.includes(pathname)) {
+    return null;
+  }
+
+  // Hide badge in production builds
+  if (process.env.NODE_ENV === 'production') {
     return null;
   }
 
