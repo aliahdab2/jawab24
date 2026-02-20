@@ -6,7 +6,6 @@ const sentryDsn = process.env.SENTRY_DSN;
 export function initSentry() {
     if (!sentryDsn) {
         if (isProduction) {
-            // eslint-disable-next-line no-console
             console.warn('⚠️ SENTRY_DSN not set - error tracking disabled');
         }
         return;
@@ -34,7 +33,6 @@ export function initSentry() {
         },
     });
 
-    // eslint-disable-next-line no-console
     console.log('✅ Sentry initialized for AI Worker');
 }
 

@@ -289,7 +289,7 @@ class NotificationService {
 
         try {
             // Dynamic import to avoid errors when firebase-admin isn't installed
-            // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const admin = require('firebase-admin');
             
             // Initialize Firebase Admin if not already initialized

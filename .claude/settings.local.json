@@ -21,7 +21,6 @@
       "Bash($HOME/Library/Android/sdk/platform-tools/adb logcat:*)",
       "Bash($HOME/Library/Android/sdk/platform-tools/adb shell am force-stop com.jawab24.app)",
       "Bash($HOME/Library/Android/sdk/platform-tools/adb shell am start -n com.jawab24.app/.MainActivity)",
-      "Bash($HOME/Library/Android/sdk/platform-tools/adb logcat -d -s \"AndroidRuntime:E\" \"Jawab24:*\" \"System.err:W\" \"ActivityManager:E\" \"FATAL:E\")",
       "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb logcat -c)",
       "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb shell am force-stop:*)",
       "Bash(/Users/aliahdab/Library/Android/sdk/platform-tools/adb shell am start -n com.jawab24.app/.MainActivity)",
@@ -120,7 +119,8 @@
       "Bash(sort ls frontend/e2e/*.spec.ts)",
       "Bash(comm:*)",
       "Bash(npx @lhci/cli@latest autorun:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(npm run lint:fix:*)"
     ]
   }
 }

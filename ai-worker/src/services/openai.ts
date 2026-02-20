@@ -110,7 +110,6 @@ export class OpenAIService {
             const { messages, tokenInfo } = this.buildMessages(request, systemPrompt);
 
             // Log token usage for observability
-            // eslint-disable-next-line no-console
             console.log(JSON.stringify({ event: 'ai_call_token_usage', ...tokenInfo }));
 
             const controller = new AbortController();
