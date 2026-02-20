@@ -494,7 +494,7 @@ const MessagesPage: NextPageWithLayout = () => {
 
       {/* Filter Chips + Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-        <div className="w-full sm:flex-1 sm:min-w-0 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:overflow-x-auto pb-1 sm:pb-0">
+        <div className="w-full sm:flex-1 sm:min-w-0 flex flex-wrap items-center gap-2">
           {([
             { key: 'needs_action' as FilterType, label: t('messages.needsAction' as TranslationKey), count: stats.needsAction },
             { key: 'all' as FilterType, label: t('messages.allMessages' as TranslationKey), count: stats.total },
