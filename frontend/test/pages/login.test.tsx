@@ -6,6 +6,11 @@ import { authApi } from '@/lib/api';
 // We need to import the mocked module to verify calls (for Capacitor only)
 import { FacebookLogin } from '@capacitor-community/facebook-login';
 
+// Mock Next.js Link (prevents ForwardRef(LinkComponent) act warnings)
+vi.mock('next/link', () => ({
+    default: ({ children, href, ...props }: any) => <a href={href} {...props}>{children}</a>,
+}));
+
 // Mock Next.js router
 vi.mock('next/router', () => ({
     useRouter: vi.fn(() => ({
@@ -186,7 +191,9 @@ describe('LoginPage', () => {
             });
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
+            await act(async () => {
+                fireEvent.click(loginButton);
+            });
 
             // Verify Native Login called
             await vi.waitFor(() => {
@@ -250,12 +257,14 @@ describe('LoginPage', () => {
             });
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
+            await act(async () => {
+                fireEvent.click(loginButton);
+            });
 
             await vi.waitFor(() => {
                 expect(toastErrorSpy).toHaveBeenCalled();
             });
-            
+
             // Should NOT navigate or set auth
             expect(mockPush).not.toHaveBeenCalled();
             expect(mockSetAuth).not.toHaveBeenCalled();
@@ -279,12 +288,14 @@ describe('LoginPage', () => {
             });
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
+            await act(async () => {
+                fireEvent.click(loginButton);
+            });
 
             await vi.waitFor(() => {
                 expect(toastErrorSpy).toHaveBeenCalled();
             });
-            
+
             // Should NOT navigate or set auth
             expect(mockPush).not.toHaveBeenCalled();
             expect(mockSetAuth).not.toHaveBeenCalled();
@@ -308,10 +319,14 @@ describe('LoginPage', () => {
             });
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
+            await act(async () => {
+                fireEvent.click(loginButton);
+            });
 
             // Fast forward 31 seconds (past the 30 second timeout)
-            await vi.advanceTimersByTimeAsync(31000);
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(31000);
+            });
 
             await vi.waitFor(() => {
                 expect(toastErrorSpy).toHaveBeenCalledWith('auth.loginTimeout');
@@ -328,8 +343,10 @@ describe('LoginPage', () => {
                 accessToken: { token: 'stale-token' } 
             });
 
-            render(<LoginPage />);
-            
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
             // Wait for initialization and stale token cleanup
             await vi.waitFor(() => {
                 expect(FacebookLogin.getCurrentAccessToken).toHaveBeenCalled();

@@ -261,7 +261,9 @@ describe('NotificationBell', () => {
 
         mockGetUnreadCount.mockResolvedValue(1);
 
-        render(<NotificationBell />);
+        await act(async () => {
+            render(<NotificationBell />);
+        });
 
         // Initial fetch
         await vi.waitFor(() => {
