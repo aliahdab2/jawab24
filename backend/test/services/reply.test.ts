@@ -45,6 +45,28 @@ vi.mock('../../src/lib/redis', () => ({
 }));
 
 vi.mock('axios');
+
+// In-memory pipelineMetrics mock (Redis-backed in production; use counters map in tests)
+const pipelineCounters = vi.hoisted<Record<string, number>>(() => ({}));
+vi.mock('../../src/lib/pipelineMetrics', () => ({
+    pipelineMetrics: {
+        record: vi.fn((pipeline: string, outcome: string) => {
+            const key = `${pipeline}.${outcome}`;
+            pipelineCounters[key] = (pipelineCounters[key] || 0) + 1;
+            return Promise.resolve();
+        }),
+        getMetrics: vi.fn(() => Promise.resolve({
+            since: '2025-01-01T00:00:00.000Z',
+            counters: { ...pipelineCounters },
+        })),
+        reset: vi.fn(() => {
+            Object.keys(pipelineCounters).forEach(k => delete pipelineCounters[k]);
+            return Promise.resolve();
+        }),
+    },
+    PipelineMetrics: class {},
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         ai: {
@@ -60,11 +82,10 @@ vi.mock('../../src/config', () => ({
 }));
 
 describe('Reply Service', () => {
-    // Spy once at describe scope; vi.clearAllMocks() resets call history each test
-    vi.spyOn(pipelineMetrics, 'record').mockResolvedValue(undefined);
 
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
+        await pipelineMetrics.reset();
 
         // Default mock implementations for settingsService
         vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
@@ -141,7 +162,7 @@ describe('Reply Service', () => {
             expect(result.success).toBe(true);
             expect(result.replyMethod).toBe('template');
             expect(result.replyText).toBe('Thank you for your feedback!');
-            expect(pipelineMetrics.record).toHaveBeenCalledWith('facebook_comment', 'success');
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.success']).toBe(1);
         });
 
         it('should process comment and reply using AI when no template', async () => {
@@ -185,7 +206,7 @@ describe('Reply Service', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Page not found');
-            expect(pipelineMetrics.record).toHaveBeenCalledWith('facebook_comment', 'page_not_found');
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.page_not_found']).toBe(1);
         });
 
         it('should skip if auto-reply is disabled for page', async () => {
@@ -203,7 +224,7 @@ describe('Reply Service', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Auto-reply disabled for this page');
-            expect(pipelineMetrics.record).toHaveBeenCalledWith('facebook_comment', 'auto_reply_disabled');
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.auto_reply_disabled']).toBe(1);
         });
 
         it('should skip if auto-reply is disabled for post', async () => {

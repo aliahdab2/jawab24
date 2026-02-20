@@ -142,6 +142,7 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
             name: page.name,
             accessToken: page.accessToken,
             knowledgeBase: null,
+            kbActiveVersion: null,
             autoReplyEnabled: true,
         };
 
@@ -184,7 +185,7 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
         expect(adapter.sendReply).toHaveBeenCalledOnce();
 
         // Verify pipeline metric recorded success
-        const metrics = pipelineMetrics.getMetrics();
+        const metrics = await pipelineMetrics.getMetrics();
         expect(metrics.counters['facebook_comment.success']).toBe(1);
     });
 
@@ -299,7 +300,7 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
         expect(row.flagReason).toBe('offensive_or_abusive');
 
         // Metric recorded
-        const metrics = pipelineMetrics.getMetrics();
+        const metrics = await pipelineMetrics.getMetrics();
         expect(metrics.counters['facebook_comment.skipped_risky']).toBe(1);
     });
 

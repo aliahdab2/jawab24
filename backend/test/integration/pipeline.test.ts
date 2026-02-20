@@ -103,6 +103,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
             name: page.name,
             accessToken: page.accessToken,
             knowledgeBase: null,
+            kbActiveVersion: null,
             autoReplyEnabled: true,
         };
 
@@ -153,7 +154,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         expect(adapter.sendReply).toHaveBeenCalledOnce();
 
         // Verify pipeline metrics recorded success
-        const metrics = pipelineMetrics.getMetrics();
+        const metrics = await pipelineMetrics.getMetrics();
         expect(metrics.counters['facebook_message.success']).toBe(1);
     });
 
@@ -350,7 +351,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         expect(outgoing.length).toBe(0);
 
         // Pipeline metric recorded
-        const metrics = pipelineMetrics.getMetrics();
+        const metrics = await pipelineMetrics.getMetrics();
         expect(metrics.counters['facebook_message.skipped_risky']).toBe(1);
     });
 
