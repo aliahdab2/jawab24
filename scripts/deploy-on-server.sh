@@ -161,12 +161,20 @@ start_new_env() {
     # Wait for container removal to fully complete (avoids race condition)
     echo "   Waiting for container cleanup to complete..."
     for container in "jawab24-backend-$DEPLOY_ENV" "jawab24-frontend-$DEPLOY_ENV" "jawab24-ai-worker-$DEPLOY_ENV"; do
+        removed=false
         for i in {1..10}; do
             if ! docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
+                removed=true
                 break
             fi
             sleep 1
         done
+        # Force-remove if still present after waiting
+        if [ "$removed" = false ]; then
+            echo "   ⚠️  Container $container still present, force-removing..."
+            docker rm -f "$container" 2>/dev/null || true
+            sleep 1
+        fi
     done
     sleep 2  # Extra buffer for Docker to release resources
 
