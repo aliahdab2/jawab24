@@ -60,9 +60,11 @@ vi.mock('../../src/config', () => ({
 }));
 
 describe('Reply Service', () => {
+    // Spy once at describe scope; vi.clearAllMocks() resets call history each test
+    vi.spyOn(pipelineMetrics, 'record').mockResolvedValue(undefined);
+
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.spyOn(pipelineMetrics, 'record').mockResolvedValue(undefined);
 
         // Default mock implementations for settingsService
         vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
