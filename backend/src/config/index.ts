@@ -93,4 +93,12 @@ export const config = {
         userName: 'Demo User',
         userEmail: 'demo@jawab24.com',
     },
+
+    // Circuit Breaker (ai-worker HTTP calls)
+    circuitBreaker: {
+        /** Consecutive failures before opening the circuit (default: 5) */
+        failureThreshold: parseInt(process.env.CIRCUIT_BREAKER_FAILURE_THRESHOLD || '5', 10),
+        /** Seconds to stay open before allowing one recovery probe (default: 30) */
+        openDurationSeconds: parseInt(process.env.CIRCUIT_BREAKER_OPEN_DURATION_SECONDS || '30', 10),
+    },
 };

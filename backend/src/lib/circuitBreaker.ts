@@ -10,9 +10,18 @@
  * All state is stored in Redis so it is shared across multiple backend
  * processes/replicas. The circuit breaker never throws on Redis errors;
  * it fails open (allows the call through) to avoid masking real issues.
+ *
+ * Observability:
+ *   - Sentry warning captured on first open (closed → open transition only)
+ *   - Redis counter `metrics:pipeline:circuit.<name>.opened` incremented on every open
+ *     (visible in GET /health/pipeline-metrics)
+ *   - Thresholds configurable via CIRCUIT_BREAKER_FAILURE_THRESHOLD and
+ *     CIRCUIT_BREAKER_OPEN_DURATION_SECONDS env vars
  */
 import type { Redis as RedisClient } from 'ioredis';
+import * as Sentry from '@sentry/node';
 import { redis } from './redis';
+import { config } from '../config';
 
 export class CircuitOpenError extends Error {
     constructor() {
@@ -24,9 +33,9 @@ export class CircuitOpenError extends Error {
 export type CircuitState = 'closed' | 'open' | 'half-open';
 
 export interface CircuitBreakerOptions {
-    /** Consecutive failures before opening (default: 5) */
+    /** Consecutive failures before opening (default: CIRCUIT_BREAKER_FAILURE_THRESHOLD env or 5) */
     failureThreshold?: number;
-    /** Seconds to stay open before allowing one probe (default: 30) */
+    /** Seconds to stay open before allowing one probe (default: CIRCUIT_BREAKER_OPEN_DURATION_SECONDS env or 30) */
     openDurationSeconds?: number;
     /** Max seconds a half-open probe lock is held (default: 15) */
     probeLockTtlSeconds?: number;
@@ -35,18 +44,22 @@ export interface CircuitBreakerOptions {
 }
 
 export class CircuitBreaker {
+    private readonly name: string;
     private readonly failureKey: string;
     private readonly circuitOpenKey: string;
     private readonly probeLockKey: string;
+    private readonly openedCounterKey: string;
     private readonly failureThreshold: number;
     private readonly openDurationSeconds: number;
     private readonly probeLockTtlSeconds: number;
     private readonly inactivityResetSeconds: number;
 
     constructor(private readonly client: RedisClient, name: string, opts: CircuitBreakerOptions = {}) {
+        this.name = name;
         this.failureKey = `cb:${name}:failures`;
         this.circuitOpenKey = `cb:${name}:open`;
         this.probeLockKey = `cb:${name}:probe_lock`;
+        this.openedCounterKey = `metrics:pipeline:circuit.${name}.opened`;
         this.failureThreshold = opts.failureThreshold ?? 5;
         this.openDurationSeconds = opts.openDurationSeconds ?? 30;
         this.probeLockTtlSeconds = opts.probeLockTtlSeconds ?? 15;
@@ -91,6 +104,22 @@ export class CircuitBreaker {
             }
             if (count >= this.failureThreshold) {
                 await this.client.set(this.circuitOpenKey, '1', 'EX', this.openDurationSeconds);
+
+                // Increment the observable counter (shown in /health/pipeline-metrics)
+                this.client.incr(this.openedCounterKey).catch(() => {});
+
+                // Sentry alert only on first open (closed → open), not on probe failures
+                // that re-open an already-triggered circuit (half-open → open).
+                if (state === 'closed') {
+                    Sentry.captureMessage(`Circuit breaker '${this.name}' opened`, {
+                        level: 'warning',
+                        tags: { circuit: this.name },
+                        extra: {
+                            failureThreshold: this.failureThreshold,
+                            openDurationSeconds: this.openDurationSeconds,
+                        },
+                    });
+                }
             }
             if (state === 'half-open') {
                 // Release probe lock so the next open→half-open cycle can try again
@@ -107,6 +136,6 @@ export class CircuitBreaker {
 }
 
 export const aiWorkerCircuit = new CircuitBreaker(redis, 'ai_worker', {
-    failureThreshold: 5,
-    openDurationSeconds: 30,
+    failureThreshold: config.circuitBreaker.failureThreshold,
+    openDurationSeconds: config.circuitBreaker.openDurationSeconds,
 });
