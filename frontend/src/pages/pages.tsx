@@ -31,6 +31,7 @@ const PagesPage: NextPageWithLayout = () => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showConnectDialog, setShowConnectDialog] = useState(false);
+  const [imgError, setImgError] = useState<Record<string, boolean>>({});
 
   // ESC key handled inside KnowledgeBaseModal
 
@@ -258,8 +259,17 @@ const PagesPage: NextPageWithLayout = () => {
               {/* Header with gradient background */}
               <div className="p-4 sm:p-6 bg-gradient-to-br from-surface-50 to-white border-b border-surface-100 flex items-start justify-between gap-4">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <div className="w-14 h-14 rounded-2xl bg-brand-600 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-100">
-                    <FileText className="w-7 h-7" />
+                  <div className="w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden bg-brand-600 flex items-center justify-center">
+                    {!imgError[page.id] ? (
+                      <img
+                        src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
+                        alt={page.name}
+                        className="w-full h-full object-cover"
+                        onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
+                      />
+                    ) : (
+                      <FileText className="w-7 h-7 text-white" />
+                    )}
                   </div>
                   <div className="text-start min-w-0">
                     <h3 className="text-lg font-bold text-surface-900 truncate" title={page.name}>{page.name}</h3>
@@ -291,56 +301,52 @@ const PagesPage: NextPageWithLayout = () => {
 
               <div className="p-4 sm:p-6 flex-1 flex flex-col gap-6">
                 {/* Platform Toggles */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className={`p-4 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 border-blue-100 ring-1 ring-blue-100' : 'bg-surface-50 border-surface-100'}`}>
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
-                          <FileText className="w-4 h-4" />
-                        </div>
-                        <span className={`text-sm font-bold truncate ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
+                <div className="flex flex-col gap-3">
+                  {/* Facebook row */}
+                  <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 border-blue-200' : 'bg-surface-50 border-surface-100'}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
+                        <FileText className="w-4 h-4" />
                       </div>
-                      <div className="flex-shrink-0">
-                        <Toggle
-                          enabled={page.autoReplyEnabled ?? false}
-                          onChange={(enabled) => handleToggle(page.id, enabled)}
-                        />
+                      <div className="min-w-0">
+                        <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-600'}`}>Facebook</p>
+                        <p className={`text-[10px] font-medium ${page.autoReplyEnabled ? 'text-blue-500' : 'text-surface-400'}`}>
+                          {page.autoReplyEnabled ? t('common.enabled') : t('common.disabled')}
+                        </p>
                       </div>
                     </div>
-                    <p className={`text-[10px] font-medium ${page.autoReplyEnabled ? 'text-blue-600' : 'text-surface-400'}`}>
-                      {page.autoReplyEnabled ? t('common.enabled') : t('common.disabled')}
-                    </p>
+                    <Toggle
+                      enabled={page.autoReplyEnabled ?? false}
+                      onChange={(enabled) => handleToggle(page.id, enabled)}
+                    />
                   </div>
 
+                  {/* Instagram row */}
                   <div
-                    className={`p-4 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-100 ring-1 ring-pink-100' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-50 opacity-60 cursor-not-allowed'}`}
+                    className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-200' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-100 opacity-60 cursor-not-allowed'}`}
                     {...(!page.instagramUsername && { title: t('pages.instagramTooltip' as TranslationKey) })}
                   >
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
-                          <Instagram className="w-4 h-4" />
-                        </div>
-                        <span className={`text-sm font-bold truncate ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
+                        <Instagram className="w-4 h-4" />
                       </div>
-                      <div className="flex-shrink-0">
-                        {page.instagramUsername ? (
-                          <Toggle
-                            enabled={page.instagramAutoReplyEnabled ?? false}
-                            onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
-                          />
-                        ) : (
-                          <div className="w-8 h-4 bg-surface-200 rounded-full"></div>
-                        )}
+                      <div className="min-w-0">
+                        <p className={`text-sm font-bold ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-600') : 'text-surface-400'}`}>Instagram</p>
+                        <p className={`text-[10px] font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-500' : 'text-surface-400') : 'text-surface-300'}`}>
+                          {page.instagramUsername
+                            ? (page.instagramAutoReplyEnabled ? t('common.enabled') : t('common.disabled'))
+                            : t('pages.notLinked')}
+                        </p>
                       </div>
                     </div>
-                    <p className={`text-[10px] font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-600' : 'text-surface-400') : 'text-surface-300'}`}>
-                      {page.instagramUsername
-                        ? (page.instagramAutoReplyEnabled ? t('common.enabled') : t('common.disabled'))
-                        : t('pages.notLinked')
-
-                      }
-                    </p>
+                    {page.instagramUsername ? (
+                      <Toggle
+                        enabled={page.instagramAutoReplyEnabled ?? false}
+                        onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
+                      />
+                    ) : (
+                      <div className="w-10 h-5 bg-surface-200 rounded-full flex-shrink-0" aria-hidden="true" />
+                    )}
                   </div>
                 </div>
 

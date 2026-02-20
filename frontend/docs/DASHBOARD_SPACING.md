@@ -50,3 +50,4 @@ Defined in `globals.css` `:root`:
 3. `DashboardLayout` handles outer padding (px, pt) and bottom padding (pb-dash-mobile) -- pages should not add their own
 4. Landscape mode reduces PageHeader margin automatically (mb-3)
 5. Content grid bottom padding (`pb-4 sm:pb-6`) is separate from layout bottom padding
+لبee to

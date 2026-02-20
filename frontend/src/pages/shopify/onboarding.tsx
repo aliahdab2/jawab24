@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Globe,
   XCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from 'sonner';
@@ -65,6 +66,18 @@ export default function ShopifyOnboarding() {
       fetchStore();
     }
   }, [isAuthenticated]);
+
+  // Retry product sync independently
+  const handleRetrySync = useCallback(async () => {
+    setSyncStatus('syncing');
+    try {
+      const syncRes = await shopifyApi.syncProducts();
+      setSyncResult(syncRes.data);
+      setSyncStatus('done');
+    } catch {
+      setSyncStatus('error');
+    }
+  }, []);
 
   // Fetch pages when advancing to step 1
   const fetchPages = useCallback(async () => {
@@ -164,9 +177,20 @@ export default function ShopifyOnboarding() {
                       </div>
                     )}
                     {syncStatus === 'error' && (
-                      <div className="flex items-center justify-center gap-2 text-amber-600">
-                        <XCircle className="w-4 h-4" />
-                        <span className="text-sm">{(t as TFunc)('shopify.onboarding.syncError')}</span>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-center gap-2 text-amber-600">
+                          <XCircle className="w-4 h-4" />
+                          <span className="text-sm">{(t as TFunc)('shopify.onboarding.syncError')}</span>
+                        </div>
+                        <div className="flex justify-center">
+                          <button
+                            onClick={handleRetrySync}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-200 transition-colors"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            {(t as TFunc)('shopify.onboarding.retrySync')}
+                          </button>
+                        </div>
                       </div>
                     )}
                     {syncStatus === 'idle' && (

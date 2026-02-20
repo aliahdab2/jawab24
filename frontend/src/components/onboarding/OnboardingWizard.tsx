@@ -113,7 +113,7 @@ function PickPageStep({
         <p className="text-surface-600 font-medium">{t('pages.noPages')}</p>
         <p className="text-surface-400 text-sm mt-2">{t('onboarding.noPagesHelp' as TranslationKey)}</p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={onRetry}
           className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors"
         >
           {t('onboarding.refreshPages' as TranslationKey)}
@@ -225,6 +225,17 @@ function ReviewInfoStep({
         <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'text-sm mb-4'}`}>
           {t('onboarding.reviewInfoDesc')}
         </p>
+
+        {/* Completion summary */}
+        {selectedPage?.autoReplyEnabled && (
+          <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl mb-3 text-start">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-emerald-800 truncate">{selectedPage.name}</p>
+              <p className="text-xs text-emerald-600">{t('onboarding.readySummary' as TranslationKey)}</p>
+            </div>
+          </div>
+        )}
 
         {isEditing ? (
           <div className="text-start">
@@ -505,6 +516,11 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
 
         {/* Footer with progress and buttons */}
         <div className={`flex-shrink-0 border-t border-surface-100 ${isLandscape ? 'px-6 py-3' : 'px-6 py-4'}`}>
+          {/* Step label */}
+          <p className="text-center text-xs text-surface-400 mb-2">
+            {t('onboarding.stepOf' as TranslationKey, { step: currentStep + 1, total: totalSteps })}
+          </p>
+
           {/* Progress dots */}
           <div className={`flex gap-2 justify-center mb-4`}>
             {[0, 1, 2].map((index) => (
