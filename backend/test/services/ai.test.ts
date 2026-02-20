@@ -628,6 +628,26 @@ describe('AI Service - Semantic Cache Integration', () => {
         expect(mockSemCache.check).toHaveBeenCalledTimes(1);
     });
 
+    it('should instrument semantic cache check with ai.cache.semantic span', async () => {
+        setupMocks({
+            semanticCacheHit: { reply: 'Semantic hit', intent: 'PRICE', confidence: 'high', flags: [] },
+        });
+
+        const sentry = await import('@sentry/node');
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'How much is this?',
+            context: { pageId: 'page-1', kbActiveVersion: 1 },
+        });
+
+        expect(vi.mocked(sentry.startSpan)).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'ai.cache.semantic', op: 'cache.get' }),
+            expect.any(Function),
+        );
+    });
+
     it('should skip semantic cache when kbActiveVersion is null', async () => {
         const { mockSemCache } = setupMocks({
             axiosReply: { reply: 'Fresh AI reply', language: 'en', intent: 'QUESTION', confidence: 'high', flags: [] },
