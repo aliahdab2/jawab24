@@ -116,13 +116,16 @@ export class OpenAIService {
 
             let completion: OpenAI.ChatCompletion;
             try {
-                completion = await this.client.chat.completions.create({
-                    model: config.openai.model,
-                    messages,
-                    max_tokens: config.openai.maxTokens,
-                    temperature: config.openai.temperature,
-                    response_format: { type: 'json_object' },
-                }, { signal: controller.signal });
+                completion = await Sentry.startSpan(
+                    { name: 'ai.llm.call', op: 'ai' },
+                    () => this.client!.chat.completions.create({
+                        model: config.openai.model,
+                        messages,
+                        max_tokens: config.openai.maxTokens,
+                        temperature: config.openai.temperature,
+                        response_format: { type: 'json_object' },
+                    }, { signal: controller.signal }),
+                );
             } finally {
                 clearTimeout(timeout);
             }

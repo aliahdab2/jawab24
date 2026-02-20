@@ -10,24 +10,6 @@ import { settingsService } from '../../src/services/settings';
 import { redis } from '../../src/lib/redis';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 
-// Mock pipelineMetrics with in-memory sync implementation (avoids real Redis in tests)
-vi.mock('../../src/lib/pipelineMetrics', () => {
-    const counters: Record<string, number> = {};
-    return {
-        pipelineMetrics: {
-            record: vi.fn((pipeline: string, outcome: string) => {
-                const key = `${pipeline}.${outcome}`;
-                counters[key] = (counters[key] || 0) + 1;
-            }),
-            getMetrics: vi.fn(() => ({ counters: { ...counters }, since: new Date().toISOString() })),
-            reset: vi.fn(() => {
-                for (const k of Object.keys(counters)) delete counters[k];
-            }),
-        },
-        PipelineMetrics: class {},
-    };
-});
-
 // Mock all services
 vi.mock('../../src/services/pages');
 vi.mock('../../src/services/posts');
@@ -63,7 +45,6 @@ vi.mock('../../src/lib/redis', () => ({
 }));
 
 vi.mock('axios');
-XXX_PLACEHOLDER
 vi.mock('../../src/config', () => ({
     config: {
         ai: {
@@ -79,10 +60,9 @@ vi.mock('../../src/config', () => ({
 }));
 
 describe('Reply Service', () => {
-    vi.spyOn(pipelineMetrics, 'record').mockResolvedValue(undefined);
-
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.spyOn(pipelineMetrics, 'record').mockResolvedValue(undefined);
 
         // Default mock implementations for settingsService
         vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);

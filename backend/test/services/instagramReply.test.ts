@@ -103,6 +103,23 @@ vi.mock('../../src/services/messages', () => ({
     },
 }));
 
+vi.mock('../../src/lib/pipelineMetrics', () => {
+    const counters: Record<string, number> = {};
+    return {
+        pipelineMetrics: {
+            record: vi.fn((pipeline: string, outcome: string) => {
+                const key = `${pipeline}.${outcome}`;
+                counters[key] = (counters[key] || 0) + 1;
+            }),
+            getMetrics: vi.fn(() => ({ counters: { ...counters }, since: new Date().toISOString() })),
+            reset: vi.fn(() => {
+                for (const k of Object.keys(counters)) delete counters[k];
+            }),
+        },
+        PipelineMetrics: class {},
+    };
+});
+
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((...args: unknown[]) => args),
     and: vi.fn((...args: unknown[]) => args),
@@ -258,7 +275,7 @@ describe('InstagramReplyService', () => {
                 commentId: 'comment-1',
                 error: 'Page not found',
             });
-            expect(pipelineMetrics.getMetrics().counters['instagram_comment.page_not_found']).toBe(1);
+            expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_comment', 'page_not_found');
         });
 
         it('should return error when Instagram auto-reply is disabled', async () => {
@@ -274,7 +291,7 @@ describe('InstagramReplyService', () => {
                 commentId: 'comment-1',
                 error: 'Auto-reply disabled for this page',
             });
-            expect(pipelineMetrics.getMetrics().counters['instagram_comment.auto_reply_disabled']).toBe(1);
+            expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_comment', 'auto_reply_disabled');
         });
 
         it('should return error when page has no userId', async () => {
@@ -300,7 +317,7 @@ describe('InstagramReplyService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBe('Comments auto-reply disabled');
-            expect(pipelineMetrics.getMetrics().counters['instagram_comment.settings_disabled']).toBe(1);
+            expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_comment', 'settings_disabled');
         });
 
         it('should return error when Instagram reply posting fails', async () => {
@@ -324,6 +341,12 @@ describe('InstagramReplyService', () => {
     });
 
     describe('processMessage', () => {
+        afterEach(() => {
+            // Ensure per-test overrides don't leak to the next test
+            vi.mocked(shouldSkipReply).mockReturnValue(false);
+            vi.mocked(shouldUseFallback).mockReturnValue(false);
+        });
+
         it('should return error when page is not found', async () => {
             vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue(null);
 
@@ -503,10 +526,7 @@ describe('InstagramReplyService', () => {
                 expect.objectContaining({ reason: 'offensive_or_abusive' }),
                 expect.objectContaining({ type: 'message' }),
             );
-            expect(pipelineMetrics.getMetrics().counters['instagram_message.skipped_risky']).toBe(1);
-
-            // Reset mock
-            vi.mocked(shouldSkipReply).mockReturnValue(false);
+            expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_message', 'skipped_risky');
         });
 
         it('should replace AI text with safe fallback for price_not_in_kb in messages', async () => {
@@ -532,8 +552,6 @@ describe('InstagramReplyService', () => {
             expect(messagesService.flagMessage).not.toHaveBeenCalled();
             expect(messagesService.markAsReplied).toHaveBeenCalled();
 
-            // Reset mock
-            vi.mocked(shouldUseFallback).mockReturnValue(false);
         });
 
         it('should skip already-flagged messages on duplicate webhook', async () => {

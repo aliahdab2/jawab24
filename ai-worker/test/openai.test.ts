@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIService } from '../src/services/openai';
 
+// Mock Sentry — pass-through so spans don't require an active trace
+vi.mock('@sentry/node', () => ({
+    startSpan: vi.fn((_opts: unknown, fn: () => unknown) => fn()),
+    captureException: vi.fn(),
+    addBreadcrumb: vi.fn(),
+}));
+
 // Mock OpenAI
 vi.mock('openai', () => {
     return {
@@ -39,6 +46,19 @@ describe('OpenAI Service', () => {
     describe('isConfigured', () => {
         it('should return true when API key is set', () => {
             expect(service.isConfigured()).toBe(true);
+        });
+    });
+
+    describe('Sentry spans', () => {
+        it('should instrument OpenAI API call with ai.llm.call span', async () => {
+            const sentry = await import('@sentry/node');
+
+            await service.generateReply({ comment: 'Hello' });
+
+            expect(vi.mocked(sentry.startSpan)).toHaveBeenCalledWith(
+                expect.objectContaining({ name: 'ai.llm.call' }),
+                expect.any(Function),
+            );
         });
     });
 

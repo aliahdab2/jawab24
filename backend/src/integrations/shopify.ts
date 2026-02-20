@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { EcommerceIntegration } from './registry';
 import type { Logger } from '../types';
 import { config } from '../config';
+import * as Sentry from '@sentry/node';
 
 /**
  * Shopify e-commerce integration adapter.
@@ -30,7 +31,10 @@ export class ShopifyIntegration implements EcommerceIntegration {
         if (!storeId || typeof storeId !== 'string') return null;
 
         const { getEnrichedKnowledgeBase } = await import('../services/shopify');
-        return getEnrichedKnowledgeBase(currentKB, storeId);
+        return Sentry.startSpan(
+            { name: 'shopify.kb.enrich', op: 'db.query' },
+            () => getEnrichedKnowledgeBase(currentKB, storeId),
+        );
     }
 
     async claimPendingInstall(

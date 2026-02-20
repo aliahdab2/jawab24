@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AiService } from '../../src/services/ai';
 import axios from 'axios';
+import { db } from '../../src/db';
 
 // Mock axios
 vi.mock('axios');
+
+// Mock Sentry — pass-through so spans don't require an active trace
+vi.mock('@sentry/node', () => ({
+    startSpan: vi.fn((_opts: unknown, fn: () => unknown) => fn()),
+    captureException: vi.fn(),
+    addBreadcrumb: vi.fn(),
+}));
 
 // Mock database
 vi.mock('../../src/db', () => ({
@@ -65,6 +73,12 @@ describe('AI Service', () => {
     beforeEach(() => {
         service = new AiService();
         vi.clearAllMocks();
+        // Re-setup db.select chain (getCacheStats and other tests modify it to remove .where)
+        vi.mocked(db.select).mockReturnValue({
+            from: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue([]),
+            }),
+        } as any);
     });
 
     describe('generateReply', () => {
@@ -440,6 +454,53 @@ describe('AI Service', () => {
             expect(result.status).toBe('queued');
         });
     });
+    describe('Sentry spans', () => {
+        // getJobStatus tests call vi.resetModules() which corrupts the
+        // module-level db mock chain.  Fresh imports per-test avoid stale refs.
+        let freshService: InstanceType<typeof AiService>;
+        let sentryMod: typeof import('@sentry/node');
+
+        beforeEach(async () => {
+            vi.resetModules();
+
+            // Re-wire db mock after module reset
+            const dbMod = await import('../../src/db');
+            vi.mocked(dbMod.db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+
+            const { AiService: FreshAiService } = await import('../../src/services/ai');
+            sentryMod = await import('@sentry/node');
+            const { redis } = await import('../../src/lib/redis');
+
+            freshService = new FreshAiService();
+
+            // Default: cache miss → falls through to AI call
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(axios.post).mockResolvedValue({ data: { reply: 'ok', language: 'en' } });
+        });
+
+        it('should instrument exact cache lookup with ai.cache.exact span', async () => {
+            await freshService.generateReply({ comment: 'test' });
+
+            expect(vi.mocked(sentryMod.startSpan)).toHaveBeenCalledWith(
+                expect.objectContaining({ name: 'ai.cache.exact' }),
+                expect.any(Function),
+            );
+        });
+
+        it('should instrument AI worker HTTP call with ai.worker.http span', async () => {
+            await freshService.generateReply({ comment: 'test' });
+
+            expect(vi.mocked(sentryMod.startSpan)).toHaveBeenCalledWith(
+                expect.objectContaining({ name: 'ai.worker.http' }),
+                expect.any(Function),
+            );
+        });
+    });
+
     describe('normalization', () => {
         it('should normalize comments for better cache hits', async () => {
             const { redis } = await import('../../src/lib/redis');

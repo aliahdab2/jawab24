@@ -37,6 +37,22 @@ vi.mock('../../src/utils/language', () => ({
 vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn(), set: vi.fn(), quit: vi.fn(), incr: vi.fn(), expire: vi.fn() },
 }));
+vi.mock('../../src/lib/pipelineMetrics', () => {
+    const counters: Record<string, number> = {};
+    return {
+        pipelineMetrics: {
+            record: vi.fn((pipeline: string, outcome: string) => {
+                const key = `${pipeline}.${outcome}`;
+                counters[key] = (counters[key] || 0) + 1;
+            }),
+            getMetrics: vi.fn(() => ({ counters: { ...counters }, since: new Date().toISOString() })),
+            reset: vi.fn(() => {
+                for (const k of Object.keys(counters)) delete counters[k];
+            }),
+        },
+        PipelineMetrics: class {},
+    };
+});
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canUseAiReplies: vi.fn().mockResolvedValue({ allowed: true }),
@@ -85,7 +101,6 @@ function createMockAdapter(overrides: Partial<CommentPlatformAdapter> = {}): Com
 describe('CommentProcessor', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        pipelineMetrics.reset();
 
         vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
         vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
@@ -123,7 +138,7 @@ describe('CommentProcessor', () => {
         expect(adapter.markAsReplied).toHaveBeenCalledWith(
             'comment-uuid', 'Thank you!', 'template', 'en', 'tpl-1', false, undefined, undefined,
         );
-        expect(pipelineMetrics.getMetrics().counters['facebook_comment.success']).toBe(1);
+        expect(pipelineMetrics.record).toHaveBeenCalledWith('facebook_comment', 'success');
     });
 
     it('should return error when page not found', async () => {
@@ -137,7 +152,7 @@ describe('CommentProcessor', () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe('Page not found');
-        expect(pipelineMetrics.getMetrics().counters['facebook_comment.page_not_found']).toBe(1);
+        expect(pipelineMetrics.record).toHaveBeenCalledWith('facebook_comment', 'page_not_found');
     });
 
     it('should return error when auto-reply disabled for page', async () => {
@@ -380,7 +395,7 @@ describe('CommentProcessor', () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe('DB connection failed');
-        expect(pipelineMetrics.getMetrics().counters['facebook_comment.error']).toBe(1);
+        expect(pipelineMetrics.record).toHaveBeenCalledWith('facebook_comment', 'error');
     });
 
     it('should set commentMessage as text in generator context', async () => {
@@ -408,7 +423,7 @@ describe('CommentProcessor', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(pipelineMetrics.getMetrics().counters['instagram_comment.success']).toBe(1);
+        expect(pipelineMetrics.record).toHaveBeenCalledWith('instagram_comment', 'success');
     });
 
     // --- Offensive skip tests ---
@@ -441,7 +456,7 @@ describe('CommentProcessor', () => {
             expect.objectContaining({ senderName: 'Troll', reason: 'offensive_or_abusive' }),
             expect.objectContaining({ commentId: 'comment-uuid', type: 'comment' }),
         );
-        expect(pipelineMetrics.getMetrics().counters['facebook_comment.skipped_risky']).toBe(1);
+        expect(pipelineMetrics.record).toHaveBeenCalledWith('facebook_comment', 'skipped_risky');
     });
 
     it('should skip reply when AI intent is OFFENSIVE (case-insensitive)', async () => {

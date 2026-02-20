@@ -194,7 +194,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 
-        return reply.send(pipelineMetrics.getMetrics());
+        return reply.send(await pipelineMetrics.getMetrics());
     });
 
     /**

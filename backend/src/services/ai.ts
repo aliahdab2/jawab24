@@ -1,5 +1,6 @@
 import axios from 'axios';
 import crypto from 'crypto';
+import * as Sentry from '@sentry/node';
 import { db } from '../db';
 import { aiCache } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
@@ -53,68 +54,70 @@ export class AiService {
             return null;
         }
 
-        const hash = this.hashComment(comment, language, pageId);
-        const cacheKey = `cache:ai_reply:${hash}`;
+        return Sentry.startSpan({ name: 'ai.cache.exact', op: 'cache.get' }, async () => {
+            const hash = this.hashComment(comment, language, pageId);
+            const cacheKey = `cache:ai_reply:${hash}`;
 
-        try {
-            // Try Redis first (fast path) — stores JSON with metadata
-            const cachedData = await redis.get(cacheKey);
-            if (cachedData) {
-                try {
-                    const parsed = JSON.parse(cachedData);
-                    if (parsed && typeof parsed === 'object' && parsed.reply) {
-                        this.logger.info('ai_cache_hit_with_metadata', { hash });
-                        return parsed;
-                    }
-                } catch {
-                    // Old format (plain text) — discard; fresh AI call will save with metadata
-                    this.logger.info('ai_cache_miss_legacy_discarded', { hash });
-                }
-            }
-        } catch (error) {
-            this.logger.error('Redis cache error', { error });
-        }
-
-        // Fallback to Postgres (slow path / persistent)
-        const cached = await db
-            .select()
-            .from(aiCache)
-            .where(eq(aiCache.commentHash, hash));
-
-        if (cached.length > 0) {
-            const meta = cached[0].metadata as { intent?: string; confidence?: string; flags?: string[] } | null;
-
-            // Skip entries without metadata — fresh AI call will save with full flagging data
-            if (!meta) {
-                this.logger.info('ai_cache_miss_postgres_no_metadata', { hash });
-                return null;
-            }
-
-            const reply = cached[0].replyText;
-            const result = { reply, intent: meta.intent, confidence: meta.confidence, flags: meta.flags };
-            this.logger.info('ai_cache_hit_postgres', { hash });
-
-            // Populate Redis for next time (JSON format with metadata)
             try {
-                await redis.set(cacheKey, JSON.stringify(result), 'EX', 30 * 24 * 60 * 60);
-            } catch {
-                // Ignore redis set error
+                // Try Redis first (fast path) — stores JSON with metadata
+                const cachedData = await redis.get(cacheKey);
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        if (parsed && typeof parsed === 'object' && parsed.reply) {
+                            this.logger.info('ai_cache_hit_with_metadata', { hash });
+                            return parsed;
+                        }
+                    } catch {
+                        // Old format (plain text) — discard; fresh AI call will save with metadata
+                        this.logger.info('ai_cache_miss_legacy_discarded', { hash });
+                    }
+                }
+            } catch (error) {
+                this.logger.error('Redis cache error', { error });
             }
 
-            // Update DB hit count
-            await db
-                .update(aiCache)
-                .set({
-                    hitCount: (cached[0].hitCount || 0) + 1,
-                    lastUsedAt: new Date(),
-                })
-                .where(eq(aiCache.id, cached[0].id));
+            // Fallback to Postgres (slow path / persistent)
+            const cached = await db
+                .select()
+                .from(aiCache)
+                .where(eq(aiCache.commentHash, hash));
 
-            return result;
-        }
+            if (cached.length > 0) {
+                const meta = cached[0].metadata as { intent?: string; confidence?: string; flags?: string[] } | null;
 
-        this.logger.info('ai_cache_miss', { hash });
-        return null;
+                // Skip entries without metadata — fresh AI call will save with full flagging data
+                if (!meta) {
+                    this.logger.info('ai_cache_miss_postgres_no_metadata', { hash });
+                    return null;
+                }
+
+                const reply = cached[0].replyText;
+                const result = { reply, intent: meta.intent, confidence: meta.confidence, flags: meta.flags };
+                this.logger.info('ai_cache_hit_postgres', { hash });
+
+                // Populate Redis for next time (JSON format with metadata)
+                try {
+                    await redis.set(cacheKey, JSON.stringify(result), 'EX', 30 * 24 * 60 * 60);
+                } catch {
+                    // Ignore redis set error
+                }
+
+                // Update DB hit count
+                await db
+                    .update(aiCache)
+                    .set({
+                        hitCount: (cached[0].hitCount || 0) + 1,
+                        lastUsedAt: new Date(),
+                    })
+                    .where(eq(aiCache.id, cached[0].id));
+
+                return result;
+            }
+
+            this.logger.info('ai_cache_miss', { hash });
+            return null;
+        });
     }
 
     /**
@@ -220,8 +223,9 @@ export class AiService {
                 }
 
                 semanticCacheService.setLogger(this.logger);
-                const semanticHit = await semanticCacheService.check(
-                    pageId, queryEmbedding, detectedPreGptIntent, kbActiveVersion,
+                const semanticHit = await Sentry.startSpan(
+                    { name: 'ai.cache.semantic', op: 'cache.get' },
+                    () => semanticCacheService.check(pageId, queryEmbedding as number[], detectedPreGptIntent ?? '', kbActiveVersion),
                 );
 
                 if (semanticHit) {
@@ -243,23 +247,26 @@ export class AiService {
 
         // Layer 3: Full AI worker call
         try {
-            const response = await axios.post<{
-                reply: string;
-                language: string;
-                intent?: string;
-                confidence?: string;
-                flags?: string[];
-                tokensUsed?: number;
-            }>(
-                `${config.ai.serviceUrl}/generate`,
-                {
-                    comment: request.comment,
-                    language: request.language,
-                    context: request.context,
-                },
-                {
-                    timeout: 30000,
-                }
+            const response = await Sentry.startSpan(
+                { name: 'ai.worker.http', op: 'http.client' },
+                () => axios.post<{
+                    reply: string;
+                    language: string;
+                    intent?: string;
+                    confidence?: string;
+                    flags?: string[];
+                    tokensUsed?: number;
+                }>(
+                    `${config.ai.serviceUrl}/generate`,
+                    {
+                        comment: request.comment,
+                        language: request.language,
+                        context: request.context,
+                    },
+                    {
+                        timeout: 30000,
+                    }
+                ),
             );
 
             const aiReply = response.data.reply;
