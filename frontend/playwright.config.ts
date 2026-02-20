@@ -26,7 +26,10 @@ export default defineConfig({
     // In CI, use next dev since 'next start' doesn't work with output: 'standalone'
     // The production build is validated separately via the Docker build step
     command: 'npm run dev',
-    port: 3001,
+    // Use url (not port) so Playwright waits for an actual HTTP response — this ensures
+    // the dev server has finished its initial compilation before any tests run.
+    url: 'http://localhost:3001/en/login',
+    timeout: 120 * 1000,
     reuseExistingServer: !process.env.CI,
   },
 });
