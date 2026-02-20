@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy only manifests first to cache dependencies
@@ -34,7 +34,7 @@ RUN npm run build --workspace=@jawab24/shared
 RUN npm run build --workspace=jawab24-frontend
 
 # Production Stage — standalone output (only traced dependencies, no full node_modules)
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 WORKDIR /app
 RUN apk add --no-cache dumb-init wget
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
