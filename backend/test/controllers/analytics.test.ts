@@ -4,6 +4,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 vi.mock('../../src/services/analytics', () => ({
     analyticsService: {
         getOverview: vi.fn(),
+        getAiUsage: vi.fn(),
     },
 }));
 
@@ -121,6 +122,70 @@ describe('AnalyticsController', () => {
             expect(mockRequest.log!.error).toHaveBeenCalled();
             expect(mockReply.status).toHaveBeenCalledWith(500);
             expect(mockReply.send).toHaveBeenCalledWith({ error: 'Failed to fetch analytics' });
+        });
+    });
+
+    describe('getAiUsage', () => {
+        const mockReport = {
+            period: { from: '2026-01-21', to: '2026-02-20', days: 30 },
+            totals: { calls: 150, llmCalls: 120, cacheHits: 30, tokensIn: 75000, tokensOut: 30000, costUsd: 0.02925 },
+            byModel: { 'gpt-4o-mini': { calls: 150, llmCalls: 120, cacheHits: 30, tokensIn: 75000, tokensOut: 30000, costUsd: 0.02925 } },
+            byDay: [{ date: '2026-02-15', calls: 100, tokensIn: 50000, tokensOut: 20000, costUsd: 0.019500 }],
+        };
+
+        it('should return 401 when user is not authenticated', async () => {
+            mockRequest.user = undefined;
+
+            await controller.getAiUsage(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Unauthorized' });
+        });
+
+        it('should call service with default days=30 when no query param', async () => {
+            vi.mocked(analyticsService.getAiUsage).mockResolvedValue(mockReport as any);
+
+            await controller.getAiUsage(mockRequest as any, mockReply as any);
+
+            expect(analyticsService.getAiUsage).toHaveBeenCalledWith('user-123', 30);
+            expect(mockReply.send).toHaveBeenCalledWith(mockReport);
+        });
+
+        it('should pass days query parameter to service', async () => {
+            mockRequest.query = { days: '7' };
+            vi.mocked(analyticsService.getAiUsage).mockResolvedValue(mockReport as any);
+
+            await controller.getAiUsage(mockRequest as any, mockReply as any);
+
+            expect(analyticsService.getAiUsage).toHaveBeenCalledWith('user-123', 7);
+        });
+
+        it('should clamp days to minimum 1', async () => {
+            mockRequest.query = { days: '-5' };
+            vi.mocked(analyticsService.getAiUsage).mockResolvedValue(mockReport as any);
+
+            await controller.getAiUsage(mockRequest as any, mockReply as any);
+
+            expect(analyticsService.getAiUsage).toHaveBeenCalledWith('user-123', 1);
+        });
+
+        it('should clamp days to maximum 365', async () => {
+            mockRequest.query = { days: '999' };
+            vi.mocked(analyticsService.getAiUsage).mockResolvedValue(mockReport as any);
+
+            await controller.getAiUsage(mockRequest as any, mockReply as any);
+
+            expect(analyticsService.getAiUsage).toHaveBeenCalledWith('user-123', 365);
+        });
+
+        it('should return 500 when service throws', async () => {
+            vi.mocked(analyticsService.getAiUsage).mockRejectedValue(new Error('DB error'));
+
+            await controller.getAiUsage(mockRequest as any, mockReply as any);
+
+            expect(mockRequest.log!.error).toHaveBeenCalled();
+            expect(mockReply.status).toHaveBeenCalledWith(500);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Failed to fetch AI usage' });
         });
     });
 });

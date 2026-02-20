@@ -13,6 +13,7 @@ vi.mock('../../src/db/schema', () => ({
     instagramMedia: { id: 'id', pageId: 'pageId' },
     messages: { pageId: 'pageId', direction: 'direction', replied: 'replied', needsAttention: 'needsAttention', replyMethod: 'replyMethod', aiIntent: 'aiIntent', flagReason: 'flagReason', platform: 'platform', createdTime: 'createdTime', repliedAt: 'repliedAt' },
     pages: { id: 'id', userId: 'userId' },
+    aiUsageLog: { userId: 'userId', createdAt: 'createdAt', model: 'model', tokensIn: 'tokensIn', tokensOut: 'tokensOut', costUsd: 'costUsd', cached: 'cached' },
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -236,6 +237,104 @@ describe('AnalyticsService', () => {
 
             expect(result.byPlatform.facebook).toBe(25); // 20 FB comments + 5 FB messages
             expect(result.byPlatform.instagram).toBe(13); // 10 IG comments + 3 IG messages
+        });
+    });
+
+    describe('getAiUsage', () => {
+        function setupAiUsageMock(rows: any[]) {
+            const mockOrderBy = vi.fn().mockResolvedValue(rows);
+            const mockGroupBy = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+            const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+            const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
+        }
+
+        it('should return empty report when no data exists', async () => {
+            setupAiUsageMock([]);
+
+            const result = await service.getAiUsage('user-1', 30);
+
+            expect(result.totals.calls).toBe(0);
+            expect(result.totals.llmCalls).toBe(0);
+            expect(result.totals.cacheHits).toBe(0);
+            expect(result.totals.tokensIn).toBe(0);
+            expect(result.totals.tokensOut).toBe(0);
+            expect(result.totals.costUsd).toBe(0);
+            expect(result.byModel).toEqual({});
+            expect(result.byDay).toEqual([]);
+            expect(result.period.days).toBe(30);
+        });
+
+        it('should aggregate totals across multiple rows', async () => {
+            setupAiUsageMock([
+                { model: 'gpt-4o-mini', day: '2026-02-15', calls: 100, llmCalls: 80, cacheHits: 20, tokensIn: 50000, tokensOut: 20000, costUsd: 0.019500 },
+                { model: 'gpt-4o-mini', day: '2026-02-16', calls: 50, llmCalls: 40, cacheHits: 10, tokensIn: 25000, tokensOut: 10000, costUsd: 0.009750 },
+            ]);
+
+            const result = await service.getAiUsage('user-1', 30);
+
+            expect(result.totals.calls).toBe(150);
+            expect(result.totals.llmCalls).toBe(120);
+            expect(result.totals.cacheHits).toBe(30);
+            expect(result.totals.tokensIn).toBe(75000);
+            expect(result.totals.tokensOut).toBe(30000);
+        });
+
+        it('should group by model correctly', async () => {
+            setupAiUsageMock([
+                { model: 'gpt-4o-mini', day: '2026-02-15', calls: 100, llmCalls: 80, cacheHits: 20, tokensIn: 50000, tokensOut: 20000, costUsd: 0.019500 },
+                { model: 'gpt-4o', day: '2026-02-15', calls: 10, llmCalls: 10, cacheHits: 0, tokensIn: 5000, tokensOut: 2000, costUsd: 0.100000 },
+                { model: 'gpt-4o-mini', day: '2026-02-16', calls: 50, llmCalls: 40, cacheHits: 10, tokensIn: 25000, tokensOut: 10000, costUsd: 0.009750 },
+            ]);
+
+            const result = await service.getAiUsage('user-1', 30);
+
+            expect(result.byModel['gpt-4o-mini'].calls).toBe(150);
+            expect(result.byModel['gpt-4o-mini'].llmCalls).toBe(120);
+            expect(result.byModel['gpt-4o-mini'].cacheHits).toBe(30);
+            expect(result.byModel['gpt-4o'].calls).toBe(10);
+            expect(result.byModel['gpt-4o'].tokensIn).toBe(5000);
+        });
+
+        it('should group by day correctly and sort ascending', async () => {
+            setupAiUsageMock([
+                { model: 'gpt-4o-mini', day: '2026-02-15', calls: 100, llmCalls: 80, cacheHits: 20, tokensIn: 50000, tokensOut: 20000, costUsd: 0.01 },
+                { model: 'gpt-4o-mini', day: '2026-02-16', calls: 50, llmCalls: 40, cacheHits: 10, tokensIn: 25000, tokensOut: 10000, costUsd: 0.005 },
+            ]);
+
+            const result = await service.getAiUsage('user-1', 30);
+
+            expect(result.byDay).toHaveLength(2);
+            expect(result.byDay[0].date).toBe('2026-02-15');
+            expect(result.byDay[0].calls).toBe(100);
+            expect(result.byDay[1].date).toBe('2026-02-16');
+            expect(result.byDay[1].calls).toBe(50);
+        });
+
+        it('should merge multiple models on the same day in byDay', async () => {
+            setupAiUsageMock([
+                { model: 'gpt-4o-mini', day: '2026-02-15', calls: 100, llmCalls: 80, cacheHits: 20, tokensIn: 50000, tokensOut: 20000, costUsd: 0.01 },
+                { model: 'gpt-4o', day: '2026-02-15', calls: 10, llmCalls: 10, cacheHits: 0, tokensIn: 5000, tokensOut: 2000, costUsd: 0.10 },
+            ]);
+
+            const result = await service.getAiUsage('user-1', 30);
+
+            expect(result.byDay).toHaveLength(1);
+            expect(result.byDay[0].date).toBe('2026-02-15');
+            expect(result.byDay[0].calls).toBe(110);
+            expect(result.byDay[0].tokensIn).toBe(55000);
+        });
+
+        it('should set correct period dates', async () => {
+            setupAiUsageMock([]);
+
+            const result = await service.getAiUsage('user-1', 7);
+
+            expect(result.period.days).toBe(7);
+            const from = new Date(result.period.from);
+            const to = new Date(result.period.to);
+            const diffDays = Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
+            expect(diffDays).toBe(7);
         });
     });
 });
