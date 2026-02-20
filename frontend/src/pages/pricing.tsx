@@ -66,6 +66,9 @@ function PlanCard({
     }).format(price / 100);
   };
 
+  // SAR equivalent (USD is pegged at 3.75 SAR)
+  const sarMonthly = !isFree ? Math.round((isAnnual ? monthlyEquivalent : plan.price) / 100 * 3.75) : 0;
+
   const highlightClasses = isCurrentPlan
     ? 'ring-2 ring-emerald-400 shadow-[0_20px_40px_rgba(16,185,129,0.18)] md:scale-105 z-10'
     : (isPopular && !isCurrentPlan)
@@ -134,6 +137,11 @@ function PlanCard({
         {isAnnual && !isFree && (
           <p className="text-xs text-surface-400 mt-1">
             {t('pricing.billedYearly' as TranslationKey, { amount: formatPrice(displayPrice) })}
+          </p>
+        )}
+        {!isFree && (
+          <p className="text-xs text-surface-400 mt-1">
+            {t('pricing.sarEquivalent' as TranslationKey).replace('{amount}', sarMonthly.toLocaleString())}
           </p>
         )}
         {/* Only show trial badge if user doesn't have an active subscription */}

@@ -159,7 +159,7 @@ function PickPageStep({
                   <FileText className="w-5 h-5" />
                 </div>
                 <div className="min-w-0 text-start">
-                  <p className="font-semibold text-surface-900 truncate">{page.name}</p>
+                  <p className="font-semibold text-surface-900 truncate" title={page.name}>{page.name}</p>
                   <p className="text-xs text-surface-400">
                     {page.autoReplyEnabled ? t('onboarding.autoReplyOn') : t('onboarding.autoReplyOff')}
                   </p>

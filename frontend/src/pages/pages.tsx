@@ -298,7 +298,7 @@ const PagesPage: NextPageWithLayout = () => {
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
                           <FileText className="w-4 h-4" />
                         </div>
-                        <span className={`text-sm font-bold whitespace-nowrap ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
+                        <span className={`text-sm font-bold truncate ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-500'}`}>Facebook</span>
                       </div>
                       <div className="flex-shrink-0">
                         <Toggle
@@ -321,7 +321,7 @@ const PagesPage: NextPageWithLayout = () => {
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
                           <Instagram className="w-4 h-4" />
                         </div>
-                        <span className={`text-sm font-bold whitespace-nowrap ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
+                        <span className={`text-sm font-bold truncate ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-500') : 'text-surface-400'}`}>Instagram</span>
                       </div>
                       <div className="flex-shrink-0">
                         {page.instagramUsername ? (

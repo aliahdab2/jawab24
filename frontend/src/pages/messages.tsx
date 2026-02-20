@@ -551,10 +551,12 @@ const MessagesPage: NextPageWithLayout = () => {
 
       {/* Conversations count hint - clarifies that tab counts refer to messages, not conversations */}
       {conversations.length > 0 && conversations.length !== allMessages.length && (
-        <p className="text-xs text-surface-400 mb-3 -mt-2">
+        <p className="text-xs text-surface-500 mb-3 -mt-2">
           {conversations.length === 1
-            ? t('messages.oneConversation' as TranslationKey)
-            : t('messages.conversationCount' as TranslationKey).replace('{count}', String(conversations.length))
+            ? t('messages.oneConversation' as TranslationKey).replace('{msgCount}', String(allMessages.length))
+            : t('messages.conversationCount' as TranslationKey)
+                .replace('{count}', String(conversations.length))
+                .replace('{msgCount}', String(allMessages.length))
           }
         </p>
       )}
