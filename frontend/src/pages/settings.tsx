@@ -195,7 +195,6 @@ const SettingsPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('settings.title')}
         description={t('settings.pageContext')}
-        className="landscape:mb-4 landscape:py-2"
       />
 
       {/* Sticky Save Button */}
@@ -221,7 +220,7 @@ const SettingsPage: NextPageWithLayout = () => {
       </div>
 
       {/* Main Settings */}
-      <div className="space-y-6 landscape:space-y-4 mb-8 landscape:mb-4">
+      <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-6 sm:mb-8 landscape:mb-4">
         <LanguageSelector
           settings={settings}
           initialSettings={initialSettings}
@@ -279,7 +278,7 @@ const SettingsPage: NextPageWithLayout = () => {
 
       {/* Advanced Settings */}
       {showAdvanced && (
-        <div className="space-y-6 landscape:space-y-4 animate-slide-up pb-12">
+        <div className="space-y-4 sm:space-y-6 landscape:space-y-4 animate-slide-up pb-4 sm:pb-6">
           <BusinessHoursCard settings={settings} setSettings={setSettings} currentTime={currentTime} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4">

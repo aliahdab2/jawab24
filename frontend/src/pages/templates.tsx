@@ -155,7 +155,7 @@ const TemplatesPage: NextPageWithLayout = () => {
 
       {/* Templates Grid */}
       {templates.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 pb-4 sm:pb-6">
           {templates.map((template, i) => (
             <TemplateCard
               key={template.id}

@@ -396,7 +396,7 @@ const DashboardPage: NextPageWithLayout = () => {
       )}
 
       {/* Comments Stats Section */}
-      <div className="mb-10">
+      <div className="mb-8 lg:mb-10">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
@@ -422,7 +422,7 @@ const DashboardPage: NextPageWithLayout = () => {
       </div>
 
       {/* Messages Stats Section */}
-      <div className={clsx("mb-10", statsData.totalMessages === 0 && statsData.messagesPending === 0 && statsData.messagesNeedsAttention === 0 && statsData.messagesRepliedToday === 0 && "opacity-50")}>
+      <div className={clsx("mb-8 lg:mb-10", statsData.totalMessages === 0 && statsData.messagesPending === 0 && statsData.messagesNeedsAttention === 0 && statsData.messagesRepliedToday === 0 && "opacity-50")}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageCircle className="w-4 h-4" />
@@ -449,7 +449,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
       {/* Performance Section — from /analytics/overview */}
       {analytics?.totals && (analytics.totals.comments + analytics.totals.messages) > 0 && (
-        <div className="mb-10">
+        <div className="mb-8 lg:mb-10">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
               <Gauge className="w-4 h-4" />
@@ -485,7 +485,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
       {/* Today's Activity Summary */}
       {(statsData.commentsToday > 0 || statsData.aiReplies > 0 || statsData.templateReplies > 0) && (
-        <div className="mb-8 p-4 bg-white rounded-2xl border border-surface-100 shadow-sm">
+        <div className="mb-8 lg:mb-10 p-4 bg-white rounded-2xl border border-surface-100 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             {/* Today vs Yesterday */}
             <div className="flex items-center gap-3">

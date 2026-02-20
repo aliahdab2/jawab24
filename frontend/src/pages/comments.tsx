@@ -449,7 +449,7 @@ const CommentsPage: NextPageWithLayout = () => {
         <>
           <div
             className={clsx(
-              "grid grid-cols-1 lg:grid-cols-2 gap-8 pb-8 transition-all duration-300 ease-out",
+              "grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 pb-4 sm:pb-6 transition-all duration-300 ease-out",
               isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
             )}
           >

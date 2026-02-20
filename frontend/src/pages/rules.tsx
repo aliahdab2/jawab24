@@ -247,7 +247,7 @@ const RulesPage: NextPageWithLayout = () => {
 
       {/* Rules List */}
       {rules.length > 0 ? (
-        <div className="space-y-6 pb-12">
+        <div className="space-y-4 sm:space-y-6 pb-4 sm:pb-6">
           {rules.map((rule, i) => (
             <RuleCard
               key={rule.id}

@@ -23,6 +23,10 @@
     --content-padding-x-md: 2rem;     /* 32px tablet */
     --content-padding-x-lg: 3rem;     /* 48px desktop */
     --content-padding-y: 1rem;        /* 16px */
+
+    /* Dashboard spacing tokens — see docs/DASHBOARD_SPACING.md */
+    --dash-section-gap: 2rem;         /* 32px between major sections */
+    --dash-filter-mb: 1.5rem;         /* 24px below filter/tab bars */
     
     /* ═══════════════════════════════════════════════════════════════════
        SAFE AREA INSETS - Single Source of Truth
@@ -1012,6 +1016,17 @@ body.is-native .pt-hero {
 @media (orientation: landscape) {
   .bottom-nav-position {
     bottom: 0;
+  }
+}
+
+/* Dashboard mobile bottom padding — accounts for bottom nav (64px) + FAB (48px) + gaps */
+.pb-dash-mobile {
+  padding-bottom: 140px;
+}
+
+@media (min-width: 1024px) {
+  .pb-dash-mobile {
+    padding-bottom: 3rem; /* 48px — desktop has no bottom nav */
   }
 }
 

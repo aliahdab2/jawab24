@@ -183,23 +183,12 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             !isCleanLayout && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >
-          <div 
+          <div
             className={clsx(
               // Padding around content - top padding is minimal since sticky header is in document flow
-              'px-4 pb-4 pt-5 px-safe-landscape max-lg:landscape:pt-2 md:px-8 md:pb-8 md:pt-8 lg:px-16 lg:pb-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
-              isCleanLayout ? 'pb-12' : 'lg:pb-12'
+              'px-4 pt-5 px-safe-landscape max-lg:landscape:pt-2 md:px-8 md:pt-8 lg:px-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
+              isCleanLayout ? 'pb-4' : 'pb-dash-mobile'
             )}
-            style={{
-              ...(isCleanLayout
-                ? {
-                    // Public pages (no bottom nav): still need bottom safe area + a bit of breathing room
-                    paddingBottom: '16px',
-                  }
-                : {
-                    // Mobile app: padding = bottom nav (64px) + FAB height (48px) + gaps + breathing room
-                    paddingBottom: '140px',
-                  }),
-            }}
           >
             {/* Demo Mode Banner - self-contained, only renders when user is in demo mode */}
             <DemoBanner className="mb-4 -mx-4 md:-mx-8 lg:-mx-16 xl:-mx-20 rounded-none" />

@@ -59,6 +59,38 @@ const MOCK_SETTINGS = {
   awayMessage: '', greetingMessage: '', replyDelay: 0,
 };
 
+const MOCK_MESSAGES = {
+  data: [
+    { id: 'm1', senderId: 'sender_1', senderName: 'Alice', message: 'Hello, I need help',
+      direction: 'incoming', replied: true, replyText: 'Hi! How can I help?',
+      replyMethod: 'ai', pageId: 'page_1', createdAt: '2026-01-15T10:00:00.000Z' },
+    { id: 'm2', senderId: 'sender_2', senderName: 'Bob', message: 'What is the price?',
+      direction: 'incoming', replied: false, replyText: null,
+      replyMethod: null, pageId: 'page_1', createdAt: '2026-01-15T09:00:00.000Z' },
+  ],
+  pagination: { nextCursor: null },
+};
+
+const MOCK_TEMPLATES = {
+  data: [
+    { id: 't1', name: 'Welcome', message: 'Welcome to our business!', enabled: true,
+      createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
+    { id: 't2', name: 'Business Hours', message: 'We are open 9 AM - 5 PM.', enabled: true,
+      createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
+  ],
+};
+
+const MOCK_RULES = {
+  data: [
+    { id: 'r1', name: 'Price Inquiry', keywords: ['price', 'cost', 'how much'],
+      templateId: 't1', enabled: true, priority: 1,
+      createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
+    { id: 'r2', name: 'Hours Question', keywords: ['hours', 'open', 'when'],
+      templateId: 't2', enabled: true, priority: 2,
+      createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
+  ],
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setupAuth(page: import('@playwright/test').Page, language: 'en' | 'ar' = 'en') {
@@ -85,6 +117,12 @@ function setupApiMocks(page: import('@playwright/test').Page) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MESSAGE_STATS) });
     if (url.includes('/comments'))
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMENTS) });
+    if (url.includes('/messages'))
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MESSAGES) });
+    if (url.includes('/templates'))
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_TEMPLATES) });
+    if (url.includes('/rules'))
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_RULES) });
     if (url.includes('/pages'))
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PAGES }) });
     if (url.includes('/subscription/usage'))
@@ -201,5 +239,44 @@ test.describe('Landscape Mode', () => {
     await page.waitForSelector('h1', { timeout: 15000 });
     await page.waitForTimeout(800);
     await expect(page).toHaveScreenshot('comments-en-landscape.png', SNAP_OPTS);
+  });
+});
+
+// ── 4. Dashboard Page Spacing — one snapshot per core page ──────────────────
+
+test.describe('Dashboard Page Spacing', () => {
+  test.use({ viewport: { width: 390, height: 844 } }); // iPhone 14 Pro
+
+  test.beforeEach(async ({ page }) => {
+    await setupAuth(page, 'en');
+    await setupApiMocks(page);
+  });
+
+  test('messages page spacing', async ({ page }) => {
+    await page.goto('/en/messages');
+    await page.waitForSelector('h1', { timeout: 15000 });
+    await page.waitForTimeout(800);
+    await expect(page).toHaveScreenshot('messages-en-mobile.png', SNAP_OPTS);
+  });
+
+  test('templates page spacing', async ({ page }) => {
+    await page.goto('/en/templates');
+    await page.waitForSelector('h1', { timeout: 15000 });
+    await page.waitForTimeout(800);
+    await expect(page).toHaveScreenshot('templates-en-mobile.png', SNAP_OPTS);
+  });
+
+  test('rules page spacing', async ({ page }) => {
+    await page.goto('/en/rules');
+    await page.waitForSelector('h1', { timeout: 15000 });
+    await page.waitForTimeout(800);
+    await expect(page).toHaveScreenshot('rules-en-mobile.png', SNAP_OPTS);
+  });
+
+  test('settings page spacing', async ({ page }) => {
+    await page.goto('/en/settings');
+    await page.waitForSelector('h1', { timeout: 15000 });
+    await page.waitForTimeout(800);
+    await expect(page).toHaveScreenshot('settings-en-mobile.png', SNAP_OPTS);
   });
 });
