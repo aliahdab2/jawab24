@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import { config } from '../config';
 import { runAllCleanupTasks, getAiCacheStats } from '../utils/cleanup';
 import { pipelineMetrics } from '../lib/pipelineMetrics';
+import { aiWorkerCircuit } from '../lib/circuitBreaker';
 import { createRequestLogger } from '../types';
 
 const startTime = Date.now();
@@ -25,6 +26,7 @@ interface ServiceStatus {
     status: 'up' | 'down' | 'not_configured';
     message?: string;
     responseTime?: number;
+    circuit?: 'closed' | 'open' | 'half-open';
 }
 
 async function checkDatabase(): Promise<ServiceStatus> {
@@ -48,11 +50,16 @@ function checkStripe(): ServiceStatus {
     return { status: 'not_configured', message: 'Stripe keys not set' };
 }
 
-function checkAI(): ServiceStatus {
-    if (config.ai.enabled) {
+async function checkAI(): Promise<ServiceStatus> {
+    if (!config.ai.enabled) {
+        return { status: 'not_configured', message: 'AI service disabled' };
+    }
+    try {
+        const circuit = await aiWorkerCircuit.getState();
+        return { status: 'up', message: 'Enabled', circuit };
+    } catch {
         return { status: 'up', message: 'Enabled' };
     }
-    return { status: 'not_configured', message: 'AI service disabled' };
 }
 
 const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
@@ -65,7 +72,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
     }, async (request, reply) => {
         const database = await checkDatabase();
         const stripe = checkStripe();
-        const ai = checkAI();
+        const ai = await checkAI();
 
         const allServicesUp = database.status === 'up';
         const anyServiceDown = database.status === 'down';

@@ -32,6 +32,13 @@ vi.mock('../../src/lib/pipelineMetrics', () => ({
     },
 }));
 
+vi.mock('../../src/lib/circuitBreaker', () => ({
+    aiWorkerCircuit: {
+        getState: vi.fn().mockResolvedValue('closed'),
+        execute: vi.fn((fn: () => unknown) => fn()),
+    },
+}));
+
 vi.mock('../../src/types', () => ({
     createRequestLogger: vi.fn().mockReturnValue({
         info: vi.fn(),
@@ -81,6 +88,28 @@ describe('Health Routes', () => {
             expect(body.timestamp).toBeDefined();
             expect(body.uptime).toBeTypeOf('number');
             expect(body.environment).toBe('test');
+        });
+
+        it('includes circuit breaker state in AI service health', async () => {
+            vi.mocked(db.execute).mockResolvedValue([] as any);
+            const { aiWorkerCircuit } = await import('../../src/lib/circuitBreaker');
+            vi.mocked(aiWorkerCircuit.getState).mockResolvedValue('closed');
+
+            const response = await app.inject({ method: 'GET', url: '/health' });
+            const body = response.json();
+
+            expect(body.services.ai.circuit).toBe('closed');
+        });
+
+        it('reflects open circuit state in health response', async () => {
+            vi.mocked(db.execute).mockResolvedValue([] as any);
+            const { aiWorkerCircuit } = await import('../../src/lib/circuitBreaker');
+            vi.mocked(aiWorkerCircuit.getState).mockResolvedValue('open');
+
+            const response = await app.inject({ method: 'GET', url: '/health' });
+            const body = response.json();
+
+            expect(body.services.ai.circuit).toBe('open');
         });
 
         it('returns unhealthy (503) when database is down', async () => {

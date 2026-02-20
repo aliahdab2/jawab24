@@ -12,6 +12,7 @@ import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { estimateCostUsd } from '../config/aiPricing';
+import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 
 /** Lazy-init embedding provider for semantic cache (only when OPENAI_API_KEY exists) */
 let _embeddingProvider: OpenAIEmbeddingProvider | null = null;
@@ -253,30 +254,32 @@ export class AiService {
             }
         }
 
-        // Layer 3: Full AI worker call
+        // Layer 3: Full AI worker call (protected by circuit breaker)
         try {
-            const response = await Sentry.startSpan(
-                { name: 'ai.worker.http', op: 'http.client' },
-                () => axios.post<{
-                    reply: string;
-                    language: string;
-                    intent?: string;
-                    confidence?: string;
-                    flags?: string[];
-                    tokensUsed?: number;
-                    tokensIn?: number;
-                    tokensOut?: number;
-                }>(
-                    `${config.ai.serviceUrl}/generate`,
-                    {
-                        comment: request.comment,
-                        language: request.language,
-                        context: request.context,
-                    },
-                    {
-                        timeout: 30000,
-                    }
-                ),
+            const response = await aiWorkerCircuit.execute(() =>
+                Sentry.startSpan(
+                    { name: 'ai.worker.http', op: 'http.client' },
+                    () => axios.post<{
+                        reply: string;
+                        language: string;
+                        intent?: string;
+                        confidence?: string;
+                        flags?: string[];
+                        tokensUsed?: number;
+                        tokensIn?: number;
+                        tokensOut?: number;
+                    }>(
+                        `${config.ai.serviceUrl}/generate`,
+                        {
+                            comment: request.comment,
+                            language: request.language,
+                            context: request.context,
+                        },
+                        {
+                            timeout: 30000,
+                        }
+                    ),
+                )
             );
 
             const aiReply = response.data.reply;
@@ -325,9 +328,13 @@ export class AiService {
                 tokensUsed: response.data.tokensUsed,
             };
         } catch (error) {
-            this.logger.error('AI Service error', {
-                error: error instanceof Error ? error.message : String(error)
-            });
+            if (error instanceof CircuitOpenError) {
+                this.logger.warn('AI circuit breaker open — using fallback');
+            } else {
+                this.logger.error('AI Service error', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
 
             // Return fallback response
             return {

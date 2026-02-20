@@ -56,6 +56,17 @@ vi.mock('../../src/lib/redis', () => ({
     },
 }));
 
+// Mock circuit breaker — pass-through so existing tests are unaffected
+vi.mock('../../src/lib/circuitBreaker', () => ({
+    aiWorkerCircuit: {
+        execute: vi.fn((fn: () => unknown) => fn()),
+        getState: vi.fn().mockResolvedValue('closed'),
+    },
+    CircuitOpenError: class CircuitOpenError extends Error {
+        constructor() { super('Circuit open'); this.name = 'CircuitOpenError'; }
+    },
+}));
+
 // Mock config
 vi.mock('../../src/config', () => ({
     config: {
