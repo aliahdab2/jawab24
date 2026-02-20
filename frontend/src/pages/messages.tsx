@@ -21,6 +21,7 @@ import {
   Download,
   MoreVertical,
   Loader2,
+  type LucideIcon,
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
@@ -425,11 +426,13 @@ const MessagesPage: NextPageWithLayout = () => {
     resumeMutation.mutate({ senderId, pageId });
   }, [resumeMutation]);
 
-  const emptyStateContent = useMemo(() => {
+  type EmptyConfig = { icon: LucideIcon; variant: 'success' | 'empty' | 'search'; title: string; subtitle: string; iconColorClass?: string; iconBgClass?: string };
+
+  const emptyStateContent = useMemo((): EmptyConfig => {
     if (searchQuery) {
-      return { icon: Search, variant: 'search' as const, title: t('common.noData'), subtitle: '' };
+      return { icon: Search, variant: 'search', title: t('common.noData'), subtitle: '' };
     }
-    const config: Record<FilterType, { icon: React.ElementType; variant: 'success' | 'empty'; title: string; subtitle: string; iconColorClass?: string; iconBgClass?: string }> = {
+    const config: Record<FilterType, EmptyConfig> = {
       needs_action: {
         icon: CheckCircle,
         variant: 'success',

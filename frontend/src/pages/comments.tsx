@@ -21,7 +21,8 @@ import {
   AlertTriangle,
   ExternalLink,
   MoreVertical,
-  Loader2
+  Loader2,
+  type LucideIcon,
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { format } from 'date-fns';
@@ -277,14 +278,16 @@ const CommentsPage: NextPageWithLayout = () => {
     }
   };
 
-  const emptyStateContent = useMemo(() => {
+  type EmptyConfig = { icon: LucideIcon; variant: 'success' | 'empty' | 'search'; title: string; subtitle: string; iconColorClass?: string; iconBgClass?: string; showConnectCta: boolean };
+
+  const emptyStateContent = useMemo((): EmptyConfig => {
     if (debouncedSearch) {
-      return { icon: Search, variant: 'search' as const, title: t('common.noData'), subtitle: t('comments.tryDifferentSearch' as TranslationKey), showConnectCta: false };
+      return { icon: Search, variant: 'search', title: t('common.noData'), subtitle: t('comments.tryDifferentSearch' as TranslationKey), showConnectCta: false };
     }
     if (pages.length === 0) {
-      return { icon: MessageSquare, variant: 'empty' as const, title: t('comments.noComments'), subtitle: t('comments.noCommentsDesc' as TranslationKey), showConnectCta: true };
+      return { icon: MessageSquare, variant: 'empty', title: t('comments.noComments'), subtitle: t('comments.noCommentsDesc' as TranslationKey), showConnectCta: true };
     }
-    const config: Record<FilterType, { icon: React.ElementType; variant: 'success' | 'empty'; title: string; subtitle: string; iconColorClass?: string; iconBgClass?: string }> = {
+    const config: Record<FilterType, Omit<EmptyConfig, 'showConnectCta'>> = {
       needs_action: {
         icon: CheckCircle,
         variant: 'success',

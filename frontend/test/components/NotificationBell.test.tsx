@@ -268,8 +268,10 @@ describe('NotificationBell', () => {
             expect(mockGetUnreadCount).toHaveBeenCalledTimes(1);
         });
 
-        // Fast forward 60 seconds (refresh interval)
-        await vi.advanceTimersByTimeAsync(60000);
+        // Fast forward 60 seconds (refresh interval) — wrap in act to handle state updates
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(60000);
+        });
 
         // Should have fetched again
         expect(mockGetUnreadCount.mock.calls.length).toBeGreaterThan(1);

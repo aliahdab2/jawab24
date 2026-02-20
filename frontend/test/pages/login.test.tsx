@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useRouter } from 'next/router';
 import LoginPage from '@/pages/login';
 import { authApi } from '@/lib/api';
@@ -166,7 +166,7 @@ describe('LoginPage', () => {
 
         it('should use native SDK when on mobile platform', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-            
+
             // Setup API Spy
             const nativeLoginSpy = vi.spyOn(authApi, 'nativeFacebookLogin').mockResolvedValue({
                 data: {
@@ -176,8 +176,10 @@ describe('LoginPage', () => {
                 }
             } as any);
 
-            render(<LoginPage />);
-            
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
             // Wait for pre-initialization to complete
             await vi.waitFor(() => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
@@ -202,7 +204,7 @@ describe('LoginPage', () => {
 
         it('should show info message when user cancels login (no token returned)', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-            
+
             // Mock SDK returning null (user cancelled)
             (FacebookLogin.login as any).mockResolvedValue({ accessToken: null });
 
@@ -211,8 +213,10 @@ describe('LoginPage', () => {
             const toastInfoSpy = vi.mocked(toast.info);
             toastInfoSpy.mockClear();
 
-            render(<LoginPage />);
-            
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
             await vi.waitFor(() => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
@@ -233,12 +237,14 @@ describe('LoginPage', () => {
 
         it('should show error when SDK login throws an error', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-            
+
             // Mock SDK throwing error
             (FacebookLogin.login as any).mockRejectedValue(new Error('SDK Error'));
 
-            render(<LoginPage />);
-            
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
             await vi.waitFor(() => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
@@ -257,15 +263,17 @@ describe('LoginPage', () => {
 
         it('should show error when backend API fails after successful SDK login', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-            
+
             // SDK succeeds
             (FacebookLogin.login as any).mockResolvedValue({ accessToken: { token: 'native-fb-token' } });
-            
+
             // But backend fails
             vi.spyOn(authApi, 'nativeFacebookLogin').mockRejectedValue(new Error('Backend Error'));
 
-            render(<LoginPage />);
-            
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
             await vi.waitFor(() => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
@@ -284,15 +292,17 @@ describe('LoginPage', () => {
 
         it('should handle login timeout', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-            
+
             // Mock SDK that never resolves (simulates hanging)
             (FacebookLogin.login as any).mockImplementation(() => new Promise(() => {}));
 
             // Use fake timers for timeout testing
             vi.useFakeTimers();
 
-            render(<LoginPage />);
-            
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
             await vi.waitFor(() => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });

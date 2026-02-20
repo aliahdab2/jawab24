@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { useRouter } from 'next/router';
 import CheckoutPage from '@/pages/checkout';
 import { useAuthStore } from '@/lib/store';
@@ -292,6 +292,9 @@ describe('CheckoutPage', () => {
     });
 
     render(<CheckoutPage />);
+
+    // Let the geo check promise settle
+    await act(async () => {});
 
     // Should not crash — plan fetch won't fire without planId
     expect(mockPublicApiGet).not.toHaveBeenCalled();
