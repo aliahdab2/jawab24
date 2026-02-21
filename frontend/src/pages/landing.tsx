@@ -221,19 +221,19 @@ export default function LandingPage() {
                 <div className="flex flex-col items-stretch gap-2 sm:gap-4 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
                   <div className="flex flex-col items-center sm:items-start gap-2">
                     <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
-                      <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-2 sm:px-8 py-2.5 sm:py-5 text-[10px] min-[375px]:text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                      <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
                         {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.hero.cta1')}
                       </Button>
                     </Link>
                     {!isAuthenticated && (
-                      <p className="text-[10px] sm:text-sm text-surface-500 font-medium">
+                      <p className="text-xs sm:text-sm text-surface-600 font-medium">
                         {t('landing.cta.note')}
                       </p>
                     )}
                   </div>
                   {!isAuthenticated && (
                     <Link href="/pricing" className="w-full sm:w-auto">
-                      <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-2 sm:px-8 py-2.5 sm:py-5 text-[10px] min-[375px]:text-xs sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-surface-200 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
+                      <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-gray-300 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
                         {t('landing.hero.cta2')}
                       </Button>
                     </Link>
@@ -416,7 +416,7 @@ export default function LandingPage() {
                     <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
                       <span className="flex items-center gap-2">
                         {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.howItWorks.cta')}
-                        <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 rtl:rotate-180" />
+                        <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                       </span>
                     </Button>
                   </Link>
@@ -542,7 +542,7 @@ export default function LandingPage() {
                 <Button size="lg" className="px-6 sm:px-12 py-4 sm:py-6 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl shadow-xl shadow-brand-200">
                   <span className="flex items-center gap-2">
                     {t('pricing.viewPricingDetails')}
-                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 rtl:rotate-180" />
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                   </span>
                 </Button>
               </Link>
