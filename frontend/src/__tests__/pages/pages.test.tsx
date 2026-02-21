@@ -126,10 +126,10 @@ describe('PagesPage - Toggle Error Handling', () => {
         render(<PagesPage />);
 
         await waitFor(() => {
-            expect(screen.getByText('My Business Page')).toBeInTheDocument();
+            expect(screen.getAllByText('My Business Page')[0]).toBeInTheDocument();
         });
 
-        expect(screen.getByText('Second Page')).toBeInTheDocument();
+        expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
     });
 
     it('should show toast when Facebook toggle ON fails with PAGE_LIMIT_REACHED', async () => {
@@ -144,7 +144,7 @@ describe('PagesPage - Toggle Error Handling', () => {
         render(<PagesPage />);
 
         await waitFor(() => {
-            expect(screen.getByText('Second Page')).toBeInTheDocument();
+            expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
         });
 
         // Page_2 FB toggle is OFF — find all OFF toggles
@@ -175,7 +175,7 @@ describe('PagesPage - Toggle Error Handling', () => {
         render(<PagesPage />);
 
         await waitFor(() => {
-            expect(screen.getByText('Second Page')).toBeInTheDocument();
+            expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
         });
 
         const allSwitches = screen.getAllByRole('switch');
@@ -193,7 +193,7 @@ describe('PagesPage - Toggle Error Handling', () => {
         render(<PagesPage />);
 
         await waitFor(() => {
-            expect(screen.getByText('My Business Page')).toBeInTheDocument();
+            expect(screen.getAllByText('My Business Page')[0]).toBeInTheDocument();
         });
 
         const allSwitches = screen.getAllByRole('switch');
@@ -220,7 +220,7 @@ describe('PagesPage - Toggle Error Handling', () => {
         render(<PagesPage />);
 
         await waitFor(() => {
-            expect(screen.getByText('My Business Page')).toBeInTheDocument();
+            expect(screen.getAllByText('My Business Page')[0]).toBeInTheDocument();
         });
 
         const allSwitches = screen.getAllByRole('switch');

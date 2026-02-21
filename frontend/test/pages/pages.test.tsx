@@ -122,7 +122,7 @@ describe('PagesPage', () => {
       render(<PagesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Test Page')).toBeInTheDocument();
+        expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();
       });
 
       // Empty state should NOT be shown
@@ -145,7 +145,7 @@ describe('PagesPage', () => {
 
       // Wait for page to load first
       await waitFor(() => {
-        expect(screen.getByText('My Business Page')).toBeInTheDocument();
+        expect(screen.getAllByText('My Business Page')[0]).toBeInTheDocument();
       });
 
       // Then check for Facebook badge (there may be multiple "Facebook" texts in the UI)
@@ -217,7 +217,7 @@ describe('PagesPage', () => {
       render(<PagesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Test Page')).toBeInTheDocument();
+        expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();
       });
 
       // Find and click the toggle button (role="switch")
@@ -249,7 +249,7 @@ describe('PagesPage', () => {
       render(<PagesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Test Page')).toBeInTheDocument();
+        expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();
       });
 
       // Click the "Add business info" button
