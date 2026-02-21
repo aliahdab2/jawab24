@@ -19,7 +19,22 @@ vi.mock('../services/auth', () => ({
         findOrCreateUser: vi.fn(),
         generateToken: vi.fn(),
         createAuthResponse: vi.fn(),
+        getUserById: vi.fn(),
     }
+}));
+
+// Mock db for refreshPicture (update chain)
+// vi.hoisted() is required because vi.mock() factories are hoisted to top of file
+const { mockDbUpdate } = vi.hoisted(() => {
+    const mockDbUpdate = vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue(undefined),
+        }),
+    });
+    return { mockDbUpdate };
+});
+vi.mock('../db', () => ({
+    db: { update: mockDbUpdate },
 }));
 
 vi.mock('../services/pages', () => ({
@@ -121,5 +136,102 @@ describe('AuthController - Native Login', () => {
         expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
             error: 'Access token is required'
         }));
+    });
+});
+
+describe('AuthController - refreshPicture', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockRequest: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockReply: any;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+
+        mockRequest = {
+            user: { userId: 'user-123' },
+            log: { error: vi.fn() },
+        };
+
+        mockReply = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+        };
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+        mockRequest.user = undefined;
+
+        await authController.refreshPicture(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(401);
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'Unauthorized' }));
+    });
+
+    it('should return 404 if user not found in DB', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue(null);
+
+        await authController.refreshPicture(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(404);
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'User not found' }));
+    });
+
+    it('should return 422 if user has no Facebook token', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-123', facebookId: 'fb-123', name: 'Test', facebookAccessToken: null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+
+        await authController.refreshPicture(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(422);
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'No Facebook token available' }));
+        expect(facebookService.getUserProfile).not.toHaveBeenCalled();
+    });
+
+    it('should return 422 if Facebook returns no picture', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-123', facebookId: 'fb-123', name: 'Test', facebookAccessToken: 'fb-token',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+            id: 'fb-123', name: 'Test', picture: undefined,
+        });
+
+        await authController.refreshPicture(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(422);
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'No picture returned from Facebook' }));
+    });
+
+    it('should save fresh picture URL to DB and return it', async () => {
+        const freshUrl = 'https://scontent.fbcdn.net/new-photo.jpg';
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-123', facebookId: 'fb-123', name: 'Test', facebookAccessToken: 'fb-token',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+            id: 'fb-123', name: 'Test', picture: freshUrl,
+        });
+
+        await authController.refreshPicture(mockRequest, mockReply);
+
+        expect(facebookService.getUserProfile).toHaveBeenCalledWith('fb-token');
+        expect(mockDbUpdate).toHaveBeenCalled();
+        expect(mockReply.send).toHaveBeenCalledWith({ picture: freshUrl });
+    });
+
+    it('should return 500 if Facebook API call throws', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-123', facebookId: 'fb-123', name: 'Test', facebookAccessToken: 'fb-token',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        vi.mocked(facebookService.getUserProfile).mockRejectedValue(new Error('FB API error'));
+
+        await authController.refreshPicture(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(500);
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'Internal Server Error' }));
     });
 });
