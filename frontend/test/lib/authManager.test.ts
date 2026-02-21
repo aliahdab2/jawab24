@@ -43,15 +43,27 @@ describe('AuthManager', () => {
             expect(typeof unsubscribe).toBe('function');
         });
 
-        it('should remove listener when unsubscribe is called', () => {
+        it('should not call listener after unsubscribe', async () => {
             const callback = vi.fn();
             const unsubscribe = AuthManagerModule.authManager.onAuthStateChange(callback);
 
             unsubscribe();
 
-            // After unsubscribe, callback should not be in the listeners set
-            // We can't directly test this, but we can verify the function works without error
-            expect(typeof unsubscribe).toBe('function');
+            // Trigger a logout which calls notifyAuthStateChange(false) internally
+            vi.doMock('@/lib/store', () => ({
+                useAuthStore: { setState: vi.fn() },
+            }));
+            vi.doMock('@/lib/api', () => ({
+                publicApi: { post: vi.fn().mockResolvedValue({}) },
+            }));
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: { isNativePlatform: () => false },
+            }));
+
+            await AuthManagerModule.authManager.logout({ redirect: false });
+
+            // Callback should NOT have been called since we unsubscribed
+            expect(callback).not.toHaveBeenCalled();
         });
     });
 
@@ -304,6 +316,71 @@ describe('AuthManager', () => {
             } as unknown as AxiosError;
 
             await expect(errorHandler(error)).rejects.toBe(error);
+        });
+
+        it('should refresh token and retry original request on 401', async () => {
+            const mockUse = vi.fn();
+            const retryResponse = { status: 200, data: { ok: true } };
+
+            // Mock the axios instance — post('/auth/refresh') succeeds,
+            // then calling the instance as a function (retry) succeeds
+            const mockAxiosInstance = vi.fn().mockResolvedValue(retryResponse);
+            (mockAxiosInstance as any).interceptors = {
+                response: { use: mockUse },
+            };
+            (mockAxiosInstance as any).post = vi.fn().mockResolvedValue({
+                data: { success: true },
+            });
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance as unknown as AxiosInstance);
+
+            const errorHandler = mockUse.mock.calls[0][1];
+            const error = {
+                config: { url: '/some-endpoint' },
+                response: { status: 401 },
+            } as unknown as AxiosError;
+
+            const result = await errorHandler(error);
+
+            // Should have retried the original request
+            expect(result).toBe(retryResponse);
+            // Config should be marked as _retry
+            expect(error.config).toHaveProperty('_retry', true);
+            // refreshToken should have been called
+            expect((mockAxiosInstance as any).post).toHaveBeenCalledWith('/auth/refresh');
+        });
+
+        it('should logout when refresh fails', async () => {
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: {
+                    response: { use: mockUse },
+                },
+                post: vi.fn().mockResolvedValue({
+                    data: { success: false },
+                }),
+            } as unknown as AxiosInstance;
+
+            // Mock logout dependencies
+            vi.doMock('@/lib/store', () => ({
+                useAuthStore: { setState: vi.fn() },
+            }));
+            vi.doMock('@/lib/api', () => ({
+                publicApi: { post: vi.fn().mockResolvedValue({}) },
+            }));
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: { isNativePlatform: () => false },
+            }));
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            const errorHandler = mockUse.mock.calls[0][1];
+            const error = {
+                config: { url: '/some-endpoint' },
+                response: { status: 401 },
+            } as unknown as AxiosError;
+
+            await expect(errorHandler(error)).rejects.toThrow('Session expired');
         });
     });
 });

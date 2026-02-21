@@ -15,15 +15,21 @@ vi.mock('../../../src/services/instagram', () => ({
     },
 }));
 
-// Mock DB for direct operations
+// Mock DB for direct operations — capture .set() arguments for assertions
 const mockDbSelect = vi.fn();
 const mockDbInsert = vi.fn();
-const mockDbUpdate = vi.fn();
+const mockDbSetArgs = vi.fn();
+const mockDbUpdateWhere = vi.fn();
 vi.mock('../../../src/db', () => ({
     db: {
         select: () => ({ from: () => ({ where: mockDbSelect }) }),
         insert: () => ({ values: (v: unknown) => ({ returning: mockDbInsert }) }),
-        update: () => ({ set: (s: unknown) => ({ where: mockDbUpdate }) }),
+        update: () => ({
+            set: (...args: unknown[]) => {
+                mockDbSetArgs(...args);
+                return { where: mockDbUpdateWhere };
+            },
+        }),
     },
 }));
 
@@ -279,32 +285,80 @@ describe('InstagramCommentAdapter', () => {
     });
 
     describe('markAsReplied', () => {
-        it('should update instagram comment in DB', async () => {
-            mockDbUpdate.mockResolvedValue(undefined);
+        it('should update instagram comment with correct fields', async () => {
+            mockDbUpdateWhere.mockResolvedValue(undefined);
 
             await adapter.markAsReplied(
                 'igc_uuid_1', 'Thank you!', 'ai', 'en', undefined, false, undefined, 'positive',
             );
 
-            expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+            expect(mockDbUpdateWhere).toHaveBeenCalledTimes(1);
+            // Verify the .set() payload
+            expect(mockDbSetArgs).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    replied: true,
+                    replyText: 'Thank you!',
+                    replyMethod: 'ai',
+                    detectedLanguage: 'en',
+                    needsAttention: false,
+                    flagReason: null,
+                    aiIntent: 'positive',
+                    repliedAt: expect.any(Date),
+                    updatedAt: expect.any(Date),
+                }),
+            );
+        });
+
+        it('should default needsAttention to false and flagReason/aiIntent to null', async () => {
+            mockDbUpdateWhere.mockResolvedValue(undefined);
+
+            await adapter.markAsReplied(
+                'igc_uuid_1', 'Thanks!', 'template', 'ar', 'tpl_123',
+            );
+
+            expect(mockDbSetArgs).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    replied: true,
+                    replyText: 'Thanks!',
+                    replyMethod: 'template',
+                    detectedLanguage: 'ar',
+                    needsAttention: false,
+                    flagReason: null,
+                    aiIntent: null,
+                }),
+            );
         });
     });
 
     describe('flagComment', () => {
-        it('should set needsAttention and flagReason', async () => {
-            mockDbUpdate.mockResolvedValue(undefined);
+        it('should set needsAttention=true with flagReason and aiIntent', async () => {
+            mockDbUpdateWhere.mockResolvedValue(undefined);
 
             await adapter.flagComment('igc_uuid_1', 'offensive', 'OFFENSIVE');
 
-            expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+            expect(mockDbUpdateWhere).toHaveBeenCalledTimes(1);
+            expect(mockDbSetArgs).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    needsAttention: true,
+                    flagReason: 'offensive',
+                    aiIntent: 'OFFENSIVE',
+                    updatedAt: expect.any(Date),
+                }),
+            );
         });
 
-        it('should handle missing flagReason and aiIntent', async () => {
-            mockDbUpdate.mockResolvedValue(undefined);
+        it('should default flagReason and aiIntent to null when missing', async () => {
+            mockDbUpdateWhere.mockResolvedValue(undefined);
 
             await adapter.flagComment('igc_uuid_1');
 
-            expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+            expect(mockDbSetArgs).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    needsAttention: true,
+                    flagReason: null,
+                    aiIntent: null,
+                }),
+            );
         });
     });
 

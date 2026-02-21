@@ -425,6 +425,9 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
             replyDelay: 0,
         });
 
+        // Spy on settingsService.getSettings to verify the pipeline uses page.userId
+        const getSettingsSpy = vi.spyOn(settingsService, 'getSettings');
+
         const adapter = createMockAdapter(platformPage);
 
         const result = await processor.processMessage(
@@ -433,12 +436,15 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
 
         expect(result.success).toBe(true);
         expect(result.replyText).toBe('Mocked AI reply');
-        // Pipeline used page.userId to fetch settings, messagesAutoReply=true was honored
+        // KEY ASSERTION: pipeline resolved settings using page.userId
+        expect(getSettingsSpy).toHaveBeenCalledWith(userId);
+
+        getSettingsSpy.mockRestore();
     });
 
     it('uses correct user settings for different users on different pages', async () => {
         // Create a second user with different settings
-        const user2 = await createTestUser({ facebookId: 'fb-user2-settings' });
+        const user2 = await createTestUser({ facebookId: 'fb-user2-settings', email: 'user2-settings@test.com' });
         await settingsService.updateSettings(user2.id, {
             messagesAutoReply: false,
             awayMessage: 'User 2 is away',
@@ -454,6 +460,9 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
             kbActiveVersion: null,
             autoReplyEnabled: true,
         };
+
+        // Spy on settings to verify each pipeline call uses the correct userId
+        const getSettingsSpy = vi.spyOn(settingsService, 'getSettings');
 
         // User 1 (original): messagesAutoReply=true → should get reply
         const adapter1 = createMockAdapter(platformPage);
@@ -473,6 +482,11 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         expect(adapter2.sendAwayMessage).toHaveBeenCalledWith(
             platformPage2, senderId, 'User 2 is away',
         );
-        // Settings isolation confirmed: each user's pipeline sees their own settings
+
+        // KEY ASSERTION: each pipeline call resolved settings for the correct userId
+        expect(getSettingsSpy).toHaveBeenCalledWith(userId);
+        expect(getSettingsSpy).toHaveBeenCalledWith(user2.id);
+
+        getSettingsSpy.mockRestore();
     });
 });
