@@ -61,7 +61,7 @@ describe('PagesService', () => {
 
             // Mock Instagram checks
             vi.mocked(instagramService.getLinkedInstagramAccount)
-                .mockResolvedValueOnce({ id: 'ig-1', username: 'ig_user_1' } as any)
+                .mockResolvedValueOnce({ id: 'ig-1', username: 'ig_user_1', profile_picture_url: 'https://example.com/ig-pic.jpg' } as any)
                 .mockResolvedValueOnce(null);
 
             // Mock DB Insert
