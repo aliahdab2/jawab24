@@ -98,6 +98,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const [selectedCommentData, setSelectedCommentData] = useState<{ comment: Comment, mode: 'full' | 'quick' } | null>(null);
   
   const [pages, setPages] = useState<Page[]>([]);
+  const [imgError, setImgError] = useState<Record<string, boolean>>({});
   const [statsData, setStatsData] = useState({
     // Comment stats
     totalComments: 0,
@@ -712,14 +713,17 @@ const DashboardPage: NextPageWithLayout = () => {
                     style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}
                   >
                     <div className="relative flex-shrink-0">
-                      <div className={clsx(
-                        "w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-sm border",
-                        page.autoReplyEnabled
-                          ? 'bg-brand-50 text-brand-600 border-brand-100'
-                          : 'bg-surface-50 text-surface-500 border-surface-200',
-                        "group-hover:scale-105"
-                      )}>
-                        <FileText className="w-6 h-6" />
+                      <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-brand-600 flex items-center justify-center transition-all group-hover:scale-105 shadow-sm">
+                        {!imgError[page.id] ? (
+                          <img
+                            src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
+                            alt={page.name}
+                            className="w-full h-full object-cover"
+                            onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
+                          />
+                        ) : (
+                          <FileText className="w-6 h-6 text-white" />
+                        )}
                       </div>
                       {/* Auto-reply status indicator */}
                       <div className={clsx(
