@@ -21,7 +21,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import {
   SimpleToggle,
-  ShopifySection,
+  EcommerceSection,
   LanguageSelector,
   CommentsAutoReplyCard,
   BusinessHoursCard,
@@ -291,7 +291,7 @@ const SettingsPage: NextPageWithLayout = () => {
         </div>
       )}
 
-      <ShopifySection />
+      <EcommerceSection />
 
       <DangerZone onDeleteAccount={handleDeleteAccount} saving={saving} />
     </>

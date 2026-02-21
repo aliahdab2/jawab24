@@ -120,7 +120,10 @@
       "Bash(comm:*)",
       "Bash(npx @lhci/cli@latest autorun:*)",
       "Bash(kill:*)",
-      "Bash(npm run lint:fix:*)"
+      "Bash(npm run lint:fix:*)",
+      "WebFetch(domain:docs.salla.dev)",
+      "WebFetch(domain:docs.zid.sa)",
+      "WebFetch(domain:docs-v2.zid.dev)"
     ]
   }
 }

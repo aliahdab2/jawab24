@@ -64,6 +64,18 @@ export const config = {
         tokenEncryptionKey: process.env.SHOPIFY_TOKEN_ENCRYPTION_KEY || '',
     },
 
+    // Salla App (disabled until credentials are set)
+    salla: {
+        clientId: process.env.SALLA_CLIENT_ID || '',
+        clientSecret: process.env.SALLA_CLIENT_SECRET || '',
+    },
+
+    // Zid App (disabled until credentials are set)
+    zid: {
+        clientId: process.env.ZID_CLIENT_ID || '',
+        clientSecret: process.env.ZID_CLIENT_SECRET || '',
+    },
+
     // Stripe Payment
     stripe: {
         secretKey: process.env.STRIPE_SECRET_KEY || '',

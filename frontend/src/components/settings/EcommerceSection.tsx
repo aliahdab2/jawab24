@@ -12,8 +12,7 @@ import {
 import { useTranslation, type TranslationKey } from '@/i18n';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 
-/** @deprecated Use EcommerceSection instead */
-export function ShopifySection() {
+export function EcommerceSection() {
   const { t } = useTranslation();
   const [store, setStore] = useState<EcommerceStore | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +83,7 @@ export function ShopifySection() {
     }
   };
 
-  // Only show when a store is connected
+  // Only show when a store is actually connected
   if (loading || !store) return null;
 
   return (

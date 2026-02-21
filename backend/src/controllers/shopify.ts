@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import * as shopifyService from '../services/shopify';
 import { authService } from '../services/auth';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { enqueueSyncJob } from '../lib/shopifySyncQueue';
+import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
 import {
     PENDING_SHOPIFY_COOKIE_OPTIONS,

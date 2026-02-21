@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, real } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 
@@ -46,8 +46,8 @@ export const pages = pgTable('pages', {
     instagramAccountId: varchar('instagram_account_id', { length: 255 }),
     instagramUsername: varchar('instagram_username', { length: 255 }),
     instagramAutoReplyEnabled: boolean('instagram_auto_reply_enabled').default(false),
-    // Shopify store linked to this page (for product-aware AI replies)
-    shopifyStoreId: uuid('shopify_store_id').references(() => shopifyStores.id, { onDelete: 'set null' }),
+    // E-commerce store linked to this page (for product-aware AI replies)
+    ecommerceStoreId: uuid('ecommerce_store_id').references(() => ecommerceStores.id, { onDelete: 'set null' }),
     // Knowledge base for AI context - business info, products, FAQ
     knowledgeBase: text('knowledge_base'),
     // Suggested knowledge base from Facebook data - pending user confirmation
@@ -66,7 +66,7 @@ export const pages = pgTable('pages', {
         userIdIdx: index('idx_pages_user_id').on(table.userId),
         facebookPageIdIdx: index('idx_pages_facebook_page_id').on(table.facebookPageId),
         instagramAccountIdIdx: index('idx_pages_instagram_account_id').on(table.instagramAccountId),
-        shopifyStoreIdIdx: index('idx_pages_shopify_store_id').on(table.shopifyStoreId),
+        ecommerceStoreIdIdx: index('idx_pages_ecommerce_store_id').on(table.ecommerceStoreId),
     };
 });
 
@@ -368,7 +368,7 @@ export const plans = pgTable('plans', {
     facebookEnabled: boolean('facebook_enabled').default(true),
     instagramEnabled: boolean('instagram_enabled').default(true),
     whatsappEnabled: boolean('whatsapp_enabled').default(false),
-    shopifyEnabled: boolean('shopify_enabled').default(false),
+    ecommerceEnabled: boolean('ecommerce_enabled').default(false),
     showBranding: boolean('show_branding').default(true), // Show "Powered by Jawab24"
     prioritySupport: boolean('priority_support').default(false),
 
@@ -521,13 +521,14 @@ export const notifications = pgTable('notifications', {
 });
 
 // ============================================
-// SHOPIFY TABLES
+// E-COMMERCE TABLES (Shopify, Salla, Zid, ...)
 // ============================================
 
-// 17a. Pending Shopify Installs - Temporary storage for Shopify-first install flow
-export const pendingShopifyInstalls = pgTable('pending_shopify_installs', {
+// 17a. Pending E-commerce Installs - Temporary storage for platform OAuth install flow
+export const pendingEcommerceInstalls = pgTable('pending_ecommerce_installs', {
     id: uuid('id').defaultRandom().primaryKey(),
-    shopDomain: varchar('shop_domain', { length: 255 }).notNull(),
+    platform: varchar('platform', { length: 20 }).notNull(), // 'shopify' | 'salla' | 'zid'
+    storeDomain: varchar('store_domain', { length: 255 }).notNull(),
     accessToken: text('access_token').notNull(),       // AES-256-GCM encrypted
     accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
     scopes: text('scopes'),
@@ -538,30 +539,38 @@ export const pendingShopifyInstalls = pgTable('pending_shopify_installs', {
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => {
     return {
-        shopDomainIdx: index('idx_pending_shopify_shop_domain').on(table.shopDomain),
-        statusIdx: index('idx_pending_shopify_status').on(table.status),
-        expiresAtIdx: index('idx_pending_shopify_expires_at').on(table.expiresAt),
+        platformCheck: check('pending_ecommerce_installs_platform_check', sql`${table.platform} in ('shopify', 'salla', 'zid')`),
+        storeDomainIdx: index('idx_pending_ecommerce_store_domain').on(table.storeDomain),
+        statusIdx: index('idx_pending_ecommerce_status').on(table.status),
+        platformStatusExpiresIdx: index('idx_pending_ecommerce_platform_status_expires').on(table.platform, table.status, table.expiresAt),
     };
 });
 
-// 17. Shopify Stores Table - Connected Shopify stores
-export const shopifyStores = pgTable('shopify_stores', {
+// 17. E-commerce Stores Table - Connected stores across all supported platforms
+export const ecommerceStores = pgTable('ecommerce_stores', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
-    shopDomain: varchar('shop_domain', { length: 255 }).unique().notNull(), // e.g. "my-store.myshopify.com"
-    accessToken: text('access_token').notNull(),
+    platform: varchar('platform', { length: 20 }).notNull(), // 'shopify' | 'salla' | 'zid'
+    storeDomain: varchar('store_domain', { length: 255 }).notNull(), // e.g. "my-store.myshopify.com"
+    accessToken: text('access_token').notNull(),             // AES-256-GCM encrypted
+    accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
+    refreshToken: text('refresh_token'),                     // nullable — Shopify never expires, Salla/Zid need refresh
+    refreshTokenIv: varchar('refresh_token_iv', { length: 64 }),
+    tokenExpiresAt: timestamp('token_expires_at'),           // null = never expires (Shopify)
 
-    // Store info (synced from Shopify)
-    shopName: varchar('shop_name', { length: 255 }),
-    shopEmail: varchar('shop_email', { length: 255 }),
-    shopCurrency: varchar('shop_currency', { length: 10 }),
-    shopTimezone: varchar('shop_timezone', { length: 100 }),
-    planName: varchar('plan_name', { length: 100 }),
+    // Store info (synced from platform)
+    storeName: varchar('store_name', { length: 255 }),
+    storeEmail: varchar('store_email', { length: 255 }),
+    storeCurrency: varchar('store_currency', { length: 10 }),
+    storeTimezone: varchar('store_timezone', { length: 100 }),
 
     // Synced product data
     productCount: integer('product_count').default(0),
-    productSummary: text('product_summary'), // ~800 chars structured summary for AI
+    productSummary: text('product_summary'),   // ~800 chars structured summary for AI
     policiesSummary: text('policies_summary'), // shipping, returns, etc.
+
+    // Platform-specific extras (e.g. Shopify planName, Salla merchant_id)
+    platformData: jsonb('platform_data'),
 
     // Sync state
     lastSyncAt: timestamp('last_sync_at'),
@@ -573,17 +582,19 @@ export const shopifyStores = pgTable('shopify_stores', {
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
     return {
-        userIdIdx: index('idx_shopify_stores_user_id').on(table.userId),
-        shopDomainIdx: index('idx_shopify_stores_shop_domain').on(table.shopDomain),
-        isActiveIdx: index('idx_shopify_stores_is_active').on(table.isActive),
+        platformCheck: check('ecommerce_stores_platform_check', sql`${table.platform} in ('shopify', 'salla', 'zid')`),
+        platformDomainUnique: uniqueIndex('idx_ecommerce_stores_platform_domain').on(table.platform, table.storeDomain),
+        userIdIdx: index('idx_ecommerce_stores_user_id').on(table.userId),
+        isActiveIdx: index('idx_ecommerce_stores_is_active').on(table.isActive),
+        tokenExpiresAtIdx: index('idx_ecommerce_stores_token_expires_at').on(table.tokenExpiresAt),
     };
 });
 
-// 18. Shopify Products Table - Individual product data for detailed queries
-export const shopifyProducts = pgTable('shopify_products', {
+// 18. E-commerce Products Table - Individual product data synced from any platform
+export const ecommerceProducts = pgTable('ecommerce_products', {
     id: uuid('id').defaultRandom().primaryKey(),
-    shopifyStoreId: uuid('shopify_store_id').references(() => shopifyStores.id, { onDelete: 'cascade' }).notNull(),
-    shopifyProductId: varchar('shopify_product_id', { length: 255 }).notNull(),
+    ecommerceStoreId: uuid('ecommerce_store_id').references(() => ecommerceStores.id, { onDelete: 'cascade' }).notNull(),
+    platformProductId: varchar('platform_product_id', { length: 255 }).notNull(), // Platform's own product ID
 
     // Product info
     title: varchar('title', { length: 500 }).notNull(),
@@ -605,9 +616,9 @@ export const shopifyProducts = pgTable('shopify_products', {
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
     return {
-        storeIdIdx: index('idx_shopify_products_store_id').on(table.shopifyStoreId),
-        shopifyProductIdIdx: index('idx_shopify_products_product_id').on(table.shopifyProductId),
-        statusIdx: index('idx_shopify_products_status').on(table.status),
+        storeProductUnique: uniqueIndex('idx_ecommerce_products_store_product').on(table.ecommerceStoreId, table.platformProductId),
+        storeIdIdx: index('idx_ecommerce_products_store_id').on(table.ecommerceStoreId),
+        statusIdx: index('idx_ecommerce_products_status').on(table.status),
     };
 });
 

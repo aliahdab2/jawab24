@@ -29,25 +29,27 @@ vi.mock('../../src/db', () => ({
 }));
 
 vi.mock('../../src/db/schema', () => ({
-    shopifyStores: {
+    ecommerceStores: {
         id: 'id',
         userId: 'user_id',
-        shopDomain: 'shop_domain',
+        storeDomain: 'store_domain',
+        platform: 'platform',
         isActive: 'is_active',
     },
-    shopifyProducts: {
-        shopifyStoreId: 'shopify_store_id',
+    ecommerceProducts: {
+        ecommerceStoreId: 'ecommerce_store_id',
         status: 'status',
     },
     pages: {
         id: 'id',
         userId: 'user_id',
-        shopifyStoreId: 'shopify_store_id',
+        ecommerceStoreId: 'ecommerce_store_id',
         kbActiveVersion: 'kb_active_version',
     },
-    pendingShopifyInstalls: {
+    pendingEcommerceInstalls: {
         id: 'id',
-        shopDomain: 'shop_domain',
+        platform: 'platform',
+        storeDomain: 'store_domain',
         status: 'status',
         expiresAt: 'expires_at',
     },
@@ -102,7 +104,7 @@ import {
     verifyWebhookHmac,
     buildVariantSummary,
     getEnrichedKnowledgeBase,
-    mapToShopifyStore,
+    mapToEcommerceStore,
     exchangeCodeForToken,
     registerWebhooks,
     linkStoreToPage,
@@ -447,20 +449,21 @@ describe('Shopify Service', () => {
         });
     });
 
-    // --- mapToShopifyStore ---
+    // --- mapToEcommerceStore ---
 
-    describe('mapToShopifyStore', () => {
-        it('should map database row to ShopifyStore type', () => {
+    describe('mapToEcommerceStore', () => {
+        it('should map database row to EcommerceStore type', () => {
             const row = {
                 id: 'store-1',
                 userId: 'user-1',
-                shopDomain: 'test.myshopify.com',
+                platform: 'shopify',
+                storeDomain: 'test.myshopify.com',
                 accessToken: 'shpat_xxx',
-                shopName: 'Test Store',
-                shopEmail: 'test@example.com',
-                shopCurrency: 'AED',
-                shopTimezone: 'GST',
-                planName: 'basic',
+                storeName: 'Test Store',
+                storeEmail: 'test@example.com',
+                storeCurrency: 'AED',
+                storeTimezone: 'GST',
+                platformData: { planName: 'basic' },
                 productCount: 42,
                 productSummary: 'Products summary',
                 policiesSummary: 'Policies summary',
@@ -472,12 +475,13 @@ describe('Shopify Service', () => {
                 updatedAt: new Date(),
             };
 
-            const result = mapToShopifyStore(row as any);
+            const result = mapToEcommerceStore(row as any);
 
             expect(result.id).toBe('store-1');
             expect(result.userId).toBe('user-1');
-            expect(result.shopDomain).toBe('test.myshopify.com');
-            expect(result.shopName).toBe('Test Store');
+            expect(result.storeDomain).toBe('test.myshopify.com');
+            expect(result.shopDomain).toBe('test.myshopify.com'); // DTO alias
+            expect(result.storeName).toBe('Test Store');
             expect(result.productCount).toBe(42);
             expect(result.isActive).toBe(true);
             // Should NOT expose accessToken
@@ -488,12 +492,13 @@ describe('Shopify Service', () => {
             const row = {
                 id: 'store-1',
                 userId: 'user-1',
-                shopDomain: 'test.myshopify.com',
+                platform: 'shopify',
+                storeDomain: 'test.myshopify.com',
                 productCount: null,
                 isActive: null,
             };
 
-            const result = mapToShopifyStore(row as any);
+            const result = mapToEcommerceStore(row as any);
             expect(result.productCount).toBe(0);
             expect(result.isActive).toBe(true);
         });
@@ -614,7 +619,7 @@ describe('Shopify Service', () => {
             expect(result).toBe(0);
             expect(mockCaptureError).toHaveBeenCalledWith(
                 expect.any(Error),
-                'Shopify cache invalidation failed',
+                'E-commerce cache invalidation failed',
                 expect.objectContaining({ tags: { service: 'shopify' } }),
             );
         });

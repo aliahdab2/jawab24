@@ -27,7 +27,7 @@ export class ShopifyIntegration implements EcommerceIntegration {
         currentKB: string | undefined,
         page: Record<string, unknown>,
     ): Promise<string | null> {
-        const storeId = page.shopifyStoreId;
+        const storeId = page.ecommerceStoreId;
         if (!storeId || typeof storeId !== 'string') return null;
 
         const { getEnrichedKnowledgeBase } = await import('../services/shopify');
@@ -55,7 +55,7 @@ export class ShopifyIntegration implements EcommerceIntegration {
             const store = await claimPendingInstall(result.value, userId);
             if (store) {
                 reply.clearCookie('pendingShopifyId', { path: '/' });
-                return { shopifyOnboarding: true, shopifyStoreId: store.id };
+                return { shopifyOnboarding: true, ecommerceStoreId: store.id };
             }
         } catch (err) {
             request.log.error({ err }, 'Failed to claim pending Shopify install');
@@ -66,9 +66,9 @@ export class ShopifyIntegration implements EcommerceIntegration {
     async onStartup(logger: Logger): Promise<void> {
         if (!this.isEnabled()) return;
 
-        const { startShopifySyncWorker, setSyncWorkerLogger } = await import('../workers/shopifySyncWorker');
+        const { startEcommerceSyncWorker, setSyncWorkerLogger } = await import('../workers/ecommerceSyncWorker');
         setSyncWorkerLogger(logger);
-        startShopifySyncWorker();
+        startEcommerceSyncWorker();
 
         const { cleanupExpiredInstalls } = await import('../services/shopify');
         this.cleanupInterval = setInterval(async () => {
@@ -86,7 +86,7 @@ export class ShopifyIntegration implements EcommerceIntegration {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = null;
         }
-        const { stopShopifySyncWorker } = await import('../workers/shopifySyncWorker');
-        await stopShopifySyncWorker();
+        const { stopEcommerceSyncWorker } = await import('../workers/ecommerceSyncWorker');
+        await stopEcommerceSyncWorker();
     }
 }

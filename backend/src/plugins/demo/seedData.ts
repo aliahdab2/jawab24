@@ -1,5 +1,5 @@
 import { db } from '../../db';
-import { pages, posts, comments, templates, settings, notifications, messages, shopifyStores, shopifyProducts } from '../../db/schema';
+import { pages, posts, comments, templates, settings, notifications, messages, ecommerceStores, ecommerceProducts } from '../../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 
@@ -627,13 +627,15 @@ const DEMO_NOTIFICATIONS = [
 ];
 
 const DEMO_SHOPIFY_STORE = {
-    shopDomain: 'demo-electronics.myshopify.com',
-    accessToken: 'demo_shopify_token',
-    shopName: 'متجر الإلكترونيات',
-    shopEmail: 'demo@demo-electronics.myshopify.com',
-    shopCurrency: 'SAR',
-    shopTimezone: 'Asia/Riyadh',
-    planName: 'basic',
+    platform: 'shopify' as const,
+    storeDomain: 'demo-electronics.myshopify.com',
+    accessToken: 'demo_token_placeholder', // not used — demo doesn't call Shopify API
+    accessTokenIv: '00000000000000000000000000000000', // 32 hex chars = valid IV format
+    storeName: 'متجر الإلكترونيات',
+    storeEmail: 'demo@demo-electronics.myshopify.com',
+    storeCurrency: 'SAR',
+    storeTimezone: 'Asia/Riyadh',
+    platformData: { planName: 'basic' },
     productCount: 5,
     productSummary: `📱 منتجات متجر الإلكترونيات:\n\n1. iPhone 15 Pro - 3,800 ريال\n2. Samsung Galaxy S24 - 2,900 ريال\n3. MacBook Air M3 - 5,200 ريال\n4. AirPods Pro - 850 ريال\n5. كفر حماية iPhone 15 - 120 ريال\n\n🚚 توصيل مجاني فوق 500 ريال | ✅ ضمان سنة`,
     policiesSummary: `إرجاع: 14 يوم\nتوصيل: 2-3 أيام عمل داخل الرياض\nدفع: بطاقة، تحويل، الدفع عند الاستلام`,
@@ -641,7 +643,7 @@ const DEMO_SHOPIFY_STORE = {
 
 const DEMO_SHOPIFY_PRODUCTS = [
     {
-        shopifyProductId: 'demo_prod_1',
+        platformProductId: 'demo_prod_1',
         title: 'iPhone 15 Pro',
         productType: 'Smartphones',
         vendor: 'Apple',
@@ -653,7 +655,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
         tags: 'iPhone,Apple,جوال',
     },
     {
-        shopifyProductId: 'demo_prod_2',
+        platformProductId: 'demo_prod_2',
         title: 'Samsung Galaxy S24',
         productType: 'Smartphones',
         vendor: 'Samsung',
@@ -665,7 +667,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
         tags: 'Samsung,Galaxy,جوال',
     },
     {
-        shopifyProductId: 'demo_prod_3',
+        platformProductId: 'demo_prod_3',
         title: 'MacBook Air M3',
         productType: 'Laptops',
         vendor: 'Apple',
@@ -677,7 +679,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
         tags: 'MacBook,Apple,لابتوب',
     },
     {
-        shopifyProductId: 'demo_prod_4',
+        platformProductId: 'demo_prod_4',
         title: 'AirPods Pro (الجيل الثاني)',
         productType: 'Accessories',
         vendor: 'Apple',
@@ -689,7 +691,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
         tags: 'AirPods,سماعات,Apple',
     },
     {
-        shopifyProductId: 'demo_prod_5',
+        platformProductId: 'demo_prod_5',
         title: 'كفر حماية iPhone 15',
         productType: 'Accessories',
         vendor: 'متجر الإلكترونيات',
@@ -972,25 +974,25 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
  * Deletes any existing demo store for the user first (cascade removes products).
  */
 async function seedDemoShopify(userId: string, electronicsPageId: string, logger: Logger): Promise<void> {
-    await db.delete(shopifyStores).where(eq(shopifyStores.userId, userId));
+    await db.delete(ecommerceStores).where(eq(ecommerceStores.userId, userId));
 
     const lastSyncAt = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h ago
-    const [store] = await db.insert(shopifyStores).values({
+    const [store] = await db.insert(ecommerceStores).values({
         userId,
         ...DEMO_SHOPIFY_STORE,
         lastSyncAt,
         isActive: true,
-    }).returning({ id: shopifyStores.id });
+    }).returning({ id: ecommerceStores.id });
 
     for (const prod of DEMO_SHOPIFY_PRODUCTS) {
-        await db.insert(shopifyProducts).values({ shopifyStoreId: store.id, ...prod, status: 'active' });
+        await db.insert(ecommerceProducts).values({ ecommerceStoreId: store.id, ...prod, status: 'active' });
     }
 
     await db.update(pages)
-        .set({ shopifyStoreId: store.id })
+        .set({ ecommerceStoreId: store.id })
         .where(eq(pages.id, electronicsPageId));
 
-    logger.debug('[DemoData] Seeded Shopify store', { storeId: store.id, products: DEMO_SHOPIFY_PRODUCTS.length });
+    logger.debug('[DemoData] Seeded e-commerce store', { storeId: store.id, products: DEMO_SHOPIFY_PRODUCTS.length });
 }
 
 /**

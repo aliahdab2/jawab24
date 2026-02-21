@@ -1,10 +1,10 @@
 import crypto from 'crypto';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { shopifyStores, shopifyProducts, pages, pendingShopifyInstalls } from '../db/schema';
+import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls } from '../db/schema';
 import { config } from '../config';
-import { encrypt, decrypt } from './shopifyCrypto';
-import type { ShopifyStore, ShopifyProduct } from '@jawab24/shared';
+import { encrypt, decrypt } from './ecommerceCrypto';
+import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { redis } from '../lib/redis';
 
@@ -98,46 +98,51 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
 
 // --- Store CRUD ---
 
-export async function getStoreByDomain(shopDomain: string) {
-    const result = await db.select().from(shopifyStores).where(eq(shopifyStores.shopDomain, shopDomain)).limit(1);
+export async function getStoreByDomain(storeDomain: string) {
+    const result = await db.select().from(ecommerceStores).where(
+        and(eq(ecommerceStores.storeDomain, storeDomain), eq(ecommerceStores.platform, 'shopify'))
+    ).limit(1);
     return result[0] || null;
 }
 
 export async function getStoreByUserId(userId: string) {
-    const result = await db.select().from(shopifyStores).where(
-        and(eq(shopifyStores.userId, userId), eq(shopifyStores.isActive, true))
+    const result = await db.select().from(ecommerceStores).where(
+        and(eq(ecommerceStores.userId, userId), eq(ecommerceStores.isActive, true), eq(ecommerceStores.platform, 'shopify'))
     ).limit(1);
     return result[0] || null;
 }
 
 export async function getStoreById(storeId: string) {
-    const result = await db.select().from(shopifyStores).where(eq(shopifyStores.id, storeId)).limit(1);
+    const result = await db.select().from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
     return result[0] || null;
 }
 
-export async function createStore(userId: string, shopDomain: string, accessToken: string, shopInfo?: {
-    shopName?: string; shopEmail?: string; shopCurrency?: string; shopTimezone?: string; planName?: string;
+export async function createStore(userId: string, storeDomain: string, accessToken: string, shopInfo?: {
+    shopName?: string; shopEmail?: string; shopCurrency?: string; shopTimezone?: string;
 }) {
-    const result = await db.insert(shopifyStores).values({
+    const { ciphertext, iv } = encrypt(accessToken);
+
+    const result = await db.insert(ecommerceStores).values({
         userId,
-        shopDomain,
-        accessToken,
-        shopName: shopInfo?.shopName,
-        shopEmail: shopInfo?.shopEmail,
-        shopCurrency: shopInfo?.shopCurrency,
-        shopTimezone: shopInfo?.shopTimezone,
-        planName: shopInfo?.planName,
+        platform: 'shopify',
+        storeDomain,
+        accessToken: ciphertext,
+        accessTokenIv: iv,
+        storeName: shopInfo?.shopName,
+        storeEmail: shopInfo?.shopEmail,
+        storeCurrency: shopInfo?.shopCurrency,
+        storeTimezone: shopInfo?.shopTimezone,
         installedAt: new Date(),
     }).onConflictDoUpdate({
-        target: shopifyStores.shopDomain,
+        target: [ecommerceStores.platform, ecommerceStores.storeDomain],
         set: {
             userId,
-            accessToken,
-            shopName: shopInfo?.shopName,
-            shopEmail: shopInfo?.shopEmail,
-            shopCurrency: shopInfo?.shopCurrency,
-            shopTimezone: shopInfo?.shopTimezone,
-            planName: shopInfo?.planName,
+            accessToken: ciphertext,
+            accessTokenIv: iv,
+            storeName: shopInfo?.shopName,
+            storeEmail: shopInfo?.shopEmail,
+            storeCurrency: shopInfo?.shopCurrency,
+            storeTimezone: shopInfo?.shopTimezone,
             isActive: true,
             uninstalledAt: null,
             updatedAt: new Date(),
@@ -147,24 +152,24 @@ export async function createStore(userId: string, shopDomain: string, accessToke
     return result[0];
 }
 
-export async function deactivateStore(shopDomain: string) {
-    await db.update(shopifyStores).set({
+export async function deactivateStore(storeDomain: string) {
+    await db.update(ecommerceStores).set({
         isActive: false,
         uninstalledAt: new Date(),
         updatedAt: new Date(),
-    }).where(eq(shopifyStores.shopDomain, shopDomain));
+    }).where(and(eq(ecommerceStores.storeDomain, storeDomain), eq(ecommerceStores.platform, 'shopify')));
 }
 
 export async function disconnectStore(storeId: string) {
     // Unlink any pages connected to this store
-    await db.update(pages).set({ shopifyStoreId: null, updatedAt: new Date() })
-        .where(eq(pages.shopifyStoreId, storeId));
+    await db.update(pages).set({ ecommerceStoreId: null, updatedAt: new Date() })
+        .where(eq(pages.ecommerceStoreId, storeId));
     // Deactivate the store
-    await db.update(shopifyStores).set({
+    await db.update(ecommerceStores).set({
         isActive: false,
         uninstalledAt: new Date(),
         updatedAt: new Date(),
-    }).where(eq(shopifyStores.id, storeId));
+    }).where(eq(ecommerceStores.id, storeId));
 }
 
 /**
@@ -181,7 +186,7 @@ export async function linkStoreToPage(storeId: string, pageId: string, userId: s
             throw new Error('Page not found or does not belong to user');
         }
 
-        await tx.update(pages).set({ shopifyStoreId: storeId, updatedAt: new Date() })
+        await tx.update(pages).set({ ecommerceStoreId: storeId, updatedAt: new Date() })
             .where(eq(pages.id, pageId));
     });
 }
@@ -251,11 +256,11 @@ async function fetchShopInfo(shop: string, accessToken: string) {
 
     const s = data.data.shop;
     return {
-        shopName: s.name,
-        shopEmail: s.email,
-        shopCurrency: s.currencyCode,
-        shopTimezone: s.timezoneAbbreviation,
-        planName: s.plan?.displayName,
+        storeName: s.name,
+        storeEmail: s.email,
+        storeCurrency: s.currencyCode,
+        storeTimezone: s.timezoneAbbreviation,
+        platformData: { planName: s.plan?.displayName ?? null },
     };
 }
 
@@ -361,11 +366,13 @@ export async function syncProducts(storeId: string) {
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
 
-    const products = await fetchAllProducts(store.shopDomain, store.accessToken);
+    // Decrypt access token before using it
+    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
+    const products = await fetchAllProducts(store.storeDomain, accessToken);
 
     // Atomic replacement: delete old + insert new in sequence
     // Delete first, then batch insert
-    await db.delete(shopifyProducts).where(eq(shopifyProducts.shopifyStoreId, storeId));
+    await db.delete(ecommerceProducts).where(eq(ecommerceProducts.ecommerceStoreId, storeId));
 
     if (products.length > 0) {
         const rows = products.map(p => {
@@ -378,8 +385,8 @@ export async function syncProducts(storeId: string) {
             const variantSummary = buildVariantSummary(p.variants.edges.map(e => e.node));
 
             return {
-                shopifyStoreId: storeId,
-                shopifyProductId: p.id.replace('gid://shopify/Product/', ''),
+                ecommerceStoreId: storeId,
+                platformProductId: p.id.replace('gid://shopify/Product/', ''),
                 title: p.title,
                 productType: p.productType || null,
                 vendor: p.vendor || null,
@@ -394,18 +401,18 @@ export async function syncProducts(storeId: string) {
         });
 
         // Batch insert all products at once (much faster than one-by-one)
-        await db.insert(shopifyProducts).values(rows);
+        await db.insert(ecommerceProducts).values(rows);
     }
 
     // Build and store the product summary
     const productSummary = await buildProductSummary(storeId);
 
-    await db.update(shopifyStores).set({
+    await db.update(ecommerceStores).set({
         productCount: products.length,
         productSummary,
         lastSyncAt: new Date(),
         updatedAt: new Date(),
-    }).where(eq(shopifyStores.id, storeId));
+    }).where(eq(ecommerceStores.id, storeId));
 
     // Invalidate AI caches so stale product info is never served
     await invalidateCachesForStore(storeId);
@@ -414,7 +421,7 @@ export async function syncProducts(storeId: string) {
 }
 
 /**
- * Invalidate AI reply caches for all pages linked to a Shopify store.
+ * Invalidate AI reply caches for all pages linked to an e-commerce store.
  *
  * When product data changes (price, stock, availability), any cached AI
  * replies that reference the old data become stale. This function:
@@ -434,7 +441,7 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
         // Find all pages linked to this store
         const linkedPages = await db.select({ id: pages.id })
             .from(pages)
-            .where(eq(pages.shopifyStoreId, storeId));
+            .where(eq(pages.ecommerceStoreId, storeId));
 
         if (linkedPages.length === 0) return 0;
 
@@ -484,7 +491,7 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
 
         return pageIds.length;
     } catch (error) {
-        captureError(error, 'Shopify cache invalidation failed', {
+        captureError(error, 'E-commerce cache invalidation failed', {
             tags: { service: 'shopify' },
             extra: { storeId },
         });
@@ -499,9 +506,10 @@ export async function syncPolicies(storeId: string) {
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
 
+    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
     const data = await shopifyGraphQL<{
         data: { shop: { shippingPolicy: { body: string } | null; refundPolicy: { body: string } | null } }
-    }>(store.shopDomain, store.accessToken, `{
+    }>(store.storeDomain, accessToken, `{
         shop {
             shippingPolicy { body }
             refundPolicy { body }
@@ -521,10 +529,10 @@ export async function syncPolicies(storeId: string) {
 
     const policiesSummary = policies.join('\n') || null;
 
-    await db.update(shopifyStores).set({
+    await db.update(ecommerceStores).set({
         policiesSummary,
         updatedAt: new Date(),
-    }).where(eq(shopifyStores.id, storeId));
+    }).where(eq(ecommerceStores.id, storeId));
 
     // Invalidate AI caches so stale policy info is never served
     await invalidateCachesForStore(storeId);
@@ -539,12 +547,14 @@ export async function fullSync(storeId: string) {
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
 
+    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
+
     // Update shop info
-    const shopInfo = await fetchShopInfo(store.shopDomain, store.accessToken);
-    await db.update(shopifyStores).set({
+    const shopInfo = await fetchShopInfo(store.storeDomain, accessToken);
+    await db.update(ecommerceStores).set({
         ...shopInfo,
         updatedAt: new Date(),
-    }).where(eq(shopifyStores.id, storeId));
+    }).where(eq(ecommerceStores.id, storeId));
 
     // Sync products and policies in parallel
     const [productResult, policyResult] = await Promise.all([
@@ -580,8 +590,8 @@ export function buildVariantSummary(variants: Array<{ title: string; selectedOpt
  * Build a structured product summary for AI consumption (~800 chars max)
  */
 export async function buildProductSummary(storeId: string): Promise<string> {
-    const products = await db.select().from(shopifyProducts)
-        .where(and(eq(shopifyProducts.shopifyStoreId, storeId), eq(shopifyProducts.status, 'active')))
+    const products = await db.select().from(ecommerceProducts)
+        .where(and(eq(ecommerceProducts.ecommerceStoreId, storeId), eq(ecommerceProducts.status, 'active')))
         .limit(15); // Top 15 active products
 
     if (products.length === 0) return '';
@@ -615,33 +625,33 @@ export async function buildProductSummary(storeId: string): Promise<string> {
 // --- KB Enrichment ---
 
 /**
- * Get enriched knowledge base: Shopify products + policies + page KB
+ * Get enriched knowledge base: e-commerce products + policies + page KB
  * Priority: 1) Products (~800 chars)  2) Policies (~200 chars)  3) Page KB (remaining space)
  */
-export async function getEnrichedKnowledgeBase(pageKB: string | undefined, shopifyStoreId: string): Promise<string> {
-    const store = await getStoreById(shopifyStoreId);
+export async function getEnrichedKnowledgeBase(pageKB: string | undefined, ecommerceStoreId: string): Promise<string> {
+    const store = await getStoreById(ecommerceStoreId);
     if (!store || !store.isActive) return pageKB || '';
 
     const productSection = store.productSummary || '';
     const policySection = store.policiesSummary || '';
 
-    const shopifySection = [productSection, policySection].filter(Boolean).join('\n');
-    const remaining = KB_MAX_CHARS - shopifySection.length;
+    const storeSection = [productSection, policySection].filter(Boolean).join('\n');
+    const remaining = KB_MAX_CHARS - storeSection.length;
     const pageSection = (pageKB && remaining > 100) ? pageKB.slice(0, remaining) : '';
 
-    return [shopifySection, pageSection].filter(Boolean).join('\n\n');
+    return [storeSection, pageSection].filter(Boolean).join('\n\n');
 }
 
 // --- List products for frontend ---
 
-export async function getProducts(storeId: string): Promise<ShopifyProduct[]> {
-    const rows = await db.select().from(shopifyProducts)
-        .where(eq(shopifyProducts.shopifyStoreId, storeId));
+export async function getProducts(storeId: string): Promise<EcommerceProduct[]> {
+    const rows = await db.select().from(ecommerceProducts)
+        .where(eq(ecommerceProducts.ecommerceStoreId, storeId));
 
     return rows.map(r => ({
         id: r.id,
-        shopifyStoreId: r.shopifyStoreId,
-        shopifyProductId: r.shopifyProductId,
+        ecommerceStoreId: r.ecommerceStoreId,
+        platformProductId: r.platformProductId,
         title: r.title,
         productType: r.productType,
         vendor: r.vendor,
@@ -669,18 +679,20 @@ export async function createPendingInstall(data: {
     nonce: string;
 }): Promise<string> {
     // Delete older pending records for same shop
-    await db.delete(pendingShopifyInstalls).where(
+    await db.delete(pendingEcommerceInstalls).where(
         and(
-            eq(pendingShopifyInstalls.shopDomain, data.shopDomain),
-            eq(pendingShopifyInstalls.status, 'pending')
+            eq(pendingEcommerceInstalls.storeDomain, data.shopDomain),
+            eq(pendingEcommerceInstalls.platform, 'shopify'),
+            eq(pendingEcommerceInstalls.status, 'pending')
         )
     );
 
     // Encrypt the access token
     const { ciphertext, iv } = encrypt(data.accessToken);
 
-    const result = await db.insert(pendingShopifyInstalls).values({
-        shopDomain: data.shopDomain,
+    const result = await db.insert(pendingEcommerceInstalls).values({
+        platform: 'shopify',
+        storeDomain: data.shopDomain,
         accessToken: ciphertext,
         accessTokenIv: iv,
         scopes: data.scopes,
@@ -693,12 +705,12 @@ export async function createPendingInstall(data: {
 }
 
 /**
- * Claim a pending install: decrypt token, create shopify_stores row, mark as claimed.
+ * Claim a pending install: decrypt token, create ecommerce_stores row, mark as claimed.
  * Returns the new store or null if pending record is invalid/expired.
  */
 export async function claimPendingInstall(pendingId: string, userId: string) {
-    const result = await db.select().from(pendingShopifyInstalls)
-        .where(eq(pendingShopifyInstalls.id, pendingId))
+    const result = await db.select().from(pendingEcommerceInstalls)
+        .where(eq(pendingEcommerceInstalls.id, pendingId))
         .limit(1);
 
     const pending = result[0];
@@ -710,7 +722,7 @@ export async function claimPendingInstall(pendingId: string, userId: string) {
     }
 
     // Check if shop is already linked to another user
-    const existingStore = await getStoreByDomain(pending.shopDomain);
+    const existingStore = await getStoreByDomain(pending.storeDomain);
     if (existingStore && existingStore.userId !== userId && existingStore.isActive) {
         throw new Error('This Shopify store is already connected to another account');
     }
@@ -719,16 +731,16 @@ export async function claimPendingInstall(pendingId: string, userId: string) {
     const accessToken = decrypt(pending.accessToken, pending.accessTokenIv);
 
     // Create/update store
-    const store = await createStore(userId, pending.shopDomain, accessToken);
+    const store = await createStore(userId, pending.storeDomain, accessToken);
 
     // Mark pending as claimed
-    await db.update(pendingShopifyInstalls).set({
+    await db.update(pendingEcommerceInstalls).set({
         status: 'claimed',
         claimedByUserId: userId,
-    }).where(eq(pendingShopifyInstalls.id, pendingId));
+    }).where(eq(pendingEcommerceInstalls.id, pendingId));
 
     // Register webhooks (non-blocking)
-    registerWebhooks(pending.shopDomain, accessToken).catch(err => {
+    registerWebhooks(pending.storeDomain, accessToken).catch(err => {
         captureError(err, 'Shopify webhook registration after claim failed', { tags: { service: 'shopify' } });
     });
 
@@ -739,10 +751,11 @@ export async function claimPendingInstall(pendingId: string, userId: string) {
  * Clean up expired pending installs
  */
 export async function cleanupExpiredInstalls(): Promise<number> {
-    const result = await db.delete(pendingShopifyInstalls).where(
+    const result = await db.delete(pendingEcommerceInstalls).where(
         and(
-            eq(pendingShopifyInstalls.status, 'pending'),
-            lt(pendingShopifyInstalls.expiresAt, new Date())
+            eq(pendingEcommerceInstalls.platform, 'shopify'),
+            eq(pendingEcommerceInstalls.status, 'pending'),
+            lt(pendingEcommerceInstalls.expiresAt, new Date())
         )
     ).returning();
 
@@ -751,14 +764,22 @@ export async function cleanupExpiredInstalls(): Promise<number> {
 
 // --- Map to shared type ---
 
-export function mapToShopifyStore(row: typeof shopifyStores.$inferSelect): ShopifyStore {
+/**
+ * Map a DB row to the EcommerceStore shared type.
+ * Note: `shopDomain` alias kept for one PR to avoid breaking existing test assertions.
+ * TODO: Remove shopDomain alias in next PR, migrate all assertions to storeDomain.
+ */
+export function mapToEcommerceStore(row: typeof ecommerceStores.$inferSelect): EcommerceStore & { shopDomain: string } {
     return {
         id: row.id,
         userId: row.userId,
-        shopDomain: row.shopDomain,
-        shopName: row.shopName,
-        shopEmail: row.shopEmail,
-        shopCurrency: row.shopCurrency,
+        platform: row.platform as 'shopify' | 'salla' | 'zid',
+        storeDomain: row.storeDomain,
+        shopDomain: row.storeDomain, // temporary alias — remove next PR
+        storeName: row.storeName,
+        storeEmail: row.storeEmail,
+        storeCurrency: row.storeCurrency,
+        tokenExpiresAt: row.tokenExpiresAt,
         productCount: row.productCount || 0,
         productSummary: row.productSummary,
         policiesSummary: row.policiesSummary,
@@ -767,3 +788,6 @@ export function mapToShopifyStore(row: typeof shopifyStores.$inferSelect): Shopi
         installedAt: row.installedAt,
     };
 }
+
+/** @deprecated Use mapToEcommerceStore */
+export const mapToShopifyStore = mapToEcommerceStore;

@@ -418,8 +418,8 @@ export const adminApi = {
   },
 };
 
-// Shopify API - Manage Shopify store connection
-export const shopifyApi = {
+// E-commerce API - Manage connected store (Shopify, Salla, Zid)
+export const ecommerceApi = {
   getStore: async () => {
     const response = await api.get('/shopify/store');
     return response.data;
@@ -444,4 +444,16 @@ export const shopifyApi = {
     const response = await api.patch('/shopify/store/link-page', { pageId });
     return response.data;
   },
+  getIntegrationStatus: async (): Promise<Record<string, boolean>> => {
+    try {
+      const response = await api.get('/api/integrations/status');
+      return response.data;
+    } catch {
+      // Graceful fallback: Shopify enabled, others disabled
+      return { shopify: true, salla: false, zid: false };
+    }
+  },
 };
+
+/** @deprecated Use ecommerceApi */
+export const shopifyApi = ecommerceApi;

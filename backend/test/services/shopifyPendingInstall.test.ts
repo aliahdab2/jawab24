@@ -15,7 +15,7 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
-vi.mock('../../src/services/shopifyCrypto', () => ({
+vi.mock('../../src/services/ecommerceCrypto', () => ({
     encrypt: vi.fn().mockReturnValue({ ciphertext: 'encrypted_token', iv: 'test_iv' }),
     decrypt: vi.fn().mockReturnValue('decrypted_access_token'),
 }));
@@ -70,11 +70,11 @@ vi.mock('../../src/db', () => ({
 }));
 
 vi.mock('../../src/db/schema', () => ({
-    shopifyStores: { id: 'id', shopDomain: 'shopDomain', userId: 'userId', isActive: 'isActive' },
-    shopifyProducts: { shopifyStoreId: 'shopifyStoreId', status: 'status' },
-    pages: { id: 'id', userId: 'userId', shopifyStoreId: 'shopifyStoreId' },
-    pendingShopifyInstalls: {
-        id: 'id', shopDomain: 'shopDomain', accessToken: 'accessToken',
+    ecommerceStores: { id: 'id', storeDomain: 'storeDomain', userId: 'userId', isActive: 'isActive', platform: 'platform' },
+    ecommerceProducts: { ecommerceStoreId: 'ecommerceStoreId', status: 'status' },
+    pages: { id: 'id', userId: 'userId', ecommerceStoreId: 'ecommerceStoreId' },
+    pendingEcommerceInstalls: {
+        id: 'id', platform: 'platform', storeDomain: 'storeDomain', accessToken: 'accessToken',
         accessTokenIv: 'accessTokenIv', scopes: 'scopes', nonce: 'nonce',
         status: 'status', claimedByUserId: 'claimedByUserId', expiresAt: 'expiresAt',
     },
@@ -106,7 +106,7 @@ describe('Pending Install Flow', () => {
         });
 
         it('should encrypt the access token before storage', async () => {
-            const { encrypt } = await import('../../src/services/shopifyCrypto');
+            const { encrypt } = await import('../../src/services/ecommerceCrypto');
             mockInsertReturning.mockResolvedValueOnce([{ id: 'test-id' }]);
 
             await shopifyService.createPendingInstall({
@@ -131,7 +131,7 @@ describe('Pending Install Flow', () => {
         it('should return null for expired pending install', async () => {
             mockSelectLimit.mockResolvedValueOnce([{
                 id: 'pending-123',
-                shopDomain: 'test.myshopify.com',
+                storeDomain: 'test.myshopify.com',
                 accessToken: 'encrypted',
                 accessTokenIv: 'iv',
                 status: 'pending',
@@ -145,7 +145,7 @@ describe('Pending Install Flow', () => {
         it('should return null for already claimed install', async () => {
             mockSelectLimit.mockResolvedValueOnce([{
                 id: 'pending-123',
-                shopDomain: 'test.myshopify.com',
+                storeDomain: 'test.myshopify.com',
                 accessToken: 'encrypted',
                 accessTokenIv: 'iv',
                 status: 'claimed',
@@ -161,7 +161,7 @@ describe('Pending Install Flow', () => {
                 // pending install
                 .mockResolvedValueOnce([{
                     id: 'pending-123',
-                    shopDomain: 'test.myshopify.com',
+                    storeDomain: 'test.myshopify.com',
                     accessToken: 'encrypted',
                     accessTokenIv: 'iv',
                     status: 'pending',
@@ -171,7 +171,7 @@ describe('Pending Install Flow', () => {
                 .mockResolvedValueOnce([{
                     id: 'store-abc',
                     userId: 'different-user',
-                    shopDomain: 'test.myshopify.com',
+                    storeDomain: 'test.myshopify.com',
                     isActive: true,
                 }]);
 
@@ -192,7 +192,7 @@ describe('Pending Install Flow', () => {
                 // pending install
                 .mockResolvedValueOnce([{
                     id: 'pending-123',
-                    shopDomain: 'test.myshopify.com',
+                    storeDomain: 'test.myshopify.com',
                     accessToken: 'encrypted',
                     accessTokenIv: 'test_iv',
                     status: 'pending',

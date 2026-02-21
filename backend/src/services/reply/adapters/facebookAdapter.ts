@@ -22,7 +22,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
             knowledgeBase: page.knowledgeBase,
             kbActiveVersion: page.kbActiveVersion ?? null,
             autoReplyEnabled: page.autoReplyEnabled ?? true,
-            shopifyStoreId: page.shopifyStoreId,
+            ecommerceStoreId: page.ecommerceStoreId,
             businessProfile: page.businessProfile as Record<string, unknown> | null,
         };
     }

@@ -33,6 +33,7 @@ import notificationRoutes from "./routes/notifications";
 import adminRoutes from "./routes/admin";
 import analyticsRoutes from "./routes/analytics";
 import { translationRoutes } from "./routes/translation";
+import integrationsRoutes from "./routes/integrations";
 import { integrationRegistry } from "./integrations";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
@@ -213,6 +214,9 @@ const start = async () => {
       server.log.error(err, 'Failed to register translation routes — skipping');
     }
 
+    // Integrations status route (authenticated)
+    await server.register(integrationsRoutes, { prefix: "/api/integrations" });
+
     // Register e-commerce integration routes (Shopify, future WooCommerce, etc.)
     for (const integration of integrationRegistry.getEnabled()) {
       await integration.registerRoutes(server);
@@ -299,7 +303,7 @@ const gracefulShutdown = async (signal: string) => {
     console.log("✅ Server closed successfully");
     process.exit(0);
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.error("❌ Error during shutdown:", err);
     Sentry.captureException(err instanceof Error ? err : new Error(String(err)), { tags: { context: 'shutdown' } });
     await Sentry.flush(2000);
@@ -313,14 +317,14 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
 // Handle uncaught errors
 process.on("uncaughtException", (error) => {
-  // eslint-disable-next-line no-console
+   
   console.error("❌ Uncaught Exception:", error);
   Sentry.captureException(error, { tags: { context: 'uncaught-exception' } });
   gracefulShutdown("UNCAUGHT_EXCEPTION");
 });
 
 process.on("unhandledRejection", (reason) => {
-  // eslint-disable-next-line no-console
+   
   console.error("❌ Unhandled Rejection:", reason);
   Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)), { tags: { context: 'unhandled-rejection' } });
   gracefulShutdown("UNHANDLED_REJECTION");

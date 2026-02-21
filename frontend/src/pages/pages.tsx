@@ -366,8 +366,8 @@ const PagesPage: NextPageWithLayout = () => {
                   </div>
                 </div>
 
-                {/* Shopify Connected Badge */}
-                {page.shopifyStoreId && (
+                {/* E-commerce Connected Badge */}
+                {page.ecommerceStoreId && (
                   <div
                     style={{
                       background: 'linear-gradient(135deg, #96BF48, #5A8A1F)',

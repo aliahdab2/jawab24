@@ -31,7 +31,7 @@ describe('ShopifyIntegration', () => {
         it('should instrument with shopify.kb.enrich span', async () => {
             const sentry = await import('@sentry/node');
 
-            await integration.enrichKnowledgeBase('existing KB', { shopifyStoreId: 'store-123' });
+            await integration.enrichKnowledgeBase('existing KB', { ecommerceStoreId: 'store-123' });
 
             expect(vi.mocked(sentry.startSpan)).toHaveBeenCalledWith(
                 expect.objectContaining({ name: 'shopify.kb.enrich', op: 'db.query' }),
@@ -39,26 +39,26 @@ describe('ShopifyIntegration', () => {
             );
         });
 
-        it('should return null when no shopifyStoreId on page', async () => {
+        it('should return null when no ecommerceStoreId on page', async () => {
             const result = await integration.enrichKnowledgeBase('existing KB', {});
             expect(result).toBeNull();
         });
 
-        it('should return null when shopifyStoreId is not a string', async () => {
-            const result = await integration.enrichKnowledgeBase('existing KB', { shopifyStoreId: 123 });
+        it('should return null when ecommerceStoreId is not a string', async () => {
+            const result = await integration.enrichKnowledgeBase('existing KB', { ecommerceStoreId: 123 });
             expect(result).toBeNull();
         });
 
         it('should pass currentKB and storeId to getEnrichedKnowledgeBase', async () => {
             const { getEnrichedKnowledgeBase } = await import('../../src/services/shopify');
 
-            await integration.enrichKnowledgeBase('base KB', { shopifyStoreId: 'store-456' });
+            await integration.enrichKnowledgeBase('base KB', { ecommerceStoreId: 'store-456' });
 
             expect(getEnrichedKnowledgeBase).toHaveBeenCalledWith('base KB', 'store-456');
         });
 
         it('should return the enriched content from getEnrichedKnowledgeBase', async () => {
-            const result = await integration.enrichKnowledgeBase('base KB', { shopifyStoreId: 'store-789' });
+            const result = await integration.enrichKnowledgeBase('base KB', { ecommerceStoreId: 'store-789' });
             expect(result).toBe('Enriched KB with products');
         });
     });

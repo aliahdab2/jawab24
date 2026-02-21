@@ -3,8 +3,8 @@ import {
     users, refreshTokens, pages, posts, instagramMedia,
     comments, instagramComments, messages, conversationPauses,
     templates, rules, settings, logs, subscriptions, usage,
-    usageLogs, deviceTokens, notifications, shopifyStores, shopifyProducts,
-    pendingShopifyInstalls,
+    usageLogs, deviceTokens, notifications, ecommerceStores,
+    pendingEcommerceInstalls,
 } from '../db/schema';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { config } from '../config';
@@ -289,18 +289,13 @@ export class AuthService {
             await tx.delete(notifications).where(eq(notifications.userId, userId));
             await tx.delete(refreshTokens).where(eq(refreshTokens.userId, userId));
 
-            // 6. Delete Shopify data (shopifyProducts → shopifyStores → pages.shopifyStoreId)
-            const userStores = await tx.select({ id: shopifyStores.id }).from(shopifyStores).where(eq(shopifyStores.userId, userId));
-            const storeIds = userStores.map(s => s.id);
-            if (storeIds.length > 0) {
-                await tx.delete(shopifyProducts).where(inArray(shopifyProducts.shopifyStoreId, storeIds));
-            }
-            await tx.delete(shopifyStores).where(eq(shopifyStores.userId, userId));
+            // 6. Delete e-commerce data (ecommerceProducts → ecommerceStores, cascade handles products)
+            await tx.delete(ecommerceStores).where(eq(ecommerceStores.userId, userId));
 
-            // 6b. Nullify pending Shopify installs claimed by this user
-            await tx.update(pendingShopifyInstalls)
+            // 6b. Nullify pending e-commerce installs claimed by this user
+            await tx.update(pendingEcommerceInstalls)
                 .set({ claimedByUserId: null })
-                .where(eq(pendingShopifyInstalls.claimedByUserId, userId));
+                .where(eq(pendingEcommerceInstalls.claimedByUserId, userId));
 
             // 7. Delete pages (now safe — all children removed)
             if (pageIds.length > 0) {

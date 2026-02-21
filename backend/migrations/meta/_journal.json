@@ -225,6 +225,13 @@
       "when": 1771551607211,
       "tag": "0031_opposite_william_stryker",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1771674856574,
+      "tag": "0032_abandoned_pixie",
+      "breakpoints": true
     }
   ]
 }

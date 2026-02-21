@@ -18,8 +18,8 @@ export interface PlatformPage {
     autoReplyEnabled: boolean;
     /** Platform-specific account ID (e.g., instagramAccountId) — set by adapter */
     platformAccountId?: string;
-    /** Linked Shopify store ID for product-aware AI replies */
-    shopifyStoreId?: string | null;
+    /** Linked e-commerce store ID for product-aware AI replies */
+    ecommerceStoreId?: string | null;
     /** Structured business profile from Facebook sync (hours, phone, address, etc.) */
     businessProfile?: Record<string, unknown> | null;
 }

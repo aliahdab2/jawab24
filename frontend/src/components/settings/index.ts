@@ -1,5 +1,6 @@
 export { SimpleToggle } from './SimpleToggle';
 export { ShopifySection } from './ShopifySection';
+export { EcommerceSection } from './EcommerceSection';
 export { LanguageSelector } from './LanguageSelector';
 export { CommentsAutoReplyCard } from './CommentsAutoReplyCard';
 export { BusinessHoursCard } from './BusinessHoursCard';

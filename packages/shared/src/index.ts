@@ -78,8 +78,8 @@ export interface Page {
   instagramAccountId?: string | null;
   instagramUsername?: string | null;
   instagramAutoReplyEnabled?: boolean | null;
-  // Shopify fields
-  shopifyStoreId?: string | null;
+  // E-commerce store linked to this page
+  ecommerceStoreId?: string | null;
   // KB fields
   knowledgeBase?: string | null;
   suggestedKnowledgeBase?: string | null;
@@ -179,7 +179,7 @@ export interface Plan {
   // Features
   facebookEnabled: boolean;
   instagramEnabled: boolean;
-  shopifyEnabled: boolean;
+  ecommerceEnabled: boolean;
   whatsappEnabled: boolean;
   showBranding: boolean;
   prioritySupport: boolean;
@@ -315,14 +315,16 @@ export const REPLY_QUEUE_NAME = 'reply-processing-queue';
 /** Default handoff pause duration (minutes) when a user manually replies to a customer */
 export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 
-// --- Shopify Types ---
-export interface ShopifyStore {
+// --- E-commerce Types (Shopify, Salla, Zid) ---
+export interface EcommerceStore {
   id: string;
   userId: string;
-  shopDomain: string;
-  shopName: string | null;
-  shopEmail: string | null;
-  shopCurrency: string | null;
+  platform: 'shopify' | 'salla' | 'zid';
+  storeDomain: string;
+  storeName: string | null;
+  storeEmail: string | null;
+  storeCurrency: string | null;
+  tokenExpiresAt: Date | null; // null = never expires (Shopify)
   productCount: number;
   productSummary: string | null;
   policiesSummary: string | null;
@@ -331,10 +333,10 @@ export interface ShopifyStore {
   installedAt: Date | null;
 }
 
-export interface ShopifyProduct {
+export interface EcommerceProduct {
   id: string;
-  shopifyStoreId: string;
-  shopifyProductId: string;
+  ecommerceStoreId: string;
+  platformProductId: string;
   title: string;
   productType: string | null;
   vendor: string | null;
@@ -347,10 +349,12 @@ export interface ShopifyProduct {
   tags: string | null;
 }
 
-export interface ShopifySyncJobData {
-  shopifyStoreId: string;
+export interface EcommerceSyncJobData {
+  ecommerceStoreId: string;
+  platform: 'shopify' | 'salla' | 'zid';
   jobType: 'full_sync' | 'product_update';
-  shopifyProductId?: string; // For incremental product_update
+  platformProductId?: string; // For incremental product_update
 }
 
-export const SHOPIFY_SYNC_QUEUE_NAME = 'shopify-sync-queue';
+// Redis queue key — value intentionally kept as 'shopify-sync-queue' for backward compatibility
+export const ECOMMERCE_SYNC_QUEUE_NAME = 'shopify-sync-queue';

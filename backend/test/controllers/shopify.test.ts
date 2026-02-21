@@ -78,7 +78,7 @@ vi.mock('@jawab24/shared', async (importOriginal) => {
 
 // Mock the singleton sync queue
 const mockEnqueueSyncJob = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../src/lib/shopifySyncQueue', () => ({
+vi.mock('../../src/lib/ecommerceSyncQueue', () => ({
     enqueueSyncJob: (...args: any[]) => mockEnqueueSyncJob(...args),
 }));
 
