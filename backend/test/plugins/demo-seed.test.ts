@@ -73,8 +73,8 @@ describe('seedDemoData', () => {
 
         await seedDemoData('user-123');
 
-        // Should have called update for each of the 3 demo pages
-        expect(db.update).toHaveBeenCalledTimes(3);
+        // 3 page name refreshes + 1 Shopify page link update
+        expect(db.update).toHaveBeenCalledTimes(4);
     });
 
     it('should create pages when no demo data exists', async () => {
