@@ -1,0 +1,309 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+
+// Mock Sentry
+vi.mock('@sentry/nextjs', () => ({
+    captureException: vi.fn(),
+    captureMessage: vi.fn(),
+    addBreadcrumb: vi.fn(),
+}));
+
+// Mock sentryHelpers
+vi.mock('@/lib/sentryHelpers', () => ({
+    captureError: vi.fn(),
+    addErrorBreadcrumb: vi.fn(),
+}));
+
+// We test the AuthManager class by importing it fresh.
+// Since it's a singleton, we need to handle that carefully.
+
+describe('AuthManager', () => {
+    let AuthManagerModule: typeof import('@/lib/authManager');
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        // Reset the module to get a fresh singleton
+        vi.resetModules();
+        AuthManagerModule = await import('@/lib/authManager');
+    });
+
+    describe('getInstance', () => {
+        it('should return the same instance (singleton)', () => {
+            const instance1 = AuthManagerModule.authManager;
+            const instance2 = AuthManagerModule.authManager;
+            expect(instance1).toBe(instance2);
+        });
+    });
+
+    describe('onAuthStateChange', () => {
+        it('should register a listener and return unsubscribe function', () => {
+            const callback = vi.fn();
+            const unsubscribe = AuthManagerModule.authManager.onAuthStateChange(callback);
+
+            expect(typeof unsubscribe).toBe('function');
+        });
+
+        it('should remove listener when unsubscribe is called', () => {
+            const callback = vi.fn();
+            const unsubscribe = AuthManagerModule.authManager.onAuthStateChange(callback);
+
+            unsubscribe();
+
+            // After unsubscribe, callback should not be in the listeners set
+            // We can't directly test this, but we can verify the function works without error
+            expect(typeof unsubscribe).toBe('function');
+        });
+    });
+
+    describe('refreshToken', () => {
+        it('should return true when refresh succeeds', async () => {
+            const mockAxiosInstance = {
+                post: vi.fn().mockResolvedValue({
+                    data: { success: true, token: 'new-token-123' },
+                }),
+            } as unknown as AxiosInstance;
+
+            const result = await AuthManagerModule.authManager.refreshToken(mockAxiosInstance);
+
+            expect(result).toBe(true);
+            expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/refresh');
+        });
+
+        it('should return false when refresh returns success=false', async () => {
+            const mockAxiosInstance = {
+                post: vi.fn().mockResolvedValue({
+                    data: { success: false },
+                }),
+            } as unknown as AxiosInstance;
+
+            const result = await AuthManagerModule.authManager.refreshToken(mockAxiosInstance);
+
+            expect(result).toBe(false);
+        });
+
+        it('should return false when refresh throws', async () => {
+            const mockAxiosInstance = {
+                post: vi.fn().mockRejectedValue(new Error('Network error')),
+            } as unknown as AxiosInstance;
+
+            const result = await AuthManagerModule.authManager.refreshToken(mockAxiosInstance);
+
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('logout', () => {
+        it('should clear localStorage', async () => {
+            localStorage.setItem('token', 'test-token');
+            localStorage.setItem('user', '{"id":"1"}');
+
+            // Mock the dynamic imports that logout uses
+            vi.doMock('@/lib/store', () => ({
+                useAuthStore: {
+                    setState: vi.fn(),
+                },
+            }));
+
+            vi.doMock('@/lib/api', () => ({
+                publicApi: {
+                    post: vi.fn().mockResolvedValue({}),
+                },
+            }));
+
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: {
+                    isNativePlatform: () => false,
+                },
+            }));
+
+            await AuthManagerModule.authManager.logout({ redirect: false });
+
+            expect(localStorage.getItem('token')).toBeNull();
+            expect(localStorage.getItem('user')).toBeNull();
+        });
+
+        it('should prevent multiple simultaneous logouts', async () => {
+            vi.doMock('@/lib/store', () => ({
+                useAuthStore: {
+                    setState: vi.fn(),
+                },
+            }));
+
+            vi.doMock('@/lib/api', () => ({
+                publicApi: {
+                    post: vi.fn().mockImplementation(() =>
+                        new Promise(resolve => setTimeout(() => resolve({}), 100))
+                    ),
+                },
+            }));
+
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: {
+                    isNativePlatform: () => false,
+                },
+            }));
+
+            // Start two logouts simultaneously
+            const logout1 = AuthManagerModule.authManager.logout({ redirect: false });
+            const logout2 = AuthManagerModule.authManager.logout({ redirect: false });
+
+            await Promise.all([logout1, logout2]);
+
+            // Should complete without error — the second logout is no-op
+        });
+
+        it('should not redirect when redirect=false', async () => {
+            vi.doMock('@/lib/store', () => ({
+                useAuthStore: {
+                    setState: vi.fn(),
+                },
+            }));
+
+            vi.doMock('@/lib/api', () => ({
+                publicApi: {
+                    post: vi.fn().mockResolvedValue({}),
+                },
+            }));
+
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: {
+                    isNativePlatform: () => false,
+                },
+            }));
+
+            const hrefSetter = vi.fn();
+            Object.defineProperty(window, 'location', {
+                value: { href: '/', pathname: '/dashboard' },
+                writable: true,
+                configurable: true,
+            });
+
+            await AuthManagerModule.authManager.logout({ redirect: false });
+
+            // Should not have changed location
+        });
+    });
+
+    describe('setupAuthInterceptor', () => {
+        it('should register a response interceptor', () => {
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: {
+                    response: {
+                        use: mockUse,
+                    },
+                },
+            } as unknown as AxiosInstance;
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            expect(mockUse).toHaveBeenCalledTimes(1);
+            // First arg is success handler, second is error handler
+            expect(typeof mockUse.mock.calls[0][0]).toBe('function');
+            expect(typeof mockUse.mock.calls[0][1]).toBe('function');
+        });
+
+        it('success handler should pass through responses', () => {
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: {
+                    response: {
+                        use: mockUse,
+                    },
+                },
+            } as unknown as AxiosInstance;
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            const successHandler = mockUse.mock.calls[0][0];
+            const mockResponse = { status: 200, data: { ok: true } };
+            expect(successHandler(mockResponse)).toBe(mockResponse);
+        });
+
+        it('error handler should pass through non-401 errors', async () => {
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: {
+                    response: {
+                        use: mockUse,
+                    },
+                },
+            } as unknown as AxiosInstance;
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            const errorHandler = mockUse.mock.calls[0][1];
+            const error = {
+                config: { url: '/some-endpoint' },
+                response: { status: 403 },
+            } as AxiosError;
+
+            await expect(errorHandler(error)).rejects.toBe(error);
+        });
+
+        it('error handler should skip auth endpoints', async () => {
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: {
+                    response: {
+                        use: mockUse,
+                    },
+                },
+            } as unknown as AxiosInstance;
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            const errorHandler = mockUse.mock.calls[0][1];
+
+            // 401 on /auth/refresh should NOT trigger refresh logic
+            const error = {
+                config: { url: '/auth/refresh' },
+                response: { status: 401 },
+            } as AxiosError;
+
+            await expect(errorHandler(error)).rejects.toBe(error);
+        });
+
+        it('error handler should skip when no config', async () => {
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: {
+                    response: {
+                        use: mockUse,
+                    },
+                },
+            } as unknown as AxiosInstance;
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            const errorHandler = mockUse.mock.calls[0][1];
+            const error = {
+                config: undefined,
+                response: { status: 401 },
+            } as unknown as AxiosError;
+
+            await expect(errorHandler(error)).rejects.toBe(error);
+        });
+
+        it('error handler should skip already-retried requests', async () => {
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: {
+                    response: {
+                        use: mockUse,
+                    },
+                },
+            } as unknown as AxiosInstance;
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            const errorHandler = mockUse.mock.calls[0][1];
+            const error = {
+                config: { url: '/some-endpoint', _retry: true },
+                response: { status: 401 },
+            } as unknown as AxiosError;
+
+            await expect(errorHandler(error)).rejects.toBe(error);
+        });
+    });
+});

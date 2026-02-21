@@ -1,0 +1,408 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock all dependencies
+const mockGetPageByFacebookId = vi.fn();
+vi.mock('../../../src/services/pages', () => ({
+    pagesService: {
+        getPageByFacebookId: (...args: unknown[]) => mockGetPageByFacebookId(...args),
+    },
+}));
+
+const mockFindOrCreateFromWebhook = vi.fn();
+vi.mock('../../../src/services/posts', () => ({
+    postsService: {
+        findOrCreateFromWebhook: (...args: unknown[]) => mockFindOrCreateFromWebhook(...args),
+    },
+}));
+
+const mockFindOrCreateComment = vi.fn();
+const mockMarkAsReplied = vi.fn();
+const mockUpdateComment = vi.fn();
+vi.mock('../../../src/services/comments', () => ({
+    commentsService: {
+        findOrCreateFromWebhook: (...args: unknown[]) => mockFindOrCreateComment(...args),
+        markAsReplied: (...args: unknown[]) => mockMarkAsReplied(...args),
+        updateComment: (...args: unknown[]) => mockUpdateComment(...args),
+    },
+}));
+
+const mockSendCommentReply = vi.fn();
+vi.mock('../../../src/services/reply/sender', () => ({
+    replySender: {
+        sendCommentReply: (...args: unknown[]) => mockSendCommentReply(...args),
+    },
+    ReplyMode: {},
+}));
+
+import { FacebookCommentAdapter } from '../../../src/services/reply/adapters/facebookCommentAdapter';
+
+describe('FacebookCommentAdapter', () => {
+    let adapter: FacebookCommentAdapter;
+
+    const mockPage = {
+        id: 'page_uuid_1',
+        userId: 'user_uuid_1',
+        name: 'Test Page',
+        accessToken: 'token_abc',
+        knowledgeBase: 'Some KB content',
+        kbActiveVersion: 2,
+        autoReplyEnabled: true,
+        ecommerceStoreId: null,
+        businessProfile: null,
+        facebookPageId: 'fb_page_123',
+    };
+
+    beforeEach(() => {
+        adapter = new FacebookCommentAdapter();
+        vi.clearAllMocks();
+    });
+
+    describe('platform', () => {
+        it('should identify as facebook', () => {
+            expect(adapter.platform).toBe('facebook');
+        });
+    });
+
+    describe('getPage', () => {
+        it('should return normalized PlatformPage for existing page', async () => {
+            mockGetPageByFacebookId.mockResolvedValue(mockPage);
+
+            const result = await adapter.getPage('fb_page_123');
+
+            expect(result).not.toBeNull();
+            expect(result!.id).toBe('page_uuid_1');
+            expect(result!.userId).toBe('user_uuid_1');
+            expect(result!.name).toBe('Test Page');
+            expect(result!.accessToken).toBe('token_abc');
+            expect(result!.knowledgeBase).toBe('Some KB content');
+            expect(result!.kbActiveVersion).toBe(2);
+            expect(result!.autoReplyEnabled).toBe(true);
+        });
+
+        it('should return null when page not found', async () => {
+            mockGetPageByFacebookId.mockResolvedValue(null);
+
+            const result = await adapter.getPage('nonexistent_page');
+
+            expect(result).toBeNull();
+        });
+
+        it('should default autoReplyEnabled to true when undefined', async () => {
+            mockGetPageByFacebookId.mockResolvedValue({
+                ...mockPage,
+                autoReplyEnabled: undefined,
+            });
+
+            const result = await adapter.getPage('fb_page_123');
+
+            expect(result!.autoReplyEnabled).toBe(true);
+        });
+
+        it('should handle null kbActiveVersion', async () => {
+            mockGetPageByFacebookId.mockResolvedValue({
+                ...mockPage,
+                kbActiveVersion: null,
+            });
+
+            const result = await adapter.getPage('fb_page_123');
+
+            expect(result!.kbActiveVersion).toBeNull();
+        });
+    });
+
+    describe('findOrCreateContent', () => {
+        it('should find or create a post and return ContentEntity', async () => {
+            mockFindOrCreateFromWebhook.mockResolvedValue({
+                id: 'post_uuid_1',
+                autoReplyEnabled: true,
+                message: 'Check out our new product!',
+            });
+
+            const result = await adapter.findOrCreateContent('page_uuid_1', 'fb_post_123');
+
+            expect(result.id).toBe('post_uuid_1');
+            expect(result.autoReplyEnabled).toBe(true);
+            expect(result.message).toBe('Check out our new product!');
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith('page_uuid_1', 'fb_post_123', undefined);
+        });
+
+        it('should default autoReplyEnabled to true when undefined', async () => {
+            mockFindOrCreateFromWebhook.mockResolvedValue({
+                id: 'post_uuid_1',
+                autoReplyEnabled: undefined,
+                message: null,
+            });
+
+            const result = await adapter.findOrCreateContent('page_uuid_1', 'fb_post_123');
+
+            expect(result.autoReplyEnabled).toBe(true);
+        });
+    });
+
+    describe('storeComment', () => {
+        it('should store a new comment and return isNew=true', async () => {
+            mockFindOrCreateComment.mockResolvedValue({
+                comment: { id: 'comment_uuid_1', replied: false, needsAttention: false },
+                isNew: true,
+            });
+
+            const result = await adapter.storeComment(
+                'post_uuid_1', 'fb_comment_123', 'Great product!', 'from_user_1', 'John',
+            );
+
+            expect(result.isNew).toBe(true);
+            expect(result.comment.id).toBe('comment_uuid_1');
+            expect(result.comment.replied).toBe(false);
+        });
+
+        it('should return isNew=false for existing comment', async () => {
+            mockFindOrCreateComment.mockResolvedValue({
+                comment: { id: 'comment_uuid_1', replied: true, needsAttention: false },
+                isNew: false,
+            });
+
+            const result = await adapter.storeComment(
+                'post_uuid_1', 'fb_comment_123', 'Great product!',
+            );
+
+            expect(result.isNew).toBe(false);
+            expect(result.comment.replied).toBe(true);
+        });
+
+        it('should handle missing fromId and fromName', async () => {
+            mockFindOrCreateComment.mockResolvedValue({
+                comment: { id: 'comment_uuid_1', replied: false },
+                isNew: true,
+            });
+
+            const result = await adapter.storeComment(
+                'post_uuid_1', 'fb_comment_123', 'Hello',
+            );
+
+            expect(result.comment.id).toBe('comment_uuid_1');
+            expect(mockFindOrCreateComment).toHaveBeenCalledWith(
+                'post_uuid_1', 'fb_comment_123', 'Hello', undefined, undefined,
+            );
+        });
+    });
+
+    describe('sendReply', () => {
+        it('should delegate to replySender with correct params', async () => {
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            const result = await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                fromId: 'from_user_1',
+                userSettings: { commentReplyMode: 'public' },
+            });
+
+            expect(result.success).toBe(true);
+            expect(mockSendCommentReply).toHaveBeenCalledWith({
+                facebookCommentId: 'fb_comment_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                fromId: 'from_user_1',
+                replyMode: 'public',
+                dualReplyNudge: undefined,
+                isDemo: false,
+            });
+        });
+
+        it('should default commentReplyMode to public when not set', async () => {
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                userSettings: {},
+            });
+
+            expect(mockSendCommentReply).toHaveBeenCalledWith(
+                expect.objectContaining({ replyMode: 'public' }),
+            );
+        });
+
+        it('should set isDemo=true for demo page IDs', async () => {
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'demo_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                userSettings: { commentReplyMode: 'public' },
+            });
+
+            expect(mockSendCommentReply).toHaveBeenCalledWith(
+                expect.objectContaining({ isDemo: true }),
+            );
+        });
+
+        it('should pass dualReplyNudge from settings', async () => {
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                userSettings: {
+                    commentReplyMode: 'dual',
+                    dualReplyNudge: 'Check your DM!',
+                },
+            });
+
+            expect(mockSendCommentReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    replyMode: 'dual',
+                    dualReplyNudge: 'Check your DM!',
+                }),
+            );
+        });
+
+        it('should return error when replySender fails', async () => {
+            mockSendCommentReply.mockResolvedValue({
+                success: false,
+                error: 'Facebook API error',
+            });
+
+            const result = await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                userSettings: {},
+            });
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Facebook API error');
+        });
+    });
+
+    describe('markAsReplied', () => {
+        it('should delegate to commentsService.markAsReplied', async () => {
+            mockMarkAsReplied.mockResolvedValue(undefined);
+
+            await adapter.markAsReplied(
+                'comment_uuid_1', 'Thank you!', 'ai', 'en', undefined, false, undefined, 'positive',
+            );
+
+            expect(mockMarkAsReplied).toHaveBeenCalledWith(
+                'comment_uuid_1', 'Thank you!', 'ai', undefined, 'en', false, undefined, 'positive',
+            );
+        });
+
+        it('should pass templateId when reply is template-based', async () => {
+            mockMarkAsReplied.mockResolvedValue(undefined);
+
+            await adapter.markAsReplied(
+                'comment_uuid_1', 'Thanks!', 'template', 'ar', 'tpl_123',
+            );
+
+            expect(mockMarkAsReplied).toHaveBeenCalledWith(
+                'comment_uuid_1', 'Thanks!', 'template', 'tpl_123', 'ar', undefined, undefined, undefined,
+            );
+        });
+    });
+
+    describe('flagComment', () => {
+        it('should update comment with needsAttention=true', async () => {
+            mockUpdateComment.mockResolvedValue(undefined);
+
+            await adapter.flagComment('comment_uuid_1', 'offensive', 'OFFENSIVE');
+
+            expect(mockUpdateComment).toHaveBeenCalledWith('comment_uuid_1', {
+                needsAttention: true,
+                flagReason: 'offensive',
+                aiIntent: 'OFFENSIVE',
+            });
+        });
+
+        it('should handle missing flagReason and aiIntent', async () => {
+            mockUpdateComment.mockResolvedValue(undefined);
+
+            await adapter.flagComment('comment_uuid_1');
+
+            expect(mockUpdateComment).toHaveBeenCalledWith('comment_uuid_1', {
+                needsAttention: true,
+                flagReason: null,
+                aiIntent: null,
+            });
+        });
+    });
+
+    describe('buildGeneratorContext', () => {
+        it('should build correct context from page and content', () => {
+            const page = {
+                id: 'page_uuid_1',
+                userId: 'user_uuid_1',
+                name: 'Test Page',
+                accessToken: 'token_abc',
+                knowledgeBase: 'KB content',
+                kbActiveVersion: 2,
+                autoReplyEnabled: true,
+                ecommerceStoreId: null,
+                businessProfile: null,
+            };
+            const content = {
+                id: 'post_uuid_1',
+                autoReplyEnabled: true,
+                message: 'Post message',
+            };
+
+            const ctx = adapter.buildGeneratorContext(page, content, 'fb_post_123');
+
+            expect(ctx.userId).toBe('user_uuid_1');
+            expect(ctx.text).toBe('');
+            expect(ctx.pageName).toBe('Test Page');
+            expect(ctx.knowledgeBase).toBe('KB content');
+            expect(ctx.kbActiveVersion).toBe(2);
+            expect(ctx.postId).toBe('fb_post_123');
+            expect(ctx.postMessage).toBe('Post message');
+            expect(ctx.pageId).toBe('page_uuid_1');
+            expect(ctx.accessToken).toBe('token_abc');
+        });
+
+        it('should handle undefined optional fields', () => {
+            const page = {
+                id: 'page_uuid_1',
+                userId: 'user_uuid_1',
+                name: null,
+                accessToken: 'token_abc',
+                knowledgeBase: null,
+                kbActiveVersion: null,
+                autoReplyEnabled: true,
+                ecommerceStoreId: null,
+                businessProfile: null,
+            };
+            const content = {
+                id: 'post_uuid_1',
+                autoReplyEnabled: true,
+                message: null,
+            };
+
+            const ctx = adapter.buildGeneratorContext(page, content, 'fb_post_123');
+
+            expect(ctx.pageName).toBeUndefined();
+            expect(ctx.knowledgeBase).toBeUndefined();
+            expect(ctx.postMessage).toBeUndefined();
+        });
+    });
+
+    describe('getFallbackReply', () => {
+        it('should return null (no fallback for Facebook)', () => {
+            expect(adapter.getFallbackReply()).toBeNull();
+        });
+    });
+});

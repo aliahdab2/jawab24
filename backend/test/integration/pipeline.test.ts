@@ -411,4 +411,68 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
             platformPage, senderId, 'We are currently away.',
         );
     });
+
+    // =========================================================
+    // 9. Settings-path: pipeline resolves settings via page.userId
+    // =========================================================
+    // BASELINE TEST (Phase 0) — documents current userId-based settings path.
+    // After workspace refactor, this evolves to: page.workspaceId → workspaceSettings.
+    it('resolves settings from page.userId and applies them correctly', async () => {
+        // Configure specific settings for this user
+        await settingsService.updateSettings(userId, {
+            messagesAutoReply: true,
+            businessHoursOnly: false,
+            replyDelay: 0,
+        });
+
+        const adapter = createMockAdapter(platformPage);
+
+        const result = await processor.processMessage(
+            adapter, 'page-fb-pipeline', senderId, 'Settings path test', 'fb-settings-001',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyText).toBe('Mocked AI reply');
+        // Pipeline used page.userId to fetch settings, messagesAutoReply=true was honored
+    });
+
+    it('uses correct user settings for different users on different pages', async () => {
+        // Create a second user with different settings
+        const user2 = await createTestUser({ facebookId: 'fb-user2-settings' });
+        await settingsService.updateSettings(user2.id, {
+            messagesAutoReply: false,
+            awayMessage: 'User 2 is away',
+        });
+
+        const page2 = await createTestPage(user2.id, { facebookPageId: 'page-fb-user2' });
+        const platformPage2: PlatformPage = {
+            id: page2.id,
+            userId: page2.userId,
+            name: page2.name,
+            accessToken: page2.accessToken,
+            knowledgeBase: null,
+            kbActiveVersion: null,
+            autoReplyEnabled: true,
+        };
+
+        // User 1 (original): messagesAutoReply=true → should get reply
+        const adapter1 = createMockAdapter(platformPage);
+        const result1 = await processor.processMessage(
+            adapter1, 'page-fb-pipeline', senderId, 'Hello user1', 'fb-iso-user1',
+        );
+        expect(result1.success).toBe(true);
+        expect(result1.replyText).toBe('Mocked AI reply');
+
+        // User 2: messagesAutoReply=false → should get away message
+        const adapter2 = createMockAdapter(platformPage2);
+        const result2 = await processor.processMessage(
+            adapter2, 'page-fb-user2', senderId, 'Hello user2', 'fb-iso-user2',
+        );
+        expect(result2.success).toBe(false);
+        expect(result2.error).toContain('Messages auto-reply disabled');
+        expect(adapter2.sendAwayMessage).toHaveBeenCalledWith(
+            platformPage2, senderId, 'User 2 is away',
+        );
+        // Settings isolation confirmed: each user's pipeline sees their own settings
+    });
 });
