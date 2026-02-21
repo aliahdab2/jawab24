@@ -8,7 +8,7 @@ import type { Plan } from '@jawab24/shared';
  * - Always fetch real plans from API for checkout
  * - Backend validates all payments
  * 
- * Last updated: 2026-01-07
+ * Last updated: 2026-02-21
  * Source: Production API /plans endpoint
  */
 export const FALLBACK_PLANS: Plan[] = [
@@ -17,11 +17,11 @@ export const FALLBACK_PLANS: Plan[] = [
         name: 'Starter',
         slug: 'starter',
         description: 'Auto-reply to your Facebook & Instagram page - 30 days free trial',
-        price: 500, // $5.00
+        price: 900, // $9.00
         currency: 'USD',
         interval: 'month',
         maxPages: 1,
-        maxAiRepliesPerMonth: 200,
+        maxAiRepliesPerMonth: 300,
         maxTemplates: 3,
         maxRules: 2,
         facebookEnabled: true,
@@ -41,11 +41,11 @@ export const FALLBACK_PLANS: Plan[] = [
         name: 'Business',
         slug: 'business',
         description: 'Auto-reply to 3 Facebook/Instagram pages with unlimited templates',
-        price: 3000, // $30.00
+        price: 2900, // $29.00
         currency: 'USD',
         interval: 'month',
         maxPages: 3,
-        maxAiRepliesPerMonth: 1800,
+        maxAiRepliesPerMonth: 1500,
         maxTemplates: null,
         maxRules: null,
         facebookEnabled: true,
@@ -65,7 +65,7 @@ export const FALLBACK_PLANS: Plan[] = [
         name: 'Pro',
         slug: 'pro',
         description: 'Auto-reply to 10 Facebook/Instagram pages - for agencies',
-        price: 7000, // $70.00
+        price: 6900, // $69.00
         currency: 'USD',
         interval: 'month',
         maxPages: 10,
