@@ -12,7 +12,8 @@ import {
   Instagram,
   ChevronRight,
   Clock,
-  ShoppingBag
+  ShoppingBag,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
@@ -248,13 +249,13 @@ const PagesPage: NextPageWithLayout = () => {
 
       {/* Pages Grid */}
       {pages.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12 landscape:px-6">
           {pages.map((page, i) => (
             <Card
               key={page.id}
               id={`page-${page.id}`}
               hover
-              className="animate-slide-up border-none shadow-xl shadow-surface-200/50 flex flex-col h-full overflow-hidden transition-all duration-300 hover:-translate-y-1"
+              className="animate-slide-up border-none shadow-2xl shadow-surface-200/50 flex flex-col h-full overflow-hidden transition-all duration-300 hover:-translate-y-1"
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
               {/* Header with gradient background */}
@@ -273,38 +274,21 @@ const PagesPage: NextPageWithLayout = () => {
                   )}
                 </div>
 
-                {/* Page info + clickable platform badges */}
+                {/* Page info */}
                 <div className="min-w-0 flex-1 text-start">
                   <h3 className="text-lg font-bold text-surface-900 truncate" title={page.name}>{page.name}</h3>
-
-                  {/* Platform badges (clickable links) */}
-                  <div className="flex flex-row flex-wrap items-center gap-1.5 mt-1">
-                    <a
-                      href={`https://facebook.com/${page.facebookPageId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-bold border border-blue-100 max-w-[180px] hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md transition-all"
-                      aria-label={`${t('common.openOn')} Facebook`}
-                    >
-                      <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                      </svg>
-                      <span className="truncate" style={{ direction: 'ltr' }}>{page.name}</span>
-                    </a>
-                    {page.instagramUsername && (
-                      <a
-                        href={`https://instagram.com/${page.instagramUsername}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 text-pink-600 text-[11px] font-bold border border-pink-100 max-w-[180px] hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md transition-all"
-                        aria-label={`${t('common.openOn')} Instagram`}
-                      >
-                        <Instagram className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
-                        <span className="truncate" style={{ direction: 'ltr' }}>@{page.instagramUsername}</span>
-                      </a>
-                    )}
-                  </div>
                 </div>
+
+                {/* External link to Facebook page */}
+                <a
+                  href={`https://facebook.com/${page.facebookPageId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-xl bg-surface-100 flex items-center justify-center text-surface-400 hover:bg-surface-200 hover:text-surface-600 transition-colors flex-shrink-0"
+                  aria-label={`${t('common.openOn')} Facebook`}
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
               </div>
 
               <div className="p-4 sm:p-6 flex-1 flex flex-col gap-6">
@@ -318,7 +302,7 @@ const PagesPage: NextPageWithLayout = () => {
                       </div>
                       <div className="min-w-0">
                         <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-600'}`}>Facebook</p>
-                        <p className={`text-[10px] font-medium ${page.autoReplyEnabled ? 'text-blue-500' : 'text-surface-400'}`}>
+                        <p className={`text-xs font-medium ${page.autoReplyEnabled ? 'text-blue-500' : 'text-surface-500'}`}>
                           {page.autoReplyEnabled ? t('common.enabled') : t('common.disabled')}
                         </p>
                       </div>
@@ -326,12 +310,13 @@ const PagesPage: NextPageWithLayout = () => {
                     <Toggle
                       enabled={page.autoReplyEnabled ?? false}
                       onChange={(enabled) => handleToggle(page.id, enabled)}
+                      aria-label={`${t('pages.autoReply' as TranslationKey)} Facebook - ${page.name}`}
                     />
                   </div>
 
                   {/* Instagram row */}
                   <div
-                    className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-200' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-100 opacity-60 cursor-not-allowed'}`}
+                    className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-200' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-100 opacity-60 cursor-not-allowed pointer-events-none'}`}
                     {...(!page.instagramUsername && { title: t('pages.instagramTooltip' as TranslationKey) })}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -340,9 +325,9 @@ const PagesPage: NextPageWithLayout = () => {
                       </div>
                       <div className="min-w-0">
                         <p className={`text-sm font-bold ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-600') : 'text-surface-400'}`}>Instagram</p>
-                        <p className={`text-[10px] font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-500' : 'text-surface-400') : 'text-surface-300'}`}>
+                        <p className={`text-xs font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-500' : 'text-surface-500') : 'text-surface-300'}`}>
                           {page.instagramUsername
-                            ? (page.instagramAutoReplyEnabled ? t('common.enabled') : t('common.disabled'))
+                            ? `@${page.instagramUsername}`
                             : t('pages.notLinked')}
                         </p>
                       </div>
@@ -351,6 +336,7 @@ const PagesPage: NextPageWithLayout = () => {
                       <Toggle
                         enabled={page.instagramAutoReplyEnabled ?? false}
                         onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
+                        aria-label={`${t('pages.autoReply' as TranslationKey)} Instagram - ${page.name}`}
                       />
                     ) : (
                       <div className="w-10 h-5 bg-surface-200 rounded-full flex-shrink-0" aria-hidden="true" />
@@ -359,29 +345,24 @@ const PagesPage: NextPageWithLayout = () => {
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-2 px-1 py-1 rounded-2xl bg-surface-50 border border-surface-100">
+                <div className="grid grid-cols-3 gap-3 px-1 py-1 rounded-2xl bg-surface-50 border border-surface-100">
                   <div className="py-3 text-center">
-                    <p className="text-[9px] font-bold text-surface-400 uppercase tracking-widest mb-1.5 opacity-70">{t('comments.title')}</p>
+                    <p className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-1.5">{t('comments.title')}</p>
                     <p className="text-lg font-bold text-surface-900 leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center border-x border-surface-200">
-                    <p className="text-[9px] font-bold text-surface-400 uppercase tracking-widest mb-1.5 opacity-70">{t('dashboard.autoReplies')}</p>
+                    <p className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-1.5">{t('dashboard.autoReplies')}</p>
                     <p className="text-lg font-bold text-surface-900 leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center">
-                    <p className="text-[9px] font-bold text-surface-400 uppercase tracking-widest mb-1.5 opacity-70">{t('dashboard.replyRate')}</p>
+                    <p className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-1.5">{t('dashboard.replyRate')}</p>
                     <p className="text-lg font-bold text-emerald-600 leading-none">{page.replyRate || 0}%</p>
                   </div>
                 </div>
 
                 {/* E-commerce Connected Badge — always rendered to keep card heights equal */}
                 <div
-                  style={{
-                    background: 'linear-gradient(135deg, #96BF48, #5A8A1F)',
-                    boxShadow: '0 2px 8px rgba(90, 138, 31, 0.3)',
-                    visibility: page.ecommerceStoreId ? 'visible' : 'hidden',
-                  }}
-                  className="w-full flex items-center justify-center gap-[7px] px-[14px] py-[8px] rounded-[10px] mb-[12px]"
+                  className={`w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl mb-3 bg-gradient-to-br from-[#96BF48] to-[#5A8A1F] shadow-md ${page.ecommerceStoreId ? 'visible' : 'invisible'}`}
                   aria-hidden={!page.ecommerceStoreId}
                 >
                   <ShoppingBag className="w-4 h-4 text-white" aria-hidden="true" />
@@ -408,7 +389,7 @@ const PagesPage: NextPageWithLayout = () => {
                             : t('pages.addBusinessInfo')
                           }
                         </p>
-                        <p className="text-[10px] font-medium text-surface-500 uppercase tracking-tight mt-0.5">
+                        <p className="text-xs font-medium text-surface-500 uppercase tracking-tight mt-0.5">
                           {page.knowledgeBase
                             ? t('pages.clickToEdit')
                             : t('pages.improveAIQuality')
@@ -429,9 +410,12 @@ const PagesPage: NextPageWithLayout = () => {
                     {(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? t('common.active') : t('common.inactive')}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-surface-400">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-bold uppercase tracking-tighter">
+                <div className="flex items-center gap-1.5 text-surface-500">
+                  <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span
+                    className="text-xs font-bold uppercase tracking-tighter"
+                    title={page.lastActivity ? t('pages.lastActivity' as TranslationKey) : ''}
+                  >
                     {page.lastActivity ? formatTime(page.lastActivity) : formatConnectedDate(page.createdAt as unknown as string)}
                   </span>
                 </div>
