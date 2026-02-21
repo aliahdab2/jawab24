@@ -12,7 +12,8 @@ import {
   BookOpen,
   Instagram,
   ChevronRight,
-  Clock
+  Clock,
+  ShoppingBag
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
@@ -258,57 +259,62 @@ const PagesPage: NextPageWithLayout = () => {
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
               {/* Header with gradient background */}
-              <div className="p-4 sm:p-6 bg-gradient-to-br from-surface-50 to-white border-b border-surface-100 flex items-start justify-between gap-4">
-                <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <div className="w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden bg-brand-600 flex items-center justify-center">
-                    {!imgError[page.id] ? (
-                      <img
-                        src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
-                        alt={page.name}
-                        className="w-full h-full object-cover"
-                        onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
-                      />
-                    ) : (
-                      <FileText className="w-7 h-7 text-white" />
-                    )}
-                  </div>
-                  <div className="text-start min-w-0">
+              <div className="p-4 sm:p-6 bg-gradient-to-br from-surface-50 to-white border-b border-surface-100 flex items-start gap-4">
+                {/* Page avatar */}
+                <div className="w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden bg-brand-600 flex items-center justify-center">
+                  {!imgError[page.id] ? (
+                    <img
+                      src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
+                      alt={page.name}
+                      className="w-full h-full object-cover"
+                      onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
+                    />
+                  ) : (
+                    <FileText className="w-7 h-7 text-white" />
+                  )}
+                </div>
+
+                {/* Page info + external links */}
+                <div className="min-w-0 flex-1 text-start">
+                  {/* Title row with external links at the end */}
+                  <div className="flex items-start justify-between gap-2">
                     <h3 className="text-lg font-bold text-surface-900 truncate" title={page.name}>{page.name}</h3>
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
-                        Facebook
-                      </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <a
+                        href={`https://facebook.com/${page.facebookPageId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-xl bg-white border border-surface-200 text-surface-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-sm transition-all"
+                        aria-label={`${t('common.openOn')} Facebook`}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
                       {page.instagramUsername && (
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-pink-50 text-pink-600 text-[10px] font-bold uppercase tracking-wider border border-pink-100">
-                          <Instagram className="w-3 h-3" />
-                          @{page.instagramUsername}
-                        </div>
+                        <a
+                          href={`https://instagram.com/${page.instagramUsername}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 rounded-xl bg-white border border-surface-200 text-surface-400 hover:text-pink-600 hover:border-pink-200 hover:shadow-sm transition-all"
+                          aria-label={`${t('common.openOn')} Instagram`}
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
                       )}
                     </div>
                   </div>
-                </div>
 
-                <div className="flex flex-col items-end gap-2">
-                  <a
-                    href={`https://facebook.com/${page.facebookPageId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2 rounded-xl bg-white border border-surface-200 text-surface-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-sm transition-all"
-                    aria-label={`${t('common.openOn')} Facebook`}
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                  {page.instagramUsername && (
-                    <a
-                      href={`https://instagram.com/${page.instagramUsername}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-2 rounded-xl bg-white border border-surface-200 text-surface-400 hover:text-pink-600 hover:border-pink-200 hover:shadow-sm transition-all"
-                      aria-label={`${t('common.openOn')} Instagram`}
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
+                  {/* Platform badges */}
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
+                      Facebook
+                    </div>
+                    {page.instagramUsername && (
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-pink-50 text-pink-600 text-[10px] font-bold uppercase tracking-wider border border-pink-100">
+                        <Instagram className="w-3 h-3" />
+                        @{page.instagramUsername}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -389,9 +395,7 @@ const PagesPage: NextPageWithLayout = () => {
                   className="w-full flex items-center justify-center gap-[7px] px-[14px] py-[8px] rounded-[10px] mb-[12px]"
                   aria-hidden={!page.ecommerceStoreId}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <path d="M15.5 2C14.5 2 13.7 2.6 13.2 3.4C12.9 3.2 12.5 3 12 3C10.6 3 9.5 4.1 9.5 5.5V6H7L6 19H18L17 6H14.5V5.5C14.5 4.1 15.1 3 15.5 2ZM12 4.5C12.3 4.5 12.5 4.7 12.5 5V6H11.5V5C11.5 4.7 11.7 4.5 12 4.5ZM14 6V5.5C14 4.9 14.2 4.3 14.6 3.9C14.8 4.2 15 4.6 15 5C15 5.3 15 5.7 15 6H14ZM8.5 7.5H9.5V9C9.5 9.4 9.8 9.7 10.2 9.7C10.6 9.7 10.9 9.4 10.9 9V7.5H13.1V9C13.1 9.4 13.4 9.7 13.8 9.7C14.2 9.7 14.5 9.4 14.5 9V7.5H15.5L16.2 17.5H7.8L8.5 7.5Z" fill="white"/>
-                  </svg>
+                  <ShoppingBag className="w-4 h-4 text-white" aria-hidden="true" />
                   <span className="text-white text-[12px] font-semibold">{t('pages.shopifyConnectedBadge')}</span>
                 </div>
 
