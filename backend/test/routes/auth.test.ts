@@ -22,6 +22,7 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/facebook', () => ({
     facebookService: {
         getAccessToken: vi.fn(),
+        getLongLivedToken: vi.fn(),
         getUserProfile: vi.fn(),
         setLogger: vi.fn(),
     },
@@ -128,6 +129,7 @@ describe('Auth Routes - Login Flow', () => {
                 replyDelay: 0,
             });
             vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_access_token_123');
+            vi.mocked(facebookService.getLongLivedToken).mockResolvedValue({ token: 'long_lived_token_123', expiresAt: new Date('2026-04-22T00:00:00Z') });
             vi.mocked(facebookService.getUserProfile).mockResolvedValue({
                 id: 'fb_user_123',
                 name: 'John Doe',
@@ -175,13 +177,13 @@ describe('Auth Routes - Login Flow', () => {
 
             // Verify service calls
             expect(facebookService.getAccessToken).toHaveBeenCalledWith('facebook_auth_code_xyz', undefined);
-            expect(facebookService.getUserProfile).toHaveBeenCalledWith('fb_access_token_123');
+            expect(facebookService.getUserProfile).toHaveBeenCalledWith('long_lived_token_123');
             expect(authService.findOrCreateUser).toHaveBeenCalledWith(
                 'fb_user_123',
                 'John Doe',
                 'john@example.com',
-                undefined, // facebookAccessToken
-                undefined, // facebookTokenExpiresAt
+                'long_lived_token_123', // facebookAccessToken
+                expect.any(Date), // facebookTokenExpiresAt
                 'https://example.com/photo.jpg' // picture
             );
         });
@@ -288,6 +290,7 @@ describe('Auth Routes - Login Flow', () => {
             const { pagesService } = await import('../../src/services/pages');
 
             vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
+            vi.mocked(facebookService.getLongLivedToken).mockResolvedValue({ token: 'long_lived_sync_token', expiresAt: new Date('2026-04-22T00:00:00Z') });
             vi.mocked(facebookService.getUserProfile).mockResolvedValue({
                 id: 'fb_123',
                 name: 'Test User',
@@ -303,7 +306,7 @@ describe('Auth Routes - Login Flow', () => {
             vi.mocked(authService.generateToken).mockReturnValue('jwt');
             vi.mocked(authService.createAuthResponse).mockReturnValue({
                 token: 'jwt',
-                fbAccessToken: 'fb_token',
+                fbAccessToken: 'long_lived_sync_token',
                 user: {
                     id: 'user_123',
                     name: 'Test User',
@@ -320,7 +323,7 @@ describe('Auth Routes - Login Flow', () => {
             // Page sync is called async, give it a moment
             await new Promise((resolve) => setTimeout(resolve, 10));
 
-            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('user_123', 'fb_token');
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('user_123', 'long_lived_sync_token');
         });
 
         it('should handle login without email (privacy setting)', async () => {
@@ -328,6 +331,7 @@ describe('Auth Routes - Login Flow', () => {
             const { authService } = await import('../../src/services/auth');
 
             vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
+            vi.mocked(facebookService.getLongLivedToken).mockResolvedValue({ token: 'long_lived_fb_token', expiresAt: new Date('2026-04-22T00:00:00Z') });
             vi.mocked(facebookService.getUserProfile).mockResolvedValue({
                 id: 'fb_no_email',
                 name: 'Private User',
@@ -367,8 +371,8 @@ describe('Auth Routes - Login Flow', () => {
                 'fb_no_email',
                 'Private User',
                 undefined, // email
-                undefined, // facebookAccessToken
-                undefined, // facebookTokenExpiresAt
+                'long_lived_fb_token', // facebookAccessToken
+                expect.any(Date), // facebookTokenExpiresAt
                 undefined  // picture
             );
         });

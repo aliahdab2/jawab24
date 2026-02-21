@@ -8,7 +8,7 @@ import type { ShopifyStore, ShopifyProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { redis } from '../lib/redis';
 
-const SHOPIFY_API_VERSION = '2024-10';
+const SHOPIFY_API_VERSION = '2025-01';
 const KB_MAX_CHARS = 1500; // Must match ai-worker's KB_MAX_CHARS
 const MAX_PRODUCTS_PER_PAGE = 50;
 const MAX_PAGES_TO_FETCH = 5; // 250 products max
