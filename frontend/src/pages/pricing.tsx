@@ -446,7 +446,7 @@ const PricingPage: NextPageWithLayout = () => {
         {/* Usage Summary if subscribed - Inline */}
         {usage?.subscription?.plan && (
           <div className="max-w-4xl mx-auto mt-1 lg:mt-2 mb-2 lg:mb-4">
-            <div className="flex flex-row items-center justify-center gap-4 sm:gap-8 py-2 sm:py-3.5 px-4 sm:px-6 bg-white rounded-2xl border border-brand-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-8 py-2 sm:py-3.5 px-4 sm:px-6 bg-white rounded-2xl border border-brand-100 shadow-sm">
               {/* Plan Info */}
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shadow-inner">
@@ -472,7 +472,7 @@ const PricingPage: NextPageWithLayout = () => {
               <div className="hidden sm:block w-px h-6 bg-surface-200" />
 
               {/* Usage Stats */}
-              <div className="flex items-center gap-6 text-sm">
+              <div className="flex items-center gap-3 sm:gap-6 text-sm">
                 <div className="flex flex-row items-center gap-1 sm:gap-2">
                   <span className="text-surface-500 font-medium">{t('pricing.repliesUsed' as TranslationKey)}</span>
                   <span className="font-bold text-brand-600">
