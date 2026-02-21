@@ -208,7 +208,7 @@ describe('Shopify Service', () => {
             expect(mockFetch).toHaveBeenCalledTimes(2);
             // First call: app/uninstalled
             expect(mockFetch).toHaveBeenCalledWith(
-                'https://test-store.myshopify.com/admin/api/2024-10/webhooks.json',
+                'https://test-store.myshopify.com/admin/api/2025-01/webhooks.json',
                 expect.objectContaining({
                     method: 'POST',
                     body: expect.stringContaining('app/uninstalled'),
@@ -216,7 +216,7 @@ describe('Shopify Service', () => {
             );
             // Second call: products/update
             expect(mockFetch).toHaveBeenCalledWith(
-                'https://test-store.myshopify.com/admin/api/2024-10/webhooks.json',
+                'https://test-store.myshopify.com/admin/api/2025-01/webhooks.json',
                 expect.objectContaining({
                     method: 'POST',
                     body: expect.stringContaining('products/update'),

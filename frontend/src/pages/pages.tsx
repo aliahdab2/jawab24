@@ -366,6 +366,22 @@ const PagesPage: NextPageWithLayout = () => {
                   </div>
                 </div>
 
+                {/* Shopify Connected Badge */}
+                {page.shopifyStoreId && (
+                  <div
+                    style={{
+                      background: 'linear-gradient(135deg, #96BF48, #5A8A1F)',
+                      boxShadow: '0 2px 8px rgba(90, 138, 31, 0.3)',
+                    }}
+                    className="w-full flex items-center justify-center gap-[7px] px-[14px] py-[8px] rounded-[10px] mb-[12px]"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                      <path d="M15.5 2C14.5 2 13.7 2.6 13.2 3.4C12.9 3.2 12.5 3 12 3C10.6 3 9.5 4.1 9.5 5.5V6H7L6 19H18L17 6H14.5V5.5C14.5 4.1 15.1 3 15.5 2ZM12 4.5C12.3 4.5 12.5 4.7 12.5 5V6H11.5V5C11.5 4.7 11.7 4.5 12 4.5ZM14 6V5.5C14 4.9 14.2 4.3 14.6 3.9C14.8 4.2 15 4.6 15 5C15 5.3 15 5.7 15 6H14ZM8.5 7.5H9.5V9C9.5 9.4 9.8 9.7 10.2 9.7C10.6 9.7 10.9 9.4 10.9 9V7.5H13.1V9C13.1 9.4 13.4 9.7 13.8 9.7C14.2 9.7 14.5 9.4 14.5 9V7.5H15.5L16.2 17.5H7.8L8.5 7.5Z" fill="white"/>
+                    </svg>
+                    <span className="text-white text-[12px] font-semibold">{t('pages.shopifyConnectedBadge')}</span>
+                  </div>
+                )}
+
                 {/* Knowledge Base CTA - More prominent */}
                 <button
                   onClick={() => openKnowledgeBase(page)}
