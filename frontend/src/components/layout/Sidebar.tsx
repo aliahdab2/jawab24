@@ -126,7 +126,7 @@ const navigationKeys = [
  */
 export const Sidebar = memo(function Sidebar() {
   const router = useRouter();
-  const { logout, user } = useAuthStore();
+  const { logout, user, fbToken } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const { t } = useTranslation();
   const isDemoUser = useIsDemoUser();
@@ -148,11 +148,19 @@ export const Sidebar = memo(function Sidebar() {
       const response = await api.get<{ picture: string }>('/auth/picture/refresh');
       if (response.data?.picture) {
         setPictureOverride(response.data.picture);
+        return;
       }
     } catch {
-      // Silent fail — letter avatar stays visible
+      // Fall through to in-memory token fallback
     }
-  }, []);
+    // Fallback: use the in-memory Facebook token (available during the current session)
+    // to build a direct Graph API URL. Works even when no token is stored in the DB.
+    if (fbToken && user?.facebookId) {
+      setPictureOverride(
+        `https://graph.facebook.com/${user.facebookId}/picture?type=large&access_token=${encodeURIComponent(fbToken)}`
+      );
+    }
+  }, [fbToken, user?.facebookId]);
 
   // Memoize user data to prevent ProfileAvatar re-renders
   const userPicture = pictureOverride ?? user?.picture;
