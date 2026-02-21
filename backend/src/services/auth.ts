@@ -210,7 +210,12 @@ export class AuthService {
      */
     async getUserById(userId: string): Promise<User | null> {
         const result = await db.select().from(users).where(eq(users.id, userId));
-        return result.length > 0 ? result[0] : null;
+        if (result.length === 0) return null;
+        const user = result[0];
+        return {
+            ...user,
+            facebookAccessToken: this.maybeDecrypt(user.facebookAccessToken),
+        };
     }
 
     /**

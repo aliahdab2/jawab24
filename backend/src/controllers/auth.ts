@@ -29,16 +29,27 @@ export class AuthController {
             // 1. Exchange code for access token
             const accessToken = await facebookService.getAccessToken(code, redirectUri);
 
-            // 2. Get user profile from Facebook
-            const fbProfile = await facebookService.getUserProfile(accessToken);
+            // 1b. Exchange for long-lived token (60 days) so picture refresh works for web users
+            let longLivedToken = accessToken;
+            let tokenExpiresAt: Date | undefined;
+            try {
+                const { token: llt, expiresAt } = await facebookService.getLongLivedToken(accessToken);
+                longLivedToken = llt;
+                tokenExpiresAt = expiresAt;
+            } catch (err) {
+                request.log.warn({ err }, 'Could not exchange for long-lived token, using short-lived');
+            }
 
-            // 3. Find or create user in our DB
+            // 2. Get user profile from Facebook
+            const fbProfile = await facebookService.getUserProfile(longLivedToken);
+
+            // 3. Find or create user in our DB (store long-lived token for picture refresh)
             const user = await authService.findOrCreateUser(
                 fbProfile.id,
                 fbProfile.name,
                 fbProfile.email,
-                undefined, // facebookAccessToken - handled below
-                undefined, // facebookTokenExpiresAt - handled below
+                longLivedToken,
+                tokenExpiresAt,
                 fbProfile.picture
             );
 
@@ -46,7 +57,7 @@ export class AuthController {
             const token = authService.generateToken(user);
 
             // 5. Auto-sync pages from Facebook (non-blocking, respects plan page limit)
-            pagesService.syncFromFacebook(user.id, accessToken).then(({ skippedCount }) => {
+            pagesService.syncFromFacebook(user.id, longLivedToken).then(({ skippedCount }) => {
                 if (skippedCount > 0) {
                     request.log.info(`Auto-sync: ${skippedCount} page(s) created but auto-reply disabled (plan limit)`);
                 }
@@ -65,7 +76,7 @@ export class AuthController {
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
             // 9. Build response
-            const response: AuthResponse = authService.createAuthResponse(user, token, accessToken, {
+            const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             });
 

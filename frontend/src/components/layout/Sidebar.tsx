@@ -155,12 +155,7 @@ export const Sidebar = memo(function Sidebar() {
   }, []);
 
   // Memoize user data to prevent ProfileAvatar re-renders
-  // Use stable Graph API URL (never expires) so the picture always loads.
-  // pictureOverride is only set when the refresh endpoint succeeds (native users).
-  const stableUrl = user?.facebookId
-    ? `https://graph.facebook.com/${user.facebookId}/picture?type=large`
-    : undefined;
-  const userPicture = pictureOverride ?? stableUrl ?? user?.picture;
+  const userPicture = pictureOverride ?? user?.picture;
   const userName = isDemoUser ? t('auth.demoUserName') : user?.name;
 
   return (
