@@ -56,12 +56,11 @@ CREATE TABLE IF NOT EXISTS "pending_ecommerce_installs" (
 	"created_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
-DROP TABLE "pending_shopify_installs";--> statement-breakpoint
-DROP TABLE "shopify_products";--> statement-breakpoint
-DROP TABLE "shopify_stores";--> statement-breakpoint
-ALTER TABLE "pages" DROP CONSTRAINT "pages_shopify_store_id_shopify_stores_id_fk";
---> statement-breakpoint
+ALTER TABLE "pages" DROP CONSTRAINT IF EXISTS "pages_shopify_store_id_shopify_stores_id_fk";--> statement-breakpoint
 DROP INDEX IF EXISTS "idx_pages_shopify_store_id";--> statement-breakpoint
+DROP TABLE IF EXISTS "pending_shopify_installs";--> statement-breakpoint
+DROP TABLE IF EXISTS "shopify_products";--> statement-breakpoint
+DROP TABLE IF EXISTS "shopify_stores";--> statement-breakpoint
 ALTER TABLE "pages" ADD COLUMN "ecommerce_store_id" uuid;--> statement-breakpoint
 ALTER TABLE "plans" ADD COLUMN "ecommerce_enabled" boolean DEFAULT false;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_ecommerce_products_store_product" ON "ecommerce_products" ("ecommerce_store_id","platform_product_id");--> statement-breakpoint
