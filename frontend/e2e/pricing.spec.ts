@@ -14,7 +14,7 @@ const MOCK_PLANS = [
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 10, maxPages: 1,
     maxTemplates: 2, maxRules: 2, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, showBranding: true, prioritySupport: false,
-    shopifyEnabled: false, regionalPricing: {}, sortOrder: 0,
+    ecommerceEnabled: false, regionalPricing: {}, sortOrder: 0,
   },
   {
     id: 'plan_starter', slug: 'starter', name: 'Starter', description: 'Starter plan',
@@ -22,7 +22,7 @@ const MOCK_PLANS = [
     isActive: true, isDefault: true, maxAiRepliesPerMonth: 100, maxPages: 1,
     maxTemplates: 5, maxRules: 5, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, showBranding: true, prioritySupport: false,
-    shopifyEnabled: false, regionalPricing: {}, sortOrder: 1,
+    ecommerceEnabled: false, regionalPricing: {}, sortOrder: 1,
   },
   {
     id: 'plan_business', slug: 'business', name: 'Business', description: 'Business plan',
@@ -30,7 +30,7 @@ const MOCK_PLANS = [
     isActive: true, isDefault: false, maxAiRepliesPerMonth: 1000, maxPages: 5,
     maxTemplates: null, maxRules: null, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, showBranding: false, prioritySupport: true,
-    shopifyEnabled: true, regionalPricing: {}, sortOrder: 2,
+    ecommerceEnabled: true, regionalPricing: {}, sortOrder: 2,
   },
   {
     id: 'plan_pro', slug: 'pro', name: 'Pro', description: 'Pro plan',
@@ -38,7 +38,7 @@ const MOCK_PLANS = [
     isActive: true, isDefault: false, maxAiRepliesPerMonth: null, maxPages: null,
     maxTemplates: null, maxRules: null, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, showBranding: false, prioritySupport: true,
-    shopifyEnabled: true, regionalPricing: {}, sortOrder: 3,
+    ecommerceEnabled: true, regionalPricing: {}, sortOrder: 3,
   },
 ];
 

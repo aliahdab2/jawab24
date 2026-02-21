@@ -185,8 +185,8 @@ function PlanCard({
 
       </div>
 
-      {/* Integration badge — shown only for plans with Shopify enabled */}
-      {plan.shopifyEnabled && (
+      {/* Integration badge — shown only for plans with e-commerce enabled */}
+      {plan.ecommerceEnabled && (
         <div className="mx-3 mt-2">
           <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-lg border border-purple-100">
             <Store className="w-4 h-4 text-purple-600 flex-shrink-0" />

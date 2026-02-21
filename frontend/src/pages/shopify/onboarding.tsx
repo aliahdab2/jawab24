@@ -155,7 +155,7 @@ export default function ShopifyOnboarding() {
                       </p>
                     ) : (
                       <p className="text-surface-500 font-mono text-sm">
-                        {store?.shopDomain}
+                        {store?.storeDomain}
                       </p>
                     )}
                   </div>
