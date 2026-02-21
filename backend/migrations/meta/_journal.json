@@ -232,6 +232,13 @@
       "when": 1771674856574,
       "tag": "0032_abandoned_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1771708423428,
+      "tag": "0033_yielding_captain_flint",
+      "breakpoints": true
     }
   ]
 }

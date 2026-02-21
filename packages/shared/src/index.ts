@@ -77,6 +77,7 @@ export interface Page {
   // Instagram fields
   instagramAccountId?: string | null;
   instagramUsername?: string | null;
+  instagramProfilePicUrl?: string | null;
   instagramAutoReplyEnabled?: boolean | null;
   // E-commerce store linked to this page
   ecommerceStoreId?: string | null;

@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN "instagram_profile_pic_url" text;

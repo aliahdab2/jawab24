@@ -45,6 +45,7 @@ export const pages = pgTable('pages', {
     // Instagram Business Account linked to this page
     instagramAccountId: varchar('instagram_account_id', { length: 255 }),
     instagramUsername: varchar('instagram_username', { length: 255 }),
+    instagramProfilePicUrl: text('instagram_profile_pic_url'),
     instagramAutoReplyEnabled: boolean('instagram_auto_reply_enabled').default(false),
     // E-commerce store linked to this page (for product-aware AI replies)
     ecommerceStoreId: uuid('ecommerce_store_id').references(() => ecommerceStores.id, { onDelete: 'set null' }),

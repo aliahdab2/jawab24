@@ -346,6 +346,7 @@ export class PagesService {
             // Check linked Instagram account
             let instagramAccountId: string | null = null;
             let instagramUsername: string | null = null;
+            let instagramProfilePicUrl: string | null = null;
 
             try {
                 const igAccount = await instagramService.getLinkedInstagramAccount(
@@ -355,6 +356,7 @@ export class PagesService {
                 if (igAccount) {
                     instagramAccountId = igAccount.id;
                     instagramUsername = igAccount.username;
+                    instagramProfilePicUrl = igAccount.profile_picture_url || null;
                     logger.info(`[Pages] Found linked Instagram: @${instagramUsername}`);
                 }
             } catch {
@@ -364,7 +366,8 @@ export class PagesService {
             return {
                 fbPage,
                 instagramAccountId,
-                instagramUsername
+                instagramUsername,
+                instagramProfilePicUrl
             };
         });
 
@@ -384,7 +387,7 @@ export class PagesService {
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
         // or potential race conditions if multiple syncs happen simultaneously.
         for (const result of results) {
-            const { fbPage, instagramAccountId, instagramUsername } = result;
+            const { fbPage, instagramAccountId, instagramUsername, instagramProfilePicUrl } = result;
             const existingPage = existingPagesMap.get(fbPage.id);
 
             if (existingPage) {
@@ -398,6 +401,7 @@ export class PagesService {
                         accessToken: fbPage.access_token,
                         instagramAccountId,
                         instagramUsername,
+                        instagramProfilePicUrl,
                         businessProfile,
                         businessProfileUpdatedAt: new Date(),
                         updatedAt: new Date(),
@@ -433,6 +437,7 @@ export class PagesService {
                         autoReplyEnabled: shouldAutoEnable,
                         instagramAccountId,
                         instagramUsername,
+                        instagramProfilePicUrl,
                         instagramAutoReplyEnabled: false,
                         knowledgeBase: suggestedKnowledgeBase || null,
                         suggestedKnowledgeBase: suggestedKnowledgeBase || null,
