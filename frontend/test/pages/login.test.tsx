@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { useRouter } from 'next/router';
 import LoginPage from '@/pages/login';
 import { authApi } from '@/lib/api';
@@ -121,14 +121,16 @@ describe('LoginPage', () => {
     });
 
     describe('Web Login', () => {
-        it('should show error when FB_APP_ID is missing', () => {
+        it('should show error when FB_APP_ID is missing', async () => {
             const originalEnv = process.env.NEXT_PUBLIC_FB_APP_ID;
             delete process.env.NEXT_PUBLIC_FB_APP_ID;
     
             render(<LoginPage />);
     
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
+            await act(async () => {
+                loginButton.click();
+            });
     
             expect(toastErrorSpy).toHaveBeenCalledWith('auth.loginError');
             expect(window.location.href).toBe(''); // Should not redirect
@@ -139,13 +141,15 @@ describe('LoginPage', () => {
         // NOTE: Error handling for web construction removed because login.tsx now uses a direct redirect 
         // without a try-catch block for visual minimalism (as requested by user).
     
-        it('should include required OAuth scopes', () => {
+        it('should include required OAuth scopes', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
     
             render(<LoginPage />);
     
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
+            await act(async () => {
+                loginButton.click();
+            });
     
             const href = window.location.href;
             expect(href).toContain('scope=');
@@ -192,7 +196,7 @@ describe('LoginPage', () => {
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
             await act(async () => {
-                fireEvent.click(loginButton);
+                loginButton.click();
             });
 
             // Verify Native Login called
@@ -229,7 +233,9 @@ describe('LoginPage', () => {
             });
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
-            fireEvent.click(loginButton);
+            await act(async () => {
+                loginButton.click();
+            });
 
             await vi.waitFor(() => {
                 // User cancellation shows info, not error
@@ -258,7 +264,7 @@ describe('LoginPage', () => {
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
             await act(async () => {
-                fireEvent.click(loginButton);
+                loginButton.click();
             });
 
             await vi.waitFor(() => {
@@ -289,7 +295,7 @@ describe('LoginPage', () => {
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
             await act(async () => {
-                fireEvent.click(loginButton);
+                loginButton.click();
             });
 
             await vi.waitFor(() => {
@@ -320,7 +326,7 @@ describe('LoginPage', () => {
 
             const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
             await act(async () => {
-                fireEvent.click(loginButton);
+                loginButton.click();
             });
 
             // Fast forward 31 seconds (past the 30 second timeout)

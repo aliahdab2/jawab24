@@ -114,10 +114,9 @@ describe('NotificationBell', () => {
 
         render(<NotificationBell />);
 
-        // Wait a tick
-        await new Promise(r => setTimeout(r, 50));
-
-        expect(mockGetUnreadCount).not.toHaveBeenCalled();
+        await waitFor(() => {
+            expect(mockGetUnreadCount).not.toHaveBeenCalled();
+        });
     });
 
     it('should call getUnreadCount on mount', async () => {
@@ -155,7 +154,9 @@ describe('NotificationBell', () => {
         render(<NotificationBell />);
 
         const button = screen.getByRole('button');
-        fireEvent.click(button);
+        await act(async () => {
+            fireEvent.click(button);
+        });
 
         await waitFor(() => {
             expect(screen.getByText('notifications.title')).toBeInTheDocument();
@@ -172,7 +173,9 @@ describe('NotificationBell', () => {
 
         // Open dropdown
         const button = screen.getByRole('button');
-        fireEvent.click(button);
+        await act(async () => {
+            fireEvent.click(button);
+        });
 
         await waitFor(() => {
             expect(mockGetNotifications).toHaveBeenCalled();
@@ -193,7 +196,9 @@ describe('NotificationBell', () => {
         render(<NotificationBell />);
 
         const button = screen.getByRole('button');
-        fireEvent.click(button);
+        await act(async () => {
+            fireEvent.click(button);
+        });
 
         await waitFor(() => {
             expect(screen.getByText('notifications.empty')).toBeInTheDocument();
@@ -211,7 +216,9 @@ describe('NotificationBell', () => {
 
         // Open dropdown
         const button = screen.getByRole('button');
-        fireEvent.click(button);
+        await act(async () => {
+            fireEvent.click(button);
+        });
 
         // Wait for notification to appear
         await waitFor(() => {
@@ -221,7 +228,9 @@ describe('NotificationBell', () => {
         // Click on notification
         const notification = screen.getByText('Payment Failed').closest('div[class*="cursor-pointer"]');
         if (notification) {
-            fireEvent.click(notification);
+            await act(async () => {
+                fireEvent.click(notification);
+            });
         }
 
         await waitFor(() => {
@@ -241,7 +250,9 @@ describe('NotificationBell', () => {
 
         // Open dropdown
         const button = screen.getByRole('button');
-        fireEvent.click(button);
+        await act(async () => {
+            fireEvent.click(button);
+        });
 
         // Wait for "Mark all read" button to appear
         await waitFor(() => {
@@ -249,7 +260,9 @@ describe('NotificationBell', () => {
         });
 
         // Click mark all read
-        fireEvent.click(screen.getByText('notifications.markAllRead'));
+        await act(async () => {
+            fireEvent.click(screen.getByText('notifications.markAllRead'));
+        });
 
         await waitFor(() => {
             expect(mockMarkAllNotificationsAsRead).toHaveBeenCalled();
@@ -261,8 +274,10 @@ describe('NotificationBell', () => {
 
         mockGetUnreadCount.mockResolvedValue(1);
 
+        let unmount: (() => void) | null = null;
         await act(async () => {
-            render(<NotificationBell />);
+            const rendered = render(<NotificationBell />);
+            unmount = rendered.unmount;
         });
 
         // Initial fetch
@@ -278,6 +293,10 @@ describe('NotificationBell', () => {
         // Should have fetched again
         expect(mockGetUnreadCount.mock.calls.length).toBeGreaterThan(1);
 
+        await act(async () => {
+            unmount?.();
+            await vi.runOnlyPendingTimersAsync();
+        });
         vi.useRealTimers();
     });
 

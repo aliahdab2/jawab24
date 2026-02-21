@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { CommentDetailModal } from '@/components/comments/CommentDetailModal';
 import { subscriptionApi, aiApi } from '@/lib/api';
@@ -56,6 +56,23 @@ const mockComment: Comment = {
 };
 
 describe('CommentDetailModal', () => {
+  const renderModal = async (override: Partial<React.ComponentProps<typeof CommentDetailModal>> = {}) => {
+    const result = render(
+      <CommentDetailModal
+        comment={mockComment}
+        onClose={vi.fn()}
+        onReplySuccess={vi.fn()}
+        {...override}
+      />
+    );
+
+    await waitFor(() => {
+      expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
+    });
+
+    return result;
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: allow AI replies (prevents act() warnings from unhandled mount effect)
@@ -63,11 +80,7 @@ describe('CommentDetailModal', () => {
   });
 
   it('fetches limits on mount', async () => {
-    render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
-    
-    await waitFor(() => {
-      expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
-    });
+    await renderModal();
   });
 
   it('disables generate button if limit reached', async () => {
@@ -75,7 +88,7 @@ describe('CommentDetailModal', () => {
       data: { allowed: false, reason: 'Limit reached' }
     });
 
-    render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
+    await renderModal();
 
     await waitFor(() => {
       // Button text shows the translation key for "Limit Reached" when disabled
@@ -92,9 +105,7 @@ describe('CommentDetailModal', () => {
         data: { status: 'completed', result: { reply: 'AI Reply' } }
     });
 
-    render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
-
-    await waitFor(() => expect(subscriptionApi.checkAiLimit).toHaveBeenCalled());
+    await renderModal();
 
     const generateBtn = screen.getByRole('button', { name: /dashboard.aiReply/i });
     fireEvent.click(generateBtn);
@@ -109,9 +120,7 @@ describe('CommentDetailModal', () => {
 
   it('closes on ESC key press', async () => {
     const onClose = vi.fn();
-    await act(async () => {
-      render(<CommentDetailModal comment={mockComment} onClose={onClose} onReplySuccess={vi.fn()} />);
-    });
+    await renderModal({ onClose });
 
     // Simulate ESC key press
     fireEvent.keyDown(window, { key: 'Escape' });
@@ -125,17 +134,13 @@ describe('CommentDetailModal', () => {
       postMessage: 'Special offer on all courses!',
     };
 
-    await act(async () => {
-      render(<CommentDetailModal comment={commentWithPost} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
-    });
+    await renderModal({ comment: commentWithPost });
 
     expect(screen.getByText('Special offer on all courses!')).toBeInTheDocument();
   });
 
   it('does not show post context when postMessage is absent', async () => {
-    await act(async () => {
-      render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
-    });
+    await renderModal();
 
     // The FileText icon area for post context should not be present
     expect(screen.queryByText('Special offer')).not.toBeInTheDocument();
@@ -152,6 +157,7 @@ describe('CommentDetailModal', () => {
     );
 
     await waitFor(() => {
+      expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
       expect(screen.getByRole('button', { name: /comments\.resolve/i })).toBeInTheDocument();
     });
   });
@@ -170,6 +176,7 @@ describe('CommentDetailModal', () => {
     );
 
     await waitFor(() => {
+      expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
       expect(screen.getByRole('button', { name: /comments\.resolve/i })).toBeInTheDocument();
     });
 
@@ -186,15 +193,9 @@ describe('CommentDetailModal', () => {
       replyMethod: 'ai',
     };
 
-    await act(async () => {
-      render(
-        <CommentDetailModal
-          comment={repliedComment}
-          onClose={vi.fn()}
-          onReplySuccess={vi.fn()}
-          onResolve={vi.fn()}
-        />
-      );
+    await renderModal({
+      comment: repliedComment,
+      onResolve: vi.fn(),
     });
 
     // Reply section is hidden for replied comments, so resolve button shouldn't exist
@@ -202,17 +203,13 @@ describe('CommentDetailModal', () => {
   });
 
   it('shows comment message in the modal body', async () => {
-    await act(async () => {
-      render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
-    });
+    await renderModal();
 
     expect(screen.getByText('Hello world')).toBeInTheDocument();
   });
 
   it('shows commenter name in the header', async () => {
-    await act(async () => {
-      render(<CommentDetailModal comment={mockComment} onClose={vi.fn()} onReplySuccess={vi.fn()} />);
-    });
+    await renderModal();
 
     expect(screen.getByText('Test User')).toBeInTheDocument();
   });
@@ -221,16 +218,7 @@ describe('CommentDetailModal', () => {
     it('shows clickable page name button when facebookCommentId is present', async () => {
       const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
 
-      await act(async () => {
-        render(
-          <CommentDetailModal
-            comment={comment}
-            onClose={vi.fn()}
-            onReplySuccess={vi.fn()}
-            pageName="My Page"
-          />
-        );
-      });
+      await renderModal({ comment, pageName: 'My Page' });
 
       expect(screen.getByRole('button', { name: /my page/i })).toBeInTheDocument();
     });
@@ -238,16 +226,7 @@ describe('CommentDetailModal', () => {
     it('opens facebook comment URL when page name is clicked', async () => {
       const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
 
-      await act(async () => {
-        render(
-          <CommentDetailModal
-            comment={comment}
-            onClose={vi.fn()}
-            onReplySuccess={vi.fn()}
-            pageName="My Page"
-          />
-        );
-      });
+      await renderModal({ comment, pageName: 'My Page' });
 
       fireEvent.click(screen.getByRole('button', { name: /my page/i }));
       expect(openExternalUrl).toHaveBeenCalledWith('https://facebook.com/fb_comment_123');
@@ -256,17 +235,7 @@ describe('CommentDetailModal', () => {
     it('falls back to pageUrl for Instagram comments without facebookCommentId', async () => {
       const comment: Comment = { ...mockComment, facebookCommentId: undefined, source: 'instagram' };
 
-      await act(async () => {
-        render(
-          <CommentDetailModal
-            comment={comment}
-            onClose={vi.fn()}
-            onReplySuccess={vi.fn()}
-            pageName="My Page"
-            pageUrl="https://instagram.com/mypageusername"
-          />
-        );
-      });
+      await renderModal({ comment, pageName: 'My Page', pageUrl: 'https://instagram.com/mypageusername' });
 
       fireEvent.click(screen.getByRole('button', { name: /my page/i }));
       expect(openExternalUrl).toHaveBeenCalledWith('https://instagram.com/mypageusername');
@@ -275,16 +244,7 @@ describe('CommentDetailModal', () => {
     it('shows non-clickable page name when no URL available', async () => {
       const comment: Comment = { ...mockComment, facebookCommentId: undefined };
 
-      await act(async () => {
-        render(
-          <CommentDetailModal
-            comment={comment}
-            onClose={vi.fn()}
-            onReplySuccess={vi.fn()}
-            pageName="My Page"
-          />
-        );
-      });
+      await renderModal({ comment, pageName: 'My Page' });
 
       expect(screen.getByText('My Page')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /my page/i })).not.toBeInTheDocument();
@@ -293,18 +253,9 @@ describe('CommentDetailModal', () => {
     it('does not render page name row when pageName is not provided', async () => {
       const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
 
-      await act(async () => {
-        render(
-          <CommentDetailModal
-            comment={comment}
-            onClose={vi.fn()}
-            onReplySuccess={vi.fn()}
-          />
-        );
-      });
+      await renderModal({ comment });
 
       expect(screen.queryByText('My Page')).not.toBeInTheDocument();
     });
   });
 });
-
