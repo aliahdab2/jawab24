@@ -136,7 +136,10 @@ export const Sidebar = memo(function Sidebar() {
   }, [logout, router]);
 
   // Memoize user data to prevent ProfileAvatar re-renders
-  const userPicture = user?.picture;
+  // Use the stable Graph API URL instead of the stored CDN URL (which expires)
+  const userPicture = user?.facebookId
+    ? `https://graph.facebook.com/${user.facebookId}/picture?type=large`
+    : user?.picture;
   const userName = isDemoUser ? t('auth.demoUserName') : user?.name;
 
   return (

@@ -348,29 +348,35 @@ echo ""
 echo "5️⃣  Running tests..."
 
 echo "   Testing Backend (Unit + coverage thresholds)..."
-if npm run test:coverage --workspace=jawab24-backend > /dev/null 2>&1; then
+_TEST_LOG=$(mktemp)
+if npm run test:coverage --workspace=jawab24-backend > "$_TEST_LOG" 2>&1; then
     echo -e "${GREEN}   ✅ Backend tests pass (coverage thresholds met)${NC}"
+    rm -f "$_TEST_LOG"
 else
     echo -e "${RED}   ❌ Backend tests or coverage thresholds failed!${NC}"
-    npm run test:coverage --workspace=jawab24-backend
+    cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
     exit 1
 fi
 
 echo "   Testing Frontend (Unit + coverage thresholds)..."
-if npm run test:coverage --workspace=jawab24-frontend > /dev/null 2>&1; then
+_TEST_LOG=$(mktemp)
+if npm run test:coverage --workspace=jawab24-frontend > "$_TEST_LOG" 2>&1; then
     echo -e "${GREEN}   ✅ Frontend unit tests pass (coverage thresholds met)${NC}"
+    rm -f "$_TEST_LOG"
 else
     echo -e "${RED}   ❌ Frontend tests or coverage thresholds failed!${NC}"
-    npm run test:coverage --workspace=jawab24-frontend
+    cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
     exit 1
 fi
 
 echo "   Testing AI Worker..."
-if npm test --workspace=jawab24-ai-worker -- --run > /dev/null 2>&1; then
+_TEST_LOG=$(mktemp)
+if npm test --workspace=jawab24-ai-worker -- --run > "$_TEST_LOG" 2>&1; then
     echo -e "${GREEN}   ✅ AI Worker tests pass${NC}"
+    rm -f "$_TEST_LOG"
 else
     echo -e "${RED}   ❌ AI Worker tests failed!${NC}"
-    npm test --workspace=jawab24-ai-worker -- --run
+    cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
     exit 1
 fi
 
@@ -421,11 +427,13 @@ else
 fi
 
 echo "   Testing Backend (Integration)..."
-if (cd backend && npm run test:integration) > /dev/null 2>&1; then
+_TEST_LOG=$(mktemp)
+if (cd backend && npm run test:integration) > "$_TEST_LOG" 2>&1; then
     echo -e "${GREEN}   ✅ Backend integration tests pass${NC}"
+    rm -f "$_TEST_LOG"
 else
     echo -e "${RED}   ❌ Backend integration tests failed!${NC}"
-    (cd backend && npm run test:integration)
+    cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
     exit 1
 fi
 
