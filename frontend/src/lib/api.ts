@@ -446,7 +446,7 @@ export const ecommerceApi = {
   },
   getIntegrationStatus: async (): Promise<Record<string, boolean>> => {
     try {
-      const response = await api.get('/api/integrations/status');
+      const response = await api.get('/integrations/status');
       return response.data;
     } catch {
       // Graceful fallback: Shopify enabled, others disabled
