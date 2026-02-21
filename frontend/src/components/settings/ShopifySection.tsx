@@ -83,6 +83,7 @@ export function ShopifySection() {
     }
   };
 
+  // Only show when a Shopify store is actually connected (user came from Shopify App Store)
   if (loading || !store) return null;
 
   return (

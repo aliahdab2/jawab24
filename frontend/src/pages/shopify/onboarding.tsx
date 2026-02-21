@@ -46,13 +46,13 @@ export default function ShopifyOnboarding() {
     async function fetchStore() {
       try {
         const res = await shopifyApi.getStore();
-        setStore(res.data);
+        setStore(res);
         setStoreLoading(false);
         // Auto-trigger sync
         setSyncStatus('syncing');
         try {
           const syncRes = await shopifyApi.syncProducts();
-          setSyncResult(syncRes.data);
+          setSyncResult(syncRes);
           setSyncStatus('done');
         } catch {
           setSyncStatus('error');
@@ -72,7 +72,7 @@ export default function ShopifyOnboarding() {
     setSyncStatus('syncing');
     try {
       const syncRes = await shopifyApi.syncProducts();
-      setSyncResult(syncRes.data);
+      setSyncResult(syncRes);
       setSyncStatus('done');
     } catch {
       setSyncStatus('error');

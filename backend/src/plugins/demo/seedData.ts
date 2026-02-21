@@ -1,5 +1,5 @@
 import { db } from '../../db';
-import { pages, posts, comments, templates, settings, notifications, messages } from '../../db/schema';
+import { pages, posts, comments, templates, settings, notifications, messages, shopifyStores, shopifyProducts } from '../../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 
@@ -626,6 +626,82 @@ const DEMO_NOTIFICATIONS = [
     },
 ];
 
+const DEMO_SHOPIFY_STORE = {
+    shopDomain: 'demo-electronics.myshopify.com',
+    accessToken: 'demo_shopify_token',
+    shopName: 'متجر الإلكترونيات',
+    shopEmail: 'demo@demo-electronics.myshopify.com',
+    shopCurrency: 'SAR',
+    shopTimezone: 'Asia/Riyadh',
+    planName: 'basic',
+    productCount: 5,
+    productSummary: `📱 منتجات متجر الإلكترونيات:\n\n1. iPhone 15 Pro - 3,800 ريال\n2. Samsung Galaxy S24 - 2,900 ريال\n3. MacBook Air M3 - 5,200 ريال\n4. AirPods Pro - 850 ريال\n5. كفر حماية iPhone 15 - 120 ريال\n\n🚚 توصيل مجاني فوق 500 ريال | ✅ ضمان سنة`,
+    policiesSummary: `إرجاع: 14 يوم\nتوصيل: 2-3 أيام عمل داخل الرياض\nدفع: بطاقة، تحويل، الدفع عند الاستلام`,
+};
+
+const DEMO_SHOPIFY_PRODUCTS = [
+    {
+        shopifyProductId: 'demo_prod_1',
+        title: 'iPhone 15 Pro',
+        productType: 'Smartphones',
+        vendor: 'Apple',
+        priceRange: '3,800 - 4,500 SAR',
+        currency: 'SAR',
+        totalInventory: 12,
+        hasVariants: true,
+        variantSummary: '128GB، 256GB، 512GB — أسود، أبيض، تيتانيوم',
+        tags: 'iPhone,Apple,جوال',
+    },
+    {
+        shopifyProductId: 'demo_prod_2',
+        title: 'Samsung Galaxy S24',
+        productType: 'Smartphones',
+        vendor: 'Samsung',
+        priceRange: '2,900 - 3,400 SAR',
+        currency: 'SAR',
+        totalInventory: 8,
+        hasVariants: true,
+        variantSummary: '256GB، 512GB — أسود، فضي',
+        tags: 'Samsung,Galaxy,جوال',
+    },
+    {
+        shopifyProductId: 'demo_prod_3',
+        title: 'MacBook Air M3',
+        productType: 'Laptops',
+        vendor: 'Apple',
+        priceRange: '5,200 - 6,500 SAR',
+        currency: 'SAR',
+        totalInventory: 5,
+        hasVariants: true,
+        variantSummary: '13 بوصة، 15 بوصة — فضي، رمادي',
+        tags: 'MacBook,Apple,لابتوب',
+    },
+    {
+        shopifyProductId: 'demo_prod_4',
+        title: 'AirPods Pro (الجيل الثاني)',
+        productType: 'Accessories',
+        vendor: 'Apple',
+        priceRange: '850 SAR',
+        currency: 'SAR',
+        totalInventory: 20,
+        hasVariants: false,
+        variantSummary: null,
+        tags: 'AirPods,سماعات,Apple',
+    },
+    {
+        shopifyProductId: 'demo_prod_5',
+        title: 'كفر حماية iPhone 15',
+        productType: 'Accessories',
+        vendor: 'متجر الإلكترونيات',
+        priceRange: '120 - 180 SAR',
+        currency: 'SAR',
+        totalInventory: 50,
+        hasVariants: true,
+        variantSummary: 'أسود، أبيض، أزرق، أحمر، شفاف',
+        tags: 'كفر,حماية,إكسسوار',
+    },
+];
+
 /**
  * Seed demo data for a user
  * This function is idempotent - it won't create duplicates if called multiple times
@@ -742,6 +818,10 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
         logger.debug('[DemoData] Refreshed demo comments', { count: DEMO_COMMENTS.length });
 
         await refreshDemoNotifications(userId, logger);
+
+        const electronicsRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_electronics');
+        if (electronicsRefresh) await seedDemoShopify(userId, electronicsRefresh.id, logger);
+
         return;
     }
 
@@ -871,6 +951,10 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
 
     logger.debug('[DemoData] Created demo templates', { count: DEMO_TEMPLATES.length });
 
+    // Seed Shopify demo store linked to the electronics page
+    const electronicsPage = createdPages.find(p => p.facebookPageId === 'demo_page_electronics');
+    if (electronicsPage) await seedDemoShopify(userId, electronicsPage.id, logger);
+
     // Create demo notifications (varied types, timestamps, and read states)
     await refreshDemoNotifications(userId, logger);
 
@@ -881,6 +965,32 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
         templates: DEMO_TEMPLATES.length,
         notifications: DEMO_NOTIFICATIONS.length,
     });
+}
+
+/**
+ * Seed Shopify demo store and products for the electronics page.
+ * Deletes any existing demo store for the user first (cascade removes products).
+ */
+async function seedDemoShopify(userId: string, electronicsPageId: string, logger: Logger): Promise<void> {
+    await db.delete(shopifyStores).where(eq(shopifyStores.userId, userId));
+
+    const lastSyncAt = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h ago
+    const [store] = await db.insert(shopifyStores).values({
+        userId,
+        ...DEMO_SHOPIFY_STORE,
+        lastSyncAt,
+        isActive: true,
+    }).returning({ id: shopifyStores.id });
+
+    for (const prod of DEMO_SHOPIFY_PRODUCTS) {
+        await db.insert(shopifyProducts).values({ shopifyStoreId: store.id, ...prod, status: 'active' });
+    }
+
+    await db.update(pages)
+        .set({ shopifyStoreId: store.id })
+        .where(eq(pages.id, electronicsPageId));
+
+    logger.debug('[DemoData] Seeded Shopify store', { storeId: store.id, products: DEMO_SHOPIFY_PRODUCTS.length });
 }
 
 /**
