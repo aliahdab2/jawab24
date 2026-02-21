@@ -176,6 +176,42 @@ export class AuthController {
     }
 
     /**
+     * Refresh profile picture from Facebook using stored access token
+     * GET /auth/picture/refresh
+     */
+    async refreshPicture(request: AuthenticatedRequest, reply: FastifyReply) {
+        const userId = request.user?.userId;
+        if (!userId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        try {
+            const user = await authService.getUserById(userId);
+            if (!user) {
+                return reply.status(404).send({ error: 'User not found' });
+            }
+
+            const fbToken = user.facebookAccessToken;
+            if (!fbToken) {
+                return reply.status(422).send({ error: 'No Facebook token available' });
+            }
+
+            const fbProfile = await facebookService.getUserProfile(fbToken);
+            if (!fbProfile.picture) {
+                return reply.status(422).send({ error: 'No picture returned from Facebook' });
+            }
+
+            // Save fresh URL to DB
+            await db.update(users).set({ picture: fbProfile.picture }).where(eq(users.id, userId));
+
+            return reply.send({ picture: fbProfile.picture });
+        } catch (error) {
+            request.log.error({ err: error }, 'Refresh picture failed');
+            return reply.status(500).send({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
      * Get current user
      * GET /auth/me
      */

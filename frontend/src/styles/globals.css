@@ -1019,9 +1019,9 @@ body.is-native .pt-hero {
   }
 }
 
-/* Dashboard mobile bottom padding — accounts for bottom nav (64px) + FAB (48px) + gaps */
+/* Dashboard mobile bottom padding — accounts for bottom nav (64px) + clearance (16px) */
 .pb-dash-mobile {
-  padding-bottom: 140px;
+  padding-bottom: 80px;
 }
 
 @media (min-width: 1024px) {

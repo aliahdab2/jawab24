@@ -44,6 +44,15 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }, authController.refresh);
 
     // Protected routes
+    fastify.get('/auth/picture/refresh', {
+        schema: {
+            tags: ['Auth'],
+            summary: 'Refresh profile picture URL from Facebook',
+            security: auth,
+        },
+        preHandler: [authenticate],
+    }, authController.refreshPicture);
+
     fastify.get('/auth/me', {
         schema: {
             tags: ['Auth'],

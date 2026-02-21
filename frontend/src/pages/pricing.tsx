@@ -264,7 +264,7 @@ function FeatureRow({
   highlight?: boolean;
 }) {
   return (
-    <div className={`flex items-start gap-2.5 py-1 md:py-1.5 px-1 rounded-lg transition-colors ${highlight ? 'bg-brand-50/30' : ''}`}>
+    <div className={`flex items-start gap-2.5 py-0.5 md:py-1 px-1 rounded-lg transition-colors ${highlight ? 'bg-brand-50/30' : ''}`}>
       <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${included ? 'bg-green-100 text-green-600' : 'bg-surface-100 text-surface-300'
         }`}>
         {included ? (
@@ -445,8 +445,8 @@ const PricingPage: NextPageWithLayout = () => {
 
         {/* Usage Summary if subscribed - Inline */}
         {usage?.subscription?.plan && (
-          <div className="max-w-4xl mx-auto mt-2 lg:mt-3 mb-6">
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 py-3.5 px-6 bg-white rounded-2xl border border-brand-100 shadow-sm">
+          <div className="max-w-4xl mx-auto mt-1 lg:mt-2 mb-2 lg:mb-4">
+            <div className="flex flex-row items-center justify-center gap-4 sm:gap-8 py-2 sm:py-3.5 px-4 sm:px-6 bg-white rounded-2xl border border-brand-100 shadow-sm">
               {/* Plan Info */}
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shadow-inner">
@@ -473,7 +473,7 @@ const PricingPage: NextPageWithLayout = () => {
 
               {/* Usage Stats */}
               <div className="flex items-center gap-6 text-sm">
-                <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2">
+                <div className="flex flex-row items-center gap-1 sm:gap-2">
                   <span className="text-surface-500 font-medium">{t('pricing.repliesUsed' as TranslationKey)}</span>
                   <span className="font-bold text-brand-600">
                     {usage.aiReplies.used} / {usage.aiReplies.limit || '∞'}
@@ -505,17 +505,17 @@ const PricingPage: NextPageWithLayout = () => {
         )}
 
         {/* Page title */}
-        <div className="text-center px-4 pt-4 sm:pt-7 md:pt-8">
-          <h1 className="text-3xl sm:text-5xl font-display font-bold text-surface-900 leading-tight max-w-4xl mx-auto">
+        <div className="text-center px-4 pt-2 sm:pt-5 md:pt-6">
+          <h1 className="text-2xl sm:text-5xl font-display font-bold text-surface-900 leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
-          <p className="text-base sm:text-xl text-surface-500 leading-relaxed mt-3 mb-6 max-w-xl mx-auto">
+          <p className="hidden sm:block text-base sm:text-xl text-surface-500 leading-relaxed mt-3 mb-6 max-w-xl mx-auto">
             {t('pricing.tryFullService')}
           </p>
         </div>
 
         {/* Billing interval toggle */}
-        <div className="flex items-center justify-center gap-3 mb-8 lg:mb-9">
+        <div className="flex items-center justify-center gap-3 mb-3 sm:mb-6 lg:mb-9">
           <button
             type="button"
             onClick={() => setBillingInterval('month')}
@@ -538,7 +538,7 @@ const PricingPage: NextPageWithLayout = () => {
         </div>
 
         {/* Plans Grid - Responsive grid based on count */}
-        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'} gap-6 md:gap-6 lg:gap-8 pb-8 items-stretch max-w-7xl mx-auto px-4 md:px-6 lg:px-0`}>
+        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'} gap-6 md:gap-6 lg:gap-8 pb-8 items-stretch max-w-7xl mx-auto px-0 md:px-6 lg:px-0`}>
           {activePlans.map((plan) => (
             <PlanCard
               key={plan.id}

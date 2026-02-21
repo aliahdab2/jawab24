@@ -21,6 +21,7 @@ import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { BrandLogo, NotificationBell } from '@/components/ui';
 import { useIsDemoUser } from '@/features/demo';
+import { api } from '@/lib/api';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -33,7 +34,7 @@ const loadedImageCache = new Set<string>();
  * ProfileAvatar - Memoized component that prevents flicker
  * Uses a global cache to track which images have been loaded this session
  */
-const ProfileAvatar = memo(function ProfileAvatar({ picture, name }: { picture?: string; name?: string }) {
+const ProfileAvatar = memo(function ProfileAvatar({ picture, name, onError }: { picture?: string; name?: string; onError?: () => void }) {
   // Initialize as loaded if image is already in our cache
   const [imageLoaded, setImageLoaded] = useState(() => 
     picture ? loadedImageCache.has(picture) : false
@@ -73,7 +74,8 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name }: { picture?:
     }
     setImageSrc(null);
     setImageLoaded(false);
-  }, [imageSrc]);
+    onError?.();
+  }, [imageSrc, onError]);
 
   const fallbackInitial = name?.charAt(0) || 'U';
 
@@ -135,11 +137,25 @@ export const Sidebar = memo(function Sidebar() {
     router.push('/login');
   }, [logout, router]);
 
+  // Local override for picture — set when the stored CDN URL expires and we refresh it
+  const [pictureOverride, setPictureOverride] = useState<string | undefined>(undefined);
+  const refreshAttemptedRef = useRef(false);
+
+  const handlePictureRefresh = useCallback(async () => {
+    if (refreshAttemptedRef.current) return; // only try once per session
+    refreshAttemptedRef.current = true;
+    try {
+      const response = await api.get<{ picture: string }>('/auth/picture/refresh');
+      if (response.data?.picture) {
+        setPictureOverride(response.data.picture);
+      }
+    } catch {
+      // Silent fail — letter avatar stays visible
+    }
+  }, []);
+
   // Memoize user data to prevent ProfileAvatar re-renders
-  // Use the stable Graph API URL instead of the stored CDN URL (which expires)
-  const userPicture = user?.facebookId
-    ? `https://graph.facebook.com/${user.facebookId}/picture?type=large`
-    : user?.picture;
+  const userPicture = pictureOverride ?? user?.picture;
   const userName = isDemoUser ? t('auth.demoUserName') : user?.name;
 
   return (
@@ -274,7 +290,7 @@ export const Sidebar = memo(function Sidebar() {
             !sidebarOpen && "justify-center px-0"
           )}>
             {/* Profile Picture with smooth loading - prevents flicker on navigation */}
-            <ProfileAvatar picture={userPicture} name={userName} />
+            <ProfileAvatar picture={userPicture} name={userName} onError={handlePictureRefresh} />
             {sidebarOpen && (
               <div className="min-w-0 text-start">
                 <p className="text-sm font-bold text-white truncate leading-tight">{userName}</p>
