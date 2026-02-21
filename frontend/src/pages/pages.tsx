@@ -8,7 +8,6 @@ import { FB_CALLBACK_PATH } from '@/constants/auth';
 import {
   FileText,
   RefreshCw,
-  ExternalLink,
   BookOpen,
   Instagram,
   ChevronRight,
@@ -274,45 +273,35 @@ const PagesPage: NextPageWithLayout = () => {
                   )}
                 </div>
 
-                {/* Page info + external links */}
+                {/* Page info + clickable platform badges */}
                 <div className="min-w-0 flex-1 text-start">
-                  {/* Title row with external links at the end */}
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-lg font-bold text-surface-900 truncate" title={page.name}>{page.name}</h3>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <h3 className="text-lg font-bold text-surface-900 truncate" title={page.name}>{page.name}</h3>
+
+                  {/* Platform badges (clickable links) */}
+                  <div className="flex flex-row flex-wrap items-center gap-1.5 mt-1">
+                    <a
+                      href={`https://facebook.com/${page.facebookPageId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-bold border border-blue-100 max-w-[180px] hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md transition-all"
+                      aria-label={`${t('common.openOn')} Facebook`}
+                    >
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                      </svg>
+                      <span className="truncate" style={{ direction: 'ltr' }}>{page.name}</span>
+                    </a>
+                    {page.instagramUsername && (
                       <a
-                        href={`https://facebook.com/${page.facebookPageId}`}
+                        href={`https://instagram.com/${page.instagramUsername}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-2 rounded-xl bg-white border border-surface-200 text-surface-400 hover:text-blue-600 hover:border-blue-200 hover:shadow-sm transition-all"
-                        aria-label={`${t('common.openOn')} Facebook`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 text-pink-600 text-[11px] font-bold border border-pink-100 max-w-[180px] hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md transition-all"
+                        aria-label={`${t('common.openOn')} Instagram`}
                       >
-                        <ExternalLink className="w-4 h-4" />
+                        <Instagram className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                        <span className="truncate" style={{ direction: 'ltr' }}>@{page.instagramUsername}</span>
                       </a>
-                      {page.instagramUsername && (
-                        <a
-                          href={`https://instagram.com/${page.instagramUsername}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 rounded-xl bg-white border border-surface-200 text-surface-400 hover:text-pink-600 hover:border-pink-200 hover:shadow-sm transition-all"
-                          aria-label={`${t('common.openOn')} Instagram`}
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Platform badges */}
-                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
-                      Facebook
-                    </div>
-                    {page.instagramUsername && (
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-pink-50 text-pink-600 text-[10px] font-bold uppercase tracking-wider border border-pink-100">
-                        <Instagram className="w-3 h-3" />
-                        @{page.instagramUsername}
-                      </div>
                     )}
                   </div>
                 </div>
