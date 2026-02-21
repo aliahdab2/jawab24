@@ -707,7 +707,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
                 return (
                   <Link
-                    href="/pages"
+                    href={`/pages#page-${page.id}`}
                     key={page.id}
                     className="flex items-center gap-4 p-4 sm:p-5 group hover:bg-brand-50/30 transition-all cursor-pointer animate-slide-up"
                     style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}

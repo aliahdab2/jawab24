@@ -252,6 +252,7 @@ const PagesPage: NextPageWithLayout = () => {
           {pages.map((page, i) => (
             <Card
               key={page.id}
+              id={`page-${page.id}`}
               hover
               className="animate-slide-up border-none shadow-xl shadow-surface-200/50 flex flex-col h-full overflow-hidden transition-all duration-300 hover:-translate-y-1"
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}

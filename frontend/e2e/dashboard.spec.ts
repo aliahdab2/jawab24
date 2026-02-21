@@ -262,6 +262,18 @@ test.describe('Dashboard Page', () => {
     ).toBeVisible({ timeout: 15000 });
   });
 
+  test('should link each "Your Pages" widget item to the specific page card', async ({ page }) => {
+    await page.goto('/en/dashboard');
+
+    // Wait for the page item to appear in the widget
+    const pageLink = page.getByRole('link', { name: /Test Business Page/i });
+    await expect(pageLink).toBeVisible({ timeout: 15000 });
+
+    // The href must deep-link to the individual page card via hash, not just /pages
+    const href = await pageLink.getAttribute('href');
+    expect(href).toContain('/pages#page-page_1');
+  });
+
   test('should show empty state gracefully when APIs fail', async ({ page }) => {
     // Override API mocks to return errors
     await page.route('**/api/**', async (route) => {
