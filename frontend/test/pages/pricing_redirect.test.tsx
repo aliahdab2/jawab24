@@ -11,25 +11,6 @@ vi.mock('next/router', () => ({
 
 // Mock the API calls
 vi.mock('@/lib/api', () => ({
-    plansApi: {
-        getAll: vi.fn().mockResolvedValue({
-            data: [
-                {
-                    id: 'plan-1',
-                    slug: 'starter',
-                    name: 'Starter',
-                    price: 1000,
-                    isActive: true,
-                    trialDays: 0,
-                    maxAiRepliesPerMonth: 100,
-                    maxPages: 1,
-                    maxTemplates: 5,
-                    maxRules: 5,
-                    showBranding: true
-                },
-            ]
-        }),
-    },
     subscriptionApi: {
         getUsage: vi.fn().mockResolvedValue({
             data: {
@@ -42,6 +23,32 @@ vi.mock('@/lib/api', () => ({
         }),
     },
 }));
+
+const TEST_PLANS = [
+    {
+        id: 'plan-1',
+        slug: 'starter',
+        name: 'Starter',
+        price: 1000,
+        isActive: true,
+        trialDays: 0,
+        maxAiRepliesPerMonth: 100,
+        maxPages: 1,
+        maxTemplates: 5,
+        maxRules: 5,
+        showBranding: true,
+        facebookEnabled: true,
+        instagramEnabled: true,
+        whatsappEnabled: false,
+        ecommerceEnabled: false,
+        prioritySupport: false,
+        currency: 'USD',
+        interval: 'month',
+        regionalPricing: {},
+        isDefault: true,
+        sortOrder: 0,
+    },
+];
 
 // Mock API Utils
 vi.mock('@/lib/api-utils', () => ({
