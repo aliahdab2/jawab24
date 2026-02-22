@@ -8,6 +8,7 @@ vi.mock('../../src/services/comments', () => ({
         getUnrepliedComments: vi.fn(),
         getCommentsByPost: vi.fn(),
         getComment: vi.fn(),
+        getCommentForWorkspace: vi.fn(),
         updateComment: vi.fn(),
         markAsReplied: vi.fn(),
         getStats: vi.fn(),
@@ -138,17 +139,17 @@ describe('CommentsController', () => {
         it('should return a single comment', async () => {
             mockRequest.params = { id: 'c-42' };
             const mockComment = { id: 'c-42', message: 'Found it' };
-            vi.mocked(commentsService.getComment).mockResolvedValue(mockComment);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(mockComment as any);
 
             await commentsController.getOne(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getComment).toHaveBeenCalledWith('c-42');
+            expect(commentsService.getCommentForWorkspace).toHaveBeenCalledWith('c-42', 'test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(mockComment);
         });
 
         it('should return 404 when comment not found', async () => {
             mockRequest.params = { id: 'missing' };
-            vi.mocked(commentsService.getComment).mockResolvedValue(null);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(null);
 
             await commentsController.getOne(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
@@ -164,6 +165,7 @@ describe('CommentsController', () => {
             mockRequest.params = { id: 'c-1' };
             mockRequest.body = { message: 'Updated text' };
             const updatedComment = { id: 'c-1', message: 'Updated text' };
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(updatedComment as any);
             vi.mocked(commentsService.updateComment).mockResolvedValue(updatedComment);
 
             await commentsController.update(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -175,7 +177,7 @@ describe('CommentsController', () => {
         it('should return 404 when comment to update is not found', async () => {
             mockRequest.params = { id: 'missing' };
             mockRequest.body = { message: 'text' };
-            vi.mocked(commentsService.updateComment).mockResolvedValue(undefined);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(null);
 
             await commentsController.update(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
@@ -191,6 +193,7 @@ describe('CommentsController', () => {
             mockRequest.params = { id: 'c-1' };
             mockRequest.body = { replyText: 'Thanks for your feedback!', language: 'en' };
             const repliedComment = { id: 'c-1', replied: true, replyText: 'Thanks for your feedback!' };
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(repliedComment as any);
             vi.mocked(commentsService.markAsReplied).mockResolvedValue(repliedComment);
 
             await commentsController.reply(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -246,6 +249,7 @@ describe('CommentsController', () => {
     describe('delete', () => {
         it('should delete comment and return 204', async () => {
             mockRequest.params = { id: 'c-99' };
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'c-99' } as any);
             vi.mocked(commentsService.deleteComment).mockResolvedValue(undefined);
 
             await commentsController.delete(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -318,6 +322,7 @@ describe('CommentsController', () => {
     describe('resolve', () => {
         it('should resolve a comment and return success', async () => {
             mockRequest.params = { id: 'c-1' };
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'c-1' } as any);
             vi.mocked(commentsService.resolveComment).mockResolvedValue({ id: 'c-1', resolved: true } as any);
 
             await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -328,7 +333,7 @@ describe('CommentsController', () => {
 
         it('should return 404 when comment not found', async () => {
             mockRequest.params = { id: 'missing' };
-            vi.mocked(commentsService.resolveComment).mockResolvedValue(undefined);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(null);
 
             await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
@@ -347,6 +352,7 @@ describe('CommentsController', () => {
 
         it('should return 500 when service throws', async () => {
             mockRequest.params = { id: 'c-1' };
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'c-1' } as any);
             vi.mocked(commentsService.resolveComment).mockRejectedValue(new Error('DB error'));
 
             await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -361,6 +367,7 @@ describe('CommentsController', () => {
     describe('unresolve', () => {
         it('should unresolve a comment and return success', async () => {
             mockRequest.params = { id: 'c-1' };
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'c-1' } as any);
             vi.mocked(commentsService.unresolveComment).mockResolvedValue({ id: 'c-1', resolved: false } as any);
 
             await commentsController.unresolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -371,7 +378,7 @@ describe('CommentsController', () => {
 
         it('should return 404 when comment not found', async () => {
             mockRequest.params = { id: 'missing' };
-            vi.mocked(commentsService.unresolveComment).mockResolvedValue(undefined);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(null);
 
             await commentsController.unresolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
 

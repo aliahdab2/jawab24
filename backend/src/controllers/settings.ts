@@ -1,10 +1,24 @@
 import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
+import { workspaceSettingsService } from '../services/workspaceSettings';
 import { AuthenticatedRequest } from '../middleware/auth';
+import type { WorkspaceRequest } from '../middleware/workspace';
 import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
 import { translateText } from '../services/translation';
 import type { UpdateSettingsDTO } from '../types/settings';
 import { auditLog } from '../services/auditLog';
+
+/** Settings fields consumed by the reply pipeline — must be synced to workspaceSettings */
+const PIPELINE_FIELDS = [
+    'commentsAutoReply', 'messagesAutoReply', 'businessHoursOnly',
+    'businessHoursStart', 'businessHoursEnd', 'timezone',
+    'aiEnabled', 'aiModel', 'commentReplyMode',
+    'dualReplyNudge', 'dualReplyNudgeMulti',
+    'replyDelay', 'greetingMessageMulti', 'awayMessageMulti',
+    'handoffPauseDurationMinutes', 'commentEscalationMinutes',
+    'messageEscalationMinutes', 'defaultReplyLanguage',
+    'supportedLanguages', 'autoDetectLanguage',
+] as const;
 
 /** Default messages restored when the source language is cleared (matches frontend i18n) */
 const DEFAULT_MESSAGES: Record<string, Record<string, string>> = {
@@ -199,6 +213,20 @@ export class SettingsController {
             }
 
             const settings = await settingsService.updateSettings(userId, updates);
+
+            // Sync pipeline-relevant fields to workspaceSettings so the reply
+            // pipeline (commentProcessor / messageProcessor) picks them up
+            const workspaceId = (request as WorkspaceRequest).workspaceId;
+            if (workspaceId) {
+                const pipelineUpdates = Object.fromEntries(
+                    PIPELINE_FIELDS
+                        .filter(key => key in updates)
+                        .map(key => [key, (updates as Record<string, unknown>)[key]])
+                );
+                if (Object.keys(pipelineUpdates).length > 0) {
+                    await workspaceSettingsService.updateSettings(workspaceId, pipelineUpdates);
+                }
+            }
 
             // Audit trail (fire-and-forget)
             auditLog({

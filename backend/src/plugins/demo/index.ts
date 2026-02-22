@@ -16,6 +16,7 @@ import { authService } from '../../services/auth';
 import { cookiesService } from '../../services/cookies';
 import { refreshTokenService } from '../../services/refreshToken';
 import { settingsService } from '../../services/settings';
+import { workspaceService } from '../../services/workspace';
 import { seedDemoData } from './seedData';
 
 async function demoPlugin(fastify: FastifyInstance) {
@@ -49,8 +50,13 @@ async function demoPlugin(fastify: FastifyInstance) {
 
             request.log.info({ userId: user.id }, '[Demo] Demo user ready');
 
-            // 2. Seed demo data for this user (pages, comments, templates)
-            await seedDemoData(user.id, request.log);
+            // 2. Get the workspace (ensureWorkspace runs inside findOrCreateUser)
+            const workspaces = await workspaceService.getUserWorkspaces(user.id);
+            const workspaceId = workspaces[0]?.id;
+            if (!workspaceId) throw new Error('Demo workspace not found after user creation');
+
+            // 3. Seed demo data for this user (pages, comments, templates)
+            await seedDemoData(user.id, workspaceId, request.log);
 
             // 3. Generate JWT token
             const token = authService.generateToken(user);

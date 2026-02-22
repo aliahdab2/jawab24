@@ -708,7 +708,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
  * Seed demo data for a user
  * This function is idempotent - it won't create duplicates if called multiple times
  */
-export async function seedDemoData(userId: string, logger: Logger = noopLogger): Promise<void> {
+export async function seedDemoData(userId: string, workspaceId: string, logger: Logger = noopLogger): Promise<void> {
     logger.info('[DemoData] Starting demo data seed', { userId });
 
     // Check if demo pages already exist for this user
@@ -723,10 +723,12 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
     if (hasExistingDemoPages) {
         logger.info('[DemoData] Demo data already exists, refreshing all demo data');
 
-        // Refresh page names/data in case seed data was updated
+        // Refresh page names/data in case seed data was updated.
+        // Also ensure workspaceId is set — handles pages created before workspace migration.
         for (const pageData of DEMO_PAGES) {
             await db.update(pages)
                 .set({
+                    workspaceId,
                     name: pageData.name,
                     knowledgeBase: pageData.suggestedKnowledgeBase,
                     autoReplyEnabled: pageData.autoReplyEnabled,
@@ -858,6 +860,7 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
             .insert(pages)
             .values({
                 userId,
+                workspaceId,
                 facebookPageId: pageData.facebookPageId,
                 name: pageData.name,
                 accessToken: 'demo_access_token',
@@ -945,6 +948,7 @@ export async function seedDemoData(userId: string, logger: Logger = noopLogger):
     for (const templateData of DEMO_TEMPLATES) {
         await db.insert(templates).values({
             userId,
+            workspaceId,
             name: templateData.name,
             message: templateData.message,
             active: templateData.active,

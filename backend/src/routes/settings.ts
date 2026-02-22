@@ -1,11 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { settingsController } from '../controllers/settings';
 import { authenticate } from '../middleware/auth';
+import { resolveWorkspace } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 
 export default async function settingsRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
+        protectedRoutes.addHook('preHandler', resolveWorkspace);
 
         protectedRoutes.get('/settings', {
             schema: {

@@ -4,6 +4,7 @@ import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
+import { config } from '../config';
 
 export class PagesController {
     /**
@@ -192,6 +193,12 @@ export class PagesController {
                 error: 'Access token is required',
                 hint: 'Please log out and log back in to refresh your Facebook token'
             });
+        }
+
+        // Demo users have no real Facebook token — return their seeded pages directly
+        if (req.user.facebookId === config.demo.userFacebookId) {
+            const pages = await pagesService.getPages(workspaceId);
+            return reply.send({ synced: pages.length, pages, skipped: 0 });
         }
 
         try {

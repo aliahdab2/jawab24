@@ -113,7 +113,7 @@ describe('Comments Routes', () => {
     describe('GET /comments/:id', () => {
         it('should get a single comment', async () => {
             const comment = { id: 'comment_1', message: 'Great!' };
-            vi.mocked(commentsService.getComment).mockResolvedValue(comment as any);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(comment as any);
 
             const response = await app.inject({
                 method: 'GET',
@@ -125,7 +125,7 @@ describe('Comments Routes', () => {
         });
 
         it('should return 404 if comment not found', async () => {
-            vi.mocked(commentsService.getComment).mockResolvedValue(null);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(null);
 
             const response = await app.inject({
                 method: 'GET',
@@ -139,6 +139,7 @@ describe('Comments Routes', () => {
     describe('POST /comments/:id/reply', () => {
         it('should reply to a comment', async () => {
             const repliedComment = { id: 'comment_1', replied: true, replyText: 'Thank you!' };
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(repliedComment as any);
             vi.mocked(commentsService.markAsReplied).mockResolvedValue(repliedComment as any);
 
             const response = await app.inject({
@@ -164,6 +165,7 @@ describe('Comments Routes', () => {
 
     describe('DELETE /comments/:id', () => {
         it('should delete a comment', async () => {
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'comment_1' } as any);
             vi.mocked(commentsService.deleteComment).mockResolvedValue(undefined);
 
             const response = await app.inject({
@@ -178,6 +180,7 @@ describe('Comments Routes', () => {
 
     describe('POST /comments/:id/resolve', () => {
         it('should resolve a comment', async () => {
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'comment_1' } as any);
             vi.mocked(commentsService.resolveComment).mockResolvedValue({ id: 'comment_1', resolved: true } as any);
 
             const response = await app.inject({
@@ -191,7 +194,7 @@ describe('Comments Routes', () => {
         });
 
         it('should return 404 if comment not found', async () => {
-            vi.mocked(commentsService.resolveComment).mockResolvedValue(undefined);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(null);
 
             const response = await app.inject({
                 method: 'POST',
@@ -204,6 +207,7 @@ describe('Comments Routes', () => {
 
     describe('POST /comments/:id/unresolve', () => {
         it('should unresolve a comment', async () => {
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'comment_1' } as any);
             vi.mocked(commentsService.unresolveComment).mockResolvedValue({ id: 'comment_1', resolved: false } as any);
 
             const response = await app.inject({
@@ -217,7 +221,7 @@ describe('Comments Routes', () => {
         });
 
         it('should return 404 if comment not found', async () => {
-            vi.mocked(commentsService.unresolveComment).mockResolvedValue(undefined);
+            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue(null);
 
             const response = await app.inject({
                 method: 'POST',

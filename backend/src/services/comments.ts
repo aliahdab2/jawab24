@@ -221,8 +221,23 @@ export class CommentsService {
             .select()
             .from(comments)
             .where(eq(comments.id, commentId));
-        
+
         return result[0] || null;
+    }
+
+    /**
+     * Get a comment, verifying it belongs to the given workspace.
+     * Used to enforce workspace isolation on single-comment endpoints.
+     */
+    async getCommentForWorkspace(commentId: string, workspaceId: string) {
+        const result = await db
+            .select({ comment: comments })
+            .from(comments)
+            .innerJoin(posts, eq(comments.postId, posts.id))
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(eq(comments.id, commentId), eq(pages.workspaceId, workspaceId)));
+
+        return result[0]?.comment || null;
     }
 
     /**

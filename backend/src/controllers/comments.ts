@@ -127,10 +127,14 @@ export class CommentsController {
      * GET /comments/:id
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
         const { id } = request.params;
-        
+
         try {
-            const comment = await commentsService.getComment(id);
+            const comment = await commentsService.getCommentForWorkspace(id, req.workspaceId);
             if (!comment) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
@@ -146,13 +150,18 @@ export class CommentsController {
      * PUT /comments/:id
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdateCommentDTO }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
         const { id } = request.params;
-        
+
         try {
-            const comment = await commentsService.updateComment(id, request.body);
-            if (!comment) {
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
+            const comment = await commentsService.updateComment(id, request.body);
             return reply.send(comment);
         } catch (error) {
             request.log.error(error);
@@ -165,18 +174,23 @@ export class CommentsController {
      * POST /comments/:id/reply
      */
     async reply(request: FastifyRequest<{ Params: { id: string }; Body: { replyText: string; language?: string } }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
         const { id } = request.params;
         const { replyText, language } = request.body;
-        
+
         if (!replyText || replyText.trim().length === 0) {
             return reply.status(400).send({ error: 'Reply text is required' });
         }
 
         try {
-            const comment = await commentsService.markAsReplied(id, replyText, 'manual', undefined, language);
-            if (!comment) {
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
+            const comment = await commentsService.markAsReplied(id, replyText, 'manual', undefined, language);
             return reply.send(comment);
         } catch (error) {
             request.log.error(error);
@@ -208,9 +222,17 @@ export class CommentsController {
      * DELETE /comments/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
         const { id } = request.params;
-        
+
         try {
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            if (!owned) {
+                return reply.status(404).send({ error: 'Comment not found' });
+            }
             await commentsService.deleteComment(id);
             return reply.status(204).send();
         } catch (error) {
@@ -218,6 +240,7 @@ export class CommentsController {
             return reply.status(500).send({ error: 'Failed to delete comment' });
         }
     }
+
     /**
      * Resolve a comment (mark as handled without replying)
      * POST /comments/:id/resolve
@@ -227,14 +250,14 @@ export class CommentsController {
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-
         const { id } = request.params;
 
         try {
-            const comment = await commentsService.resolveComment(id);
-            if (!comment) {
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
+            await commentsService.resolveComment(id);
             return reply.send({ success: true });
         } catch (error) {
             request.log.error(error);
@@ -251,14 +274,14 @@ export class CommentsController {
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-
         const { id } = request.params;
 
         try {
-            const comment = await commentsService.unresolveComment(id);
-            if (!comment) {
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
+            await commentsService.unresolveComment(id);
             return reply.send({ success: true });
         } catch (error) {
             request.log.error(error);
