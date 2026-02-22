@@ -100,12 +100,10 @@ describe('PricingPage Navigation Logic', () => {
             _hasHydrated: true
         });
 
-        render(<PricingPage />);
+        render(<PricingPage plans={TEST_PLANS} />);
 
-        // Wait for plans to load
-        await waitFor(() => {
-            expect(screen.queryByText('Starter')).toBeInTheDocument();
-        }, { timeout: 3000 });
+        // Plans are passed as props (SSR via getStaticProps), so they render immediately
+        expect(screen.getByText('Starter')).toBeInTheDocument();
 
         // Find button by text content (mocked t() returns the key)
         const subscribeButton = screen.getByText('pricing.subscribe');
@@ -135,15 +133,14 @@ describe('PricingPage Navigation Logic', () => {
             _hasHydrated: true
         });
 
-        render(<PricingPage />);
+        render(<PricingPage plans={TEST_PLANS} />);
 
-        // Wait for plans to load
-        await waitFor(() => {
-            expect(screen.queryByText('Starter')).toBeInTheDocument();
-        }, { timeout: 3000 });
+        // Plans are passed as props (SSR via getStaticProps), so they render immediately
+        expect(screen.getByText('Starter')).toBeInTheDocument();
 
-        // Find button by text content (mocked t() returns the key)
-        const upgradeButton = screen.getByText('pricing.upgrade');
+        // Wait for usage data to load (async useEffect fetches subscription info)
+        // Once loaded, button changes from "subscribe" to "upgrade"
+        const upgradeButton = await screen.findByText('pricing.upgrade', {}, { timeout: 3000 });
         expect(upgradeButton).toBeInTheDocument();
 
         // Action: Click upgrade
