@@ -42,7 +42,7 @@ export class TranslationService {
 
     // Auto-detect source language if needed
     let sourceLang = sourceLanguage;
-    let detectedLanguage: 'ar' | 'en' | undefined;
+    let detectedLanguage: string | undefined;
 
     if (sourceLang === 'auto' || !sourceLang) {
       sourceLang = this.detectLanguage(text);
@@ -59,8 +59,10 @@ export class TranslationService {
     }
 
     // Build prompt
-    const langNames = { ar: 'Arabic', en: 'English' };
-    const systemPrompt = `You are a professional translator. Translate the following text from ${langNames[sourceLang]} to ${langNames[targetLanguage]}. Maintain the tone, style, and any emojis. Return ONLY the translated text without any explanations.`;
+    const langNames: Record<string, string> = { ar: 'Arabic', en: 'English' };
+    const sourceName = langNames[sourceLang] ?? sourceLang;
+    const targetName = langNames[targetLanguage] ?? targetLanguage;
+    const systemPrompt = `You are a professional translator. Translate the following text from ${sourceName} to ${targetName}. Maintain the tone, style, and any emojis. Return ONLY the translated text without any explanations.`;
 
     try {
       const completion = await this.client.chat.completions.create({
