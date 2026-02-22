@@ -19,7 +19,8 @@ import {
   Smartphone,
   Mail,
   Check,
-  ShoppingBag
+  ShoppingBag,
+  Rocket
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
@@ -190,8 +191,20 @@ export default function LandingPage() {
           </div>
         </nav>
 
+        {/* Coming Soon Banner */}
+        <div className="relative z-40 mt-16 sm:mt-20 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white text-center py-3 sm:py-4 px-4 shadow-lg">
+          <div className="flex items-center justify-center gap-2 sm:gap-3">
+            <Rocket className="w-5 h-5 sm:w-6 sm:h-6 animate-bounce" aria-hidden="true" />
+            <div>
+              <p className="font-bold text-sm sm:text-lg">{t('landing.comingSoon.banner')}</p>
+              <p className="text-xs sm:text-sm text-white/90 font-medium">{t('landing.comingSoon.subtitle')}</p>
+            </div>
+            <Rocket className="w-5 h-5 sm:w-6 sm:h-6 animate-bounce hidden sm:block" aria-hidden="true" />
+          </div>
+        </div>
+
         {/* Hero Section - Uses pt-hero for consistent spacing below fixed nav + breathing room */}
-        <section className="relative pt-hero pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
+        <section className="relative pt-8 sm:pt-12 lg:pt-20 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
           {/* Animated Background Elements */}
           <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
           <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />

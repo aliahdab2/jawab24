@@ -22,6 +22,9 @@ const ROLE_HIERARCHY: Record<WorkspaceRole, number> = {
  * 1. If `X-Workspace-Id` header is present, verify the user is a member.
  * 2. If no header, auto-select if the user belongs to exactly 1 workspace.
  * 3. If >1 workspace and no header, return 409 (workspace_selection_required).
+ * 4. If 0 workspaces, return 404 (NO_WORKSPACE) — should not happen after
+ *    running scripts/migrate-workspaces.ts and deploying the workspace-aware
+ *    auth service (which calls ensureWorkspace on every login).
  *
  * Must be used AFTER the `authenticate` middleware.
  */
@@ -79,7 +82,7 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
     if (memberships.length === 0) {
         return reply.status(404).send({
             error: true,
-            message: 'No workspace found. Please contact support.',
+            message: 'No workspace found. Please log out and log back in.',
             code: 'NO_WORKSPACE',
         });
     }
@@ -90,7 +93,7 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         return;
     }
 
-    // Multiple workspaces — user must specify which one (G1)
+    // Multiple workspaces — user must specify which one
     return reply.status(409).send({
         error: 'workspace_selection_required',
         message: 'You belong to multiple workspaces. Please select one.',

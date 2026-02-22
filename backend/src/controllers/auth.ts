@@ -57,24 +57,24 @@ export class AuthController {
             // 4. Generate JWT token
             const token = authService.generateToken(user);
 
-            // 5. Auto-sync pages from Facebook (non-blocking, respects plan page limit)
-            workspaceService.getUserWorkspaces(user.id).then((ws) => {
-                const workspaceId = ws[0]?.id;
-                if (!workspaceId) return;
-                return pagesService.syncFromFacebook(workspaceId, user.id, longLivedToken);
-            }).then((result) => {
-                if (result && result.skippedCount > 0) {
-                    request.log.info(`Auto-sync: ${result.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
-                }
-            }).catch((err) => {
-                request.log.error({ err }, 'Auto-sync pages failed');
-            });
-
-            // 6. Fetch user settings + workspaces for immediate UI sync
+            // 5. Fetch user settings + workspaces for immediate UI sync
             const [userSettings, workspaces] = await Promise.all([
                 settingsService.getSettings(user.id),
                 workspaceService.getUserWorkspaces(user.id),
             ]);
+
+            // 6. Sync pages from Facebook (awaited — ensures pages exist when onboarding wizard loads)
+            const syncWorkspaceId = workspaces[0]?.id;
+            if (syncWorkspaceId) {
+                try {
+                    const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);
+                    if (syncResult && syncResult.skippedCount > 0) {
+                        request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+                    }
+                } catch (err) {
+                    request.log.error({ err }, 'Auto-sync pages failed (non-fatal)');
+                }
+            }
 
             // 7. Generate refresh token (Level 2 Security)
             const refreshToken = await refreshTokenService.createRefreshToken(user.id);
@@ -157,24 +157,24 @@ export class AuthController {
             // 6. Generate Internal JWT
             const token = authService.generateToken(user);
 
-            // 7. Auto-sync pages (Non-blocking, respects plan page limit)
-            workspaceService.getUserWorkspaces(user.id).then((ws) => {
-                const workspaceId = ws[0]?.id;
-                if (!workspaceId) return;
-                return pagesService.syncFromFacebook(workspaceId, user.id, longLivedToken);
-            }).then((result) => {
-                if (result && result.skippedCount > 0) {
-                    request.log.info(`Auto-sync: ${result.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
-                }
-            }).catch((err) => {
-                request.log.error({ err }, 'Auto-sync pages failed (Native Flow)');
-            });
-
-            // 8. Fetch user settings + workspaces
+            // 7. Fetch user settings + workspaces
             const [userSettings, workspaces] = await Promise.all([
                 settingsService.getSettings(user.id),
                 workspaceService.getUserWorkspaces(user.id),
             ]);
+
+            // 8. Sync pages from Facebook (awaited — ensures pages exist when onboarding wizard loads)
+            const syncWorkspaceId = workspaces[0]?.id;
+            if (syncWorkspaceId) {
+                try {
+                    const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);
+                    if (syncResult && syncResult.skippedCount > 0) {
+                        request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+                    }
+                } catch (err) {
+                    request.log.error({ err }, 'Auto-sync pages failed (non-fatal, Native Flow)');
+                }
+            }
 
             // 9. Set cookies (HttpOnly + CSRF)
             cookiesService.setAuthCookies(reply, token);

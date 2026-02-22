@@ -16,6 +16,7 @@ import {
 import { Button, Toggle } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { pagesApi, api } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import type { Page } from '@jawab24/shared';
@@ -314,6 +315,7 @@ function ReviewInfoStep({
 export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) {
   const { t, language } = useTranslation();
   const isRTL = language === 'ar';
+  const { fbToken } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(0);
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
@@ -323,21 +325,36 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const [saving, setSaving] = useState(false);
   const [fetchError, setFetchError] = useState(false);
   const [pageLimit, setPageLimit] = useState<number | null>(null);
-  
+
   // Reusable hooks
   const isLandscape = useLandscape();
   useBodyScrollLock(true);
   useEscapeKey(onSkip);
 
-  // Fetch pages
+  // Fetch pages — if empty and we have a FB token, trigger a sync first (defense-in-depth
+  // against the race condition where the login-time auto-sync hasn't completed yet)
   const fetchPages = useCallback(async () => {
     try {
       setLoading(true);
       setFetchError(false);
-      const response = await pagesApi.getAll();
-      const data = Array.isArray(response.data)
+      let response = await pagesApi.getAll();
+      let data: Page[] = Array.isArray(response.data)
         ? response.data
         : (Array.isArray(response.data?.data) ? response.data.data : []);
+
+      // If no pages found and we have a token, trigger a sync then re-read
+      if (data.length === 0 && fbToken) {
+        try {
+          await api.post('/pages/sync', { accessToken: fbToken });
+          response = await pagesApi.getAll();
+          data = Array.isArray(response.data)
+            ? response.data
+            : (Array.isArray(response.data?.data) ? response.data.data : []);
+        } catch {
+          // Sync failed — show empty state with retry button
+        }
+      }
+
       setPages(data);
 
       // Auto-select first enabled page, or first page
@@ -355,7 +372,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fbToken]);
 
   // Fetch pages and page limit on mount
   useEffect(() => {

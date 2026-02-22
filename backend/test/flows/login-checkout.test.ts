@@ -520,4 +520,118 @@ describe('Integration: Login → Checkout Flow', () => {
             // Request log should contain error details for security monitoring
         });
     });
+
+    // ── Regression: pages must be synced BEFORE login response is returned ───
+    // Without this, new users land on the onboarding wizard with 0 pages because
+    // the non-blocking fire-and-forget sync hadn't finished yet.
+    describe('Page sync blocking guarantee', () => {
+        it('awaits syncFromFacebook so pages exist before the login response is returned', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+            const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
+            const { refreshTokenService } = await import('../../src/services/refreshToken');
+            const { cookiesService } = await import('../../src/services/cookies');
+            const { pagesService } = await import('../../src/services/pages');
+            const { workspaceService } = await import('../../src/services/workspace');
+
+            vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
+            vi.mocked(facebookService.getUserProfile).mockResolvedValue({
+                id: 'fb_sync_test',
+                name: 'Sync Test User',
+            });
+            vi.mocked(authService.findOrCreateUser).mockResolvedValue({
+                id: 'user_sync_test',
+                facebookId: 'fb_sync_test',
+                name: 'Sync Test User',
+                email: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            vi.mocked(authService.generateToken).mockReturnValue('jwt_sync_test');
+            vi.mocked(authService.createAuthResponse).mockReturnValue({
+                token: 'jwt_sync_test',
+                fbAccessToken: 'fb_token',
+                user: { id: 'user_sync_test', name: 'Sync Test User', facebookId: 'fb_sync_test' },
+            });
+            vi.mocked(settingsService.getSettings).mockResolvedValue({ dashboardLanguage: 'en' } as any);
+            vi.mocked(refreshTokenService.createRefreshToken).mockResolvedValue('refresh_token');
+            vi.mocked(cookiesService.setAuthCookies).mockReturnValue(undefined);
+            vi.mocked(cookiesService.setRefreshTokenCookie).mockReturnValue(undefined);
+
+            // Return a real workspace ID so the sync is triggered
+            vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue([
+                { id: 'ws_sync_test', name: 'Test WS', role: 'owner' },
+            ] as any);
+
+            // Track whether syncFromFacebook completed before the response arrived
+            let syncCompleted = false;
+            vi.mocked(pagesService.syncFromFacebook).mockImplementation(async () => {
+                await new Promise((r) => setTimeout(r, 30)); // simulate async Facebook API call
+                syncCompleted = true;
+                return { syncedPages: [], skippedCount: 0 } as any;
+            });
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: { code: 'sync_test_code' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            // The critical assertion: if sync were non-blocking (fire-and-forget),
+            // syncCompleted would still be false here because the response would return
+            // before the 30ms timeout resolved.
+            expect(syncCompleted).toBe(true);
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith(
+                'ws_sync_test',
+                'user_sync_test',
+                'fb_token',
+            );
+        });
+
+        it('still succeeds when syncFromFacebook throws (sync failure is non-fatal)', async () => {
+            const { facebookService } = await import('../../src/services/facebook');
+            const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
+            const { refreshTokenService } = await import('../../src/services/refreshToken');
+            const { cookiesService } = await import('../../src/services/cookies');
+            const { pagesService } = await import('../../src/services/pages');
+            const { workspaceService } = await import('../../src/services/workspace');
+
+            vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
+            vi.mocked(facebookService.getUserProfile).mockResolvedValue({ id: 'fb_fail', name: 'Fail User' });
+            vi.mocked(authService.findOrCreateUser).mockResolvedValue({
+                id: 'user_fail',
+                facebookId: 'fb_fail',
+                name: 'Fail User',
+                email: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+            vi.mocked(authService.generateToken).mockReturnValue('jwt_fail');
+            vi.mocked(authService.createAuthResponse).mockReturnValue({
+                token: 'jwt_fail',
+                fbAccessToken: 'fb_token',
+                user: { id: 'user_fail', name: 'Fail User', facebookId: 'fb_fail' },
+            });
+            vi.mocked(settingsService.getSettings).mockResolvedValue({ dashboardLanguage: 'en' } as any);
+            vi.mocked(refreshTokenService.createRefreshToken).mockResolvedValue('refresh_token');
+            vi.mocked(cookiesService.setAuthCookies).mockReturnValue(undefined);
+            vi.mocked(cookiesService.setRefreshTokenCookie).mockReturnValue(undefined);
+            vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue([
+                { id: 'ws_fail', name: 'Fail WS', role: 'owner' },
+            ] as any);
+            // Sync throws — login must still succeed
+            vi.mocked(pagesService.syncFromFacebook).mockRejectedValue(new Error('Facebook API down'));
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/facebook',
+                payload: { code: 'fail_sync_code' },
+            });
+
+            // Login must succeed even if sync fails
+            expect(response.statusCode).toBe(200);
+        });
+    });
 });
