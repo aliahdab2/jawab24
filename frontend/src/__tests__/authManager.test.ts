@@ -196,6 +196,8 @@ describe('AuthManager', () => {
         token: null,
         fbToken: null,
         isAuthenticated: false,
+        workspaces: [],
+        activeWorkspaceId: null,
       });
     });
 
