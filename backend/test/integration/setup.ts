@@ -47,7 +47,8 @@ beforeEach(async () => {
             logs, comments, instagram_comments, posts, instagram_media,
             messages, conversation_pauses, rules, templates, settings,
             subscriptions, usage, usage_logs, device_tokens, notifications,
-            refresh_tokens, pages, users
+            refresh_tokens, workspace_invites, workspace_members, workspaces,
+            pages, users
         CASCADE
     `);
 });
@@ -79,6 +80,29 @@ export async function createTestUser(overrides: Partial<typeof schema.users.$inf
         })
         .returning();
     return user;
+}
+
+export async function createTestWorkspace(
+    ownerId: string,
+    overrides: Partial<typeof schema.workspaces.$inferInsert> = {},
+) {
+    const [workspace] = await testDb
+        .insert(schema.workspaces)
+        .values({
+            ownerId,
+            name: overrides.name ?? 'Test Workspace',
+            ...overrides,
+        })
+        .returning();
+
+    // Add owner as workspace member
+    await testDb.insert(schema.workspaceMembers).values({
+        workspaceId: workspace.id,
+        userId: ownerId,
+        role: 'owner',
+    });
+
+    return workspace;
 }
 
 export async function createTestPage(

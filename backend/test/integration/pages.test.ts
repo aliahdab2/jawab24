@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { getTableColumns } from 'drizzle-orm';
-import { createTestUser, createTestPage, testDb } from './setup';
+import { createTestUser, createTestPage, createTestWorkspace, testDb } from './setup';
 import * as schema from '../../src/db/schema';
 import { pagesService } from '../../src/services/pages';
 
 describe('pagesService.getPages — integration', () => {
     it('returns pages with zeroed stats when no comments exist', async () => {
         const user = await createTestUser();
-        await createTestPage(user.id, { name: 'My Page' });
+        const workspace = await createTestWorkspace(user.id);
+        await createTestPage(user.id, { name: 'My Page', workspaceId: workspace.id });
 
-        const pages = await pagesService.getPages(user.id);
+        const pages = await pagesService.getPages(workspace.id);
 
         expect(pages).toHaveLength(1);
         expect(pages[0].name).toBe('My Page');
@@ -21,7 +22,8 @@ describe('pagesService.getPages — integration', () => {
 
     it('returns correct stats with FB comments', async () => {
         const user = await createTestUser();
-        const page = await createTestPage(user.id);
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
         // Seed: post → 3 comments (2 replied)
         const [post] = await testDb.insert(schema.posts).values({
@@ -37,7 +39,7 @@ describe('pagesService.getPages — integration', () => {
             { postId: post.id, facebookCommentId: `c3-${Date.now()}`, message: 'Hey', replied: false },
         ]);
 
-        const pages = await pagesService.getPages(user.id);
+        const pages = await pagesService.getPages(workspace.id);
 
         expect(pages[0].commentsCount).toBe(3);
         expect(pages[0].repliesCount).toBe(2);
@@ -48,7 +50,8 @@ describe('pagesService.getPages — integration', () => {
 
     it('returns correct stats with IG comments', async () => {
         const user = await createTestUser();
-        const page = await createTestPage(user.id);
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
         // Seed: instagramMedia → 2 IG comments (1 replied)
         const [media] = await testDb.insert(schema.instagramMedia).values({
@@ -62,7 +65,7 @@ describe('pagesService.getPages — integration', () => {
             { mediaId: media.id, instagramCommentId: `ic2-${Date.now()}`, message: 'Cool', replied: false },
         ]);
 
-        const pages = await pagesService.getPages(user.id);
+        const pages = await pagesService.getPages(workspace.id);
 
         expect(pages[0].commentsCount).toBe(2);
         expect(pages[0].repliesCount).toBe(1);
@@ -71,7 +74,8 @@ describe('pagesService.getPages — integration', () => {
 
     it('combines FB + IG stats for the same page', async () => {
         const user = await createTestUser();
-        const page = await createTestPage(user.id);
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
         // FB: 1 comment (replied)
         const [post] = await testDb.insert(schema.posts).values({
@@ -89,7 +93,7 @@ describe('pagesService.getPages — integration', () => {
             mediaId: media.id, instagramCommentId: `ic-${Date.now()}`, message: 'IG comment', replied: false,
         });
 
-        const pages = await pagesService.getPages(user.id);
+        const pages = await pagesService.getPages(workspace.id);
 
         expect(pages[0].commentsCount).toBe(2); // 1 FB + 1 IG
         expect(pages[0].repliesCount).toBe(1);   // 1 FB
@@ -98,9 +102,10 @@ describe('pagesService.getPages — integration', () => {
 
     it('returns every schema column plus computed stats', async () => {
         const user = await createTestUser();
-        await createTestPage(user.id, { name: 'Full Page' });
+        const workspace = await createTestWorkspace(user.id);
+        await createTestPage(user.id, { name: 'Full Page', workspaceId: workspace.id });
 
-        const pages = await pagesService.getPages(user.id);
+        const pages = await pagesService.getPages(workspace.id);
         const page = pages[0];
         const returnedKeys = Object.keys(page);
 
@@ -117,9 +122,10 @@ describe('pagesService.getPages — integration', () => {
         }
     });
 
-    it('returns empty array for user with no pages', async () => {
+    it('returns empty array for workspace with no pages', async () => {
         const user = await createTestUser();
-        const pages = await pagesService.getPages(user.id);
+        const workspace = await createTestWorkspace(user.id);
+        const pages = await pagesService.getPages(workspace.id);
         expect(pages).toEqual([]);
     });
 });
