@@ -5,6 +5,7 @@ import { UserSettings, UpdateSettingsDTO } from '../types';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
+import { captureError } from '../utils/sentryHelpers';
 
 /** Settings fields consumed by the reply pipeline — synced to workspaceSettings on every save */
 const PIPELINE_FIELDS = [
@@ -137,8 +138,9 @@ export class SettingsService {
             if (!workspaceId) return;
 
             await workspaceSettingsService.updateSettings(workspaceId, pipelineUpdates);
-        } catch {
+        } catch (error) {
             // Never let a sync failure break the settings save
+            captureError(error, 'syncPipelineFieldsToWorkspace failed', { tags: { context: 'settings', action: 'workspace-sync' }, extra: { userId } });
         }
     }
 

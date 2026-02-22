@@ -1,6 +1,6 @@
 # Jawab24 — Product Roadmap
 
-> **Last updated**: 2026-02-17
+> **Last updated**: 2026-02-22
 > **Purpose**: Strategic feature roadmap based on competitive analysis and product study.
 
 ---
@@ -22,19 +22,32 @@
 - Capacitor mobile app (iOS/Android)
 - Escalation SLA system
 - Conversation pause/resume (handoff)
+- Multi-tenant workspace infrastructure (invisible to users, ready for team features)
 
 ### Competitive Gaps
 - No WhatsApp channel
-- No team/multi-agent features
 - No chatbot flow builder
 - Limited analytics (basic overview only)
 - No customer profiles/CRM
 - No AI suggested replies in inbox
 - Frontend doesn't fully reflect backend capabilities
+- Team features: backend ready, UI not yet exposed (see Phase 6)
 
 ---
 
 ## Completed Work
+
+### Workspace / Multi-Tenant Infrastructure (2026-02-22) ✅
+- Full workspace-scoped data model: pages, templates, rules, settings all scoped by `workspaceId`
+- RBAC middleware: owner > admin > member roles with `resolveWorkspace` + `requireRole`
+- Workspace auto-created on signup (invisible to users)
+- Reply pipeline fully workspace-aware (settings, rules, templates resolved by workspace)
+- Invite system backend-ready (hashed tokens, expiry, single-use)
+- Frontend silently manages workspace state (`X-Workspace-Id` header on every request)
+- Comprehensive backend tests: integration, isolation, pipeline, middleware
+- **UI intentionally hidden** — no team page, no invite UI, no workspace switcher
+- Activating team UI estimated at ~5-7 days when customers request it
+- Full plan: `docs/workspace-implementation-plan.md`
 
 ### Comments Page Redesign (2026-02-17) ✅
 - Replaced 6 stat cards with 3 filter chips (Needs Action / All / Auto-replied)
@@ -204,62 +217,109 @@ Biggest channel in MENA. The reply pipeline is channel-agnostic.
 
 ---
 
-## Phase 6: Basic Team Features
+## Phase 6: Team Features UI
 
-**Impact**: Medium-High | **Effort**: High | **Backend readiness**: Needs new tables
+**Impact**: Medium-High | **Effort**: Low (backend done) | **Backend readiness**: Complete
 
-Unlock small teams (2-5 people).
+Backend infrastructure is fully built and running in production (see Completed Work above). Only frontend UI work remains.
 
-### 6.1 Team members table
-- `team_members`: userId, teamId, role (admin/agent), invitedBy, status
-- Roles: admin (full access), agent (reply only, no settings/billing)
+### 6.1 ~~Team members table~~ DONE
+- `workspace_members` table with RBAC (owner/admin/member) — already in production
+- All business data scoped by `workspaceId` — already working
 
-### 6.2 Conversation assignment
+### 6.2 Remaining: Team Management UI (~2-3 days)
+- Team management page (list members, roles, remove)
+- Invite generation UI (currently API-only)
+- Invite accept page (`/invite/[token]`)
+- Workspace switcher (for users with >1 workspace)
+
+### 6.3 Remaining: Conversation Assignment (~2 days)
 - Assign conversations to specific agents
 - "Unassigned" as default (needs attention queue)
 - Auto-assignment rules (optional, round-robin)
 
-### 6.3 Activity tracking
+### 6.4 Remaining: Activity Tracking (~1-2 days)
 - Who replied to what
 - Agent performance metrics (response time, volume)
 
-### 6.4 Invitation flow
-- Admin invites agent by email
-- Agent creates account, joins team
-- No separate billing (covered by admin's subscription)
+### 6.5 ~~Invitation flow~~ Backend DONE
+- Hashed token invite system — already built
+- Accept/revoke/expiry — already working
+- Only needs: frontend invite accept page + invite generation UI
 
 ---
 
 ## Competitive Analysis Summary
+
+### Supported Platforms
+
+| Channel | ManyChat | Intercom | Crisp | **Jawab24** |
+|---|---|---|---|---|
+| Facebook Comments | ✅ | ❌ | ❌ | **✅** |
+| Facebook Messenger | ✅ | ✅ | ✅ | **✅** |
+| Instagram Comments | ✅ | ❌ | ❌ | **✅** |
+| Instagram DM | ✅ | ❌ | ✅ | **✅** |
+| WhatsApp | ✅ | ✅ | ✅ | ❌ (Phase 5) |
+| Web Chat | ✅ | ✅ | ✅ | ❌ |
+| Email | ✅ | ✅ | ✅ | ❌ |
+| SMS | ✅ | ❌ | ❌ | ❌ |
 
 ### Direct Competitors (Same niche)
 
 | | CommentGuard | Simple auto-reply tools | **Jawab24** |
 |---|---|---|---|
 | Keyword rules | ✅ | ✅ | ✅ |
-| AI replies | ❌ | ❌ | ✅ RAG + KB |
-| Arabic-first | ❌ | ❌ | ✅ |
-| Knowledge Base | ❌ | ❌ | ✅ + semantic search |
-| Gap detection | ❌ | ❌ | ✅ |
-| Mobile app | ❌ | ❌ | ✅ |
+| AI replies | ❌ | ❌ | **✅** RAG + KB |
+| Arabic-first | ❌ | ❌ | **✅** |
+| Knowledge Base | ❌ | ❌ | **✅** + semantic search |
+| Gap detection | ❌ | ❌ | **✅** |
+| Mobile app | ❌ | ❌ | **✅** |
+| Multi-channel | ❌ | ❌ | **✅** (FB + IG) |
 
-### Larger Competitors (Different tier)
+### Larger Competitors (Feature comparison)
 
-| | ManyChat | Intercom | Crisp | **Jawab24** |
+| Feature | ManyChat | Intercom | Crisp | **Jawab24** |
 |---|---|---|---|---|
 | Arabic AI | Weak | No | No | **Strong** |
 | Chatbot flows | ✅ | ✅ | ✅ | ❌ |
 | WhatsApp | ✅ | ✅ | ✅ | ❌ (Phase 5) |
-| Team features | ✅ | ✅ | ✅ | ❌ (Phase 6) |
-| AI suggested replies | ✅ | ✅ (Fin) | ✅ (MagicReply) | ❌ (Phase 2) |
-| Customer profiles | ✅ | ✅ | ✅ | ❌ (Phase 3) |
-| Analytics | ✅ | ✅ | ✅ | Basic (Phase 4) |
-| Price hallucination guard | ❌ | ❌ | ❌ | **✅** |
-| KB gap detection | ❌ | ❌ | ❌ | **✅** |
-| Semantic caching | ❌ | ❌ | ❌ | **✅** |
+| Team features | ✅ | ✅ | ✅ | Backend ✅, UI pending (Phase 6) |
+| AI suggested replies | ✅ | ✅ (Fin) | ✅ (MagicReply) | Partial (Smart Reply button, Phase 2 for multi-suggestion chips) |
+| Customer profiles / CRM | ✅ | ✅ | ✅ | ❌ (Phase 3) |
+| Advanced analytics | ✅ | ✅ | ✅ | Basic (Phase 4) |
+| Price hallucination guard | ❌ | ❌ | ❌ | **✅ Unique** |
+| KB gap detection | ❌ | ❌ | ❌ | **✅ Unique** |
+| Semantic caching | ❌ | ❌ | ❌ | **✅ Unique** |
+| Bilingual auto-translation | ❌ | ❌ | ❌ | **✅ Unique** |
+| E-commerce AI (Shopify) | ✅ | ❌ | ❌ | **✅** |
+
+### Jawab24 Strengths (what no competitor has)
+
+| Strength | Description | Competitive edge |
+|----------|-------------|-----------------|
+| Arabic-first AI | RAG + Knowledge Base with Arabic normalization (diacritics, alef variants, digit conversion) | No competitor does Arabic AI at this depth |
+| KB Gap Detection | Automatically detects questions the Knowledge Base doesn't cover, notifies merchant | No competitor has this |
+| Price Hallucination Guard | Prevents AI from inventing incorrect prices from product data | No competitor has this |
+| Semantic Caching | pgvector cosine similarity, 70-80% cache hit rate, reduces AI costs significantly | No competitor has this |
+| Bilingual Auto-Translation | User writes in one language, system auto-translates to Arabic + English | No competitor does this transparently |
+| 3 Reply Modes | Public comment, private message, or both (dual reply) — user configurable per-workspace | Unique flexibility |
+| Shopify-Aware AI | AI reads product catalog (name, price, stock) to answer customer questions accurately | Only ManyChat has e-commerce, but not with RAG |
+
+### Jawab24 Weaknesses (gaps to close)
+
+| Weakness | Impact | Fix | Priority |
+|----------|--------|-----|----------|
+| Only 2 channels (FB + IG) | Competitors have 4-6 channels. Missing WhatsApp = missing biggest MENA channel | Phase 5: WhatsApp | **High** |
+| No web chat widget | Industry standard for websites. Missing = lost leads from website visitors | Future phase | Medium |
+| No chatbot flow builder | ManyChat's core product. Complex to build, but Rules + AI covers 90% of use cases | Not planned (intentional) | Low |
+| Limited analytics | Only basic overview dashboard. Competitors have deep insights | Phase 4: Smart Analytics | Medium |
+| No customer profiles / CRM | No customer history view, tags, or notes. Competitors surface this | Phase 3: Customer Profiles | Medium |
+| No AI suggested replies in inbox | Smart Reply button exists (comments), but competitors show 2-3 AI suggestion chips for agents to pick from | Phase 2: AI Suggestions | **High** |
+| No email channel | Standard for support platforms. Not critical for social-first merchants | Future phase | Low |
+| Team UI not exposed | Backend ready but no team management page, invite UI, or role indicators | Phase 6: Team UI (~5-7 days) | Low (on demand) |
 
 ### Jawab24's Unique Differentiator
-**Arabic-first AI + RAG + bilingual auto-translation** — no competitor serves the MENA market with this depth. ManyChat has scale, Intercom has enterprise features, but neither does Arabic well.
+**Arabic-first AI + RAG + bilingual auto-translation** — no competitor serves the MENA market with this depth. ManyChat has scale, Intercom has enterprise features, but neither does Arabic well. The 4 unique features (gap detection, price guard, semantic caching, auto-translation) have no equivalent in any competitor.
 
 ---
 
@@ -282,4 +342,4 @@ Unlock small teams (2-5 people).
 | **Phase 3** | Customer Profiles | Phase 1 (sidebar/modal work) |
 | **Phase 4** | Smart Analytics | Independent (can parallel with 2-3) |
 | **Phase 5** | WhatsApp | Independent (backend-heavy) |
-| **Phase 6** | Team Features | After Phase 5 (needs stable multi-channel) |
+| **Phase 6** | Team Features UI | Backend done ✅ — only UI needed, can start anytime |

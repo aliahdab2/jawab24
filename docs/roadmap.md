@@ -1,6 +1,6 @@
 # Technical Roadmap & Architecture Evolution
 
-> **Last updated**: 2026-02-17
+> **Last updated**: 2026-02-22
 
 This document outlines the technical infrastructure state and planned improvements for the Jawab24 platform.
 
@@ -61,11 +61,23 @@ This document outlines the technical infrastructure state and planned improvemen
 - **Coverage:** comments, dashboard, landing, login, messages, pages, payment, pricing, rules, settings, templates
 - **Directory:** `frontend/e2e/`
 
+### 8. Workspace / Multi-Tenancy Infrastructure
+**Status:** Done (2026-02-22)
+- **Tables:** `workspaces`, `workspace_members`, `workspace_invites` + `workspaceId` on pages, templates, rules, stores, logs
+- **Middleware:** `resolveWorkspace` (auto-select single workspace, 409 for multi) + `requireRole` (owner > admin > member)
+- **Services:** `WorkspaceService`, `WorkspaceInviteService`, `WorkspaceSettingsService` (Redis-cached)
+- **Pipeline:** `commentProcessor`, `messageProcessor`, `generator` all resolve workspace from page
+- **Settings sync:** User settings page writes to `settings` table → `syncPipelineFieldsToWorkspace` syncs to `workspaces.settings` JSONB → pipeline reads from workspace
+- **Frontend:** Silent workspace state in Zustand, `X-Workspace-Id` header on every request, auto-created on signup
+- **Testing:** Integration tests for workspace CRUD, invite flow, pipeline, isolation/IDOR
+- **UI:** Intentionally hidden — no team page, no switcher, no invite UI. ~5-7 days to activate when needed.
+- **Full plan:** `docs/workspace-implementation-plan.md`
+
 ---
 
 ## Planned Improvements
 
-### 8. Log Aggregation & APM
+### 9. Log Aggregation & APM
 **Priority:** Medium
 **Context:** Pino logging is in place but logs are per-container. No centralized view across backend, ai-worker, and frontend.
 **Next steps:**
@@ -73,7 +85,7 @@ This document outlines the technical infrastructure state and planned improvemen
 - Evaluate log aggregator (ELK, Datadog, or Grafana Loki)
 - Add APM traces to identify slow queries and AI response times
 
-### 9. CSP for Frontend
+### 10. CSP for Frontend
 **Priority:** Medium
 **Context:** Backend API doesn't serve HTML so CSP is N/A there. Frontend (Next.js) serves HTML and would benefit from strict CSP.
 **Next steps:**
@@ -81,7 +93,7 @@ This document outlines the technical infrastructure state and planned improvemen
 - Use nonces for inline scripts if needed
 - Configure via Next.js `headers()` in `next.config.js`
 
-### 10. Database Connection Pooling & Monitoring
+### 11. Database Connection Pooling & Monitoring
 **Priority:** Medium
 **Context:** As concurrent users grow, database connection management becomes critical.
 **Next steps:**
@@ -89,7 +101,7 @@ This document outlines the technical infrastructure state and planned improvemen
 - Add query duration logging for slow query detection
 - Consider PgBouncer for connection pooling at scale
 
-### 11. WhatsApp Infrastructure (supports Phase 5)
+### 12. WhatsApp Infrastructure (supports Phase 5)
 **Priority:** High (when Phase 5 starts)
 **Context:** WhatsApp integration requires new webhook handlers, message queue types, and template message support.
 **Next steps:**
@@ -98,21 +110,16 @@ This document outlines the technical infrastructure state and planned improvemen
 - Template message management (Meta requirement for first contact)
 - 24-hour messaging window enforcement
 
-### 12. Team & Multi-Tenancy Infrastructure (supports Phase 6)
-**Priority:** Low
-**Context:** Current architecture is single-user. Team features need authorization layer changes.
-**Next steps:**
-- `team_members` table with role-based access (admin/agent)
-- Row-level security or middleware-based authorization
-- Conversation assignment and agent activity tracking
+### 13. ~~Team & Multi-Tenancy Infrastructure~~ — DONE
+Moved to Completed Infrastructure (#8). See `docs/workspace-implementation-plan.md` for full details.
 
-### 13. Monorepo Build Optimization
+### 14. Monorepo Build Optimization
 **Priority:** Low
 **Context:** Currently using npm workspaces. Build times are acceptable but will grow with codebase.
 **When to act:** When full rebuild exceeds 3 minutes or CI costs become a concern.
 **Options:** Turborepo (simple, caching) or Nx (advanced dependency graph)
 
-### 14. Visual Regression Testing
+### 15. Visual Regression Testing
 **Priority:** Low
 **Context:** E2E functional coverage is good (11 suites), but RTL + mobile + landscape UI can easily regress visually.
 **Next steps:**
