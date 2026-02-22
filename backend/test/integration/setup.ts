@@ -185,3 +185,36 @@ export async function insertComment(
         .returning();
     return comment;
 }
+
+export async function insertInstagramMedia(
+    pageId: string,
+    overrides: Partial<typeof schema.instagramMedia.$inferInsert> = {},
+) {
+    const [media] = await testDb
+        .insert(schema.instagramMedia)
+        .values({
+            pageId,
+            instagramMediaId: overrides.instagramMediaId ?? `ig-media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            mediaType: overrides.mediaType ?? 'IMAGE',
+            ...overrides,
+        })
+        .returning();
+    return media;
+}
+
+export async function insertInstagramComment(
+    mediaId: string,
+    overrides: Partial<typeof schema.instagramComments.$inferInsert> = {},
+) {
+    const [comment] = await testDb
+        .insert(schema.instagramComments)
+        .values({
+            mediaId,
+            instagramCommentId: overrides.instagramCommentId ?? `ig-comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            message: overrides.message ?? 'Test Instagram comment',
+            replied: overrides.replied ?? false,
+            ...overrides,
+        })
+        .returning();
+    return comment;
+}

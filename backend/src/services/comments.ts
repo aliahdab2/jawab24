@@ -226,18 +226,30 @@ export class CommentsService {
     }
 
     /**
-     * Get a comment, verifying it belongs to the given workspace.
+     * Get a comment (Facebook or Instagram), verifying it belongs to the given workspace.
      * Used to enforce workspace isolation on single-comment endpoints.
+     * Returns null if the comment does not exist or belongs to a different workspace.
      */
     async getCommentForWorkspace(commentId: string, workspaceId: string) {
-        const result = await db
+        // Try Facebook comments first (comments → posts → pages)
+        const fbResult = await db
             .select({ comment: comments })
             .from(comments)
             .innerJoin(posts, eq(comments.postId, posts.id))
             .innerJoin(pages, eq(posts.pageId, pages.id))
             .where(and(eq(comments.id, commentId), eq(pages.workspaceId, workspaceId)));
 
-        return result[0]?.comment || null;
+        if (fbResult[0]) return fbResult[0].comment;
+
+        // Try Instagram comments (instagramComments → instagramMedia → pages)
+        const igResult = await db
+            .select({ comment: instagramComments })
+            .from(instagramComments)
+            .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+            .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+            .where(and(eq(instagramComments.id, commentId), eq(pages.workspaceId, workspaceId)));
+
+        return igResult[0]?.comment || null;
     }
 
     /**

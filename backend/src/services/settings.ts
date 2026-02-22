@@ -125,6 +125,8 @@ export class SettingsService {
             );
             if (Object.keys(pipelineUpdates).length === 0) return;
 
+            // Each user currently belongs to exactly one workspace (owner role).
+            // limit(1) is intentional — multi-workspace sync would require a separate migration.
             const memberships = await db
                 .select({ workspaceId: workspaceMembers.workspaceId })
                 .from(workspaceMembers)
