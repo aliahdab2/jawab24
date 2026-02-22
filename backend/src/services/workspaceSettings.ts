@@ -1,0 +1,225 @@
+import { eq } from 'drizzle-orm';
+import { db } from '../db';
+import { workspaces } from '../db/schema';
+import { redis } from '../lib/redis';
+import type { WorkspaceSettings } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
+
+/** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
+const SETTINGS_CACHE_TTL = 300;
+const cacheKey = (workspaceId: string) => `workspace_settings:v1:${workspaceId}`;
+
+/** Default workspace settings — applied when JSONB fields are empty */
+const DEFAULTS: WorkspaceSettings = {
+    defaultReplyLanguage: 'ar',
+    supportedLanguages: ['en', 'ar'],
+    autoDetectLanguage: true,
+    aiEnabled: true,
+    aiModel: 'gpt-4o-mini',
+    commentReplyMode: 'public',
+    dualReplyNudge: '',
+    commentsAutoReply: true,
+    messagesAutoReply: true,
+    businessHoursOnly: false,
+    businessHoursStart: '09:00',
+    businessHoursEnd: '18:00',
+    timezone: 'Asia/Damascus',
+    greetingMessageMulti: {},
+    awayMessageMulti: {},
+    dualReplyNudgeMulti: {},
+    replyDelay: 0,
+    commentEscalationMinutes: 60,
+    messageEscalationMinutes: 30,
+    handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
+};
+
+/** Default away message as send-time fallback when all stored values are empty */
+const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
+    ar: 'شكراً لتواصلك معنا! نحن حالياً خارج أوقات العمل، وسنرد عليك في أقرب وقت ممكن.',
+    en: 'Thanks for your message! We\'re currently away and will get back to you as soon as possible.',
+};
+
+export class WorkspaceSettingsService {
+    /**
+     * Get workspace settings from the JSONB column, with defaults applied.
+     * Cached in Redis for 5 minutes.
+     */
+    async getSettings(workspaceId: string): Promise<WorkspaceSettings> {
+        const key = cacheKey(workspaceId);
+
+        // Try cache first — fail open
+        try {
+            const cached = await redis.get(key);
+            if (cached) {
+                return JSON.parse(cached) as WorkspaceSettings;
+            }
+        } catch {
+            // Redis unavailable — fall through to DB
+        }
+
+        // DB fetch
+        const [workspace] = await db
+            .select({ settings: workspaces.settings })
+            .from(workspaces)
+            .where(eq(workspaces.id, workspaceId))
+            .limit(1);
+
+        if (!workspace) {
+            return { ...DEFAULTS };
+        }
+
+        const raw = (workspace.settings ?? {}) as Partial<WorkspaceSettings>;
+        const result: WorkspaceSettings = { ...DEFAULTS, ...raw };
+
+        // Populate cache — fail open
+        try {
+            await redis.set(key, JSON.stringify(result), 'EX', SETTINGS_CACHE_TTL);
+        } catch {
+            // Redis unavailable — continue without caching
+        }
+
+        return result;
+    }
+
+    /**
+     * Update workspace settings (partial merge into JSONB).
+     * Invalidates cache.
+     */
+    async updateSettings(
+        workspaceId: string,
+        updates: Partial<WorkspaceSettings>,
+    ): Promise<WorkspaceSettings> {
+        // Get current settings
+        const current = await this.getSettings(workspaceId);
+        const merged = { ...current, ...updates };
+
+        await db
+            .update(workspaces)
+            .set({
+                settings: merged as Record<string, unknown>,
+                updatedAt: new Date(),
+            })
+            .where(eq(workspaces.id, workspaceId));
+
+        // Invalidate cache
+        try {
+            await redis.del(cacheKey(workspaceId));
+        } catch {
+            // Redis unavailable — cache expires via TTL
+        }
+
+        return merged;
+    }
+
+    /**
+     * Check if auto-reply is enabled for comments, respecting business hours.
+     */
+    async isCommentsAutoReplyEnabled(workspaceId: string): Promise<boolean> {
+        const settings = await this.getSettings(workspaceId);
+
+        if (!settings.commentsAutoReply) return false;
+
+        if (settings.businessHoursOnly) {
+            return this.isWithinBusinessHours(
+                settings.businessHoursStart,
+                settings.businessHoursEnd,
+                settings.timezone,
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if auto-reply is enabled for messages, respecting business hours.
+     */
+    async isMessagesAutoReplyEnabled(workspaceId: string): Promise<boolean> {
+        const settings = await this.getSettings(workspaceId);
+
+        if (!settings.messagesAutoReply) return false;
+
+        if (settings.businessHoursOnly) {
+            return this.isWithinBusinessHours(
+                settings.businessHoursStart,
+                settings.businessHoursEnd,
+                settings.timezone,
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Get the away message in the best language for the customer.
+     */
+    async getAwayMessage(workspaceId: string, detectedLanguage?: string): Promise<string | null> {
+        const settings = await this.getSettings(workspaceId);
+        const preferred = this.resolveLanguage(settings, detectedLanguage);
+
+        const multi = settings.awayMessageMulti || {};
+        const primary = multi[preferred];
+        const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
+
+        return primary || fallback || DEFAULT_AWAY_MESSAGE[preferred] || DEFAULT_AWAY_MESSAGE['en'];
+    }
+
+    /**
+     * Get the greeting message for new conversations.
+     */
+    async getGreetingMessage(workspaceId: string, detectedLanguage?: string): Promise<string | null> {
+        const settings = await this.getSettings(workspaceId);
+        const preferred = this.resolveLanguage(settings, detectedLanguage);
+
+        const multi = settings.greetingMessageMulti || {};
+        const primary = multi[preferred];
+        const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
+
+        return primary || fallback || null;
+    }
+
+    /**
+     * Get the reply delay in seconds.
+     */
+    async getReplyDelay(workspaceId: string): Promise<number> {
+        const settings = await this.getSettings(workspaceId);
+        return settings.replyDelay;
+    }
+
+    /**
+     * Check if current time is within business hours.
+     */
+    private isWithinBusinessHours(start: string, end: string, timezone: string): boolean {
+        let currentTime: string;
+        try {
+            const parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: timezone,
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            }).formatToParts(new Date());
+            const hour = parts.find(p => p.type === 'hour')?.value || '00';
+            const minute = parts.find(p => p.type === 'minute')?.value || '00';
+            currentTime = `${hour}:${minute}`;
+        } catch {
+            const now = new Date();
+            currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        }
+
+        return currentTime >= start && currentTime <= end;
+    }
+
+    /**
+     * Resolve which language version to use.
+     */
+    private resolveLanguage(settings: WorkspaceSettings, detectedLanguage?: string): 'ar' | 'en' {
+        const fallback = (settings.defaultReplyLanguage === 'ar' ? 'ar' : 'en') as 'ar' | 'en';
+
+        if (!settings.autoDetectLanguage || !detectedLanguage || detectedLanguage === 'unknown') {
+            return fallback;
+        }
+
+        return detectedLanguage === 'ar' ? 'ar' : fallback;
+    }
+}
+
+export const workspaceSettingsService = new WorkspaceSettingsService();
