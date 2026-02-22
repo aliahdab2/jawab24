@@ -351,14 +351,14 @@ describe('Routes', () => {
             expect(res.json().error).toBe('Text is required');
         });
 
-        it('should return 400 when targetLanguage is invalid', async () => {
+        it('should return 400 when targetLanguage is too short', async () => {
             const res = await app.inject({
                 method: 'POST',
                 url: '/translate',
-                payload: { text: 'test', targetLanguage: 'fr' }
+                payload: { text: 'test', targetLanguage: 'x' }
             });
             expect(res.statusCode).toBe(400);
-            expect(res.json().error).toBe('targetLanguage must be "ar" or "en"');
+            expect(res.json().error).toBe('targetLanguage is required');
         });
 
         it('should return 400 when targetLanguage is missing', async () => {
@@ -368,17 +368,17 @@ describe('Routes', () => {
                 payload: { text: 'test' }
             });
             expect(res.statusCode).toBe(400);
-            expect(res.json().error).toBe('targetLanguage must be "ar" or "en"');
+            expect(res.json().error).toBe('targetLanguage is required');
         });
 
-        it('should return 400 when sourceLanguage is invalid', async () => {
+        it('should return 400 when sourceLanguage is too short', async () => {
             const res = await app.inject({
                 method: 'POST',
                 url: '/translate',
-                payload: { text: 'test', sourceLanguage: 'fr', targetLanguage: 'en' }
+                payload: { text: 'test', sourceLanguage: 'x', targetLanguage: 'en' }
             });
             expect(res.statusCode).toBe(400);
-            expect(res.json().error).toBe('sourceLanguage must be "ar", "en", or "auto"');
+            expect(res.json().error).toBe('sourceLanguage must be a valid language code or "auto"');
         });
 
         it('should return 503 when translation service not configured', async () => {
