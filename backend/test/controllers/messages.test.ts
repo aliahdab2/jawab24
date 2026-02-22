@@ -46,6 +46,8 @@ describe('MessagesController', () => {
         };
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
+            workspaceId: 'test_workspace_id',
+            workspaceRole: 'owner',
             query: {},
             params: {},
             body: {},
@@ -66,7 +68,7 @@ describe('MessagesController', () => {
 
             await messagesController.getAll(mockRequest as any, mockReply as any);
 
-            expect(messagesService.getMessages).toHaveBeenCalledWith('user-123', {
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', {
                 cursor: 'cur-1',
                 limit: 20,
             });
@@ -82,7 +84,7 @@ describe('MessagesController', () => {
 
             await messagesController.getAll(mockRequest as any, mockReply as any);
 
-            expect(messagesService.getMessages).toHaveBeenCalledWith('user-123', {
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', {
                 direction: 'incoming',
             });
         });
@@ -96,7 +98,7 @@ describe('MessagesController', () => {
 
             await messagesController.getAll(mockRequest as any, mockReply as any);
 
-            expect(messagesService.getMessages).toHaveBeenCalledWith('user-123', {
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', {
                 direction: 'outgoing',
             });
         });
@@ -110,7 +112,7 @@ describe('MessagesController', () => {
 
             await messagesController.getAll(mockRequest as any, mockReply as any);
 
-            expect(messagesService.getMessages).toHaveBeenCalledWith('user-123', {});
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', {});
         });
 
         it('should clamp limit to max 100', async () => {
@@ -122,7 +124,7 @@ describe('MessagesController', () => {
 
             await messagesController.getAll(mockRequest as any, mockReply as any);
 
-            expect(messagesService.getMessages).toHaveBeenCalledWith('user-123', {
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', {
                 limit: 100,
             });
         });
@@ -152,7 +154,7 @@ describe('MessagesController', () => {
 
             await messagesController.getStats(mockRequest as any, mockReply as any);
 
-            expect(messagesService.getStats).toHaveBeenCalledWith('user-123');
+            expect(messagesService.getStats).toHaveBeenCalledWith('test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(stats);
         });
 

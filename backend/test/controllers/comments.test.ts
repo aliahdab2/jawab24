@@ -4,7 +4,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 // Mock dependencies before imports
 vi.mock('../../src/services/comments', () => ({
     commentsService: {
-        getCommentsByUser: vi.fn(),
+        getCommentsByWorkspace: vi.fn(),
         getUnrepliedComments: vi.fn(),
         getCommentsByPost: vi.fn(),
         getComment: vi.fn(),
@@ -34,6 +34,8 @@ describe('CommentsController', () => {
         };
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
+            workspaceId: 'test_workspace_id',
+            workspaceRole: 'owner',
             query: {},
             params: {},
             body: {},
@@ -50,11 +52,11 @@ describe('CommentsController', () => {
                 data: [{ id: 'c-1', message: 'Hello' }],
                 pagination: { hasMore: false, nextCursor: null, limit: 25 },
             };
-            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue(mockResult);
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue(mockResult);
 
             await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('user-123', {
+            expect(commentsService.getCommentsByWorkspace).toHaveBeenCalledWith('test_workspace_id', {
                 cursor: 'c-10',
                 limit: 25,
                 replied: true,
@@ -63,8 +65,8 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith(mockResult);
         });
 
-        it('should return 401 when user is not authenticated', async () => {
-            mockRequest.user = undefined;
+        it('should return 401 when workspace is not set', async () => {
+            (mockRequest as any).workspaceId = undefined;
 
             await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
@@ -74,11 +76,11 @@ describe('CommentsController', () => {
 
         it('should clamp limit to max 100', async () => {
             mockRequest.query = { limit: '999' };
-            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 100 } });
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 100 } });
 
             await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('user-123', expect.objectContaining({ limit: 100 }));
+            expect(commentsService.getCommentsByWorkspace).toHaveBeenCalledWith('test_workspace_id', expect.objectContaining({ limit: 100 }));
         });
     });
 
@@ -92,12 +94,12 @@ describe('CommentsController', () => {
 
             await commentsController.getInbox(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getUnrepliedComments).toHaveBeenCalledWith('user-123', 20);
+            expect(commentsService.getUnrepliedComments).toHaveBeenCalledWith('test_workspace_id', 20);
             expect(mockReply.send).toHaveBeenCalledWith(mockComments);
         });
 
-        it('should return 401 when user is not authenticated', async () => {
-            mockRequest.user = undefined;
+        it('should return 401 when workspace is not set', async () => {
+            (mockRequest as any).workspaceId = undefined;
 
             await commentsController.getInbox(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
@@ -226,12 +228,12 @@ describe('CommentsController', () => {
 
             await commentsController.getStats(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getStats).toHaveBeenCalledWith('user-123');
+            expect(commentsService.getStats).toHaveBeenCalledWith('test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(mockStats);
         });
 
-        it('should return 401 when user is not authenticated', async () => {
-            mockRequest.user = undefined;
+        it('should return 401 when workspace is not set', async () => {
+            (mockRequest as any).workspaceId = undefined;
 
             await commentsController.getStats(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
@@ -294,20 +296,20 @@ describe('CommentsController', () => {
     describe('getAll with resolved filter', () => {
         it('should pass resolved=false filter to service', async () => {
             mockRequest.query = { resolved: 'false' };
-            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
 
             await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('user-123', expect.objectContaining({ resolved: false }));
+            expect(commentsService.getCommentsByWorkspace).toHaveBeenCalledWith('test_workspace_id', expect.objectContaining({ resolved: false }));
         });
 
         it('should pass resolved=true filter to service', async () => {
             mockRequest.query = { resolved: 'true' };
-            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
 
             await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('user-123', expect.objectContaining({ resolved: true }));
+            expect(commentsService.getCommentsByWorkspace).toHaveBeenCalledWith('test_workspace_id', expect.objectContaining({ resolved: true }));
         });
     });
 
@@ -334,8 +336,8 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith({ error: 'Comment not found' });
         });
 
-        it('should return 401 when user is not authenticated', async () => {
-            mockRequest.user = undefined;
+        it('should return 401 when workspace is not set', async () => {
+            (mockRequest as any).workspaceId = undefined;
             mockRequest.params = { id: 'c-1' };
 
             await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -377,8 +379,8 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith({ error: 'Comment not found' });
         });
 
-        it('should return 401 when user is not authenticated', async () => {
-            mockRequest.user = undefined;
+        it('should return 401 when workspace is not set', async () => {
+            (mockRequest as any).workspaceId = undefined;
             mockRequest.params = { id: 'c-1' };
 
             await commentsController.unresolve(mockRequest as FastifyRequest, mockReply as FastifyReply);

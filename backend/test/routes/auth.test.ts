@@ -67,6 +67,12 @@ vi.mock('../../src/services/cookies', () => ({
     },
 }));
 
+vi.mock('../../src/services/workspace', () => ({
+    workspaceService: {
+        getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'test_workspace_id' }]),
+    },
+}));
+
 describe('Auth Routes - Login Flow', () => {
     let app: FastifyInstance;
 
@@ -323,7 +329,7 @@ describe('Auth Routes - Login Flow', () => {
             // Page sync is called async, give it a moment
             await new Promise((resolve) => setTimeout(resolve, 10));
 
-            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('user_123', 'long_lived_sync_token');
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user_123', 'long_lived_sync_token');
         });
 
         it('should handle login without email (privacy setting)', async () => {

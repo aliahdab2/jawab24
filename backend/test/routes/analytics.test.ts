@@ -9,6 +9,12 @@ vi.mock('../../src/middleware/auth', () => ({
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
     },
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'test_workspace_id';
+        req.workspaceRole = 'owner';
+    }
+}));
 
 const mockOverview = {
     period: { from: '2026-01-08', to: '2026-02-07', days: 30 },
@@ -42,7 +48,7 @@ describe('Analytics Routes', () => {
 
             expect(response.statusCode).toBe(200);
             expect(JSON.parse(response.payload)).toEqual(mockOverview);
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_user_id', 30, undefined);
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 30, undefined);
         });
 
         it('should pass days query param', async () => {
@@ -54,7 +60,7 @@ describe('Analytics Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_user_id', 7, undefined);
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 7, undefined);
         });
 
         it('should pass pageId query param', async () => {
@@ -66,7 +72,7 @@ describe('Analytics Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_user_id', 30, 'page-uuid-123');
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 30, 'page-uuid-123');
         });
 
         it('should return 500 when service fails', async () => {

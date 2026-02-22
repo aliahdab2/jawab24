@@ -45,6 +45,8 @@ describe('RulesController', () => {
         };
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
+            workspaceId: 'test_workspace_id',
+            workspaceRole: 'owner',
             query: {},
             params: {},
             body: {},
@@ -111,7 +113,7 @@ describe('RulesController', () => {
 
             await rulesController.getAll(mockRequest as any, mockReply as any);
 
-            expect(rulesService.getRules).toHaveBeenCalledWith('user-123', { page: 1, limit: 20 });
+            expect(rulesService.getRules).toHaveBeenCalledWith('test_workspace_id', { page: 1, limit: 20 });
             expect(mockReply.send).toHaveBeenCalledWith(result);
         });
     });
@@ -130,7 +132,7 @@ describe('RulesController', () => {
 
             await rulesController.getOne(mockRequest as any, mockReply as any);
 
-            expect(rulesService.getRule).toHaveBeenCalledWith('user-123', 'rule-uuid-1');
+            expect(rulesService.getRule).toHaveBeenCalledWith('test_workspace_id', 'rule-uuid-1');
             expect(mockReply.send).toHaveBeenCalledWith(rule);
         });
 
@@ -213,7 +215,7 @@ describe('RulesController', () => {
 
             await rulesController.delete(mockRequest as any, mockReply as any);
 
-            expect(rulesService.deleteRule).toHaveBeenCalledWith('user-123', 'rule-uuid-1');
+            expect(rulesService.deleteRule).toHaveBeenCalledWith('test_workspace_id', 'rule-uuid-1');
             expect(mockReply.status).toHaveBeenCalledWith(204);
         });
 

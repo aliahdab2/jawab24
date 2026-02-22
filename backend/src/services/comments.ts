@@ -39,7 +39,7 @@ export class CommentsService {
      * Supports cursor-based pagination for efficient infinite scroll
      * Supports server-side filtering for efficient paginated filtering
      */
-    async getCommentsByUser(userId: string, options?: {
+    async getCommentsByWorkspace(workspaceId: string, options?: {
         replied?: boolean;
         replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
         needsAttention?: boolean;  // Filter by needsAttention flag
@@ -64,7 +64,7 @@ export class CommentsService {
         }
 
         // --- Facebook comments query ---
-        const fbConditions = [eq(pages.userId, userId)];
+        const fbConditions = [eq(pages.workspaceId, workspaceId)];
         if (options?.replied !== undefined) fbConditions.push(eq(comments.replied, options.replied));
         if (options?.replyMethod) fbConditions.push(eq(comments.replyMethod, options.replyMethod));
         if (options?.needsAttention !== undefined) fbConditions.push(eq(comments.needsAttention, options.needsAttention));
@@ -102,7 +102,7 @@ export class CommentsService {
             .limit(limit + 1);
 
         // --- Instagram comments query ---
-        const igConditions = [eq(pages.userId, userId)];
+        const igConditions = [eq(pages.workspaceId, workspaceId)];
         if (options?.replied !== undefined) igConditions.push(eq(instagramComments.replied, options.replied));
         if (options?.replyMethod) igConditions.push(eq(instagramComments.replyMethod, options.replyMethod));
         if (options?.needsAttention !== undefined) igConditions.push(eq(instagramComments.needsAttention, options.needsAttention));
@@ -168,8 +168,8 @@ export class CommentsService {
      * Get all comments for a user without pagination (for backwards compatibility)
      * @deprecated Use getCommentsByUser with pagination instead
      */
-    async getAllCommentsByUser(userId: string, options?: { replied?: boolean }) {
-        const conditions = [eq(pages.userId, userId)];
+    async getAllCommentsByWorkspace(workspaceId: string, options?: { replied?: boolean }) {
+        const conditions = [eq(pages.workspaceId, workspaceId)];
 
         if (options?.replied !== undefined) {
             conditions.push(eq(comments.replied, options.replied));
@@ -208,8 +208,8 @@ export class CommentsService {
      * Get unreplied comments for a user
      * Returns array directly for backwards compatibility
      */
-    async getUnrepliedComments(userId: string, limit?: number) {
-        const result = await this.getCommentsByUser(userId, { replied: false, limit });
+    async getUnrepliedComments(workspaceId: string, limit?: number) {
+        const result = await this.getCommentsByWorkspace(workspaceId, { replied: false, limit });
         return result.data;
     }
 
@@ -360,7 +360,7 @@ export class CommentsService {
      * Get comment statistics for a user
      * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query per table
      */
-    async getStats(userId: string) {
+    async getStats(workspaceId: string) {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
@@ -380,7 +380,7 @@ export class CommentsService {
                 .from(comments)
                 .innerJoin(posts, eq(comments.postId, posts.id))
                 .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(eq(pages.userId, userId)),
+                .where(eq(pages.workspaceId, workspaceId)),
 
             // Instagram comments — single query with FILTER
             db.select({
@@ -396,7 +396,7 @@ export class CommentsService {
                 .from(instagramComments)
                 .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
                 .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(eq(pages.userId, userId)),
+                .where(eq(pages.workspaceId, workspaceId)),
         ]);
 
         const fb = fbStats[0];

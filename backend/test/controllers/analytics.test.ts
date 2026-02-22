@@ -36,14 +36,16 @@ describe('AnalyticsController', () => {
         };
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
+            workspaceId: 'test_workspace_id',
+            workspaceRole: 'owner',
             query: {},
             log: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
         } as any;
     });
 
     describe('getOverview', () => {
-        it('should return 401 when user is not authenticated', async () => {
-            mockRequest.user = undefined;
+        it('should return 401 when workspace is not set', async () => {
+            (mockRequest as any).workspaceId = undefined;
 
             await controller.getOverview(mockRequest as any, mockReply as any);
 
@@ -56,7 +58,7 @@ describe('AnalyticsController', () => {
 
             await controller.getOverview(mockRequest as any, mockReply as any);
 
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('user-123', 30, undefined);
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 30, undefined);
             expect(mockReply.send).toHaveBeenCalledWith(mockOverview);
         });
 
@@ -66,7 +68,7 @@ describe('AnalyticsController', () => {
 
             await controller.getOverview(mockRequest as any, mockReply as any);
 
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('user-123', 7, undefined);
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 7, undefined);
         });
 
         it('should clamp days to minimum 1', async () => {
@@ -75,7 +77,7 @@ describe('AnalyticsController', () => {
 
             await controller.getOverview(mockRequest as any, mockReply as any);
 
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('user-123', 1, undefined);
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 1, undefined);
         });
 
         it('should clamp days to maximum 365', async () => {
@@ -84,7 +86,7 @@ describe('AnalyticsController', () => {
 
             await controller.getOverview(mockRequest as any, mockReply as any);
 
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('user-123', 365, undefined);
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 365, undefined);
         });
 
         it('should default to 30 when days is not a number', async () => {
@@ -93,7 +95,7 @@ describe('AnalyticsController', () => {
 
             await controller.getOverview(mockRequest as any, mockReply as any);
 
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('user-123', 30, undefined);
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 30, undefined);
         });
 
         it('should pass pageId to service', async () => {
@@ -102,7 +104,7 @@ describe('AnalyticsController', () => {
 
             await controller.getOverview(mockRequest as any, mockReply as any);
 
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('user-123', 30, 'page-uuid-123');
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 30, 'page-uuid-123');
         });
 
         it('should pass both days and pageId to service', async () => {
@@ -111,7 +113,7 @@ describe('AnalyticsController', () => {
 
             await controller.getOverview(mockRequest as any, mockReply as any);
 
-            expect(analyticsService.getOverview).toHaveBeenCalledWith('user-123', 7, 'page-uuid-123');
+            expect(analyticsService.getOverview).toHaveBeenCalledWith('test_workspace_id', 7, 'page-uuid-123');
         });
 
         it('should return 500 when service throws', async () => {

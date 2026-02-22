@@ -5,27 +5,12 @@ import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
 import { settingsService } from '../services/settings';
 import { promoteDelayedJobs } from '../lib/replyQueue';
-
-/** Authenticated request with user info */
-interface AuthenticatedRequest extends FastifyRequest {
-    user: { userId: string; facebookId: string };
-}
+import type { WorkspaceRequest } from '../middleware/workspace';
 
 export class MessagesController {
     /**
      * Get all messages with pagination
      * GET /messages
-     *
-     * Query params:
-     * - cursor: Message ID to start after (for infinite scroll)
-     * - limit: Number of messages per page (default 50, max 100)
-     * - direction: Filter by direction ('incoming' | 'outgoing')
-     *
-     * Response:
-     * {
-     *   data: Message[],
-     *   pagination: { hasMore: boolean, nextCursor: string | null, limit: number }
-     * }
      */
     async getAll(request: FastifyRequest<{
         Querystring: {
@@ -37,8 +22,12 @@ export class MessagesController {
             needsAttention?: string;
         }
     }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
         try {
-            const userId = (request as AuthenticatedRequest).user.userId;
             const { cursor, limit, direction, replied, resolved, needsAttention } = request.query;
 
             const options: {
@@ -75,7 +64,7 @@ export class MessagesController {
                 options.needsAttention = needsAttention === 'true';
             }
 
-            const result = await messagesService.getMessages(userId, options);
+            const result = await messagesService.getMessages(req.workspaceId, options);
             return reply.send(result);
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error getting messages');
@@ -88,9 +77,13 @@ export class MessagesController {
      * GET /messages/stats
      */
     async getStats(request: FastifyRequest, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
         try {
-            const userId = (request as AuthenticatedRequest).user.userId;
-            const stats = await messagesService.getStats(userId);
+            const stats = await messagesService.getStats(req.workspaceId);
             return reply.send(stats);
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error getting message stats');
@@ -130,7 +123,10 @@ export class MessagesController {
         request: FastifyRequest<{ Params: { id: string }; Body: { replyText: string } }>,
         reply: FastifyReply
     ) {
-        const userId = (request as AuthenticatedRequest).user.userId;
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
         const { id } = request.params;
         const { replyText } = request.body;
 
@@ -145,10 +141,10 @@ export class MessagesController {
                 return reply.status(404).send({ error: 'Message not found' });
             }
 
-            // 2. Verify user owns the page
-            const page = await pagesService.getPage(userId, message.pageId);
+            // 2. Verify workspace owns the page
+            const page = await pagesService.getPage(req.workspaceId, message.pageId);
             if (!page) {
-                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
             }
 
             // 3. Send the reply via the appropriate platform API
@@ -197,8 +193,12 @@ export class MessagesController {
         }>,
         reply: FastifyReply
     ) {
+        const req = request as WorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
         try {
-            const userId = (request as AuthenticatedRequest).user.userId;
             const { senderId } = request.params;
             const { pageId, durationMinutes } = request.body;
 
@@ -206,16 +206,16 @@ export class MessagesController {
                 return reply.status(400).send({ error: 'pageId is required' });
             }
 
-            // Verify user owns the page
-            const page = await pagesService.getPage(userId, pageId);
+            // Verify workspace owns the page
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
-                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
             }
 
             // Use provided duration or user's default from settings
             let duration = durationMinutes;
             if (!duration) {
-                const userSettings = await settingsService.getSettings(userId);
+                const userSettings = await settingsService.getSettings(req.user.userId);
                 duration = userSettings.handoffPauseDurationMinutes;
             }
 
@@ -238,8 +238,12 @@ export class MessagesController {
         }>,
         reply: FastifyReply
     ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
         try {
-            const userId = (request as AuthenticatedRequest).user.userId;
             const { senderId } = request.params;
             const { pageId } = request.body;
 
@@ -247,10 +251,10 @@ export class MessagesController {
                 return reply.status(400).send({ error: 'pageId is required' });
             }
 
-            // Verify user owns the page
-            const page = await pagesService.getPage(userId, pageId);
+            // Verify workspace owns the page
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
-                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
             }
 
             await messagesService.resumeConversation(pageId, senderId);
@@ -281,8 +285,12 @@ export class MessagesController {
         }>,
         reply: FastifyReply
     ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
         try {
-            const userId = (request as AuthenticatedRequest).user.userId;
             const { senderId } = request.params;
             const { pageId } = request.query;
 
@@ -290,10 +298,10 @@ export class MessagesController {
                 return reply.status(400).send({ error: 'pageId is required' });
             }
 
-            // Verify user owns the page
-            const page = await pagesService.getPage(userId, pageId);
+            // Verify workspace owns the page
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
-                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
             }
 
             const status = await messagesService.getPauseStatus(pageId, senderId);
@@ -314,8 +322,12 @@ export class MessagesController {
         }>,
         reply: FastifyReply
     ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
         try {
-            const userId = (request as AuthenticatedRequest).user.userId;
             const { senderId } = request.params;
             const { pageId } = request.body;
 
@@ -323,9 +335,9 @@ export class MessagesController {
                 return reply.status(400).send({ error: 'pageId is required' });
             }
 
-            const page = await pagesService.getPage(userId, pageId);
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
-                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
             }
 
             const count = await messagesService.resolveConversation(pageId, senderId);
@@ -347,8 +359,12 @@ export class MessagesController {
         }>,
         reply: FastifyReply
     ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
         try {
-            const userId = (request as AuthenticatedRequest).user.userId;
             const { senderId } = request.params;
             const { pageId } = request.body;
 
@@ -356,9 +372,9 @@ export class MessagesController {
                 return reply.status(400).send({ error: 'pageId is required' });
             }
 
-            const page = await pagesService.getPage(userId, pageId);
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
-                return reply.status(403).send({ error: 'Unauthorized: page not owned by user' });
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
             }
 
             const count = await messagesService.unresolveConversation(pageId, senderId);
@@ -371,13 +387,3 @@ export class MessagesController {
 }
 
 export const messagesController = new MessagesController();
-
-
-
-
-
-
-
-
-
-

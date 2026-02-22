@@ -16,6 +16,12 @@ vi.mock('../../src/middleware/auth', () => ({
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
     }
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'test_workspace_id';
+        req.workspaceRole = 'owner';
+    }
+}));
 
 describe('Pages Routes', () => {
     let app: any;
@@ -52,7 +58,7 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(201);
-            expect(pagesService.createPage).toHaveBeenCalledWith('test_user_id', newPageData);
+            expect(pagesService.createPage).toHaveBeenCalledWith('test_workspace_id', 'test_user_id', newPageData);
         });
     });
 
@@ -68,7 +74,7 @@ describe('Pages Routes', () => {
 
             expect(response.statusCode).toBe(200);
             expect(JSON.parse(response.payload)).toEqual(pagesList);
-            expect(pagesService.getPages).toHaveBeenCalledWith('test_user_id');
+            expect(pagesService.getPages).toHaveBeenCalledWith('test_workspace_id');
         });
     });
 
@@ -108,7 +114,7 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(204);
-            expect(pagesService.deletePage).toHaveBeenCalledWith('test_user_id', 'page_1');
+            expect(pagesService.deletePage).toHaveBeenCalledWith('test_workspace_id', 'page_1');
         });
     });
 
@@ -124,7 +130,7 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(pagesService.toggleAutoReply).toHaveBeenCalledWith('test_user_id', 'page_1', false);
+            expect(pagesService.toggleAutoReply).toHaveBeenCalledWith('test_workspace_id', 'page_1', false);
         });
     });
 });

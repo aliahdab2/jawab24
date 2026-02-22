@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import type { AuthenticatedRequest } from '../../src/middleware/auth';
+import type { WorkspaceRequest } from '../../src/middleware/workspace';
 
 // Mock dependencies before imports
 vi.mock('../../src/services/pages', () => ({
@@ -22,13 +22,20 @@ vi.mock('../../src/services/subscriptions', () => ({
     },
 }));
 
+vi.mock('../../src/services/facebook', () => ({
+    facebookService: {
+        subscribePageToWebhooks: vi.fn(),
+        unsubscribePageFromWebhooks: vi.fn(),
+    },
+}));
+
 // Import after mocks
 import { pagesController } from '../../src/controllers/pages';
 import { pagesService } from '../../src/services/pages';
 import { subscriptionsService } from '../../src/services/subscriptions';
 
 describe('Pages Controller', () => {
-    let mockRequest: Partial<AuthenticatedRequest>;
+    let mockRequest: Partial<WorkspaceRequest>;
     let mockReply: Partial<FastifyReply>;
 
     beforeEach(() => {
@@ -39,6 +46,8 @@ describe('Pages Controller', () => {
         };
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
+            workspaceId: 'test_workspace_id',
+            workspaceRole: 'owner',
             query: {},
             params: {},
             body: {},
@@ -83,7 +92,7 @@ describe('Pages Controller', () => {
 
             await pagesController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(pagesService.getPages).toHaveBeenCalledWith('user-123');
+            expect(pagesService.getPages).toHaveBeenCalledWith('test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(pages);
         });
     });
@@ -97,7 +106,7 @@ describe('Pages Controller', () => {
 
             await pagesController.getOne(mockRequest as any, mockReply as FastifyReply);
 
-            expect(pagesService.getPage).toHaveBeenCalledWith('user-123', 'page-1');
+            expect(pagesService.getPage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
             expect(mockReply.send).toHaveBeenCalledWith(page);
         });
 
@@ -122,7 +131,7 @@ describe('Pages Controller', () => {
 
             await pagesController.update(mockRequest as any, mockReply as FastifyReply);
 
-            expect(pagesService.updatePage).toHaveBeenCalledWith('user-123', 'page-1', { name: 'Updated' });
+            expect(pagesService.updatePage).toHaveBeenCalledWith('test_workspace_id', 'page-1', { name: 'Updated' });
             expect(mockReply.send).toHaveBeenCalledWith(updated);
         });
     });
@@ -130,12 +139,13 @@ describe('Pages Controller', () => {
     // ---- delete ----
     describe('delete', () => {
         it('should delete a page and return 204', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', facebookPageId: 'fb-page-1', accessToken: 'tok' } as any);
             vi.mocked(pagesService.deletePage).mockResolvedValue(undefined as any);
             mockRequest.params = { id: 'page-1' };
 
             await pagesController.delete(mockRequest as any, mockReply as FastifyReply);
 
-            expect(pagesService.deletePage).toHaveBeenCalledWith('user-123', 'page-1');
+            expect(pagesService.deletePage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
             expect(mockReply.status).toHaveBeenCalledWith(204);
         });
     });
@@ -151,7 +161,7 @@ describe('Pages Controller', () => {
 
             await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
 
-            expect(pagesService.toggleAutoReply).toHaveBeenCalledWith('user-123', 'page-1', true);
+            expect(pagesService.toggleAutoReply).toHaveBeenCalledWith('test_workspace_id', 'page-1', true);
             expect(mockReply.send).toHaveBeenCalledWith(toggled);
         });
     });
@@ -166,7 +176,7 @@ describe('Pages Controller', () => {
 
             await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
 
-            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('user-123', 'fb-token-abc');
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user-123', 'fb-token-abc');
             expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ synced: 1, pages: syncedPages }));
         });
 

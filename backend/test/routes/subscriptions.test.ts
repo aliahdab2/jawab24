@@ -104,6 +104,13 @@ vi.mock('../../src/middleware/auth', () => ({
     }),
     AuthenticatedRequest: {},
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'workspace_123';
+        req.workspaceRole = 'owner';
+    },
+    WorkspaceRequest: {},
+}));
 
 describe('Subscriptions Routes', () => {
     let app: ReturnType<typeof Fastify>;

@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { AuthenticatedRequest } from '../middleware/auth';
+import type { WorkspaceRequest } from '../middleware/workspace';
 import { pagesService } from '../services/pages';
 import { instagramService } from '../services/instagram';
 import { subscriptionsService } from '../services/subscriptions';
@@ -13,25 +13,24 @@ export class InstagramController {
      * GET /instagram/:pageId/media
      */
     async getMedia(
-        request: FastifyRequest<{ Params: { pageId: string } }>, 
+        request: FastifyRequest<{ Params: { pageId: string } }>,
         reply: FastifyReply
     ) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { pageId } = request.params;
 
         try {
-            // Get page and verify ownership
-            const page = await pagesService.getPage(userId, pageId);
+            // Get page and verify workspace ownership
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
 
             if (!page.instagramAccountId) {
-                return reply.status(400).send({ 
+                return reply.status(400).send({
                     error: 'No Instagram account linked to this page',
                     hint: 'Please link an Instagram Business Account to your Facebook Page first'
                 });
@@ -56,14 +55,13 @@ export class InstagramController {
      * GET /instagram/media/:mediaId/comments
      */
     async getComments(
-        request: FastifyRequest<{ Params: { mediaId: string } }>, 
+        request: FastifyRequest<{ Params: { mediaId: string } }>,
         reply: FastifyReply
     ) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { mediaId } = request.params;
 
         try {
@@ -82,7 +80,7 @@ export class InstagramController {
             if (!pageId) {
                 return reply.status(404).send({ error: 'Media has no associated page' });
             }
-            const page = await pagesService.getPage(userId, pageId);
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
                 return reply.status(403).send({ error: 'Access denied' });
             }
@@ -106,17 +104,16 @@ export class InstagramController {
      * POST /instagram/comments/:commentId/reply
      */
     async replyToComment(
-        request: FastifyRequest<{ 
-            Params: { commentId: string }; 
-            Body: { message: string } 
-        }>, 
+        request: FastifyRequest<{
+            Params: { commentId: string };
+            Body: { message: string }
+        }>,
         reply: FastifyReply
     ) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { commentId } = request.params;
         const { message } = request.body;
 
@@ -154,7 +151,7 @@ export class InstagramController {
             if (!mediaPageId) {
                 return reply.status(404).send({ error: 'Media has no associated page' });
             }
-            const page = await pagesService.getPage(userId, mediaPageId);
+            const page = await pagesService.getPage(req.workspaceId, mediaPageId);
             if (!page) {
                 return reply.status(403).send({ error: 'Access denied' });
             }
@@ -178,17 +175,17 @@ export class InstagramController {
                 })
                 .where(eq(instagramComments.id, commentId));
 
-            return reply.send({ 
-                success: true, 
+            return reply.send({
+                success: true,
                 replyId,
-                message: 'Reply posted successfully' 
+                message: 'Reply posted successfully'
             });
         } catch (error) {
             request.log.error(error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            return reply.status(500).send({ 
+            return reply.status(500).send({
                 error: 'Failed to post reply',
-                details: errorMessage 
+                details: errorMessage
             });
         }
     }
@@ -198,24 +195,25 @@ export class InstagramController {
      * PATCH /pages/:id/instagram-auto-reply
      */
     async toggleAutoReply(
-        request: FastifyRequest<{ 
-            Params: { id: string }; 
-            Body: { enabled: boolean } 
-        }>, 
+        request: FastifyRequest<{
+            Params: { id: string };
+            Body: { enabled: boolean }
+        }>,
         reply: FastifyReply
     ) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
+        const { userId } = req.user;
+        const { workspaceId } = req;
         const { id } = request.params;
         const { enabled } = request.body;
 
         try {
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
-                const limitCheck = await subscriptionsService.canEnablePage(userId, id);
+                const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId, id);
                 if (!limitCheck.allowed) {
                     return reply.status(403).send({
                         error: limitCheck.reason || 'Page limit reached',
@@ -226,7 +224,7 @@ export class InstagramController {
                 }
             }
 
-            const page = await pagesService.toggleInstagramAutoReply(userId, id, enabled);
+            const page = await pagesService.toggleInstagramAutoReply(workspaceId, id, enabled);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
@@ -242,25 +240,24 @@ export class InstagramController {
      * POST /instagram/:pageId/sync
      */
     async syncMedia(
-        request: FastifyRequest<{ Params: { pageId: string } }>, 
+        request: FastifyRequest<{ Params: { pageId: string } }>,
         reply: FastifyReply
     ) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { pageId } = request.params;
 
         try {
-            // Get page and verify ownership
-            const page = await pagesService.getPage(userId, pageId);
+            // Get page and verify workspace ownership
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
 
             if (!page.instagramAccountId) {
-                return reply.status(400).send({ 
+                return reply.status(400).send({
                     error: 'No Instagram account linked to this page',
                     hint: 'Please link an Instagram Business Account to your Facebook Page first'
                 });
@@ -360,13 +357,12 @@ export class InstagramController {
         } catch (error) {
             request.log.error(error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            return reply.status(500).send({ 
+            return reply.status(500).send({
                 error: 'Failed to sync Instagram data',
-                details: errorMessage 
+                details: errorMessage
             });
         }
     }
 }
 
 export const instagramController = new InstagramController();
-

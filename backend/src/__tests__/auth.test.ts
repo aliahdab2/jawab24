@@ -49,6 +49,12 @@ vi.mock('../services/settings', () => ({
     }
 }));
 
+vi.mock('../services/workspace', () => ({
+    workspaceService: {
+        getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'test_workspace_id' }]),
+    }
+}));
+
 describe('AuthController - Native Login', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockRequest: any;
@@ -110,7 +116,7 @@ describe('AuthController - Native Login', () => {
         expect(authService.findOrCreateUser).toHaveBeenCalledWith(
             'fb-user-id', 'Test User', 'test@example.com', 'long-lived-token', expiresAt, 'https://example.com/photo.jpg'
         );
-        expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('user-id', 'long-lived-token');
+        expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user-id', 'long-lived-token');
         expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
             token: 'session-jwt'
         }));

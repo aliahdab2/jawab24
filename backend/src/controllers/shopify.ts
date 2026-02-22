@@ -2,7 +2,8 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import * as shopifyService from '../services/shopify';
 import { authService } from '../services/auth';
-import { AuthenticatedRequest } from '../middleware/auth';
+import { workspaceService } from '../services/workspace';
+import type { WorkspaceRequest } from '../middleware/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
 import {
@@ -97,7 +98,9 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
 
         if (userId) {
             // --- LOGGED IN: Create store directly ---
-            const store = await shopifyService.createStore(userId, shop, accessToken);
+            const workspaces = await workspaceService.getUserWorkspaces(userId);
+            const workspaceId = workspaces[0]?.id || null;
+            const store = await shopifyService.createStore(userId, shop, accessToken, undefined, workspaceId);
 
             // Register webhooks (non-blocking)
             shopifyService.registerWebhooks(shop, accessToken).catch(err => {
@@ -229,9 +232,9 @@ export async function gdprShopRedact(request: FastifyRequest, reply: FastifyRepl
 // --- Protected API (Jawab24 JWT required) ---
 
 export async function getStore(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user?.userId;
-    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await shopifyService.getStoreByUserId(userId);
+    const req = request as WorkspaceRequest;
+    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+    const store = await shopifyService.getStoreByWorkspace(req.workspaceId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
     }
@@ -252,9 +255,9 @@ export async function connectStore(request: FastifyRequest, reply: FastifyReply)
 }
 
 export async function disconnectStoreHandler(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user?.userId;
-    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await shopifyService.getStoreByUserId(userId);
+    const req = request as WorkspaceRequest;
+    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+    const store = await shopifyService.getStoreByWorkspace(req.workspaceId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
     }
@@ -263,9 +266,9 @@ export async function disconnectStoreHandler(request: FastifyRequest, reply: Fas
 }
 
 export async function syncStore(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user?.userId;
-    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await shopifyService.getStoreByUserId(userId);
+    const req = request as WorkspaceRequest;
+    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+    const store = await shopifyService.getStoreByWorkspace(req.workspaceId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
     }
@@ -275,9 +278,9 @@ export async function syncStore(request: FastifyRequest, reply: FastifyReply) {
 }
 
 export async function getStoreProducts(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user?.userId;
-    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await shopifyService.getStoreByUserId(userId);
+    const req = request as WorkspaceRequest;
+    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+    const store = await shopifyService.getStoreByWorkspace(req.workspaceId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
     }
@@ -287,25 +290,25 @@ export async function getStoreProducts(request: FastifyRequest, reply: FastifyRe
 }
 
 export async function linkPage(request: FastifyRequest, reply: FastifyReply) {
-    const userId = (request as AuthenticatedRequest).user?.userId;
-    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
+    const req = request as WorkspaceRequest;
+    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
     const { pageId } = request.body as { pageId?: string };
 
     if (!pageId) {
         return reply.status(400).send({ error: 'pageId is required' });
     }
 
-    const store = await shopifyService.getStoreByUserId(userId);
+    const store = await shopifyService.getStoreByWorkspace(req.workspaceId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
     }
 
     try {
-        await shopifyService.linkStoreToPage(store.id, pageId, userId);
+        await shopifyService.linkStoreToPage(store.id, pageId, req.workspaceId);
         return reply.send({ ok: true });
     } catch (error) {
-        if (error instanceof Error && error.message?.includes('does not belong to user')) {
-            return reply.status(403).send({ error: 'Page does not belong to user' });
+        if (error instanceof Error && error.message?.includes('does not belong to workspace')) {
+            return reply.status(403).send({ error: 'Page does not belong to workspace' });
         }
         throw error;
     }

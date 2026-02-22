@@ -44,7 +44,7 @@ export class PostsService {
     /**
      * Get all posts for a user (across all their pages)
      */
-    async getPostsByUser(userId: string) {
+    async getPostsByWorkspace(workspaceId: string) {
         return db
             .select({
                 id: posts.id,
@@ -59,7 +59,7 @@ export class PostsService {
             })
             .from(posts)
             .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(eq(pages.userId, userId))
+            .where(eq(pages.workspaceId, workspaceId))
             .orderBy(desc(posts.createdAt));
     }
 

@@ -20,7 +20,7 @@ export class MessagesService {
     /**
      * Get all messages for a user's pages with cursor-based pagination
      */
-    async getMessages(userId: string, options?: {
+    async getMessages(workspaceId: string, options?: {
         limit?: number;
         cursor?: string;
         direction?: 'incoming' | 'outgoing';
@@ -33,18 +33,18 @@ export class MessagesService {
     }> {
         const limit = options?.limit || 50;
 
-        const userPages = await db.query.pages.findMany({
-            where: eq(pages.userId, userId),
+        const workspacePages = await db.query.pages.findMany({
+            where: eq(pages.workspaceId, workspaceId),
         });
 
-        if (userPages.length === 0) {
+        if (workspacePages.length === 0) {
             return {
                 data: [],
                 pagination: { hasMore: false, nextCursor: null, limit }
             };
         }
 
-        const pageIds = userPages.map(p => p.id);
+        const pageIds = workspacePages.map(p => p.id);
 
         // Build conditions
         const conditions = [
@@ -276,16 +276,16 @@ export class MessagesService {
     /**
      * Get unreplied messages
      */
-    async getUnrepliedMessages(userId: string, limit: number = 10): Promise<Message[]> {
-        const userPages = await db.query.pages.findMany({
-            where: eq(pages.userId, userId),
+    async getUnrepliedMessages(workspaceId: string, limit: number = 10): Promise<Message[]> {
+        const workspacePages = await db.query.pages.findMany({
+            where: eq(pages.workspaceId, workspaceId),
         });
 
-        if (userPages.length === 0) {
+        if (workspacePages.length === 0) {
             return [];
         }
 
-        const pageIds = userPages.map(p => p.id);
+        const pageIds = workspacePages.map(p => p.id);
 
         const result = await db.query.messages.findMany({
             where: and(
@@ -445,7 +445,7 @@ export class MessagesService {
      * Get message statistics
      * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query
      */
-    async getStats(userId: string): Promise<{
+    async getStats(workspaceId: string): Promise<{
         total: number;
         replied: number;
         pending: number;
@@ -467,7 +467,7 @@ export class MessagesService {
             .from(messages)
             .innerJoin(pages, eq(messages.pageId, pages.id))
             .where(and(
-                eq(pages.userId, userId),
+                eq(pages.workspaceId, workspaceId),
                 eq(messages.direction, 'incoming')
             ));
 

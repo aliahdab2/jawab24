@@ -13,6 +13,12 @@ vi.mock('../../src/middleware/auth', () => ({
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
     }
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'test_workspace_id';
+        req.workspaceRole = 'owner';
+    }
+}));
 
 describe('Posts Routes', () => {
     let app: any;
@@ -27,7 +33,7 @@ describe('Posts Routes', () => {
     describe('GET /posts', () => {
         it('should get all posts for user', async () => {
             const postsList = [{ id: 'post_1', message: 'Hello World' }];
-            vi.mocked(postsService.getPostsByUser).mockResolvedValue(postsList as any);
+            vi.mocked(postsService.getPostsByWorkspace).mockResolvedValue(postsList as any);
 
             const response = await app.inject({
                 method: 'GET',
@@ -36,7 +42,7 @@ describe('Posts Routes', () => {
 
             expect(response.statusCode).toBe(200);
             expect(JSON.parse(response.payload)).toEqual(postsList);
-            expect(postsService.getPostsByUser).toHaveBeenCalledWith('test_user_id');
+            expect(postsService.getPostsByWorkspace).toHaveBeenCalledWith('test_workspace_id');
         });
     });
 

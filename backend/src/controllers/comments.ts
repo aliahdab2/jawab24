@@ -1,7 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { commentsService } from '../services/comments';
 import { UpdateCommentDTO } from '../types';
-import { AuthenticatedRequest } from '../middleware/auth';
+import type { WorkspaceRequest } from '../middleware/workspace';
 
 export class CommentsController {
     /**
@@ -31,11 +31,10 @@ export class CommentsController {
             resolved?: string;
         }
     }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { cursor, limit, replied, replyMethod, needsAttention, resolved } = request.query;
 
         try {
@@ -79,7 +78,7 @@ export class CommentsController {
                 options.resolved = resolved === 'true';
             }
 
-            const result = await commentsService.getCommentsByUser(userId, options);
+            const result = await commentsService.getCommentsByWorkspace(req.workspaceId, options);
             return reply.send(result);
         } catch (error) {
             request.log.error(error);
@@ -92,15 +91,14 @@ export class CommentsController {
      * GET /comments/inbox
      */
     async getInbox(request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const limit = request.query.limit ? parseInt(request.query.limit, 10) : 50;
-        
+
         try {
-            const comments = await commentsService.getUnrepliedComments(userId, limit);
+            const comments = await commentsService.getUnrepliedComments(req.workspaceId, limit);
             return reply.send(comments);
         } catch (error) {
             request.log.error(error);
@@ -191,14 +189,13 @@ export class CommentsController {
      * GET /comments/stats
      */
     async getStats(request: FastifyRequest, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
-        
+
         try {
-            const stats = await commentsService.getStats(userId);
+            const stats = await commentsService.getStats(req.workspaceId);
             return reply.send(stats);
         } catch (error) {
             request.log.error(error);
@@ -226,8 +223,8 @@ export class CommentsController {
      * POST /comments/:id/resolve
      */
     async resolve(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 
@@ -250,8 +247,8 @@ export class CommentsController {
      * POST /comments/:id/unresolve
      */
     async unresolve(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 
@@ -274,10 +271,11 @@ export class CommentsController {
      * POST /comments/:id/feedback
      */
     async feedback(request: FastifyRequest<{ Params: { id: string }; Body: { helpful: boolean; reason?: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.user) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
+        const user = req.user;
         
         const { id } = request.params;
         const { helpful, reason } = request.body;

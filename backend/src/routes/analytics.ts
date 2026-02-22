@@ -1,11 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { analyticsController } from '../controllers/analytics';
 import { authenticate } from '../middleware/auth';
+import { resolveWorkspace } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 
 export default async function analyticsRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
+        protectedRoutes.addHook('preHandler', resolveWorkspace);
 
         protectedRoutes.get('/ai-usage', {
             schema: {

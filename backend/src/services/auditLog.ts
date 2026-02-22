@@ -33,6 +33,7 @@ export type AuditAction =
 
 export interface AuditEntry {
     userId: string;
+    workspaceId?: string;      // Workspace context (when available)
     action: AuditAction;
     entityType?: string;       // 'template', 'rule', 'page', 'settings', etc.
     entityId?: string;         // The specific entity affected
@@ -46,6 +47,7 @@ export async function auditLog(entry: AuditEntry): Promise<void> {
     try {
         await db.insert(logs).values({
             userId: entry.userId,
+            workspaceId: entry.workspaceId,
             action: entry.action,
             status: 'audit',
             metadata: {

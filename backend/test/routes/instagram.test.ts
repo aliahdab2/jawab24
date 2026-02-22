@@ -5,6 +5,9 @@ import instagramRoutes from '../../src/routes/instagram';
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: vi.fn(),
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: vi.fn(),
+}));
 
 vi.mock('../../src/controllers/instagram', () => ({
     instagramController: {
@@ -35,6 +38,12 @@ describe('Instagram Routes', () => {
                 throw err;
             }
             req.user = { userId: 'user-123' };
+        });
+
+        const { resolveWorkspace } = await import('../../src/middleware/workspace');
+        vi.mocked(resolveWorkspace).mockImplementation(async (req: any) => {
+            req.workspaceId = 'test_workspace_id';
+            req.workspaceRole = 'owner';
         });
 
         const { instagramController } = await import('../../src/controllers/instagram');

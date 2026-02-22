@@ -10,6 +10,12 @@ vi.mock('../../src/middleware/auth', () => ({
         req.user = { id: 'test_user_id', userId: 'test_user_id', facebookId: 'test_fb_id' };
     }
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'test_workspace_id';
+        req.workspaceRole = 'owner';
+    }
+}));
 
 describe('Messages Routes', () => {
     let app: any;
@@ -42,7 +48,7 @@ describe('Messages Routes', () => {
                 data: messagesList,
                 pagination: { hasMore: false, nextCursor: null, limit: 50 }
             });
-            expect(messagesService.getMessages).toHaveBeenCalledWith('test_user_id', {});
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', {});
         });
 
         it('should respect limit parameter', async () => {
@@ -56,7 +62,7 @@ describe('Messages Routes', () => {
                 url: '/messages?limit=100'
             });
 
-            expect(messagesService.getMessages).toHaveBeenCalledWith('test_user_id', { limit: 100 });
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', { limit: 100 });
         });
     });
 
@@ -76,7 +82,7 @@ describe('Messages Routes', () => {
 
             expect(response.statusCode).toBe(200);
             expect(JSON.parse(response.payload)).toEqual(stats);
-            expect(messagesService.getStats).toHaveBeenCalledWith('test_user_id');
+            expect(messagesService.getStats).toHaveBeenCalledWith('test_workspace_id');
         });
     });
 

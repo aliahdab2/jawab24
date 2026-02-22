@@ -12,6 +12,7 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { auditLog } from '../services/auditLog';
+import { workspaceService } from '../services/workspace';
 
 export class AuthController {
     /**
@@ -57,9 +58,13 @@ export class AuthController {
             const token = authService.generateToken(user);
 
             // 5. Auto-sync pages from Facebook (non-blocking, respects plan page limit)
-            pagesService.syncFromFacebook(user.id, longLivedToken).then(({ skippedCount }) => {
-                if (skippedCount > 0) {
-                    request.log.info(`Auto-sync: ${skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+            workspaceService.getUserWorkspaces(user.id).then((ws) => {
+                const workspaceId = ws[0]?.id;
+                if (!workspaceId) return;
+                return pagesService.syncFromFacebook(workspaceId, user.id, longLivedToken);
+            }).then((result) => {
+                if (result && result.skippedCount > 0) {
+                    request.log.info(`Auto-sync: ${result.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
                 }
             }).catch((err) => {
                 request.log.error({ err }, 'Auto-sync pages failed');
@@ -150,9 +155,13 @@ export class AuthController {
             const token = authService.generateToken(user);
 
             // 7. Auto-sync pages (Non-blocking, respects plan page limit)
-            pagesService.syncFromFacebook(user.id, longLivedToken).then(({ skippedCount }) => {
-                if (skippedCount > 0) {
-                    request.log.info(`Auto-sync: ${skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+            workspaceService.getUserWorkspaces(user.id).then((ws) => {
+                const workspaceId = ws[0]?.id;
+                if (!workspaceId) return;
+                return pagesService.syncFromFacebook(workspaceId, user.id, longLivedToken);
+            }).then((result) => {
+                if (result && result.skippedCount > 0) {
+                    request.log.info(`Auto-sync: ${result.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
                 }
             }).catch((err) => {
                 request.log.error({ err }, 'Auto-sync pages failed (Native Flow)');

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import type { AuthenticatedRequest } from '../../src/middleware/auth';
+import type { WorkspaceRequest } from '../../src/middleware/workspace';
 
 // Mock dependencies before imports
 vi.mock('../../src/services/posts', () => ({
     postsService: {
-        getPostsByUser: vi.fn(),
+        getPostsByWorkspace: vi.fn(),
         getPostsByPage: vi.fn(),
         getPost: vi.fn(),
         updatePost: vi.fn(),
@@ -26,7 +26,7 @@ import { postsService } from '../../src/services/posts';
 import { pagesService } from '../../src/services/pages';
 
 describe('Posts Controller', () => {
-    let mockRequest: Partial<AuthenticatedRequest>;
+    let mockRequest: Partial<WorkspaceRequest>;
     let mockReply: Partial<FastifyReply>;
 
     beforeEach(() => {
@@ -37,6 +37,8 @@ describe('Posts Controller', () => {
         };
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
+            workspaceId: 'test_workspace_id',
+            workspaceRole: 'owner',
             query: {},
             params: {},
             body: {},
@@ -48,11 +50,11 @@ describe('Posts Controller', () => {
     describe('getAll', () => {
         it('should return all posts for the user', async () => {
             const posts = [{ id: 'post-1' }, { id: 'post-2' }];
-            vi.mocked(postsService.getPostsByUser).mockResolvedValue(posts as any);
+            vi.mocked(postsService.getPostsByWorkspace).mockResolvedValue(posts as any);
 
             await postsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(postsService.getPostsByUser).toHaveBeenCalledWith('user-123');
+            expect(postsService.getPostsByWorkspace).toHaveBeenCalledWith('test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(posts);
         });
     });
@@ -68,7 +70,7 @@ describe('Posts Controller', () => {
 
             await postsController.getByPage(mockRequest as any, mockReply as FastifyReply);
 
-            expect(pagesService.getPage).toHaveBeenCalledWith('user-123', 'page-1');
+            expect(pagesService.getPage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
             expect(postsService.getPostsByPage).toHaveBeenCalledWith('page-1');
             expect(mockReply.send).toHaveBeenCalledWith(posts);
         });

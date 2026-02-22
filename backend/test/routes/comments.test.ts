@@ -10,6 +10,12 @@ vi.mock('../../src/middleware/auth', () => ({
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
     }
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'test_workspace_id';
+        req.workspaceRole = 'owner';
+    }
+}));
 
 describe('Comments Routes', () => {
     let app: any;
@@ -24,7 +30,7 @@ describe('Comments Routes', () => {
     describe('GET /comments', () => {
         it('should get all comments for user', async () => {
             const commentsList = [{ id: 'comment_1', message: 'Great product!' }];
-            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue(commentsList as any);
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue(commentsList as any);
 
             const response = await app.inject({
                 method: 'GET',
@@ -42,7 +48,7 @@ describe('Comments Routes', () => {
                 pageId: 'page-uuid-123',
                 pageName: 'My Shop',
             }];
-            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue(commentsList as any);
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue(commentsList as any);
 
             const response = await app.inject({
                 method: 'GET',
@@ -56,7 +62,7 @@ describe('Comments Routes', () => {
 
         it('should filter by replied status', async () => {
             const commentsList = [{ id: 'comment_1', replied: false }];
-            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue(commentsList as any);
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue(commentsList as any);
 
             const response = await app.inject({
                 method: 'GET',
@@ -64,7 +70,7 @@ describe('Comments Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('test_user_id', { replied: false });
+            expect(commentsService.getCommentsByWorkspace).toHaveBeenCalledWith('test_workspace_id', { replied: false });
         });
     });
 
@@ -224,7 +230,7 @@ describe('Comments Routes', () => {
 
     describe('GET /comments with resolved filter', () => {
         it('should pass resolved=false to service', async () => {
-            vi.mocked(commentsService.getCommentsByUser).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } } as any);
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } } as any);
 
             const response = await app.inject({
                 method: 'GET',
@@ -232,7 +238,7 @@ describe('Comments Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(commentsService.getCommentsByUser).toHaveBeenCalledWith('test_user_id', expect.objectContaining({ resolved: false }));
+            expect(commentsService.getCommentsByWorkspace).toHaveBeenCalledWith('test_workspace_id', expect.objectContaining({ resolved: false }));
         });
     });
 });

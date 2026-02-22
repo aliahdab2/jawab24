@@ -77,6 +77,8 @@ describe('InstagramController', () => {
         };
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
+            workspaceId: 'test_workspace_id',
+            workspaceRole: 'owner',
             query: {},
             params: {},
             body: {},
@@ -101,7 +103,7 @@ describe('InstagramController', () => {
 
             await instagramController.getMedia(mockRequest as any, mockReply as any);
 
-            expect(pagesService.getPage).toHaveBeenCalledWith('user-123', 'page-1');
+            expect(pagesService.getPage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
             expect(mockReply.send).toHaveBeenCalledWith(mediaItems);
         });
 
@@ -177,7 +179,7 @@ describe('InstagramController', () => {
 
             await instagramController.getComments(mockRequest as any, mockReply as any);
 
-            expect(pagesService.getPage).toHaveBeenCalledWith('user-123', 'page-1');
+            expect(pagesService.getPage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
             expect(mockReply.send).toHaveBeenCalledWith(comments);
         });
 
@@ -280,7 +282,7 @@ describe('InstagramController', () => {
 
             await instagramController.toggleAutoReply(mockRequest as any, mockReply as any);
 
-            expect(pagesService.toggleInstagramAutoReply).toHaveBeenCalledWith('user-123', 'page-1', true);
+            expect(pagesService.toggleInstagramAutoReply).toHaveBeenCalledWith('test_workspace_id', 'page-1', true);
             expect(mockReply.send).toHaveBeenCalledWith(updatedPage);
         });
 

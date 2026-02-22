@@ -25,16 +25,16 @@ interface AnalyticsOverview {
 }
 
 export class AnalyticsService {
-    async getOverview(userId: string, days: number = 30, pageId?: string): Promise<AnalyticsOverview> {
+    async getOverview(workspaceId: string, days: number = 30, pageId?: string): Promise<AnalyticsOverview> {
         const now = new Date();
         const since = new Date(now);
         since.setDate(since.getDate() - days);
 
         const [fbComments, igComments, msgRows, responseTimes] = await Promise.all([
-            this.queryFbComments(userId, since, pageId),
-            this.queryIgComments(userId, since, pageId),
-            this.queryMessages(userId, since, pageId),
-            this.queryResponseTimes(userId, since, pageId),
+            this.queryFbComments(workspaceId, since, pageId),
+            this.queryIgComments(workspaceId, since, pageId),
+            this.queryMessages(workspaceId, since, pageId),
+            this.queryResponseTimes(workspaceId, since, pageId),
         ]);
 
         // Aggregate all rows
@@ -132,9 +132,9 @@ export class AnalyticsService {
         };
     }
 
-    private async queryFbComments(userId: string, since: Date, pageId?: string): Promise<GroupedRow[]> {
+    private async queryFbComments(workspaceId: string, since: Date, pageId?: string): Promise<GroupedRow[]> {
         const conditions = [
-            eq(pages.userId, userId),
+            eq(pages.workspaceId, workspaceId),
             gte(comments.createdTime, since),
         ];
         if (pageId) conditions.push(eq(pages.id, pageId));
@@ -158,9 +158,9 @@ export class AnalyticsService {
         return rows as GroupedRow[];
     }
 
-    private async queryIgComments(userId: string, since: Date, pageId?: string): Promise<GroupedRow[]> {
+    private async queryIgComments(workspaceId: string, since: Date, pageId?: string): Promise<GroupedRow[]> {
         const conditions = [
-            eq(pages.userId, userId),
+            eq(pages.workspaceId, workspaceId),
             gte(instagramComments.createdTime, since),
         ];
         if (pageId) conditions.push(eq(pages.id, pageId));
@@ -184,9 +184,9 @@ export class AnalyticsService {
         return rows as GroupedRow[];
     }
 
-    private async queryMessages(userId: string, since: Date, pageId?: string): Promise<(GroupedRow & { platform?: string | null })[]> {
+    private async queryMessages(workspaceId: string, since: Date, pageId?: string): Promise<(GroupedRow & { platform?: string | null })[]> {
         const conditions = [
-            eq(pages.userId, userId),
+            eq(pages.workspaceId, workspaceId),
             eq(messages.direction, 'incoming'),
             gte(messages.createdTime, since),
         ];
@@ -211,11 +211,11 @@ export class AnalyticsService {
         return rows as (GroupedRow & { platform?: string | null })[];
     }
 
-    private async queryResponseTimes(userId: string, since: Date, pageId?: string): Promise<number[]> {
+    private async queryResponseTimes(workspaceId: string, since: Date, pageId?: string): Promise<number[]> {
         // Collect response times from all three tables in parallel
         const conditions = (table: typeof comments | typeof instagramComments | typeof messages) => {
             const conds = [
-                eq(pages.userId, userId),
+                eq(pages.workspaceId, workspaceId),
                 eq(table.replied, true),
                 gte(table.createdTime, since),
             ];

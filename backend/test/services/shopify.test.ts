@@ -43,6 +43,7 @@ vi.mock('../../src/db/schema', () => ({
     pages: {
         id: 'id',
         userId: 'user_id',
+        workspaceId: 'workspace_id',
         ecommerceStoreId: 'ecommerce_store_id',
         kbActiveVersion: 'kb_active_version',
     },
@@ -52,6 +53,12 @@ vi.mock('../../src/db/schema', () => ({
         storeDomain: 'store_domain',
         status: 'status',
         expiresAt: 'expires_at',
+    },
+    workspaceMembers: {
+        id: 'id',
+        workspaceId: 'workspace_id',
+        userId: 'user_id',
+        role: 'role',
     },
 }));
 
@@ -315,7 +322,7 @@ describe('Shopify Service', () => {
     // --- linkStoreToPage ---
 
     describe('linkStoreToPage', () => {
-        it('should throw if page does not belong to user', async () => {
+        it('should throw if page does not belong to workspace', async () => {
             mockSelect.mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
@@ -325,13 +332,13 @@ describe('Shopify Service', () => {
             });
 
             await expect(
-                linkStoreToPage('store-1', 'page-1', 'user-1')
-            ).rejects.toThrow('Page not found or does not belong to user');
+                linkStoreToPage('store-1', 'page-1', 'workspace-1')
+            ).rejects.toThrow('Page not found or does not belong to workspace');
         });
 
-        it('should link page when user owns it', async () => {
+        it('should link page when workspace owns it', async () => {
             const mockWhere = vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([{ id: 'page-1', userId: 'user-1' }]),
+                limit: vi.fn().mockResolvedValue([{ id: 'page-1', workspaceId: 'workspace-1' }]),
             });
             mockSelect.mockReturnValue({
                 from: vi.fn().mockReturnValue({ where: mockWhere }),
@@ -344,7 +351,7 @@ describe('Shopify Service', () => {
                 set: mockSet,
             });
 
-            await linkStoreToPage('store-1', 'page-1', 'user-1');
+            await linkStoreToPage('store-1', 'page-1', 'workspace-1');
             expect(mockUpdate).toHaveBeenCalled();
         });
     });

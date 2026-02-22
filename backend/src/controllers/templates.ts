@@ -2,7 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { templatesService } from '../services/templates';
 import { subscriptionsService } from '../services/subscriptions';
 import { CreateTemplateDTO, UpdateTemplateDTO } from '../types';
-import { AuthenticatedRequest } from '../middleware/auth';
+import type { WorkspaceRequest } from '../middleware/workspace';
 
 export class TemplatesController {
     /**
@@ -10,24 +10,25 @@ export class TemplatesController {
      * POST /templates
      */
     async create(request: FastifyRequest<{ Body: CreateTemplateDTO }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
-        
+        const { userId } = req.user;
+        const { workspaceId } = req;
+
         try {
-            // Check template limit before creating
-            const limitCheck = await subscriptionsService.canAddTemplate(userId);
+            // Check template limit (billing stays per-user)
+            const limitCheck = await subscriptionsService.canAddTemplate(userId, workspaceId);
             if (!limitCheck.allowed) {
-                return reply.status(403).send({ 
+                return reply.status(403).send({
                     error: limitCheck.reason || 'Template limit reached',
                     limit: limitCheck.limit,
                     used: limitCheck.used,
                 });
             }
-            
-            const template = await templatesService.createTemplate(userId, request.body);
+
+            const template = await templatesService.createTemplate(workspaceId, request.body);
             return reply.status(201).send(template);
         } catch (error) {
             request.log.error(error);
@@ -40,14 +41,13 @@ export class TemplatesController {
      * GET /templates
      */
     async getAll(request: FastifyRequest, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
-        
+
         try {
-            const templates = await templatesService.getTemplates(userId);
+            const templates = await templatesService.getTemplates(req.workspaceId);
             return reply.send(templates);
         } catch (error) {
             request.log.error(error);
@@ -60,15 +60,14 @@ export class TemplatesController {
      * GET /templates/:id
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { id } = request.params;
-        
+
         try {
-            const template = await templatesService.getTemplate(userId, id);
+            const template = await templatesService.getTemplate(req.workspaceId, id);
             if (!template) {
                 return reply.status(404).send({ error: 'Template not found' });
             }
@@ -84,15 +83,14 @@ export class TemplatesController {
      * PUT /templates/:id
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdateTemplateDTO }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { id } = request.params;
-        
+
         try {
-            const template = await templatesService.updateTemplate(userId, id, request.body);
+            const template = await templatesService.updateTemplate(req.workspaceId, id, request.body);
             if (!template) {
                 return reply.status(404).send({ error: 'Template not found' });
             }
@@ -108,15 +106,14 @@ export class TemplatesController {
      * DELETE /templates/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { id } = request.params;
-        
+
         try {
-            await templatesService.deleteTemplate(userId, id);
+            await templatesService.deleteTemplate(req.workspaceId, id);
             return reply.status(204).send();
         } catch (error) {
             request.log.error(error);
@@ -126,4 +123,3 @@ export class TemplatesController {
 }
 
 export const templatesController = new TemplatesController();
-

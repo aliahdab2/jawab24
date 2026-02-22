@@ -70,13 +70,16 @@ vi.mock('../../src/db', () => ({
 }));
 
 vi.mock('../../src/db/schema', () => ({
-    ecommerceStores: { id: 'id', storeDomain: 'storeDomain', userId: 'userId', isActive: 'isActive', platform: 'platform' },
+    ecommerceStores: { id: 'id', storeDomain: 'storeDomain', userId: 'userId', workspaceId: 'workspaceId', isActive: 'isActive', platform: 'platform' },
     ecommerceProducts: { ecommerceStoreId: 'ecommerceStoreId', status: 'status' },
-    pages: { id: 'id', userId: 'userId', ecommerceStoreId: 'ecommerceStoreId' },
+    pages: { id: 'id', userId: 'userId', workspaceId: 'workspaceId', ecommerceStoreId: 'ecommerceStoreId' },
     pendingEcommerceInstalls: {
         id: 'id', platform: 'platform', storeDomain: 'storeDomain', accessToken: 'accessToken',
         accessTokenIv: 'accessTokenIv', scopes: 'scopes', nonce: 'nonce',
         status: 'status', claimedByUserId: 'claimedByUserId', expiresAt: 'expiresAt',
+    },
+    workspaceMembers: {
+        id: 'id', workspaceId: 'workspaceId', userId: 'userId', role: 'role',
     },
 }));
 
@@ -199,7 +202,9 @@ describe('Pending Install Flow', () => {
                     expiresAt: new Date(Date.now() + 300000),
                 }])
                 // getStoreByDomain returns null
-                .mockResolvedValueOnce([]);
+                .mockResolvedValueOnce([])
+                // workspace members lookup
+                .mockResolvedValueOnce([{ workspaceId: 'test_workspace_id' }]);
 
             mockInsertReturning.mockResolvedValueOnce([storeRow]);
 

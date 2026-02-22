@@ -1,11 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { messagesController } from '../controllers/messages';
 import { authenticate } from '../middleware/auth';
+import { resolveWorkspace } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 
 export default async function messagesRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
+        protectedRoutes.addHook('preHandler', resolveWorkspace);
 
         protectedRoutes.get('/messages', {
             schema: {

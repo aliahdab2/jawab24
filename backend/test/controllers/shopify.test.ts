@@ -8,7 +8,7 @@ const mockRegisterWebhooks = vi.fn().mockResolvedValue(undefined);
 const mockVerifyWebhookHmac = vi.fn();
 const mockDeactivateStore = vi.fn().mockResolvedValue(undefined);
 const mockGetStoreByDomain = vi.fn();
-const mockGetStoreByUserId = vi.fn();
+const mockGetStoreByWorkspace = vi.fn();
 const mockDisconnectStore = vi.fn().mockResolvedValue(undefined);
 const mockFullSync = vi.fn().mockResolvedValue({ synced: 10 });
 const mockGetProducts = vi.fn().mockResolvedValue([]);
@@ -24,7 +24,7 @@ vi.mock('../../src/services/shopify', () => ({
     verifyWebhookHmac: (...args: any[]) => mockVerifyWebhookHmac(...args),
     deactivateStore: (...args: any[]) => mockDeactivateStore(...args),
     getStoreByDomain: (...args: any[]) => mockGetStoreByDomain(...args),
-    getStoreByUserId: (...args: any[]) => mockGetStoreByUserId(...args),
+    getStoreByWorkspace: (...args: any[]) => mockGetStoreByWorkspace(...args),
     disconnectStore: (...args: any[]) => mockDisconnectStore(...args),
     fullSync: (...args: any[]) => mockFullSync(...args),
     getProducts: (...args: any[]) => mockGetProducts(...args),
@@ -37,6 +37,13 @@ const mockVerifyToken = vi.fn();
 vi.mock('../../src/services/auth', () => ({
     authService: {
         verifyToken: (...args: any[]) => mockVerifyToken(...args),
+    },
+}));
+
+const mockGetUserWorkspaces = vi.fn().mockResolvedValue([{ id: 'test_workspace_id' }]);
+vi.mock('../../src/services/workspace', () => ({
+    workspaceService: {
+        getUserWorkspaces: (...args: any[]) => mockGetUserWorkspaces(...args),
     },
 }));
 
@@ -105,6 +112,8 @@ function mockRequest(overrides: Partial<any> = {}): any {
         headers: {},
         cookies: {},
         user: { userId: 'user-123', facebookId: 'fb-123' },
+        workspaceId: 'test_workspace_id',
+        workspaceRole: 'owner',
         unsignCookie: vi.fn().mockReturnValue({ valid: false, value: null }),
         log: {
             error: vi.fn(),
@@ -255,7 +264,8 @@ describe('Shopify Controller', () => {
             await authCallback(req, rep);
 
             expect(mockExchangeCodeForToken).toHaveBeenCalledWith('test.myshopify.com', 'code123');
-            expect(mockCreateStore).toHaveBeenCalledWith('user-123', 'test.myshopify.com', 'shpat_test_token');
+            expect(mockGetUserWorkspaces).toHaveBeenCalledWith('user-123');
+            expect(mockCreateStore).toHaveBeenCalledWith('user-123', 'test.myshopify.com', 'shpat_test_token', undefined, 'test_workspace_id');
             expect(mockRegisterWebhooks).toHaveBeenCalledWith('test.myshopify.com', 'shpat_test_token');
             expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/shopify/onboarding');
         });
@@ -396,7 +406,8 @@ describe('Shopify Controller', () => {
             await authCallback(req, rep);
 
             expect(mockVerifyToken).toHaveBeenCalledWith('jwt_token_from_header');
-            expect(mockCreateStore).toHaveBeenCalledWith('user-456', 'test.myshopify.com', 'shpat_test_token');
+            expect(mockGetUserWorkspaces).toHaveBeenCalledWith('user-456');
+            expect(mockCreateStore).toHaveBeenCalledWith('user-456', 'test.myshopify.com', 'shpat_test_token', undefined, 'test_workspace_id');
             expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/shopify/onboarding');
         });
 
@@ -599,7 +610,7 @@ describe('Shopify Controller', () => {
 
     describe('getStore', () => {
         it('should return 404 when no store found', async () => {
-            mockGetStoreByUserId.mockResolvedValue(null);
+            mockGetStoreByWorkspace.mockResolvedValue(null);
             const req = mockRequest();
             const rep = mockReply();
 
@@ -609,7 +620,7 @@ describe('Shopify Controller', () => {
         });
 
         it('should return store data', async () => {
-            mockGetStoreByUserId.mockResolvedValue({ id: 'store-1', shopDomain: 'test.myshopify.com' });
+            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1', shopDomain: 'test.myshopify.com' });
             const req = mockRequest();
             const rep = mockReply();
 
@@ -647,7 +658,7 @@ describe('Shopify Controller', () => {
 
     describe('disconnectStoreHandler', () => {
         it('should return 404 when no store', async () => {
-            mockGetStoreByUserId.mockResolvedValue(null);
+            mockGetStoreByWorkspace.mockResolvedValue(null);
             const rep = mockReply();
 
             await disconnectStoreHandler(mockRequest(), rep);
@@ -656,7 +667,7 @@ describe('Shopify Controller', () => {
         });
 
         it('should disconnect store', async () => {
-            mockGetStoreByUserId.mockResolvedValue({ id: 'store-1' });
+            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1' });
             const rep = mockReply();
 
             await disconnectStoreHandler(mockRequest(), rep);
@@ -668,7 +679,7 @@ describe('Shopify Controller', () => {
 
     describe('syncStore', () => {
         it('should sync and return result', async () => {
-            mockGetStoreByUserId.mockResolvedValue({ id: 'store-1' });
+            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1' });
             const rep = mockReply();
 
             await syncStore(mockRequest(), rep);
@@ -680,7 +691,7 @@ describe('Shopify Controller', () => {
 
     describe('getStoreProducts', () => {
         it('should return products', async () => {
-            mockGetStoreByUserId.mockResolvedValue({ id: 'store-1' });
+            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1' });
             mockGetProducts.mockResolvedValue([{ id: 'p1', title: 'Product 1' }]);
             const rep = mockReply();
 
@@ -704,8 +715,8 @@ describe('Shopify Controller', () => {
         });
 
         it('should return 403 when page does not belong to user', async () => {
-            mockGetStoreByUserId.mockResolvedValue({ id: 'store-1' });
-            mockLinkStoreToPage.mockRejectedValueOnce(new Error('Page not found or does not belong to user'));
+            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1' });
+            mockLinkStoreToPage.mockRejectedValueOnce(new Error('Page not found or does not belong to workspace'));
             const req = mockRequest({ body: { pageId: 'page-1' } });
             const rep = mockReply();
 
@@ -715,14 +726,14 @@ describe('Shopify Controller', () => {
         });
 
         it('should link page successfully', async () => {
-            mockGetStoreByUserId.mockResolvedValue({ id: 'store-1' });
+            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1' });
             mockLinkStoreToPage.mockResolvedValueOnce(undefined);
             const req = mockRequest({ body: { pageId: 'page-1' } });
             const rep = mockReply();
 
             await linkPage(req, rep);
 
-            expect(mockLinkStoreToPage).toHaveBeenCalledWith('store-1', 'page-1', 'user-123');
+            expect(mockLinkStoreToPage).toHaveBeenCalledWith('store-1', 'page-1', 'test_workspace_id');
             expect(rep.send).toHaveBeenCalledWith({ ok: true });
         });
     });

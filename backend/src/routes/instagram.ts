@@ -1,11 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { instagramController } from '../controllers/instagram';
 import { authenticate } from '../middleware/auth';
+import { resolveWorkspace } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 
 export default async function instagramRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
+        protectedRoutes.addHook('preHandler', resolveWorkspace);
 
         // Instagram Media
         protectedRoutes.get('/instagram/:pageId/media', {

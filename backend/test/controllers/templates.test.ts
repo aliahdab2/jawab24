@@ -36,6 +36,8 @@ describe('TemplatesController', () => {
         };
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
+            workspaceId: 'test_workspace_id',
+            workspaceRole: 'owner',
             query: {},
             params: {},
             body: {},
@@ -96,7 +98,7 @@ describe('TemplatesController', () => {
 
             await templatesController.getAll(mockRequest as any, mockReply as any);
 
-            expect(templatesService.getTemplates).toHaveBeenCalledWith('user-123');
+            expect(templatesService.getTemplates).toHaveBeenCalledWith('test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(templates);
         });
     });
@@ -114,7 +116,7 @@ describe('TemplatesController', () => {
 
             await templatesController.getOne(mockRequest as any, mockReply as any);
 
-            expect(templatesService.getTemplate).toHaveBeenCalledWith('user-123', 'tpl-uuid-1');
+            expect(templatesService.getTemplate).toHaveBeenCalledWith('test_workspace_id', 'tpl-uuid-1');
             expect(mockReply.send).toHaveBeenCalledWith(template);
         });
 
@@ -142,7 +144,7 @@ describe('TemplatesController', () => {
 
             await templatesController.update(mockRequest as any, mockReply as any);
 
-            expect(templatesService.updateTemplate).toHaveBeenCalledWith('user-123', 'tpl-uuid-1', { name: 'Updated Greeting' });
+            expect(templatesService.updateTemplate).toHaveBeenCalledWith('test_workspace_id', 'tpl-uuid-1', { name: 'Updated Greeting' });
             expect(mockReply.send).toHaveBeenCalledWith(updatedTemplate);
         });
 
@@ -168,7 +170,7 @@ describe('TemplatesController', () => {
 
             await templatesController.delete(mockRequest as any, mockReply as any);
 
-            expect(templatesService.deleteTemplate).toHaveBeenCalledWith('user-123', 'tpl-uuid-1');
+            expect(templatesService.deleteTemplate).toHaveBeenCalledWith('test_workspace_id', 'tpl-uuid-1');
             expect(mockReply.status).toHaveBeenCalledWith(204);
         });
 

@@ -2,11 +2,13 @@ import { FastifyInstance } from 'fastify';
 import { postsController } from '../controllers/posts';
 import { commentsController } from '../controllers/comments';
 import { authenticate } from '../middleware/auth';
+import { resolveWorkspace } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 
 export default async function postsRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
+        protectedRoutes.addHook('preHandler', resolveWorkspace);
 
         // Posts
         protectedRoutes.get('/posts', {

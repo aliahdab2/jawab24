@@ -3,7 +3,7 @@ import { pagesService } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
-import { AuthenticatedRequest } from '../middleware/auth';
+import type { WorkspaceRequest } from '../middleware/workspace';
 
 export class PagesController {
     /**
@@ -11,15 +11,16 @@ export class PagesController {
      * POST /pages
      */
     async create(request: FastifyRequest<{ Body: CreatePageDTO }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
-        
+        const { userId } = req.user;
+        const { workspaceId } = req;
+
         try {
-            // Check enabled page limit before creating (new pages start enabled)
-            const limitCheck = await subscriptionsService.canEnablePage(userId);
+            // Check enabled page limit before creating (billing stays per-user)
+            const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId);
             if (!limitCheck.allowed) {
                 return reply.status(403).send({
                     error: limitCheck.reason || 'Page limit reached',
@@ -28,8 +29,8 @@ export class PagesController {
                     used: limitCheck.used,
                 });
             }
-            
-            const page = await pagesService.createPage(userId, request.body);
+
+            const page = await pagesService.createPage(workspaceId, userId, request.body);
 
             // Subscribe page to webhook events so Facebook sends comments/messages
             if (request.body.facebookPageId && request.body.accessToken) {
@@ -48,14 +49,13 @@ export class PagesController {
      * GET /pages
      */
     async getAll(request: FastifyRequest, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
-        
+
         try {
-            const pages = await pagesService.getPages(userId);
+            const pages = await pagesService.getPages(req.workspaceId);
             return reply.send(pages);
         } catch (error) {
             request.log.error(error);
@@ -68,15 +68,14 @@ export class PagesController {
      * GET /pages/:id
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { id } = request.params;
-        
+
         try {
-            const page = await pagesService.getPage(userId, id);
+            const page = await pagesService.getPage(req.workspaceId, id);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
@@ -92,15 +91,14 @@ export class PagesController {
      * PUT /pages/:id
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdatePageDTO }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { id } = request.params;
-        
+
         try {
-            const page = await pagesService.updatePage(userId, id, request.body);
+            const page = await pagesService.updatePage(req.workspaceId, id, request.body);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
@@ -116,21 +114,20 @@ export class PagesController {
      * DELETE /pages/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { id } = request.params;
-        
+
         try {
             // Unsubscribe from webhooks before deleting
-            const page = await pagesService.getPage(userId, id);
+            const page = await pagesService.getPage(req.workspaceId, id);
             if (page) {
                 await facebookService.unsubscribePageFromWebhooks(page.facebookPageId, page.accessToken);
             }
 
-            await pagesService.deletePage(userId, id);
+            await pagesService.deletePage(req.workspaceId, id);
             return reply.status(204).send();
         } catch (error) {
             request.log.error(error);
@@ -143,18 +140,19 @@ export class PagesController {
      * PATCH /pages/:id/auto-reply
      */
     async toggleAutoReply(request: FastifyRequest<{ Params: { id: string }; Body: { enabled: boolean } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
+        const { userId } = req.user;
+        const { workspaceId } = req;
         const { id } = request.params;
         const { enabled } = request.body;
 
         try {
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
-                const limitCheck = await subscriptionsService.canEnablePage(userId, id);
+                const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId, id);
                 if (!limitCheck.allowed) {
                     return reply.status(403).send({
                         error: limitCheck.reason || 'Page limit reached',
@@ -165,7 +163,7 @@ export class PagesController {
                 }
             }
 
-            const page = await pagesService.toggleAutoReply(userId, id, enabled);
+            const page = await pagesService.toggleAutoReply(workspaceId, id, enabled);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
@@ -181,23 +179,24 @@ export class PagesController {
      * POST /pages/sync
      */
     async sync(request: FastifyRequest<{ Body: { accessToken: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
+        const { userId } = req.user;
+        const { workspaceId } = req;
         const { accessToken } = request.body;
-        
+
         if (!accessToken) {
-            return reply.status(400).send({ 
+            return reply.status(400).send({
                 error: 'Access token is required',
                 hint: 'Please log out and log back in to refresh your Facebook token'
             });
         }
 
         try {
-            request.log.info(`[Pages] Sync requested for user ${userId}`);
-            const { syncedPages, skippedCount } = await pagesService.syncFromFacebook(userId, accessToken);
+            request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
+            const { syncedPages, skippedCount } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
 
             if (syncedPages.length === 0) {
                 return reply.send({
@@ -215,7 +214,7 @@ export class PagesController {
             }
 
             // Include current limit status for frontend display
-            const limitCheck = await subscriptionsService.canEnablePage(userId);
+            const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId);
             if (limitCheck.remaining !== undefined) {
                 response.enabledPagesRemaining = limitCheck.remaining;
             }
@@ -224,7 +223,7 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            return reply.status(500).send({ 
+            return reply.status(500).send({
                 error: 'Failed to sync pages from Facebook',
                 details: errorMessage,
                 hint: 'This could be due to an expired token. Try logging out and back in.'
@@ -234,4 +233,3 @@ export class PagesController {
 }
 
 export const pagesController = new PagesController();
-

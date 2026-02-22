@@ -17,6 +17,12 @@ vi.mock('../../src/middleware/auth', () => ({
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
     }
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'test_workspace_id';
+        req.workspaceRole = 'owner';
+    }
+}));
 
 describe('Rules Routes', () => {
     let app: any;
@@ -65,7 +71,7 @@ describe('Rules Routes', () => {
         const body = JSON.parse(response.payload);
         expect(body.data).toEqual(rulesList);
         expect(body.pagination).toBeDefined();
-        expect(rulesService.getRules).toHaveBeenCalledWith('test_user_id', { page: 1, limit: 20 });
+        expect(rulesService.getRules).toHaveBeenCalledWith('test_workspace_id', { page: 1, limit: 20 });
     });
 
     it('should get a single rule', async () => {
@@ -101,7 +107,7 @@ describe('Rules Routes', () => {
         });
 
         expect(response.statusCode).toBe(204);
-        expect(rulesService.deleteRule).toHaveBeenCalledWith('test_user_id', '123e4567-e89b-12d3-a456-426614174000');
+        expect(rulesService.deleteRule).toHaveBeenCalledWith('test_workspace_id', '123e4567-e89b-12d3-a456-426614174000');
     });
 
     it('should return 400 for invalid rule ID', async () => {

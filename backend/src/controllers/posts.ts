@@ -2,22 +2,21 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { postsService } from '../services/posts';
 import { pagesService } from '../services/pages';
 import { UpdatePostDTO } from '../types';
-import { AuthenticatedRequest } from '../middleware/auth';
+import type { WorkspaceRequest } from '../middleware/workspace';
 
 export class PostsController {
     /**
-     * Get all posts for user
+     * Get all posts for workspace
      * GET /posts
      */
     async getAll(request: FastifyRequest, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
-        
+
         try {
-            const posts = await postsService.getPostsByUser(userId);
+            const posts = await postsService.getPostsByWorkspace(req.workspaceId);
             return reply.send(posts);
         } catch (error) {
             request.log.error(error);
@@ -30,16 +29,15 @@ export class PostsController {
      * GET /pages/:pageId/posts
      */
     async getByPage(request: FastifyRequest<{ Params: { pageId: string } }>, reply: FastifyReply) {
-        const user = (request as AuthenticatedRequest).user;
-        if (!user) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = user;
         const { pageId } = request.params;
-        
+
         try {
-            // Verify user owns the page
-            const page = await pagesService.getPage(userId, pageId);
+            // Verify workspace owns the page
+            const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
@@ -58,7 +56,7 @@ export class PostsController {
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
         const { id } = request.params;
-        
+
         try {
             const post = await postsService.getPost(id);
             if (!post) {
@@ -77,7 +75,7 @@ export class PostsController {
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdatePostDTO }>, reply: FastifyReply) {
         const { id } = request.params;
-        
+
         try {
             const post = await postsService.updatePost(id, request.body);
             if (!post) {
@@ -96,7 +94,7 @@ export class PostsController {
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
         const { id } = request.params;
-        
+
         try {
             await postsService.deletePost(id);
             return reply.status(204).send();
@@ -113,7 +111,7 @@ export class PostsController {
     async toggleAutoReply(request: FastifyRequest<{ Params: { id: string }; Body: { enabled: boolean } }>, reply: FastifyReply) {
         const { id } = request.params;
         const { enabled } = request.body;
-        
+
         try {
             const post = await postsService.toggleAutoReply(id, enabled);
             if (!post) {
@@ -128,4 +126,3 @@ export class PostsController {
 }
 
 export const postsController = new PostsController();
-

@@ -1,6 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { subscriptionsService } from '../services/subscriptions';
-import { authenticate, AuthenticatedRequest } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
+import { resolveWorkspace } from '../middleware/workspace';
+import type { WorkspaceRequest } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 import { config } from '../config';
 
@@ -19,12 +21,13 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
     // All routes require authentication
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
+        protectedRoutes.addHook('preHandler', resolveWorkspace);
 
         /**
          * GET /subscription - Get current user's subscription
          */
         protectedRoutes.get('/', { schema: { tags: ['Subscriptions'], summary: 'Get current user subscription', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as AuthenticatedRequest).user;
+            const user = (request as WorkspaceRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -57,14 +60,14 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/usage - Get current usage summary
          */
         protectedRoutes.get('/usage', { schema: { tags: ['Subscriptions'], summary: 'Get current usage summary', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as AuthenticatedRequest).user;
-            if (!user) {
+            const req = request as WorkspaceRequest;
+            if (!req.user || !req.workspaceId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
-            const { userId } = user;
-            
+            const { userId } = req.user;
+
             try {
-                const usage = await subscriptionsService.getUsageSummary(userId);
+                const usage = await subscriptionsService.getUsageSummary(userId, req.workspaceId);
                 
                 if (!usage) {
                     return reply.status(404).send({
@@ -90,7 +93,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/ai - Check AI reply limits
          */
         protectedRoutes.get('/limits/ai', { schema: { tags: ['Subscriptions'], summary: 'Check AI reply limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as AuthenticatedRequest).user;
+            const user = (request as WorkspaceRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -121,14 +124,14 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/pages - Check page limits
          */
         protectedRoutes.get('/limits/pages', { schema: { tags: ['Subscriptions'], summary: 'Check page limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as AuthenticatedRequest).user;
-            if (!user) {
+            const req = request as WorkspaceRequest;
+            if (!req.user || !req.workspaceId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
-            const { userId } = user;
-            
+            const { userId } = req.user;
+
             try {
-                const result = await subscriptionsService.canAddPage(userId);
+                const result = await subscriptionsService.canAddPage(userId, req.workspaceId);
 
                 return reply.send({
                     success: true,
@@ -147,14 +150,14 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/templates - Check template limits
          */
         protectedRoutes.get('/limits/templates', { schema: { tags: ['Subscriptions'], summary: 'Check template limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as AuthenticatedRequest).user;
-            if (!user) {
+            const req = request as WorkspaceRequest;
+            if (!req.user || !req.workspaceId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
-            const { userId } = user;
-            
+            const { userId } = req.user;
+
             try {
-                const result = await subscriptionsService.canAddTemplate(userId);
+                const result = await subscriptionsService.canAddTemplate(userId, req.workspaceId);
 
                 return reply.send({
                     success: true,
@@ -173,14 +176,14 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * GET /subscription/limits/rules - Check rule limits
          */
         protectedRoutes.get('/limits/rules', { schema: { tags: ['Subscriptions'], summary: 'Check rule limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as AuthenticatedRequest).user;
-            if (!user) {
+            const req = request as WorkspaceRequest;
+            if (!req.user || !req.workspaceId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
-            const { userId } = user;
-            
+            const { userId } = req.user;
+
             try {
-                const result = await subscriptionsService.canAddRule(userId);
+                const result = await subscriptionsService.canAddRule(userId, req.workspaceId);
 
                 return reply.send({
                     success: true,
@@ -202,7 +205,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
             '/change-plan',
             { schema: { tags: ['Subscriptions'], summary: 'Change subscription plan', security: auth } },
             async (request, reply) => {
-                const user = (request as AuthenticatedRequest).user;
+                const user = (request as WorkspaceRequest).user;
                 if (!user) {
                     return reply.status(401).send({ error: 'Unauthorized' });
                 }
@@ -248,7 +251,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
             '/cancel',
             { schema: { tags: ['Subscriptions'], summary: 'Cancel subscription', security: auth } },
             async (request, reply) => {
-                const user = (request as AuthenticatedRequest).user;
+                const user = (request as WorkspaceRequest).user;
                 if (!user) {
                     return reply.status(401).send({ error: 'Unauthorized' });
                 }
@@ -286,7 +289,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * POST /subscription/pause - Pause subscription
          */
         protectedRoutes.post('/pause', { schema: { tags: ['Subscriptions'], summary: 'Pause subscription', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as AuthenticatedRequest).user;
+            const user = (request as WorkspaceRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
@@ -320,7 +323,7 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
          * POST /subscription/resume - Resume subscription
          */
         protectedRoutes.post('/resume', { schema: { tags: ['Subscriptions'], summary: 'Resume subscription', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const user = (request as AuthenticatedRequest).user;
+            const user = (request as WorkspaceRequest).user;
             if (!user) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }

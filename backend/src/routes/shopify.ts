@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth';
+import { resolveWorkspace } from '../middleware/workspace';
 import * as shopifyController from '../controllers/shopify';
 
 export default async function shopifyRoutes(fastify: FastifyInstance) {
@@ -19,10 +20,10 @@ export default async function shopifyRoutes(fastify: FastifyInstance) {
 
     // --- Protected routes (Jawab24 JWT required) ---
 
-    fastify.get('/store', { preHandler: [authenticate] }, shopifyController.getStore);
+    fastify.get('/store', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.getStore);
     fastify.post('/store/connect', { preHandler: [authenticate] }, shopifyController.connectStore);
-    fastify.delete('/store', { preHandler: [authenticate] }, shopifyController.disconnectStoreHandler);
-    fastify.post('/store/sync', { preHandler: [authenticate] }, shopifyController.syncStore);
-    fastify.get('/store/products', { preHandler: [authenticate] }, shopifyController.getStoreProducts);
-    fastify.patch('/store/link-page', { preHandler: [authenticate] }, shopifyController.linkPage);
+    fastify.delete('/store', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.disconnectStoreHandler);
+    fastify.post('/store/sync', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.syncStore);
+    fastify.get('/store/products', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.getStoreProducts);
+    fastify.patch('/store/link-page', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.linkPage);
 }

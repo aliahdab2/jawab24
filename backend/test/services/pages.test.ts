@@ -39,6 +39,7 @@ describe('PagesService', () => {
 
     describe('syncFromFacebook', () => {
         it('should sync pages efficiently (parallel API calls)', async () => {
+            const workspaceId = 'workspace-123';
             const userId = 'user-123';
             const accessToken = 'token-123';
 
@@ -72,7 +73,7 @@ describe('PagesService', () => {
                 })
             } as any);
 
-            await pagesService.syncFromFacebook(userId, accessToken);
+            await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
 
             // Verify Facebook API called once
             expect(facebookService.getUserPages).toHaveBeenCalledWith(accessToken);
@@ -85,6 +86,7 @@ describe('PagesService', () => {
         });
 
         it('should update existing pages instead of creating new ones', async () => {
+             const workspaceId = 'workspace-123';
              const userId = 'user-123';
              const accessToken = 'token-123';
  
@@ -115,14 +117,15 @@ describe('PagesService', () => {
                  })
              } as any);
  
-             await pagesService.syncFromFacebook(userId, accessToken);
- 
+             await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+
              // Verify Update called
              expect(db.update).toHaveBeenCalled();
              expect(db.insert).not.toHaveBeenCalled();
         });
 
         it('should save Facebook business info to suggestedKnowledgeBase (not knowledgeBase)', async () => {
+            const workspaceId = 'workspace-123';
             const userId = 'user-123';
             const accessToken = 'token-123';
 
@@ -165,7 +168,7 @@ describe('PagesService', () => {
                 })
             } as any);
 
-            await pagesService.syncFromFacebook(userId, accessToken);
+            await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
 
             // Verify suggestedKnowledgeBase is set (not knowledgeBase)
             expect(insertedValues).toBeDefined();
@@ -176,12 +179,13 @@ describe('PagesService', () => {
             expect(insertedValues.suggestedKnowledgeBase).toContain('0501234567');
             // Should contain address
             expect(insertedValues.suggestedKnowledgeBase).toContain('Riyadh');
-            
+
             // knowledgeBase should be auto-applied from Facebook data
             expect(insertedValues.knowledgeBase).toBe(insertedValues.suggestedKnowledgeBase);
         });
 
         it('should not set suggestedKnowledgeBase when Facebook has no business info', async () => {
+            const workspaceId = 'workspace-123';
             const userId = 'user-123';
             const accessToken = 'token-123';
 
@@ -220,7 +224,7 @@ describe('PagesService', () => {
                 })
             } as any);
 
-            await pagesService.syncFromFacebook(userId, accessToken);
+            await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
 
             // suggestedKnowledgeBase should be null when no business info available
             expect(insertedValues).toBeDefined();

@@ -7,11 +7,11 @@ export class TemplatesService {
     /**
      * Create a new template
      */
-    async createTemplate(userId: string, data: CreateTemplateDTO) {
+    async createTemplate(workspaceId: string, data: CreateTemplateDTO) {
         const [newTemplate] = await db
             .insert(templates)
             .values({
-                userId,
+                workspaceId,
                 name: data.name,
                 message: data.message,
 
@@ -25,22 +25,22 @@ export class TemplatesService {
     /**
      * Get all templates for a user
      */
-    async getTemplates(userId: string) {
+    async getTemplates(workspaceId: string) {
         return db
             .select()
             .from(templates)
-            .where(eq(templates.userId, userId))
+            .where(eq(templates.workspaceId, workspaceId))
             .orderBy(desc(templates.createdAt));
     }
 
     /**
      * Get a single template by ID
      */
-    async getTemplate(userId: string, templateId: string) {
+    async getTemplate(workspaceId: string, templateId: string) {
         const result = await db
             .select()
             .from(templates)
-            .where(and(eq(templates.id, templateId), eq(templates.userId, userId)));
+            .where(and(eq(templates.id, templateId), eq(templates.workspaceId, workspaceId)));
         
         return result[0] || null;
     }
@@ -48,14 +48,14 @@ export class TemplatesService {
     /**
      * Update a template
      */
-    async updateTemplate(userId: string, templateId: string, data: UpdateTemplateDTO) {
+    async updateTemplate(workspaceId: string, templateId: string, data: UpdateTemplateDTO) {
         const [updatedTemplate] = await db
             .update(templates)
             .set({
                 ...data,
                 updatedAt: new Date(),
             })
-            .where(and(eq(templates.id, templateId), eq(templates.userId, userId)))
+            .where(and(eq(templates.id, templateId), eq(templates.workspaceId, workspaceId)))
             .returning();
         
         return updatedTemplate;
@@ -64,10 +64,10 @@ export class TemplatesService {
     /**
      * Delete a template
      */
-    async deleteTemplate(userId: string, templateId: string) {
+    async deleteTemplate(workspaceId: string, templateId: string) {
         await db
             .delete(templates)
-            .where(and(eq(templates.id, templateId), eq(templates.userId, userId)));
+            .where(and(eq(templates.id, templateId), eq(templates.workspaceId, workspaceId)));
     }
 }
 

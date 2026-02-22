@@ -1,11 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { pagesController } from '../controllers/pages';
 import { authenticate } from '../middleware/auth';
+import { resolveWorkspace } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 
 export default async function pagesRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
+        protectedRoutes.addHook('preHandler', resolveWorkspace);
 
         // Pages CRUD
         protectedRoutes.post('/pages', {

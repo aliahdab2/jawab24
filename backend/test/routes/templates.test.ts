@@ -17,6 +17,12 @@ vi.mock('../../src/middleware/auth', () => ({
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
     }
 }));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'test_workspace_id';
+        req.workspaceRole = 'owner';
+    }
+}));
 
 describe('Templates Routes', () => {
     let app: any;
@@ -52,7 +58,7 @@ describe('Templates Routes', () => {
 
         expect(response.statusCode).toBe(201);
         expect(JSON.parse(response.payload)).toEqual(JSON.parse(JSON.stringify(createdTemplate)));
-        expect(templatesService.createTemplate).toHaveBeenCalledWith('test_user_id', newTemplateData);
+        expect(templatesService.createTemplate).toHaveBeenCalledWith('test_workspace_id', newTemplateData);
     });
 
     it('should get all templates for user', async () => {
@@ -66,7 +72,7 @@ describe('Templates Routes', () => {
 
         expect(response.statusCode).toBe(200);
         expect(JSON.parse(response.payload)).toEqual(templatesList);
-        expect(templatesService.getTemplates).toHaveBeenCalledWith('test_user_id');
+        expect(templatesService.getTemplates).toHaveBeenCalledWith('test_workspace_id');
     });
 
     it('should get a single template', async () => {
@@ -102,7 +108,7 @@ describe('Templates Routes', () => {
         });
 
         expect(response.statusCode).toBe(204);
-        expect(templatesService.deleteTemplate).toHaveBeenCalledWith('test_user_id', 'template_1');
+        expect(templatesService.deleteTemplate).toHaveBeenCalledWith('test_workspace_id', 'template_1');
     });
 });
 

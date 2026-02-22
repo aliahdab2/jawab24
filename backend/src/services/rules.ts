@@ -49,11 +49,11 @@ export class RulesService {
     /**
      * Create a new rule
      */
-    async createRule(userId: string, data: CreateRuleDTO) {
+    async createRule(workspaceId: string, data: CreateRuleDTO) {
         const [newRule] = await db
             .insert(rules)
             .values({
-                userId,
+                workspaceId,
                 name: data.name,
                 keywords: data.keywords,
                 templateId: data.templateId,
@@ -68,7 +68,7 @@ export class RulesService {
     /**
      * Get all rules for a user with pagination
      */
-    async getRules(userId: string, options: PaginationOptions = {}): Promise<PaginatedResult<typeof rules.$inferSelect & { templateName: string | null }>> {
+    async getRules(workspaceId: string, options: PaginationOptions = {}): Promise<PaginatedResult<typeof rules.$inferSelect & { templateName: string | null }>> {
         const page = options.page || 1;
         const limit = options.limit || 20;
         const offset = (page - 1) * limit;
@@ -77,7 +77,7 @@ export class RulesService {
         const [countResult] = await db
             .select({ count: sql<number>`count(*)::int` })
             .from(rules)
-            .where(eq(rules.userId, userId));
+            .where(eq(rules.workspaceId, workspaceId));
         const total = countResult?.count || 0;
 
         // Get paginated results
@@ -97,7 +97,7 @@ export class RulesService {
             })
             .from(rules)
             .leftJoin(templates, eq(rules.templateId, templates.id))
-            .where(eq(rules.userId, userId))
+            .where(eq(rules.workspaceId, workspaceId))
             .orderBy(asc(rules.priority), asc(rules.createdAt))
             .limit(limit)
             .offset(offset);
@@ -116,11 +116,11 @@ export class RulesService {
     /**
      * Get a single rule by ID
      */
-    async getRule(userId: string, ruleId: string) {
+    async getRule(workspaceId: string, ruleId: string) {
         const result = await db
             .select()
             .from(rules)
-            .where(and(eq(rules.id, ruleId), eq(rules.userId, userId)));
+            .where(and(eq(rules.id, ruleId), eq(rules.workspaceId, workspaceId)));
         
         return result[0] || null;
     }
@@ -128,14 +128,14 @@ export class RulesService {
     /**
      * Update a rule
      */
-    async updateRule(userId: string, ruleId: string, data: UpdateRuleDTO) {
+    async updateRule(workspaceId: string, ruleId: string, data: UpdateRuleDTO) {
         const [updatedRule] = await db
             .update(rules)
             .set({
                 ...data,
                 updatedAt: new Date(),
             })
-            .where(and(eq(rules.id, ruleId), eq(rules.userId, userId)))
+            .where(and(eq(rules.id, ruleId), eq(rules.workspaceId, workspaceId)))
             .returning();
         
         return updatedRule;
@@ -144,29 +144,29 @@ export class RulesService {
     /**
      * Delete a rule
      */
-    async deleteRule(userId: string, ruleId: string) {
+    async deleteRule(workspaceId: string, ruleId: string) {
         await db
             .delete(rules)
-            .where(and(eq(rules.id, ruleId), eq(rules.userId, userId)));
+            .where(and(eq(rules.id, ruleId), eq(rules.workspaceId, workspaceId)));
     }
 
     /**
      * Find matching rule for a comment
      */
-    async findMatchingRule(userId: string, commentText: string) {
-        // Get active rules for the user, ordered by priority.
+    async findMatchingRule(workspaceId: string, commentText: string) {
+        // Get active rules for the workspace, ordered by priority.
         // Capped at 100 to prevent unbounded fetches if limits aren't enforced at the app layer.
-        const userRules = await db
+        const workspaceRules = await db
             .select()
             .from(rules)
-            .where(and(eq(rules.userId, userId), eq(rules.active, true)))
+            .where(and(eq(rules.workspaceId, workspaceId), eq(rules.active, true)))
             .orderBy(asc(rules.priority))
             .limit(100);
 
         // Normalize once outside the loop
         const normalizedComment = normalizeArabic(commentText.toLowerCase());
 
-        for (const rule of userRules) {
+        for (const rule of workspaceRules) {
             if (rule.keywords && rule.keywords.length > 0) {
                 const match = rule.keywords.some(keyword =>
                     matchesKeyword(normalizedComment, normalizeArabic(keyword.toLowerCase()))

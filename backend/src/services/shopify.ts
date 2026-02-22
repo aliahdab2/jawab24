@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls } from '../db/schema';
+import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers } from '../db/schema';
 import { config } from '../config';
 import { encrypt, decrypt } from './ecommerceCrypto';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
@@ -105,6 +105,14 @@ export async function getStoreByDomain(storeDomain: string) {
     return result[0] || null;
 }
 
+export async function getStoreByWorkspace(workspaceId: string) {
+    const result = await db.select().from(ecommerceStores).where(
+        and(eq(ecommerceStores.workspaceId, workspaceId), eq(ecommerceStores.isActive, true), eq(ecommerceStores.platform, 'shopify'))
+    ).limit(1);
+    return result[0] || null;
+}
+
+/** @deprecated Use getStoreByWorkspace — kept for OAuth flows that lack workspace context */
 export async function getStoreByUserId(userId: string) {
     const result = await db.select().from(ecommerceStores).where(
         and(eq(ecommerceStores.userId, userId), eq(ecommerceStores.isActive, true), eq(ecommerceStores.platform, 'shopify'))
@@ -119,11 +127,12 @@ export async function getStoreById(storeId: string) {
 
 export async function createStore(userId: string, storeDomain: string, accessToken: string, shopInfo?: {
     shopName?: string; shopEmail?: string; shopCurrency?: string; shopTimezone?: string;
-}) {
+}, workspaceId?: string | null) {
     const { ciphertext, iv } = encrypt(accessToken);
 
     const result = await db.insert(ecommerceStores).values({
         userId,
+        workspaceId: workspaceId ?? undefined,
         platform: 'shopify',
         storeDomain,
         accessToken: ciphertext,
@@ -137,6 +146,7 @@ export async function createStore(userId: string, storeDomain: string, accessTok
         target: [ecommerceStores.platform, ecommerceStores.storeDomain],
         set: {
             userId,
+            workspaceId: workspaceId ?? undefined,
             accessToken: ciphertext,
             accessTokenIv: iv,
             storeName: shopInfo?.shopName,
@@ -175,15 +185,15 @@ export async function disconnectStore(storeId: string) {
 /**
  * Link a Shopify store to a Facebook/Instagram page (with ownership validation)
  */
-export async function linkStoreToPage(storeId: string, pageId: string, userId: string) {
+export async function linkStoreToPage(storeId: string, pageId: string, workspaceId: string) {
     await db.transaction(async (tx) => {
-        // Validate page belongs to user (inside transaction for atomicity)
+        // Validate page belongs to workspace (inside transaction for atomicity)
         const page = await tx.select().from(pages)
-            .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .limit(1);
 
         if (!page[0]) {
-            throw new Error('Page not found or does not belong to user');
+            throw new Error('Page not found or does not belong to workspace');
         }
 
         await tx.update(pages).set({ ecommerceStoreId: storeId, updatedAt: new Date() })
@@ -730,8 +740,13 @@ export async function claimPendingInstall(pendingId: string, userId: string) {
     // Decrypt access token
     const accessToken = decrypt(pending.accessToken, pending.accessTokenIv);
 
+    // Resolve user's workspace for store scoping
+    const [membership] = await db.select({ workspaceId: workspaceMembers.workspaceId })
+        .from(workspaceMembers).where(eq(workspaceMembers.userId, userId)).limit(1);
+    const workspaceId = membership?.workspaceId || null;
+
     // Create/update store
-    const store = await createStore(userId, pending.storeDomain, accessToken);
+    const store = await createStore(userId, pending.storeDomain, accessToken, undefined, workspaceId);
 
     // Mark pending as claimed
     await db.update(pendingEcommerceInstalls).set({

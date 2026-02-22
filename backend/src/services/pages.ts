@@ -162,10 +162,11 @@ export class PagesService {
     /**
      * Create a new page
      */
-    async createPage(userId: string, data: CreatePageDTO) {
+    async createPage(workspaceId: string, userId: string, data: CreatePageDTO) {
         const [newPage] = await db
             .insert(pages)
             .values({
+                workspaceId,
                 userId,
                 facebookPageId: data.facebookPageId,
                 name: data.name,
@@ -180,15 +181,15 @@ export class PagesService {
     /**
      * Get all pages for a user, with computed comment stats
      */
-    async getPages(userId: string) {
-        const userPages = await db
+    async getPages(workspaceId: string) {
+        const workspacePages = await db
             .select()
             .from(pages)
-            .where(eq(pages.userId, userId))
+            .where(eq(pages.workspaceId, workspaceId))
             .orderBy(desc(pages.createdAt));
 
         const emptyStats = { commentsCount: 0, repliesCount: 0, replyRate: 0, lastActivity: null as number | null };
-        if (userPages.length === 0) return userPages.map(p => ({ ...p, ...emptyStats }));
+        if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, ...emptyStats }));
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
         const statsMap = new Map<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>();
@@ -207,7 +208,7 @@ export class PagesService {
                         (SELECT MAX(ic.replied_at) FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
                     )) AS last_activity
                 FROM pages p
-                WHERE p.user_id = ${userId}`
+                WHERE p.workspace_id = ${workspaceId}`
             );
 
             const rows = statsRows as unknown as Array<Record<string, unknown>>;
@@ -224,7 +225,7 @@ export class PagesService {
             captureError(err, 'Pages stats query failed', { level: 'warning', tags: { service: 'pages' } });
         }
 
-        return userPages.map(page => {
+        return workspacePages.map(page => {
             const stats = statsMap.get(page.id) || { commentsCount: 0, repliesCount: 0, lastActivity: null };
             return {
                 ...page,
@@ -239,11 +240,11 @@ export class PagesService {
     /**
      * Get a single page by ID
      */
-    async getPage(userId: string, pageId: string) {
+    async getPage(workspaceId: string, pageId: string) {
         const result = await db
             .select()
             .from(pages)
-            .where(and(eq(pages.id, pageId), eq(pages.userId, userId)));
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
 
         return result[0] || null;
     }
@@ -265,7 +266,7 @@ export class PagesService {
      * When knowledgeBase changes, bumps kbVersion and sets kbUpdatedAt.
      * kbActiveVersion is NOT touched here — it's set after ingestion completes.
      */
-    async updatePage(userId: string, pageId: string, data: UpdatePageDTO) {
+    async updatePage(workspaceId: string, pageId: string, data: UpdatePageDTO) {
         const setData: Record<string, unknown> = {
             ...data,
             updatedAt: new Date(),
@@ -285,7 +286,7 @@ export class PagesService {
         const [updatedPage] = await db
             .update(pages)
             .set(setData)
-            .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
         return updatedPage;
@@ -294,23 +295,23 @@ export class PagesService {
     /**
      * Delete a page
      */
-    async deletePage(userId: string, pageId: string) {
+    async deletePage(workspaceId: string, pageId: string) {
         await db
             .delete(pages)
-            .where(and(eq(pages.id, pageId), eq(pages.userId, userId)));
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
     }
 
     /**
      * Toggle auto-reply for a page
      */
-    async toggleAutoReply(userId: string, pageId: string, enabled: boolean) {
+    async toggleAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
         const [updatedPage] = await db
             .update(pages)
             .set({
                 autoReplyEnabled: enabled,
                 updatedAt: new Date(),
             })
-            .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
         return updatedPage;
@@ -318,12 +319,13 @@ export class PagesService {
 
     /**
      * Sync pages from Facebook (and linked Instagram accounts)
-     * @param userId - The user ID to sync pages for
+     * @param workspaceId - The workspace ID to sync pages for
+     * @param userId - The user ID (billing owner)
      * @param userAccessToken - Facebook user access token
      * @param logger - Optional logger for tracking sync progress
      */
-    async syncFromFacebook(userId: string, userAccessToken: string, logger: Logger = noopLogger) {
-        logger.info(`[Pages] Starting sync for user ${userId}`);
+    async syncFromFacebook(workspaceId: string, userId: string, userAccessToken: string, logger: Logger = noopLogger) {
+        logger.info(`[Pages] Starting sync for workspace ${workspaceId}`);
 
         const fbPages = await facebookService.getUserPages(userAccessToken);
         const syncedPages = [];
@@ -335,8 +337,8 @@ export class PagesService {
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
 
-        // 1. Fetch all existing pages for this user upfront (optimizes DB reads)
-        const existingPages = await this.getPages(userId);
+        // 1. Fetch all existing pages for this workspace upfront (optimizes DB reads)
+        const existingPages = await this.getPages(workspaceId);
         const existingPagesMap = new Map(existingPages.map(p => [p.facebookPageId, p]));
 
         // 2. Process Facebook pages in parallel (optimizes external API calls)
@@ -374,7 +376,7 @@ export class PagesService {
         const results = await Promise.all(processPromises);
 
         // 3. Determine how many more pages can be auto-enabled
-        const enableCheck = await subscriptionsService.canEnablePage(userId);
+        const enableCheck = await subscriptionsService.canEnablePage(userId, workspaceId);
         let remainingSlots: number | null = null; // null = unlimited
         if (enableCheck.allowed && enableCheck.remaining !== undefined) {
             remainingSlots = enableCheck.remaining;
@@ -430,6 +432,7 @@ export class PagesService {
                 const [created] = await db
                     .insert(pages)
                     .values({
+                        workspaceId,
                         userId,
                         facebookPageId: fbPage.id,
                         name: fbPage.name,
@@ -466,14 +469,14 @@ export class PagesService {
     /**
      * Toggle Instagram auto-reply for a page
      */
-    async toggleInstagramAutoReply(userId: string, pageId: string, enabled: boolean) {
+    async toggleInstagramAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
         const [updatedPage] = await db
             .update(pages)
             .set({
                 instagramAutoReplyEnabled: enabled,
                 updatedAt: new Date(),
             })
-            .where(and(eq(pages.id, pageId), eq(pages.userId, userId)))
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
         return updatedPage;

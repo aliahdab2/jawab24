@@ -262,7 +262,7 @@ export const subscriptionsService = {
     /**
      * Get full usage summary with limits and subscription info
      */
-    async getUsageSummary(userId: string): Promise<UsageSummary | null> {
+    async getUsageSummary(userId: string, workspaceId: string): Promise<UsageSummary | null> {
         const subscription = await this.getUserSubscription(userId);
         if (!subscription) return null;
 
@@ -270,17 +270,17 @@ export const subscriptionsService = {
         const plan = subscription.plan;
 
         // Count enabled page slots (FB + IG counted separately)
-        const pagesUsed = await this.countEnabledPageSlots(userId);
+        const pagesUsed = await this.countEnabledPageSlots(workspaceId);
 
         const [templatesCount] = await db
             .select({ count: templates.id })
             .from(templates)
-            .where(eq(templates.userId, userId));
+            .where(eq(templates.workspaceId, workspaceId));
 
         const [rulesCount] = await db
             .select({ count: rules.id })
             .from(rules)
-            .where(eq(rules.userId, userId));
+            .where(eq(rules.workspaceId, workspaceId));
 
         // Calculate trial days remaining
         let trialDaysRemaining: number | undefined;
@@ -432,7 +432,7 @@ export const subscriptionsService = {
     /**
      * Check if user can add more pages
      */
-    async canAddPage(userId: string): Promise<LimitCheckResult> {
+    async canAddPage(userId: string, workspaceId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
 
         if (!subscription) {
@@ -450,11 +450,11 @@ export const subscriptionsService = {
             return { allowed: true };
         }
 
-        // Count current pages
+        // Count current pages in workspace
         const [result] = await db
             .select({ count: pages.id })
             .from(pages)
-            .where(eq(pages.userId, userId));
+            .where(eq(pages.workspaceId, workspaceId));
 
         const used = Number(result?.count) || 0;
         const limit = plan.maxPages;
@@ -481,12 +481,12 @@ export const subscriptionsService = {
      * Count enabled page slots for a user.
      * 1 physical page = 1 slot (regardless of whether FB, IG, or both are enabled).
      */
-    async countEnabledPageSlots(userId: string): Promise<number> {
+    async countEnabledPageSlots(workspaceId: string): Promise<number> {
         const [result] = await db
             .select({ count: sql<number>`count(*)` })
             .from(pages)
             .where(and(
-                eq(pages.userId, userId),
+                eq(pages.workspaceId, workspaceId),
                 or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true))
             ));
 
@@ -498,7 +498,7 @@ export const subscriptionsService = {
      * 1 page = 1 slot (FB + IG on the same page share the slot).
      * Pass pageId to allow enabling the other platform on an already-active page.
      */
-    async canEnablePage(userId: string, pageId?: string): Promise<LimitCheckResult> {
+    async canEnablePage(userId: string, workspaceId: string, pageId?: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
 
         if (!subscription) {
@@ -516,7 +516,7 @@ export const subscriptionsService = {
             return { allowed: true };
         }
 
-        const used = await this.countEnabledPageSlots(userId);
+        const used = await this.countEnabledPageSlots(workspaceId);
         const limit = plan.maxPages;
 
         if (used >= limit) {
@@ -525,7 +525,7 @@ export const subscriptionsService = {
                 const [existing] = await db
                     .select({ autoReplyEnabled: pages.autoReplyEnabled, instagramAutoReplyEnabled: pages.instagramAutoReplyEnabled })
                     .from(pages)
-                    .where(and(eq(pages.id, pageId), eq(pages.userId, userId)));
+                    .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
                 if (existing?.autoReplyEnabled || existing?.instagramAutoReplyEnabled) {
                     return { allowed: true, limit, used, remaining: 0 };
                 }
@@ -551,7 +551,7 @@ export const subscriptionsService = {
     /**
      * Check if user can add more templates
      */
-    async canAddTemplate(userId: string): Promise<LimitCheckResult> {
+    async canAddTemplate(userId: string, workspaceId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
 
         if (!subscription) {
@@ -569,11 +569,11 @@ export const subscriptionsService = {
             return { allowed: true };
         }
 
-        // Count current templates
+        // Count current templates in workspace
         const [result] = await db
             .select({ count: templates.id })
             .from(templates)
-            .where(eq(templates.userId, userId));
+            .where(eq(templates.workspaceId, workspaceId));
 
         const used = Number(result?.count) || 0;
         const limit = plan.maxTemplates;
@@ -599,7 +599,7 @@ export const subscriptionsService = {
     /**
      * Check if user can add more rules
      */
-    async canAddRule(userId: string): Promise<LimitCheckResult> {
+    async canAddRule(userId: string, workspaceId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
 
         if (!subscription) {
@@ -617,11 +617,11 @@ export const subscriptionsService = {
             return { allowed: true };
         }
 
-        // Count current rules
+        // Count current rules in workspace
         const [result] = await db
             .select({ count: rules.id })
             .from(rules)
-            .where(eq(rules.userId, userId));
+            .where(eq(rules.workspaceId, workspaceId));
 
         const used = Number(result?.count) || 0;
         const limit = plan.maxRules;
