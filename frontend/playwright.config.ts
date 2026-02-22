@@ -31,5 +31,10 @@ export default defineConfig({
     url: 'http://localhost:3001/en/login',
     timeout: 120 * 1000,
     reuseExistingServer: !process.env.CI,
+    // Force getStaticProps to use FALLBACK_PLANS by pointing to a non-existent server.
+    // Playwright route mocking only intercepts browser requests, not server-side fetches.
+    env: {
+      NEXT_PUBLIC_API_URL: 'http://localhost:4999/api',
+    },
   },
 });
