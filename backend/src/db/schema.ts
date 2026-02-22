@@ -17,7 +17,65 @@ export const users = pgTable('users', {
     updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// 1b. Refresh Tokens Table (Level 2 Security)
+// ============================================
+// WORKSPACE / TEAM TABLES
+// ============================================
+
+// 1a. Workspaces Table
+export const workspaces = pgTable('workspaces', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 100 }).unique(),
+    logoUrl: text('logo_url'),
+    // Business settings stored as JSONB (industry standard — no separate settings table)
+    settings: jsonb('settings').$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        ownerIdIdx: index('idx_workspaces_owner_id').on(table.ownerId),
+    };
+});
+
+// 1b. Workspace Members Table
+export const workspaceMembers = pgTable('workspace_members', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    role: varchar('role', { length: 20 }).notNull().default('member'), // 'owner' | 'admin' | 'member'
+    joinedAt: timestamp('joined_at').defaultNow(),
+    invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+}, (table) => {
+    return {
+        workspaceUserUnique: uniqueIndex('idx_workspace_members_ws_user').on(table.workspaceId, table.userId),
+        workspaceIdIdx: index('idx_workspace_members_workspace_id').on(table.workspaceId),
+        userIdIdx: index('idx_workspace_members_user_id').on(table.userId),
+    };
+});
+
+// 1c. Workspace Invites Table
+export const workspaceInvites = pgTable('workspace_invites', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
+    email: varchar('email', { length: 255 }).notNull(),
+    tokenHash: varchar('token_hash', { length: 255 }).notNull().unique(),
+    role: varchar('role', { length: 20 }).default('member'),
+    status: varchar('status', { length: 20 }).default('pending'), // 'pending' | 'accepted' | 'expired' | 'revoked'
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    expiresAt: timestamp('expires_at').notNull(),
+    usedAt: timestamp('used_at'),
+    usedBy: uuid('used_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        tokenHashIdx: index('idx_workspace_invites_token_hash').on(table.tokenHash),
+        workspaceIdIdx: index('idx_workspace_invites_workspace_id').on(table.workspaceId),
+        workspaceEmailUnique: uniqueIndex('idx_workspace_invites_ws_email').on(table.workspaceId, table.email),
+    };
+});
+
+// 1d. Refresh Tokens Table (Level 2 Security)
 export const refreshTokens = pgTable('refresh_tokens', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
@@ -38,6 +96,7 @@ export const refreshTokens = pgTable('refresh_tokens', {
 export const pages = pgTable('pages', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     facebookPageId: varchar('facebook_page_id', { length: 255 }).unique().notNull(),
     name: varchar('name', { length: 255 }),
     accessToken: text('access_token').notNull(),
@@ -65,6 +124,7 @@ export const pages = pgTable('pages', {
 }, (table) => {
     return {
         userIdIdx: index('idx_pages_user_id').on(table.userId),
+        workspaceIdIdx: index('idx_pages_workspace_id').on(table.workspaceId),
         facebookPageIdIdx: index('idx_pages_facebook_page_id').on(table.facebookPageId),
         instagramAccountIdIdx: index('idx_pages_instagram_account_id').on(table.instagramAccountId),
         ecommerceStoreIdIdx: index('idx_pages_ecommerce_store_id').on(table.ecommerceStoreId),
@@ -112,6 +172,7 @@ export const instagramMedia = pgTable('instagram_media', {
 export const templates = pgTable('templates', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }).notNull(),
     message: text('message').notNull().default(''),
     active: boolean('active').default(true),
@@ -120,9 +181,7 @@ export const templates = pgTable('templates', {
 }, (table) => {
     return {
         userIdIdx: index('idx_templates_user_id').on(table.userId),
-        // GIN indexes are not fully supported in drizzle-kit push yet without raw SQL, 
-        // but we define them here for completeness if we use migration generation.
-        // For now, simple indexes or relying on raw SQL migrations might be needed for GIN.
+        workspaceIdIdx: index('idx_templates_workspace_id').on(table.workspaceId),
     };
 });
 
@@ -198,6 +257,7 @@ export const instagramComments = pgTable('instagram_comments', {
 export const rules = pgTable('rules', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 255 }).notNull(),
     keywords: text('keywords').array(),
     templateId: uuid('template_id').references(() => templates.id, { onDelete: 'set null' }),
@@ -208,6 +268,7 @@ export const rules = pgTable('rules', {
 }, (table) => {
     return {
         userIdIdx: index('idx_rules_user_id').on(table.userId),
+        workspaceIdIdx: index('idx_rules_workspace_id').on(table.workspaceId),
     };
 });
 
@@ -326,6 +387,7 @@ export const aiCache = pgTable('ai_cache', {
 export const logs = pgTable('logs', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }),
     commentId: uuid('comment_id').references(() => comments.id, { onDelete: 'cascade' }),
     action: varchar('action', { length: 100 }),
@@ -551,6 +613,7 @@ export const pendingEcommerceInstalls = pgTable('pending_ecommerce_installs', {
 export const ecommerceStores = pgTable('ecommerce_stores', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     platform: varchar('platform', { length: 20 }).notNull(), // 'shopify' | 'salla' | 'zid'
     storeDomain: varchar('store_domain', { length: 255 }).notNull(), // e.g. "my-store.myshopify.com"
     accessToken: text('access_token').notNull(),             // AES-256-GCM encrypted
@@ -586,6 +649,7 @@ export const ecommerceStores = pgTable('ecommerce_stores', {
         platformCheck: check('ecommerce_stores_platform_check', sql`${table.platform} in ('shopify', 'salla', 'zid')`),
         platformDomainUnique: uniqueIndex('idx_ecommerce_stores_platform_domain').on(table.platform, table.storeDomain),
         userIdIdx: index('idx_ecommerce_stores_user_id').on(table.userId),
+        workspaceIdIdx: index('idx_ecommerce_stores_workspace_id').on(table.workspaceId),
         isActiveIdx: index('idx_ecommerce_stores_is_active').on(table.isActive),
         tokenExpiresAtIdx: index('idx_ecommerce_stores_token_expires_at').on(table.tokenExpiresAt),
     };
@@ -697,6 +761,7 @@ export const kbGaps = pgTable('kb_gaps', {
 export const aiUsageLog = pgTable('ai_usage_log', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),
     model: varchar('model', { length: 100 }).notNull(),     // e.g. 'gpt-4o-mini'
     tokensIn: integer('tokens_in').notNull().default(0),

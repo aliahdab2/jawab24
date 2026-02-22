@@ -239,6 +239,13 @@
       "when": 1771708423428,
       "tag": "0033_yielding_captain_flint",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1771717549315,
+      "tag": "0034_slim_kate_bishop",
+      "breakpoints": true
     }
   ]
 }

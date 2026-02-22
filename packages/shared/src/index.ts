@@ -359,3 +359,67 @@ export interface EcommerceSyncJobData {
 
 // Redis queue key — value intentionally kept as 'shopify-sync-queue' for backward compatibility
 export const ECOMMERCE_SYNC_QUEUE_NAME = 'shopify-sync-queue';
+
+// --- Workspace / Team Types ---
+export type WorkspaceRole = 'owner' | 'admin' | 'member';
+
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  role: WorkspaceRole;
+}
+
+export interface Workspace {
+  id: string;
+  ownerId: string;
+  name: string;
+  slug: string | null;
+  logoUrl: string | null;
+  settings: WorkspaceSettings;
+  createdAt: string | Date | null;
+  updatedAt: string | Date | null;
+}
+
+export interface WorkspaceMember {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceRole;
+  joinedAt: string | Date | null;
+  invitedBy: string | null;
+}
+
+export interface WorkspaceInvite {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: WorkspaceRole;
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  expiresAt: string | Date;
+  usedAt: string | Date | null;
+  createdAt: string | Date | null;
+}
+
+/** Shape of the JSONB `settings` column on the workspaces table */
+export interface WorkspaceSettings {
+  defaultReplyLanguage: string;
+  supportedLanguages: string[] | null;
+  autoDetectLanguage: boolean;
+  aiEnabled: boolean;
+  aiModel: string;
+  commentReplyMode: string;
+  dualReplyNudge: string | null;
+  commentsAutoReply: boolean;
+  messagesAutoReply: boolean;
+  businessHoursOnly: boolean;
+  businessHoursStart: string;
+  businessHoursEnd: string;
+  timezone: string;
+  greetingMessageMulti: Record<string, string>;
+  awayMessageMulti: Record<string, string>;
+  dualReplyNudgeMulti: Record<string, string>;
+  replyDelay: number;
+  commentEscalationMinutes: number;
+  messageEscalationMinutes: number;
+  handoffPauseDurationMinutes: number;
+}

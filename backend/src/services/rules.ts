@@ -85,6 +85,7 @@ export class RulesService {
             .select({
                 id: rules.id,
                 userId: rules.userId,
+                workspaceId: rules.workspaceId,
                 name: rules.name,
                 keywords: rules.keywords,
                 priority: rules.priority,

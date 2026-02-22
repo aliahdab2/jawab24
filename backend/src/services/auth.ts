@@ -4,7 +4,7 @@ import {
     comments, instagramComments, messages, conversationPauses,
     templates, rules, settings, logs, subscriptions, usage,
     usageLogs, deviceTokens, notifications, ecommerceStores,
-    pendingEcommerceInstalls,
+    pendingEcommerceInstalls, workspaces, workspaceMembers,
 } from '../db/schema';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { config } from '../config';
@@ -68,6 +68,9 @@ export class AuthService {
             // initial subscription creation failed silently during signup)
             await this.ensureSubscription(user.id);
 
+            // Ensure returning users have a workspace (for users created before workspace support)
+            await this.ensureWorkspace(user.id, name || user.name || 'My Workspace');
+
             return {
                 ...user,
                 name,
@@ -97,6 +100,9 @@ export class AuthService {
 
         // Create subscription for new user (with free trial)
         await this.createSubscriptionForNewUser(newUser.id);
+
+        // Create default workspace for new user
+        await this.createDefaultWorkspace(newUser.id, name || 'My Workspace');
 
         // Return plaintext token in memory — the DB row holds the encrypted form
         return {
@@ -133,6 +139,68 @@ export class AuthService {
             }
         } catch (error) {
             captureError(error, 'Failed to ensure subscription', { tags: { context: 'auth', action: 'ensure-subscription' }, extra: { userId } });
+        }
+    }
+
+    /**
+     * Create default workspace for a new user (silent, automatic)
+     */
+    private async createDefaultWorkspace(userId: string, name: string): Promise<void> {
+        try {
+            const [workspace] = await db
+                .insert(workspaces)
+                .values({
+                    ownerId: userId,
+                    name,
+                    settings: {},
+                })
+                .returning();
+
+            await db.insert(workspaceMembers).values({
+                workspaceId: workspace.id,
+                userId,
+                role: 'owner',
+            });
+        } catch (error) {
+            captureError(error, 'Failed to create default workspace for new user', { tags: { context: 'auth', action: 'create-workspace' }, extra: { userId } });
+            // Retry once
+            try {
+                const [workspace] = await db
+                    .insert(workspaces)
+                    .values({
+                        ownerId: userId,
+                        name,
+                        settings: {},
+                    })
+                    .returning();
+
+                await db.insert(workspaceMembers).values({
+                    workspaceId: workspace.id,
+                    userId,
+                    role: 'owner',
+                });
+            } catch (retryError) {
+                captureError(retryError, 'Workspace creation retry also failed', { level: 'fatal', tags: { context: 'auth', action: 'create-workspace-retry' }, extra: { userId } });
+            }
+        }
+    }
+
+    /**
+     * Ensure user has a workspace (for existing users who might not have one)
+     */
+    private async ensureWorkspace(userId: string, name: string): Promise<void> {
+        try {
+            const existing = await db
+                .select({ id: workspaceMembers.id })
+                .from(workspaceMembers)
+                .where(eq(workspaceMembers.userId, userId))
+                .limit(1);
+
+            if (existing.length === 0) {
+                await this.createDefaultWorkspace(userId, name);
+            }
+        } catch (error) {
+            captureError(error, 'Failed to ensure workspace', { tags: { context: 'auth', action: 'ensure-workspace' }, extra: { userId } });
         }
     }
 
@@ -291,6 +359,11 @@ export class AuthService {
 
             // 6. Delete e-commerce data (ecommerceProducts → ecommerceStores, cascade handles products)
             await tx.delete(ecommerceStores).where(eq(ecommerceStores.userId, userId));
+
+            // 6c. Delete workspaces owned by this user (cascade handles members + invites)
+            await tx.delete(workspaces).where(eq(workspaces.ownerId, userId));
+            // Also remove user from any workspaces they're a member of (but don't own)
+            await tx.delete(workspaceMembers).where(eq(workspaceMembers.userId, userId));
 
             // 6b. Nullify pending e-commerce installs claimed by this user
             await tx.update(pendingEcommerceInstalls)
