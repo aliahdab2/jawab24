@@ -19,8 +19,8 @@ vi.mock('../../src/services/pages', () => ({
 
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
 vi.mock('../../src/services/instagram', () => ({ instagramService: {} }));
-vi.mock('../../src/services/settings', () => ({
-    settingsService: { getSettings: vi.fn() },
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: { getSettings: vi.fn() },
 }));
 
 const mockPromoteDelayedJobs = vi.fn().mockResolvedValue(0);

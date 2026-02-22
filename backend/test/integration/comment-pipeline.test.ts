@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommentProcessor } from '../../src/services/reply/commentProcessor';
 import { postsService } from '../../src/services/posts';
 import { commentsService } from '../../src/services/comments';
-import { settingsService } from '../../src/services/settings';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
-import { createTestUser, createTestPage, insertPost, insertComment, insertPause, testDb } from './setup';
+import { createTestUser, createTestWorkspace, createTestPage, insertPost, insertComment, insertPause, testDb } from './setup';
 import { eq } from 'drizzle-orm';
 import { comments } from '../../src/db/schema';
 import type { CommentPlatformAdapter, PlatformPage, ContentEntity, CommentReplyContext } from '../../src/interfaces';
@@ -49,6 +49,7 @@ function createMockAdapter(
             );
         }),
         buildGeneratorContext: vi.fn((p: PlatformPage, _content: ContentEntity, contentId: string): CommentReplyContext => ({
+            workspaceId: p.workspaceId!,
             userId: p.userId!,
             text: '',
             pageName: p.name || undefined,
@@ -112,6 +113,7 @@ vi.mock('../../src/services/notifications', () => ({
 describe('Comment Pipeline — Integration (real Postgres)', () => {
     let processor: CommentProcessor;
     let userId: string;
+    let workspaceId: string;
     let pageId: string;
     let facebookPageId: string;
     let platformPage: PlatformPage;
@@ -132,13 +134,16 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
 
         const user = await createTestUser();
         userId = user.id;
+        const workspace = await createTestWorkspace(userId);
+        workspaceId = workspace.id;
         facebookPageId = `page-fb-comment-${Date.now()}`;
-        const page = await createTestPage(userId, { facebookPageId, autoReplyEnabled: true });
+        const page = await createTestPage(userId, { facebookPageId, autoReplyEnabled: true, workspaceId });
         pageId = page.id;
 
         platformPage = {
             id: page.id,
             userId: page.userId,
+            workspaceId: page.workspaceId,
             name: page.name,
             accessToken: page.accessToken,
             knowledgeBase: null,
@@ -146,8 +151,8 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
             autoReplyEnabled: true,
         };
 
-        // Ensure settings exist with comments auto-reply ON
-        await settingsService.updateSettings(userId, { commentsAutoReply: true });
+        // Ensure workspace settings exist with comments auto-reply ON
+        await workspaceSettingsService.updateSettings(workspaceId, { commentsAutoReply: true });
     });
 
     // =========================================================
@@ -223,7 +228,7 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
     // 3. Comments auto-reply disabled → stores but skips reply
     // =========================================================
     it('stores comment but skips reply when comments auto-reply is disabled', async () => {
-        await settingsService.updateSettings(userId, { commentsAutoReply: false });
+        await workspaceSettingsService.updateSettings(workspaceId, { commentsAutoReply: false });
 
         const adapter = createMockAdapter(platformPage);
 

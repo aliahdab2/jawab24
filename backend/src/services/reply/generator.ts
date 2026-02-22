@@ -37,7 +37,8 @@ export const PRICE_FALLBACK: Record<string, string> = {
 };
 
 export interface GenerateReplyContext {
-    userId: string;
+    workspaceId: string;
+    userId: string;       // kept for billing (subscription checks)
     text: string;
     /** Text to use for template keyword matching (latest message only).
      *  Falls back to `text` if not provided. */
@@ -95,10 +96,10 @@ export class ReplyGenerator {
         context: GenerateReplyContext,
         aiEnabled: boolean
     ): Promise<GenerateReplyResult> {
-        const { userId, text, pageName, knowledgeBase, postId, pageId, accessToken } = context;
+        const { workspaceId, userId, text, pageName, knowledgeBase, postId, pageId, accessToken } = context;
 
         // 1. Try to find a matching rule with template
-        const templateResult = await this.tryTemplateMatch(userId, text);
+        const templateResult = await this.tryTemplateMatch(workspaceId, text);
         if (templateResult) return templateResult;
 
         // 2. If no template, use AI if enabled
@@ -146,12 +147,12 @@ export class ReplyGenerator {
         context: GenerateReplyContext,
         aiEnabled: boolean
     ): Promise<GenerateReplyResult> {
-        const { userId, text, pageName, knowledgeBase, pageId, senderId } = context;
+        const { workspaceId, userId, text, pageName, knowledgeBase, pageId, senderId } = context;
 
         // 1. Try to find a matching rule with template
         // Use templateMatchText (latest message) for keyword matching to avoid
         // stale consolidated messages hijacking the user's current intent.
-        const templateResult = await this.tryTemplateMatch(userId, context.templateMatchText || text);
+        const templateResult = await this.tryTemplateMatch(workspaceId, context.templateMatchText || text);
         if (templateResult) return templateResult;
 
         // 2. If no template, use AI with conversation context
@@ -254,11 +255,11 @@ export class ReplyGenerator {
     /**
      * Try to match a template rule — shared across all platforms
      */
-    private async tryTemplateMatch(userId: string, text: string): Promise<GenerateReplyResult | null> {
-        const matchingRule = await rulesService.findMatchingRule(userId, text);
+    private async tryTemplateMatch(workspaceId: string, text: string): Promise<GenerateReplyResult | null> {
+        const matchingRule = await rulesService.findMatchingRule(workspaceId, text);
 
         if (matchingRule?.templateId) {
-            const template = await templatesService.getTemplate(userId, matchingRule.templateId);
+            const template = await templatesService.getTemplate(workspaceId, matchingRule.templateId);
 
             if (template?.message && template.active !== false) {
                 this.logger.debug('[Generator] Using template', { templateName: template.name });

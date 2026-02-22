@@ -1,4 +1,4 @@
-import { settingsService } from '../settings';
+import { workspaceSettingsService } from '../workspaceSettings';
 import { messagesService } from '../messages';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
@@ -69,10 +69,15 @@ export class CommentProcessor {
                 pipelineMetrics.record(pipeline, 'no_user');
                 return { success: false, commentId: platformCommentId, error: 'Page has no associated user' };
             }
+            if (!page.workspaceId) {
+                pipelineMetrics.record(pipeline, 'no_workspace');
+                return { success: false, commentId: platformCommentId, error: 'Page has no associated workspace' };
+            }
             const userId = page.userId;
+            const workspaceId = page.workspaceId;
 
-            // 2. Check user settings
-            const isCommentsEnabled = await settingsService.isCommentsAutoReplyEnabled(userId);
+            // 2. Check workspace settings
+            const isCommentsEnabled = await workspaceSettingsService.isCommentsAutoReplyEnabled(workspaceId);
 
             // 3. Find or create content entity (post/media)
             const content = await adapter.findOrCreateContent(page.id, contentId);
@@ -101,7 +106,7 @@ export class CommentProcessor {
             }
 
             // 5. Handoff pause check
-            const userSettings = await settingsService.getSettings(userId);
+            const userSettings = await workspaceSettingsService.getSettings(workspaceId);
             if (fromId) {
                 const pauseMinutes = userSettings.handoffPauseDurationMinutes;
                 const isPaused = await messagesService.isPaused(page.id, fromId, pauseMinutes);
@@ -129,7 +134,7 @@ export class CommentProcessor {
             }
 
             // 7. Reply delay
-            const replyDelay = await settingsService.getReplyDelay(userId);
+            const replyDelay = await workspaceSettingsService.getReplyDelay(workspaceId);
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }

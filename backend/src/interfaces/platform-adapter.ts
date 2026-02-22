@@ -9,6 +9,7 @@
 export interface PlatformPage {
     id: string;
     userId: string | null;
+    workspaceId: string | null;
     name: string | null;
     accessToken: string;
     knowledgeBase: string | null;

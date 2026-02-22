@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { commentProcessor } from '../../src/services/reply/commentProcessor';
-import { settingsService } from '../../src/services/settings';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../../src/services/reply/generator';
 import { rateLimiter } from '../../src/services/protection';
@@ -8,7 +8,7 @@ import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { notificationService } from '../../src/services/notifications';
 import type { CommentPlatformAdapter, PlatformPage, ContentEntity, StoredComment, CommentReplyContext, SendCommentResult } from '../../src/interfaces';
 
-vi.mock('../../src/services/settings');
+vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
 vi.mock('../../src/services/reply/generator', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../src/services/reply/generator')>();
@@ -66,9 +66,11 @@ function createMockAdapter(overrides: Partial<CommentPlatformAdapter> = {}): Com
     const mockPage: PlatformPage = {
         id: 'page-uuid',
         userId: 'user-uuid',
+        workspaceId: 'test_workspace_id',
         name: 'Test Page',
         accessToken: 'token-123',
         knowledgeBase: null,
+        kbActiveVersion: null,
         autoReplyEnabled: true,
     };
 
@@ -88,6 +90,7 @@ function createMockAdapter(overrides: Partial<CommentPlatformAdapter> = {}): Com
         sendReply: vi.fn().mockResolvedValue({ success: true }),
         markAsReplied: vi.fn().mockResolvedValue(undefined),
         buildGeneratorContext: vi.fn().mockReturnValue({
+            workspaceId: 'test_workspace_id',
             userId: 'user-uuid',
             text: '',
             pageName: 'Test Page',
@@ -104,9 +107,9 @@ describe('CommentProcessor', () => {
         vi.clearAllMocks();
         await pipelineMetrics.reset();
 
-        vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
-        vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -160,7 +163,7 @@ describe('CommentProcessor', () => {
     it('should return error when auto-reply disabled for page', async () => {
         const adapter = createMockAdapter({
             getPage: vi.fn().mockResolvedValue({
-                id: 'p', userId: 'u', name: 'N', accessToken: 't', knowledgeBase: null,
+                id: 'p', userId: 'u', workspaceId: 'test_workspace_id', name: 'N', accessToken: 't', knowledgeBase: null,
                 autoReplyEnabled: false,
             }),
         });
@@ -176,7 +179,7 @@ describe('CommentProcessor', () => {
     it('should return error when page has no user', async () => {
         const adapter = createMockAdapter({
             getPage: vi.fn().mockResolvedValue({
-                id: 'p', userId: null, name: 'N', accessToken: 't', knowledgeBase: null,
+                id: 'p', userId: null, workspaceId: 'test_workspace_id', name: 'N', accessToken: 't', knowledgeBase: null,
                 autoReplyEnabled: true,
             }),
         });
@@ -187,6 +190,23 @@ describe('CommentProcessor', () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe('Page has no associated user');
+    });
+
+    it('should return error when page has no workspace', async () => {
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue({
+                id: 'p', userId: 'u', workspaceId: null, name: 'N', accessToken: 't', knowledgeBase: null,
+                autoReplyEnabled: true,
+            }),
+        });
+
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Hello!',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Page has no associated workspace');
+        expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.no_workspace']).toBe(1);
     });
 
     it('should return error when content auto-reply disabled and still store comment', async () => {
@@ -207,7 +227,7 @@ describe('CommentProcessor', () => {
     });
 
     it('should return error when comments auto-reply disabled in settings', async () => {
-        vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(false);
         const adapter = createMockAdapter();
 
         const result = await commentProcessor.processComment(
@@ -254,7 +274,7 @@ describe('CommentProcessor', () => {
     it('should use full pause duration as delay when getRemainingPauseMs returns 0', async () => {
         vi.mocked(messagesService.isPaused).mockResolvedValue(true);
         vi.mocked(messagesService.getRemainingPauseMs).mockResolvedValue(0);
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -402,7 +422,7 @@ describe('CommentProcessor', () => {
 
     it('should set commentMessage as text in generator context', async () => {
         const buildGeneratorContext = vi.fn().mockReturnValue({
-            userId: 'user-uuid', text: '', pageName: 'Test', pageId: 'page-uuid',
+            workspaceId: 'test_workspace_id', userId: 'user-uuid', text: '', pageName: 'Test', pageId: 'page-uuid',
         });
         const adapter = createMockAdapter({ buildGeneratorContext });
 
@@ -560,6 +580,7 @@ describe('CommentProcessor', () => {
         const mockPage: PlatformPage = {
             id: 'page-uuid',
             userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
             name: 'Test Page',
             accessToken: 'token-123',
             knowledgeBase: 'We sell shoes.',
@@ -574,6 +595,7 @@ describe('CommentProcessor', () => {
         };
 
         const buildGeneratorContext = vi.fn().mockReturnValue({
+            workspaceId: 'test_workspace_id',
             userId: 'user-uuid',
             text: '',
             pageName: 'Test Page',
@@ -603,6 +625,7 @@ describe('CommentProcessor', () => {
         const mockPage: PlatformPage = {
             id: 'page-uuid',
             userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
             name: 'Test Page',
             accessToken: 'token-123',
             knowledgeBase: null,
@@ -615,6 +638,7 @@ describe('CommentProcessor', () => {
         };
 
         const buildGeneratorContext = vi.fn().mockReturnValue({
+            workspaceId: 'test_workspace_id',
             userId: 'user-uuid',
             text: '',
             pageName: 'Test Page',
@@ -642,6 +666,7 @@ describe('CommentProcessor', () => {
         const mockPage: PlatformPage = {
             id: 'page-uuid',
             userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
             name: 'Test Page',
             accessToken: 'token-123',
             knowledgeBase: 'We sell shoes.',
@@ -651,6 +676,7 @@ describe('CommentProcessor', () => {
         };
 
         const buildGeneratorContext = vi.fn().mockReturnValue({
+            workspaceId: 'test_workspace_id',
             userId: 'user-uuid',
             text: '',
             pageName: 'Test Page',
@@ -758,7 +784,7 @@ describe('CommentProcessor', () => {
             needsAttention: false,
             aiIntent: 'QUESTION',
         });
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -784,7 +810,7 @@ describe('CommentProcessor', () => {
             needsAttention: false,
             aiIntent: 'QUESTION',
         });
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -807,7 +833,7 @@ describe('CommentProcessor', () => {
             needsAttention: false,
             aiIntent: 'QUESTION',
         });
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -831,7 +857,7 @@ describe('CommentProcessor', () => {
             needsAttention: false,
             aiIntent: 'COMPLIMENT',
         });
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -855,7 +881,7 @@ describe('CommentProcessor', () => {
             needsAttention: false,
             aiIntent: 'QUESTION',
         });
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -882,7 +908,7 @@ describe('CommentProcessor', () => {
             needsAttention: false,
             aiIntent: 'PURCHASE_INTENT',
         });
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,

@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { messageProcessor } from '../../src/services/reply/messageProcessor';
-import { settingsService } from '../../src/services/settings';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
 import { replyGenerator } from '../../src/services/reply/generator';
 import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../src/interfaces';
 
-vi.mock('../../src/services/settings');
+vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
 vi.mock('../../src/services/reply/generator', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../src/services/reply/generator')>();
@@ -53,6 +53,7 @@ function createMockAdapter(overrides: Partial<MessagePlatformAdapter> = {}): Mes
     const mockPage: PlatformPage = {
         id: 'page-uuid',
         userId: 'user-uuid',
+        workspaceId: 'test_workspace_id',
         name: 'Test Page',
         accessToken: 'token-123',
         knowledgeBase: null,
@@ -80,9 +81,9 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         vi.clearAllMocks();
         pipelineMetrics.reset();
 
-        vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
-        vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -107,6 +108,7 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         const mockPage: PlatformPage = {
             id: 'page-uuid',
             userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
             name: 'My Restaurant',
             accessToken: 'token-123',
             knowledgeBase: 'We serve Lebanese food.',
@@ -157,6 +159,7 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         const mockPage: PlatformPage = {
             id: 'page-uuid',
             userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
             name: 'Test Page',
             accessToken: 'token-123',
             knowledgeBase: null,
@@ -187,6 +190,7 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         const mockPage: PlatformPage = {
             id: 'page-uuid',
             userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
             name: 'Test Page',
             accessToken: 'token-123',
             knowledgeBase: 'Original KB text.',
@@ -222,6 +226,7 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         const mockPage: PlatformPage = {
             id: 'page-uuid',
             userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
             name: 'Shop',
             accessToken: 'token-123',
             knowledgeBase: 'We sell electronics.',
@@ -249,9 +254,9 @@ describe('MessageProcessor — Handoff Re-enqueue', () => {
         vi.clearAllMocks();
         pipelineMetrics.reset();
 
-        vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
-        vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
+        vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
@@ -309,5 +314,44 @@ describe('MessageProcessor — Handoff Re-enqueue', () => {
 
         expect(result.success).toBe(true);
         expect(result.handoffDelayMs).toBeUndefined();
+    });
+});
+
+describe('MessageProcessor — Guard Conditions', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+    });
+
+    it('should return error when page has no user', async () => {
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue({
+                id: 'p', userId: null, workspaceId: 'test_workspace_id', name: 'N', accessToken: 't',
+                knowledgeBase: null, kbActiveVersion: null, autoReplyEnabled: true,
+            }),
+        });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Page has no associated user');
+    });
+
+    it('should return error when page has no workspace', async () => {
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue({
+                id: 'p', userId: 'u', workspaceId: null, name: 'N', accessToken: 't',
+                knowledgeBase: null, kbActiveVersion: null, autoReplyEnabled: true,
+            }),
+        });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Page has no associated workspace');
     });
 });

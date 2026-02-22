@@ -17,6 +17,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
         return {
             id: page.id,
             userId: page.userId,
+            workspaceId: page.workspaceId,
             name: page.name,
             accessToken: page.accessToken,
             knowledgeBase: page.knowledgeBase,

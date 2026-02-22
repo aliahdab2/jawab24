@@ -6,7 +6,7 @@ import { commentsService } from '../../src/services/comments';
 import { rulesService } from '../../src/services/rules';
 import { templatesService } from '../../src/services/templates';
 import { aiService } from '../../src/services/ai';
-import { settingsService } from '../../src/services/settings';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { redis } from '../../src/lib/redis';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 
@@ -17,7 +17,7 @@ vi.mock('../../src/services/comments');
 vi.mock('../../src/services/rules');
 vi.mock('../../src/services/templates');
 vi.mock('../../src/services/ai');
-vi.mock('../../src/services/settings');
+vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
 vi.mock('../../src/services/facebook');
 vi.mock('../../src/services/notifications', () => ({
@@ -91,19 +91,31 @@ describe('Reply Service', () => {
         vi.clearAllMocks();
         await pipelineMetrics.reset();
 
-        // Default mock implementations for settingsService
-        vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
-        vi.mocked(settingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
-        vi.mocked(settingsService.getReplyDelay).mockResolvedValue(0);
-        vi.mocked(settingsService.getSettings).mockResolvedValue({
-            id: 'settings_uuid',
-            userId: 'user_uuid',
+        // Default mock implementations for workspaceSettingsService
+        vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             aiEnabled: true,
             defaultReplyLanguage: 'en',
+            supportedLanguages: ['en', 'ar'],
+            autoDetectLanguage: true,
+            aiModel: 'gpt-4o-mini',
+            commentReplyMode: 'public',
+            dualReplyNudge: '',
             commentsAutoReply: true,
             messagesAutoReply: true,
             businessHoursOnly: false,
+            businessHoursStart: '09:00',
+            businessHoursEnd: '18:00',
+            timezone: 'Asia/Damascus',
+            greetingMessageMulti: {},
+            awayMessageMulti: {},
+            dualReplyNudgeMulti: {},
             replyDelay: 0,
+            commentEscalationMinutes: 60,
+            messageEscalationMinutes: 30,
+            handoffPauseDurationMinutes: 30,
         } as any);
 
         // Default Redis rate limiting mocks (within limit)
@@ -115,6 +127,7 @@ describe('Reply Service', () => {
         const mockPage = {
             id: 'page_uuid',
             userId: 'user_uuid',
+            workspaceId: 'test_workspace_id',
             facebookPageId: 'fb_page_123',
             name: 'My Store',
             accessToken: 'access_token',
@@ -233,7 +246,7 @@ describe('Reply Service', () => {
 
         it('should skip if auto-reply is disabled for post', async () => {
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue({
                 ...mockPost,
                 autoReplyEnabled: false,
@@ -256,7 +269,7 @@ describe('Reply Service', () => {
 
         it('should skip if comment already replied', async () => {
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
                 comment: { ...mockComment, replied: true } as any,
@@ -280,7 +293,7 @@ describe('Reply Service', () => {
             vi.mocked(redis.expire).mockResolvedValue(1);
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
                 comment: mockComment as any,
@@ -313,7 +326,7 @@ describe('Reply Service', () => {
             };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
                 comment: mockComment as any,
@@ -350,7 +363,7 @@ describe('Reply Service', () => {
             };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
                 comment: mockComment as any,
@@ -545,7 +558,7 @@ describe('Reply Service', () => {
             };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(settingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
+            vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({
                 comment: mockComment as any,

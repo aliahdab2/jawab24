@@ -20,6 +20,7 @@ export type Outcome =
     | 'success'
     | 'page_not_found'
     | 'no_user'
+    | 'no_workspace'
     | 'auto_reply_disabled'
     | 'debounce_skipped'
     | 'handoff_active'

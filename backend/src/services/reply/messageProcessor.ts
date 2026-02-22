@@ -1,4 +1,4 @@
-import { settingsService } from '../settings';
+import { workspaceSettingsService } from '../workspaceSettings';
 import { messagesService } from '../messages';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
@@ -73,6 +73,10 @@ export class MessageProcessor {
                 pipelineMetrics.record(pipeline, 'no_user');
                 return { success: false, messageId: platformMessageId, error: 'Page has no associated user' };
             }
+            if (!page.workspaceId) {
+                pipelineMetrics.record(pipeline, 'no_workspace');
+                return { success: false, messageId: platformMessageId, error: 'Page has no associated workspace' };
+            }
 
             // 2. Check auto-reply enabled for this platform
             if (!page.autoReplyEnabled) {
@@ -81,6 +85,7 @@ export class MessageProcessor {
             }
 
             const userId = page.userId;
+            const workspaceId = page.workspaceId;
 
             // 3. Fetch sender name (best-effort)
             let senderName: string | undefined;
@@ -112,7 +117,7 @@ export class MessageProcessor {
             }
 
             // 6. Handoff pause check
-            const userSettings = await settingsService.getSettings(userId);
+            const userSettings = await workspaceSettingsService.getSettings(workspaceId);
             const pauseMinutes = userSettings.handoffPauseDurationMinutes;
             const isPaused = await messagesService.isPaused(page.id, senderId, pauseMinutes);
             lap('6-isPaused');
@@ -135,12 +140,12 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Rate limited' };
             }
 
-            // 8. User settings check
-            const isMessagesEnabled = await settingsService.isMessagesAutoReplyEnabled(userId);
+            // 8. Workspace settings check
+            const isMessagesEnabled = await workspaceSettingsService.isMessagesAutoReplyEnabled(workspaceId);
             lap('8-settingsCheck');
             if (!isMessagesEnabled) {
                 const customerLang = detectLanguageCode(messageText);
-                const awayMessage = await settingsService.getAwayMessage(userId, customerLang);
+                const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
                 if (awayMessage && isNew) {
                     try {
                         await adapter.sendAwayMessage(page, senderId, awayMessage);
@@ -162,7 +167,7 @@ export class MessageProcessor {
             // 9b. Send Greeting Message (if new conversation)
             if (isNew) {
                 const detectedLang = detectLanguageCode(messageText);
-                const greeting = await settingsService.getGreetingMessage(userId, detectedLang);
+                const greeting = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
                 if (greeting) {
                     try {
                         await adapter.sendReply(page, senderId, greeting);
@@ -178,7 +183,7 @@ export class MessageProcessor {
             }
 
             // 10. Reply delay
-            const replyDelay = await settingsService.getReplyDelay(userId);
+            const replyDelay = await workspaceSettingsService.getReplyDelay(workspaceId);
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }
@@ -214,6 +219,7 @@ export class MessageProcessor {
             let { replyText, replyMethod, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForMessage(
                     {
+                        workspaceId,
                         userId,
                         text: consolidatedText,
                         templateMatchText: latestMessageText,

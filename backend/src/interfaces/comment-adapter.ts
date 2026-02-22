@@ -24,7 +24,8 @@ export interface ContentEntity {
 
 /** Context passed to replyGenerator.generateForComment */
 export interface CommentReplyContext {
-    userId: string;
+    workspaceId: string;
+    userId: string;       // kept for billing (subscription checks)
     text: string;
     pageName?: string;
     knowledgeBase?: string;

@@ -26,6 +26,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         return {
             id: page.id,
             userId: page.userId,
+            workspaceId: page.workspaceId,
             name: page.name,
             accessToken: page.accessToken,
             knowledgeBase: page.knowledgeBase,
@@ -174,6 +175,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         _contentId: string,
     ): CommentReplyContext {
         return {
+            workspaceId: page.workspaceId!,
             userId: page.userId!,
             text: '',  // filled by processor with commentMessage
             pageName: page.name || undefined,

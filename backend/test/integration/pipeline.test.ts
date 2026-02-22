@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageProcessor } from '../../src/services/reply/messageProcessor';
 import { messagesService } from '../../src/services/messages';
-import { settingsService } from '../../src/services/settings';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
-import { createTestUser, createTestPage, insertMessage, insertPause, testDb } from './setup';
+import { createTestUser, createTestWorkspace, createTestPage, insertMessage, insertPause, testDb } from './setup';
 import { eq, and } from 'drizzle-orm';
 import { messages } from '../../src/db/schema';
 import type { MessagePlatformAdapter, PlatformPage } from '../../src/interfaces';
@@ -83,6 +83,7 @@ vi.mock('../../src/services/notifications', () => ({
 describe('Message Pipeline — Integration (real Postgres)', () => {
     let processor: MessageProcessor;
     let userId: string;
+    let workspaceId: string;
     let pageId: string;
     let platformPage: PlatformPage;
     const senderId = 'sender-pipeline-test';
@@ -94,12 +95,15 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
 
         const user = await createTestUser();
         userId = user.id;
-        const page = await createTestPage(userId, { facebookPageId: 'page-fb-pipeline' });
+        const workspace = await createTestWorkspace(userId);
+        workspaceId = workspace.id;
+        const page = await createTestPage(userId, { facebookPageId: 'page-fb-pipeline', workspaceId });
         pageId = page.id;
 
         platformPage = {
             id: page.id,
             userId: page.userId,
+            workspaceId: page.workspaceId,
             name: page.name,
             accessToken: page.accessToken,
             knowledgeBase: null,
@@ -107,8 +111,8 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
             autoReplyEnabled: true,
         };
 
-        // Ensure settings exist with messages auto-reply ON
-        await settingsService.updateSettings(userId, { messagesAutoReply: true });
+        // Ensure workspace settings exist with messages auto-reply ON
+        await workspaceSettingsService.updateSettings(workspaceId, { messagesAutoReply: true });
     });
 
     // =========================================================
@@ -394,9 +398,9 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
     // 8. Auto-reply disabled → away message sent
     // =========================================================
     it('sends away message when messages auto-reply is disabled', async () => {
-        await settingsService.updateSettings(userId, {
+        await workspaceSettingsService.updateSettings(workspaceId, {
             messagesAutoReply: false,
-            awayMessage: 'We are currently away.',
+            awayMessageMulti: { en: 'We are currently away.', ar: 'We are currently away.' },
         });
 
         const adapter = createMockAdapter(platformPage);
@@ -413,20 +417,18 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
     });
 
     // =========================================================
-    // 9. Settings-path: pipeline resolves settings via page.userId
+    // 9. Settings-path: pipeline resolves settings via page.workspaceId
     // =========================================================
-    // BASELINE TEST (Phase 0) — documents current userId-based settings path.
-    // After workspace refactor, this evolves to: page.workspaceId → workspaceSettings.
-    it('resolves settings from page.userId and applies them correctly', async () => {
-        // Configure specific settings for this user
-        await settingsService.updateSettings(userId, {
+    it('resolves settings from page.workspaceId and applies them correctly', async () => {
+        // Configure specific settings for this workspace
+        await workspaceSettingsService.updateSettings(workspaceId, {
             messagesAutoReply: true,
             businessHoursOnly: false,
             replyDelay: 0,
         });
 
-        // Spy on settingsService.getSettings to verify the pipeline uses page.userId
-        const getSettingsSpy = vi.spyOn(settingsService, 'getSettings');
+        // Spy on workspaceSettingsService.getSettings to verify the pipeline uses page.workspaceId
+        const getSettingsSpy = vi.spyOn(workspaceSettingsService, 'getSettings');
 
         const adapter = createMockAdapter(platformPage);
 
@@ -436,24 +438,26 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
 
         expect(result.success).toBe(true);
         expect(result.replyText).toBe('Mocked AI reply');
-        // KEY ASSERTION: pipeline resolved settings using page.userId
-        expect(getSettingsSpy).toHaveBeenCalledWith(userId);
+        // KEY ASSERTION: pipeline resolved settings using page.workspaceId
+        expect(getSettingsSpy).toHaveBeenCalledWith(workspaceId);
 
         getSettingsSpy.mockRestore();
     });
 
-    it('uses correct user settings for different users on different pages', async () => {
-        // Create a second user with different settings
+    it('uses correct workspace settings for different workspaces on different pages', async () => {
+        // Create a second user with a separate workspace and different settings
         const user2 = await createTestUser({ facebookId: 'fb-user2-settings', email: 'user2-settings@test.com' });
-        await settingsService.updateSettings(user2.id, {
+        const workspace2 = await createTestWorkspace(user2.id, { name: 'Workspace 2' });
+        await workspaceSettingsService.updateSettings(workspace2.id, {
             messagesAutoReply: false,
-            awayMessage: 'User 2 is away',
+            awayMessageMulti: { en: 'User 2 is away', ar: 'User 2 is away' },
         });
 
-        const page2 = await createTestPage(user2.id, { facebookPageId: 'page-fb-user2' });
+        const page2 = await createTestPage(user2.id, { facebookPageId: 'page-fb-user2', workspaceId: workspace2.id });
         const platformPage2: PlatformPage = {
             id: page2.id,
             userId: page2.userId,
+            workspaceId: page2.workspaceId,
             name: page2.name,
             accessToken: page2.accessToken,
             knowledgeBase: null,
@@ -461,10 +465,10 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
             autoReplyEnabled: true,
         };
 
-        // Spy on settings to verify each pipeline call uses the correct userId
-        const getSettingsSpy = vi.spyOn(settingsService, 'getSettings');
+        // Spy on settings to verify each pipeline call uses the correct workspaceId
+        const getSettingsSpy = vi.spyOn(workspaceSettingsService, 'getSettings');
 
-        // User 1 (original): messagesAutoReply=true → should get reply
+        // Workspace 1 (original): messagesAutoReply=true → should get reply
         const adapter1 = createMockAdapter(platformPage);
         const result1 = await processor.processMessage(
             adapter1, 'page-fb-pipeline', senderId, 'Hello user1', 'fb-iso-user1',
@@ -472,7 +476,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         expect(result1.success).toBe(true);
         expect(result1.replyText).toBe('Mocked AI reply');
 
-        // User 2: messagesAutoReply=false → should get away message
+        // Workspace 2: messagesAutoReply=false → should get away message
         const adapter2 = createMockAdapter(platformPage2);
         const result2 = await processor.processMessage(
             adapter2, 'page-fb-user2', senderId, 'Hello user2', 'fb-iso-user2',
@@ -483,9 +487,9 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
             platformPage2, senderId, 'User 2 is away',
         );
 
-        // KEY ASSERTION: each pipeline call resolved settings for the correct userId
-        expect(getSettingsSpy).toHaveBeenCalledWith(userId);
-        expect(getSettingsSpy).toHaveBeenCalledWith(user2.id);
+        // KEY ASSERTION: each pipeline call resolved settings for the correct workspaceId
+        expect(getSettingsSpy).toHaveBeenCalledWith(workspaceId);
+        expect(getSettingsSpy).toHaveBeenCalledWith(workspace2.id);
 
         getSettingsSpy.mockRestore();
     });

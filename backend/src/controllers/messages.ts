@@ -3,7 +3,7 @@ import { messagesService } from '../services/messages';
 import { pagesService } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
-import { settingsService } from '../services/settings';
+import { workspaceSettingsService } from '../services/workspaceSettings';
 import { promoteDelayedJobs } from '../lib/replyQueue';
 import type { WorkspaceRequest } from '../middleware/workspace';
 
@@ -215,8 +215,8 @@ export class MessagesController {
             // Use provided duration or user's default from settings
             let duration = durationMinutes;
             if (!duration) {
-                const userSettings = await settingsService.getSettings(req.user.userId);
-                duration = userSettings.handoffPauseDurationMinutes;
+                const wsSettings = await workspaceSettingsService.getSettings(req.workspaceId);
+                duration = wsSettings.handoffPauseDurationMinutes;
             }
 
             const result = await messagesService.pauseConversation(pageId, senderId, duration);
