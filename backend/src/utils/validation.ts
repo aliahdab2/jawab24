@@ -41,9 +41,9 @@ export const UpdateRuleSchema = CreateRuleSchema.partial();
 // Settings
 // ==========================================
 export const UpdateSettingsSchema = z.object({
-    dashboardLanguage: z.enum(['en', 'ar']).optional(),
-    defaultReplyLanguage: z.enum(['en', 'ar']).optional(),
-    supportedLanguages: z.array(z.enum(['en', 'ar'])).optional(),
+    dashboardLanguage: z.string().min(2).max(10).optional(),
+    defaultReplyLanguage: z.string().min(2).max(10).optional(),
+    supportedLanguages: z.array(z.string().min(2).max(10)).optional(),
     autoDetectLanguage: z.boolean().optional(),
     aiEnabled: z.boolean().optional(),
     aiModel: z.string().optional(),

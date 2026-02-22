@@ -158,7 +158,7 @@ export class WorkspaceSettingsService {
 
         const multi = settings.awayMessageMulti || {};
         const primary = multi[preferred];
-        const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
+        const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
 
         return primary || fallback || DEFAULT_AWAY_MESSAGE[preferred] || DEFAULT_AWAY_MESSAGE['en'];
     }
@@ -172,7 +172,7 @@ export class WorkspaceSettingsService {
 
         const multi = settings.greetingMessageMulti || {};
         const primary = multi[preferred];
-        const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
+        const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
 
         return primary || fallback || null;
     }
@@ -211,14 +211,17 @@ export class WorkspaceSettingsService {
     /**
      * Resolve which language version to use.
      */
-    private resolveLanguage(settings: WorkspaceSettings, detectedLanguage?: string): 'ar' | 'en' {
-        const fallback = (settings.defaultReplyLanguage === 'ar' ? 'ar' : 'en') as 'ar' | 'en';
+    private resolveLanguage(settings: WorkspaceSettings, detectedLanguage?: string): string {
+        const supported = settings.supportedLanguages ?? ['en', 'ar'];
+        const fallback = supported.includes(settings.defaultReplyLanguage)
+            ? settings.defaultReplyLanguage
+            : (supported[0] ?? 'en');
 
         if (!settings.autoDetectLanguage || !detectedLanguage || detectedLanguage === 'unknown') {
             return fallback;
         }
 
-        return detectedLanguage === 'ar' ? 'ar' : fallback;
+        return supported.includes(detectedLanguage) ? detectedLanguage : fallback;
     }
 }
 

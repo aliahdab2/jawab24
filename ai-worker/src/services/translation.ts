@@ -4,13 +4,13 @@ import * as Sentry from '@sentry/node';
 
 export interface TranslateRequest {
   text: string;
-  sourceLanguage?: 'ar' | 'en' | 'auto';
-  targetLanguage: 'ar' | 'en';
+  sourceLanguage?: string;
+  targetLanguage: string;
 }
 
 export interface TranslateResponse {
   translatedText: string;
-  detectedLanguage?: 'ar' | 'en';
+  detectedLanguage?: string;
   tokensUsed: number;
 }
 
@@ -28,7 +28,7 @@ export class TranslationService {
   }
 
   // Simple language detection (check for Arabic characters)
-  private detectLanguage(text: string): 'ar' | 'en' {
+  private detectLanguage(text: string): string {
     const arabicPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
     return arabicPattern.test(text) ? 'ar' : 'en';
   }

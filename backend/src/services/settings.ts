@@ -146,10 +146,10 @@ export class SettingsService {
         const userSettings = await this.getSettings(userId);
         const preferred = this.resolveLanguage(userSettings, detectedLanguage);
 
-        // Try the preferred language from JSONB first, then other language, then default
+        // Try the preferred language from JSONB first, then any other stored language, then default
         const multi = userSettings.awayMessageMulti || {};
         const primary = multi[preferred];
-        const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
+        const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
 
         return primary || fallback || userSettings.awayMessage || DEFAULT_AWAY_MESSAGE[preferred] || DEFAULT_AWAY_MESSAGE['en'];
     }
@@ -169,7 +169,7 @@ export class SettingsService {
         // (Unlike away message, greeting is optional and shouldn't be unsolicited.)
         const multi = userSettings.greetingMessageMulti || {};
         const primary = multi[preferred];
-        const fallback = multi[preferred === 'ar' ? 'en' : 'ar'];
+        const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
 
         return primary || fallback || userSettings.greetingMessage || null;
     }
@@ -210,19 +210,20 @@ export class SettingsService {
     /**
      * Resolves which stored language version to use.
      *
-     * - If autoDetectLanguage is ON and a detected language was provided:
-     *     Arabic → 'ar', anything else → defaultReplyLanguage
-     * - If autoDetectLanguage is OFF or no detection provided:
-     *     Uses dashboardLanguage from user settings as the fallback
+     * - If autoDetectLanguage is ON and the detected language is supported: use it
+     * - Otherwise: use dashboardLanguage (or the first supported language as last resort)
      */
-    private resolveLanguage(userSettings: UserSettings, detectedLanguage?: string): 'ar' | 'en' {
-        const fallback = (userSettings.dashboardLanguage === 'ar' ? 'ar' : 'en') as 'ar' | 'en';
+    private resolveLanguage(userSettings: UserSettings, detectedLanguage?: string): string {
+        const supported = userSettings.supportedLanguages ?? ['en', 'ar'];
+        const fallback = supported.includes(userSettings.dashboardLanguage)
+            ? userSettings.dashboardLanguage
+            : (supported[0] ?? 'en');
 
         if (!userSettings.autoDetectLanguage || !detectedLanguage || detectedLanguage === 'unknown') {
             return fallback;
         }
 
-        return detectedLanguage === 'ar' ? 'ar' : fallback;
+        return supported.includes(detectedLanguage) ? detectedLanguage : fallback;
     }
 
     /**

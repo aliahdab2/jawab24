@@ -23,9 +23,9 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
                 body: {
                     type: 'object',
                     properties: {
-                        dashboardLanguage: { type: 'string', enum: ['en', 'ar'] },
-                        defaultReplyLanguage: { type: 'string', enum: ['en', 'ar'] },
-                        supportedLanguages: { type: 'array', items: { type: 'string', enum: ['en', 'ar'] } },
+                        dashboardLanguage: { type: 'string', minLength: 2, maxLength: 10 },
+                        defaultReplyLanguage: { type: 'string', minLength: 2, maxLength: 10 },
+                        supportedLanguages: { type: 'array', items: { type: 'string', minLength: 2, maxLength: 10 } },
                         autoDetectLanguage: { type: 'boolean' },
                         aiEnabled: { type: 'boolean' },
                         aiModel: { type: 'string' },

@@ -57,11 +57,11 @@ async function routes(server: FastifyInstance) {
         if (!text || text.trim().length === 0) {
             return reply.status(400).send({ error: 'Text is required' });
         }
-        if (!targetLanguage || !['ar', 'en'].includes(targetLanguage)) {
-            return reply.status(400).send({ error: 'targetLanguage must be "ar" or "en"' });
+        if (!targetLanguage || typeof targetLanguage !== 'string' || targetLanguage.length < 2) {
+            return reply.status(400).send({ error: 'targetLanguage is required' });
         }
-        if (sourceLanguage && !['ar', 'en', 'auto'].includes(sourceLanguage)) {
-            return reply.status(400).send({ error: 'sourceLanguage must be "ar", "en", or "auto"' });
+        if (sourceLanguage && (typeof sourceLanguage !== 'string' || sourceLanguage.length < 2)) {
+            return reply.status(400).send({ error: 'sourceLanguage must be a valid language code or "auto"' });
         }
 
         if (!translationService.isConfigured()) {
