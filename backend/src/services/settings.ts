@@ -1,9 +1,22 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
-import { settings } from '../db/schema';
+import { settings, workspaceMembers } from '../db/schema';
 import { UserSettings, UpdateSettingsDTO } from '../types';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { redis } from '../lib/redis';
+import { workspaceSettingsService } from './workspaceSettings';
+
+/** Settings fields consumed by the reply pipeline — synced to workspaceSettings on every save */
+const PIPELINE_FIELDS = [
+    'commentsAutoReply', 'messagesAutoReply', 'businessHoursOnly',
+    'businessHoursStart', 'businessHoursEnd', 'timezone',
+    'aiEnabled', 'aiModel', 'commentReplyMode',
+    'dualReplyNudge', 'dualReplyNudgeMulti',
+    'replyDelay', 'greetingMessageMulti', 'awayMessageMulti',
+    'handoffPauseDurationMinutes', 'commentEscalationMinutes',
+    'messageEscalationMinutes', 'defaultReplyLanguage',
+    'supportedLanguages', 'autoDetectLanguage',
+] as const;
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
@@ -66,6 +79,10 @@ export class SettingsService {
     /**
      * Update user settings and invalidate the cache so the next read
      * reflects the change immediately.
+     *
+     * Also syncs pipeline-relevant fields to workspaceSettings so the reply
+     * pipeline (commentProcessor / messageProcessor) picks them up immediately,
+     * regardless of whether this call comes from the HTTP controller or directly.
      */
     async updateSettings(userId: string, updates: UpdateSettingsDTO): Promise<UserSettings> {
         // Ensure settings exist
@@ -88,7 +105,39 @@ export class SettingsService {
             // Redis unavailable — cache expires naturally via TTL
         }
 
+        // Sync pipeline fields to workspaceSettings so the reply pipeline sees them
+        await this.syncPipelineFieldsToWorkspace(userId, updates);
+
         return result;
+    }
+
+    /**
+     * Looks up the user's workspace and syncs any pipeline-relevant fields from
+     * the update payload into workspaceSettings.
+     * Fire-and-forget: failures are logged but never surfaced to the caller.
+     */
+    private async syncPipelineFieldsToWorkspace(userId: string, updates: UpdateSettingsDTO): Promise<void> {
+        try {
+            const pipelineUpdates = Object.fromEntries(
+                PIPELINE_FIELDS
+                    .filter(key => key in updates)
+                    .map(key => [key, (updates as Record<string, unknown>)[key]])
+            );
+            if (Object.keys(pipelineUpdates).length === 0) return;
+
+            const memberships = await db
+                .select({ workspaceId: workspaceMembers.workspaceId })
+                .from(workspaceMembers)
+                .where(eq(workspaceMembers.userId, userId))
+                .limit(1);
+
+            const workspaceId = memberships[0]?.workspaceId;
+            if (!workspaceId) return;
+
+            await workspaceSettingsService.updateSettings(workspaceId, pipelineUpdates);
+        } catch {
+            // Never let a sync failure break the settings save
+        }
     }
 
     /**
