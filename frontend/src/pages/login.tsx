@@ -235,10 +235,10 @@ export default function LoginPage() {
         <title>{BRAND_ASSETS.meta.appTitle} - {t('auth.login')}</title>
         <meta name="description" content={t('auth.seoDescription')} />
         <meta name="keywords" content={t('auth.seoKeywords')} />
-        <link rel="canonical" href="https://jawab24.com/login" />
+        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/login' : '/login')} />
         <meta property="og:title" content={t('auth.ogTitle')} />
         <meta property="og:description" content={t('auth.ogDescription')} />
-        <meta property="og:url" content="https://jawab24.com/login" />
+        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/login' : '/login')} />
       </Head>
 
       <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row min-h-[100dvh]">

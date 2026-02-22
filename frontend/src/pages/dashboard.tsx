@@ -231,10 +231,12 @@ const DashboardPage: NextPageWithLayout = () => {
     }
   }, [setOnboardingVisible, t]);
 
-  // Auto-sync if no pages found (Ported from pages.tsx)
+  // Auto-sync if no pages found — only for existing users (onboarding already completed)
+  // New users are guided through onboarding instead
   const syncAttemptedRef = useRef(false);
   useEffect(() => {
-    if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncAttemptedRef.current) {
+    const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+    if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncAttemptedRef.current && onboardingComplete) {
       syncAttemptedRef.current = true;
       api.post('/pages/sync', { accessToken: fbToken })
         .then(() => {

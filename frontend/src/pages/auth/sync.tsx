@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import Head from 'next/head';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import { captureError } from '@/lib/sentryHelpers';
@@ -63,10 +64,13 @@ export default function AuthSync() {
   }, [router.isReady, router.query, setAuth, router]);
 
   return (
-    <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50">
-      <div className="text-center">
-        <p className="text-surface-500 text-sm font-medium">{status}</p>
+    <>
+      <Head><meta name="robots" content="noindex, nofollow" /></Head>
+      <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50">
+        <div className="text-center">
+          <p className="text-surface-500 text-sm font-medium">{status}</p>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

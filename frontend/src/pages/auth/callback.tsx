@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
+import Head from 'next/head';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
@@ -217,17 +218,25 @@ export default function AuthCallback() {
 
   if (error) {
     return (
-      <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50">
+      <>
+        <Head><meta name="robots" content="noindex, nofollow" /></Head>
+        <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50">
         <div className="text-center">
-          <div className="text-red-500 text-xl mb-4">❌</div>
+          <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4"><span className="text-red-500 text-2xl font-bold" aria-hidden="true">&times;</span></div>
           <h1 className="text-xl font-semibold text-surface-900 mb-2">{t('auth.loginError')}</h1>
           <p className="text-surface-500 mb-4">{error}</p>
           <p className="text-sm text-surface-400">{t('auth.redirecting')}</p>
         </div>
       </div>
+      </>
     );
   }
 
   // Show dashboard skeleton while processing - consistent with native app flow
-  return <AppSkeleton variant="dashboard" />;
+  return (
+    <>
+      <Head><meta name="robots" content="noindex, nofollow" /></Head>
+      <AppSkeleton variant="dashboard" />
+    </>
+  );
 }

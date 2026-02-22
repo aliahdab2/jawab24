@@ -14,6 +14,7 @@ import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck'
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
+import { BRAND_ASSETS } from '@/constants/brand';
 
 interface PricingPageProps {
   plans: Plan[];
@@ -398,10 +399,10 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         <title>{t('pricing.seoTitle')}</title>
         <meta name="description" content={t('pricing.seoDescription')} />
         <meta name="keywords" content={t('pricing.seoKeywords')} />
-        <link rel="canonical" href="https://jawab24.com/pricing" />
+        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/pricing' : '/pricing')} />
         <meta property="og:title" content={t('pricing.ogTitle')} />
         <meta property="og:description" content={t('pricing.ogDescription')} />
-        <meta property="og:url" content="https://jawab24.com/pricing" />
+        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/pricing' : '/pricing')} />
       </Head>
         <div className="lg:-mt-4">
 
