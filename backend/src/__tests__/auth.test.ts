@@ -102,7 +102,8 @@ describe('AuthController - Native Login', () => {
             token: 'session-jwt',
             fbAccessToken: 'long-lived-token',
             user: { id: 'user-id', facebookId: 'fb-user-id', name: 'Test User' },
-            settings: { dashboardLanguage: 'en' }
+            settings: { dashboardLanguage: 'en' },
+            workspaces: [],
         });
         vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages: [], skippedCount: 0 });
 

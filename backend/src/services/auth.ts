@@ -289,7 +289,13 @@ export class AuthService {
     /**
      * Create auth response
      */
-    createAuthResponse(user: User, token: string, fbAccessToken: string, settings?: { dashboardLanguage: string }): AuthResponse {
+    createAuthResponse(
+        user: User,
+        token: string,
+        fbAccessToken: string,
+        settings?: { dashboardLanguage: string },
+        workspaces: AuthResponse['workspaces'] = [],
+    ): AuthResponse {
         return {
             token,
             fbAccessToken,
@@ -302,6 +308,7 @@ export class AuthService {
                 isAdmin: user.isAdmin || false,
             },
             settings,
+            workspaces,
         };
     }
 

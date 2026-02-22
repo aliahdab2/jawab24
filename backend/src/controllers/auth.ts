@@ -70,8 +70,11 @@ export class AuthController {
                 request.log.error({ err }, 'Auto-sync pages failed');
             });
 
-            // 6. Fetch user settings for immediate UI sync
-            const userSettings = await settingsService.getSettings(user.id);
+            // 6. Fetch user settings + workspaces for immediate UI sync
+            const [userSettings, workspaces] = await Promise.all([
+                settingsService.getSettings(user.id),
+                workspaceService.getUserWorkspaces(user.id),
+            ]);
 
             // 7. Generate refresh token (Level 2 Security)
             const refreshToken = await refreshTokenService.createRefreshToken(user.id);
@@ -83,7 +86,7 @@ export class AuthController {
             // 9. Build response
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            });
+            }, workspaces);
 
             // 10. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -167,8 +170,11 @@ export class AuthController {
                 request.log.error({ err }, 'Auto-sync pages failed (Native Flow)');
             });
 
-            // 8. Fetch user settings
-            const userSettings = await settingsService.getSettings(user.id);
+            // 8. Fetch user settings + workspaces
+            const [userSettings, workspaces] = await Promise.all([
+                settingsService.getSettings(user.id),
+                workspaceService.getUserWorkspaces(user.id),
+            ]);
 
             // 9. Set cookies (HttpOnly + CSRF)
             cookiesService.setAuthCookies(reply, token);
@@ -176,7 +182,7 @@ export class AuthController {
             // 10. Build response
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            });
+            }, workspaces);
 
             // 11. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {

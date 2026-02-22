@@ -1,6 +1,7 @@
 /**
  * Authentication related types
  */
+import type { WorkspaceSummary } from '@jawab24/shared';
 
 // User types
 export interface User {
@@ -45,6 +46,7 @@ export interface AuthResponse {
     settings?: {
         dashboardLanguage: string;
     };
+    workspaces: WorkspaceSummary[];
     // E-commerce onboarding context (set when pending install is claimed)
     shopifyOnboarding?: boolean;
     ecommerceStoreId?: string;

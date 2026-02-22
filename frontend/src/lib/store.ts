@@ -4,6 +4,9 @@ import * as Sentry from '@sentry/nextjs';
 import { getPersistStorage } from './zustandStorage';
 import { isNativePlatform } from './capacitor';
 import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
+import type { WorkspaceSummary } from '@jawab24/shared';
+
+export type { WorkspaceSummary };
 
 export type Language = 'ar' | 'en';
 
@@ -22,7 +25,11 @@ interface AuthState {
   fbToken: string | null;
   isAuthenticated: boolean;
   _hasHydrated: boolean;
+  workspaces: WorkspaceSummary[];
+  activeWorkspaceId: string | null;
   setAuth: (user: User, token: string, fbToken: string) => void;
+  setWorkspaces: (workspaces: WorkspaceSummary[]) => void;
+  setActiveWorkspace: (id: string) => void;
   logout: () => void;
   setHasHydrated: (state: boolean) => void;
 }
@@ -35,6 +42,13 @@ export const useAuthStore = create<AuthState>()(
       fbToken: null,
       isAuthenticated: false,
       _hasHydrated: false,
+      workspaces: [],
+      activeWorkspaceId: null,
+      setWorkspaces: (workspaces) => {
+        const activeId = workspaces[0]?.id ?? null;
+        set({ workspaces, activeWorkspaceId: activeId });
+      },
+      setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
       setAuth: (user, token, fbToken) => {
         // Defensive validation
         if (!user?.id || !token || token.trim() === '') {
@@ -110,15 +124,17 @@ export const useAuthStore = create<AuthState>()(
             const isNative = isNativePlatform();
             if (!isNative) {
                 // On Web: Do NOT persist token or fbToken (security + conflict with cookies)
-                // We only persist the user object and isAuthenticated flag for UI state
+                // We only persist the user object, isAuthenticated flag, and activeWorkspaceId for UI state
                 // The actual session is validated via cookies
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { token, fbToken, ...rest } = state;
-                return rest;
+                const { token, fbToken, workspaces, ...rest } = state;
+                return rest; // includes activeWorkspaceId so header survives page refresh
             }
         }
-        // On Native: Persist everything
-        return state;
+        // On Native: Persist everything except workspaces list (refetched on login)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { workspaces, ...rest } = state;
+        return rest;
       },
     }
   )

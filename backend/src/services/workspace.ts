@@ -1,7 +1,7 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaces, workspaceMembers, users } from '../db/schema';
-import type { WorkspaceRole } from '@jawab24/shared';
+import type { WorkspaceRole, WorkspaceSummary } from '@jawab24/shared';
 
 /** Internal member limit — quietly enforced, no UI for managing this. */
 const MAX_MEMBERS_PER_WORKSPACE = 5;
@@ -32,8 +32,8 @@ export class WorkspaceService {
     /**
      * List all workspaces the user belongs to.
      */
-    async getUserWorkspaces(userId: string) {
-        return db
+    async getUserWorkspaces(userId: string): Promise<WorkspaceSummary[]> {
+        const rows = await db
             .select({
                 id: workspaces.id,
                 name: workspaces.name,
@@ -42,6 +42,7 @@ export class WorkspaceService {
             .from(workspaceMembers)
             .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
             .where(eq(workspaceMembers.userId, userId));
+        return rows as WorkspaceSummary[];
     }
 
     /**

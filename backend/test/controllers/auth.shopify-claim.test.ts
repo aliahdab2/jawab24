@@ -135,6 +135,12 @@ vi.mock('drizzle-orm', () => ({
     eq: vi.fn(),
 }));
 
+vi.mock('../../src/services/workspace', () => ({
+    workspaceService: {
+        getUserWorkspaces: vi.fn().mockResolvedValue([]),
+    },
+}));
+
 // Import after mocks
 import { AuthController } from '../../src/controllers/auth';
 

@@ -110,6 +110,12 @@ vi.mock('drizzle-orm', () => ({
     sql: vi.fn(),
 }));
 
+vi.mock('../../src/services/workspace', () => ({
+    workspaceService: {
+        getUserWorkspaces: vi.fn().mockResolvedValue([]),
+    },
+}));
+
 // Mock authentication middleware
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: async (req: any) => {
@@ -153,6 +159,7 @@ describe('Integration: Login → Checkout Flow', () => {
             const { refreshTokenService } = await import('../../src/services/refreshToken');
             const { cookiesService } = await import('../../src/services/cookies');
             const { pagesService } = await import('../../src/services/pages');
+            const { workspaceService } = await import('../../src/services/workspace');
 
             const planId = '92598acb-dde0-4d25-8312-17d7f9d9df9b';
 
@@ -186,6 +193,7 @@ describe('Integration: Login → Checkout Flow', () => {
             vi.mocked(refreshTokenService.createRefreshToken).mockResolvedValue('mock_refresh_token');
             vi.mocked(cookiesService.setAuthCookies).mockReturnValue(undefined);
             vi.mocked(cookiesService.setRefreshTokenCookie).mockReturnValue(undefined);
+            vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue([]);
 
             const loginResponse = await app.inject({
                 method: 'POST',
@@ -337,6 +345,7 @@ describe('Integration: Login → Checkout Flow', () => {
             const { refreshTokenService } = await import('../../src/services/refreshToken');
             const { cookiesService } = await import('../../src/services/cookies');
             const { pagesService } = await import('../../src/services/pages');
+            const { workspaceService } = await import('../../src/services/workspace');
 
             // Setup login service mocks
             vi.mocked(facebookService.getAccessToken).mockResolvedValue('fb_token');
@@ -367,6 +376,7 @@ describe('Integration: Login → Checkout Flow', () => {
             vi.mocked(refreshTokenService.createRefreshToken).mockResolvedValue('mock_refresh_token');
             vi.mocked(cookiesService.setAuthCookies).mockReturnValue(undefined);
             vi.mocked(cookiesService.setRefreshTokenCookie).mockReturnValue(undefined);
+            vi.mocked(workspaceService.getUserWorkspaces).mockResolvedValue([]);
 
             const loginResponse = await app.inject({
                 method: 'POST',

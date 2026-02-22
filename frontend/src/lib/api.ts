@@ -68,6 +68,20 @@ api.interceptors.request.use((config) => {
         config.headers['X-CSRF-Token'] = match[2];
       }
     }
+
+    // Workspace scoping: tell the backend which workspace this request is for.
+    // Imported lazily to avoid circular dependency (store imports api, api imports store).
+    // The header is omitted on unauthenticated requests where activeWorkspaceId is null.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { useAuthStore } = require('./store');
+      const workspaceId = useAuthStore.getState().activeWorkspaceId;
+      if (workspaceId) {
+        config.headers['X-Workspace-Id'] = workspaceId;
+      }
+    } catch {
+      // Store not yet initialized — continue without header
+    }
   }
   return config;
 });
@@ -457,3 +471,23 @@ export const ecommerceApi = {
 
 /** @deprecated Use ecommerceApi */
 export const shopifyApi = ecommerceApi;
+
+// Workspace API
+export const workspaceApi = {
+  list: () => api.get('/workspaces'),
+  getCurrent: () => api.get('/workspaces/current'),
+  getMembers: () => api.get('/workspaces/current/members'),
+  getSettings: () => api.get('/workspaces/current/settings'),
+  updateSettings: (data: Record<string, unknown>) => api.put('/workspaces/current/settings', data),
+  createInvite: (email: string, role?: string) =>
+    api.post('/workspaces/current/invites', { email, role }),
+  listInvites: () => api.get('/workspaces/current/invites'),
+  revokeInvite: (inviteId: string) =>
+    api.delete(`/workspaces/current/invites/${inviteId}`),
+  removeMember: (userId: string) =>
+    api.delete(`/workspaces/current/members/${userId}`),
+  updateMemberRole: (userId: string, role: string) =>
+    api.patch(`/workspaces/current/members/${userId}`, { role }),
+  acceptInvite: (token: string) =>
+    api.post('/invites/accept', { token }),
+};

@@ -10,7 +10,7 @@ import { captureError } from '@/lib/sentryHelpers';
 
 export default function AuthCallback() {
   const router = useRouter();
-  const { setAuth } = useAuthStore();
+  const { setAuth, setWorkspaces } = useAuthStore();
   const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const authAttemptedRef = useRef(false);
@@ -19,9 +19,11 @@ export default function AuthCallback() {
   const routerRef = useRef(router);
   routerRef.current = router;
 
-  // Memoize setAuth to ensure stable reference
+  // Memoize callbacks to ensure stable references
   const setAuthRef = useRef(setAuth);
   setAuthRef.current = setAuth;
+  const setWorkspacesRef = useRef(setWorkspaces);
+  setWorkspacesRef.current = setWorkspaces;
 
   const handleCallback = useCallback(async (abortSignal: AbortSignal) => {
     // Prevent multiple auth attempts
@@ -101,8 +103,11 @@ export default function AuthCallback() {
 
       const data = await response.json();
 
-      // Store auth data including FB token
+      // Store auth data including FB token and workspace context
       setAuthRef.current(data.user, data.token, data.fbAccessToken);
+      if (data.workspaces?.length) {
+        setWorkspacesRef.current(data.workspaces);
+      }
 
       // Apply language setting if available
       // Priority: 1. User Profile Settings, 2. Preferred Locale from State, 3. Default

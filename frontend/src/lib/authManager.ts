@@ -145,6 +145,8 @@ class AuthManager {
           token: null,
           fbToken: null,
           isAuthenticated: false,
+          workspaces: [],
+          activeWorkspaceId: null,
         });
       } catch (e) {
         captureError(e, 'Failed to clear auth store', { tags: { context: 'auth-logout' } });
