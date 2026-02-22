@@ -460,7 +460,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         )}
 
         {/* Page title */}
-        <div className="text-center px-4 pt-2 sm:pt-5 md:pt-6">
+        <div className="text-center px-4 pt-2 sm:pt-5 md:pt-6 mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-5xl font-display font-bold text-surface-900 leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
