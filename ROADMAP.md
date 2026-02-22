@@ -62,43 +62,18 @@
 
 ---
 
-## Phase 1: Messages Page Redesign (Next)
+## ~~Phase 1: Messages Page Redesign~~ ✅ Complete
 
-Apply the same design philosophy as Comments redesign.
+Completed alongside Comments redesign. Same design philosophy applied.
 
-### 1.1 Replace 6 stat cards with 3 filter chips
-**Current**: 6 stat cards (Total, Pending, Replied, Smart Replies, Template Replies, Needs Attention)
-**Target**: 3 filter chips — `Needs Action` | `All` | `Auto-replied`
-
-### 1.2 Default to "Needs Action"
-Same as Comments — merchants open the page and see what needs their attention.
-
-### 1.3 Add resolve/unresolve for conversations
-Conversations like "شكراً 👍" that don't need a reply sit in pending forever.
-- Add `resolved` field to messages or conversation-level tracking
-- Add resolve/unresolve buttons in card and modal
-
-### 1.4 Add AI regenerate button in modal
-CommentDetailModal has it, Messages modal doesn't. Parity needed.
-
-### 1.5 Wire toast notifications
-Translation keys exist but are unused:
-- `messages.pauseSuccess` → toast on pause
-- `messages.resumeSuccess` → toast on resume
-- `messages.replySent` → toast on reply
-
-### 1.6 Remove dead code
-- `repliedToday` stat is hardcoded to 0 — remove it
-- Clean up unused translation keys
-
-### 1.7 Landscape optimization
-- Add `landscape:px-6` for side padding
-- Modal: `max-h-[85vh] landscape:max-h-[90vh]`
-
-### 1.8 Consistent design language
-- Same card style as Comments (chat bubble pattern)
-- Same modal structure (header, scrollable body, fixed footer)
-- Same badge/chip styling
+- ✅ 3 filter chips (Needs Action | All | Auto-replied) replacing 6 stat cards
+- ✅ Default to "Needs Action"
+- ✅ Resolve/unresolve for conversations
+- ✅ Toast notifications wired (pause, resume, reply)
+- ✅ Dead code removed (repliedToday stat)
+- ✅ Consistent design language (chat bubbles, modal structure, badges)
+- ✅ Landscape modal optimization
+- ~~AI regenerate button~~ — Not needed: auto-reply already tried; if message needs attention, AI couldn't answer (low confidence / no KB match), regenerating gives same result
 
 ---
 
@@ -337,9 +312,9 @@ Backend infrastructure is fully built and running in production (see Completed W
 
 | Phase | Description | Dependency |
 |-------|-------------|------------|
-| **Phase 1** | Messages page redesign | Comments redesign (done ✅) |
-| **Phase 2** | AI Suggested Replies | Phase 1 (modal redesign) |
-| **Phase 3** | Customer Profiles | Phase 1 (sidebar/modal work) |
+| **Phase 1** | ~~Messages page redesign~~ | Done ✅ |
+| **Phase 2** | AI Suggested Replies (Next) | Phase 1 done ✅ |
+| **Phase 3** | Customer Profiles | Phase 1 done ✅ |
 | **Phase 4** | Smart Analytics | Independent (can parallel with 2-3) |
 | **Phase 5** | WhatsApp | Independent (backend-heavy) |
 | **Phase 6** | Team Features UI | Backend done ✅ — only UI needed, can start anytime |

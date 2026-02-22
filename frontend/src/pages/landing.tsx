@@ -20,6 +20,7 @@ import {
   Mail,
   Check,
   ShoppingBag,
+  Store,
   Rocket
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -263,10 +264,17 @@ export default function LandingPage() {
                     <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{t('landing.platforms.instagram')}</span>
                   </div>
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-600 font-bold text-sm sm:text-base cursor-default opacity-80">
+                  <div className="group flex items-center gap-2 px-4 py-2 rounded-full bg-[#96bf48]/10 text-[#96bf48] font-bold text-sm sm:text-base hover:bg-[#96bf48] hover:text-white transition-all cursor-default opacity-80">
                     <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{t('landing.platforms.shopify')}</span>
-                    <span className="text-[10px] sm:text-xs font-semibold bg-emerald-500/20 text-emerald-700 px-1.5 py-0.5 rounded-full leading-none">
+                    <span className="text-[10px] sm:text-xs font-semibold bg-[#96bf48]/20 text-[#96bf48] group-hover:bg-white/20 group-hover:text-white px-1.5 py-0.5 rounded-full leading-none transition-all">
+                      {t('landing.platforms.comingSoon')}
+                    </span>
+                  </div>
+                  <div className="group flex items-center gap-2 px-4 py-2 rounded-full bg-[#5236d6]/10 text-[#5236d6] font-bold text-sm sm:text-base hover:bg-[#5236d6] hover:text-white transition-all cursor-default opacity-80">
+                    <Store className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>{t('landing.platforms.salla')}</span>
+                    <span className="text-[10px] sm:text-xs font-semibold bg-[#5236d6]/20 text-[#5236d6] group-hover:bg-white/20 group-hover:text-white px-1.5 py-0.5 rounded-full leading-none transition-all">
                       {t('landing.platforms.comingSoon')}
                     </span>
                   </div>
@@ -353,6 +361,15 @@ export default function LandingPage() {
                     <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-emerald-500/20 border-b-2 border-emerald-100">
                       <div className="w-full h-full rounded-full bg-[#96bf48] flex items-center justify-center relative">
                         <ShoppingBag className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Salla Floating Icon */}
+                  <div className="absolute -end-4 sm:-end-8 top-2/3 animate-float-orbit z-10">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-violet-500/20 border-b-2 border-violet-100">
+                      <div className="w-full h-full rounded-full bg-[#5236d6] flex items-center justify-center relative">
+                        <Store className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                       </div>
                     </div>
                   </div>

@@ -135,8 +135,8 @@ describe('GapDetectorService', () => {
             expect(db.insert).not.toHaveBeenCalled();
         });
 
-        it('sends notification via template when threshold is reached (count = 5)', async () => {
-            mockExecuteForIncrement(mockGapRow({ occurrence_count: 4 }), 5);
+        it('sends notification via template when threshold is reached (count = 3)', async () => {
+            mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
             mockPageLookup('user-1', 'My Shop');
 
             await gapDetectorService.recordGap('page-1', 'How much is the cake?');
@@ -146,12 +146,12 @@ describe('GapDetectorService', () => {
                 'user-1',
                 'kb_gap',
                 { pageName: 'My Shop', topic: 'What is the price?' },
-                expect.objectContaining({ pageId: 'page-1', intent: 'PRICE', occurrenceCount: 5 }),
+                expect.objectContaining({ pageId: 'page-1', intent: 'PRICE', occurrenceCount: 3 }),
             );
         });
 
         it('does NOT send notification when count < threshold', async () => {
-            mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
+            mockExecuteForIncrement(mockGapRow({ occurrence_count: 1 }), 2);
 
             await gapDetectorService.recordGap('page-1', 'How much is the cake?');
 
@@ -159,7 +159,7 @@ describe('GapDetectorService', () => {
         });
 
         it('does NOT send notification when count > threshold (already sent)', async () => {
-            mockExecuteForIncrement(mockGapRow({ occurrence_count: 6 }), 7);
+            mockExecuteForIncrement(mockGapRow({ occurrence_count: 4 }), 5);
 
             await gapDetectorService.recordGap('page-1', 'How much is the cake?');
 
@@ -191,7 +191,7 @@ describe('GapDetectorService', () => {
 
         it('truncates long queries in notification variables', async () => {
             const longQuery = 'A'.repeat(200);
-            mockExecuteForIncrement(mockGapRow({ query_text: longQuery, occurrence_count: 4 }), 5);
+            mockExecuteForIncrement(mockGapRow({ query_text: longQuery, occurrence_count: 2 }), 3);
             mockPageLookup('user-1', 'Shop');
 
             await gapDetectorService.recordGap('page-1', 'Another price query');
@@ -204,7 +204,7 @@ describe('GapDetectorService', () => {
         });
 
         it('skips notification when page has no userId', async () => {
-            mockExecuteForIncrement(mockGapRow({ occurrence_count: 4 }), 5);
+            mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
             // Page lookup returns no user
             mockPageLookup(null);
 
@@ -215,7 +215,7 @@ describe('GapDetectorService', () => {
         });
 
         it('does not throw when notification service fails', async () => {
-            mockExecuteForIncrement(mockGapRow({ occurrence_count: 4 }), 5);
+            mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
             mockPageLookup('user-1', 'My Shop');
             (notificationService.sendTemplateNotification as ReturnType<typeof vi.fn>)
                 .mockRejectedValue(new Error('FCM unavailable'));
@@ -227,7 +227,7 @@ describe('GapDetectorService', () => {
         });
 
         it('uses page name fallback when page name is null', async () => {
-            mockExecuteForIncrement(mockGapRow({ occurrence_count: 4 }), 5);
+            mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
             mockPageLookup('user-1', null);
 
             await gapDetectorService.recordGap('page-1', 'How much?');

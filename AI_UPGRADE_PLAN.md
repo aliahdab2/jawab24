@@ -14,9 +14,9 @@ Transform Jawab24 from a "static KB injector" (sends entire `knowledgeBase` text
 | **PR2** | KB versioning + business profile + category defaults | **Done** | Migration 0017, `schema.ts` (pages: kb_version + business_profile), `pages.ts` bump logic, `category-defaults.ts` + 35 tests |
 | **PR3** | DB extensions + kb_chunks + kb_gaps + interfaces | **Done** | Migration 0018 (pgvector, pg_trgm, kb_chunks, kb_gaps tables), `interfaces.ts` (EmbeddingProvider, VectorStore) |
 | **PR4** | Ingestion pipeline | **Done** | `chunker.ts`, `embedding.ts`, `pgvector-store.ts`, `ingestion.ts` + 26 tests, `openai` dep added |
-| **PR5** | Retrieval + wiring into reply flow | Pending | `retrieval.ts`, `generator.ts` uses chunks, `openai.ts` uses `<business_knowledge>`, `RAG_MODE` flag |
-| **PR6** | Semantic cache + intent detector | Pending | Migration (semantic_cache table), `intent-detector.ts`, cache flow in `ai.ts` |
-| **PR7** | Gap detection + monitoring + shadow mode | Pending | `gap-detector.ts`, notifications, logging, `RAG_MODE=shadow` |
+| **PR5** | Retrieval + wiring into reply flow | **Done** | `retrieval.ts`, `generator.ts` uses chunks, `openai.ts` uses `<business_knowledge>`, `RAG_MODE` flag, ingestion wired into `pages.ts` KB save + sync |
+| **PR6** | Semantic cache + intent detector | **Done** | `semantic-cache.ts`, `intent-detector.ts`, cache flow in `ai.ts`, `RAG_MODE` default changed to `on` |
+| **PR7** | Gap detection + monitoring | **Done** (backend) | `gap-detector.ts`, notifications, `NOTIFICATION_THRESHOLD` lowered to 3. Frontend dashboard deferred to post-launch. |
 | **PR8** | Speed + scaling | Pending | Parallel execution, fast paths, worker concurrency 5->15 |
 
 **Dependencies:** PR1 -> PR2 -> PR3 -> PR4 -> PR5 -> PR6/PR7 (parallel) -> PR8

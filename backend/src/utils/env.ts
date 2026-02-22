@@ -41,7 +41,7 @@ const EnvSchema = z.object({
     OPENAI_API_KEY: z.string().optional(),
 
     // RAG mode: off = static KB, shadow = run RAG but log only, on = full RAG
-    RAG_MODE: z.enum(['off', 'shadow', 'on']).default('off'),
+    RAG_MODE: z.enum(['off', 'shadow', 'on']).default('on'),
 
     // Shopify (optional — required for Shopify integration)
     SHOPIFY_API_KEY: z.string().optional(),

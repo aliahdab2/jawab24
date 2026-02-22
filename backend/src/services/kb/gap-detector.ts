@@ -8,7 +8,7 @@ import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
 
 /** Number of occurrences before a notification is triggered */
-const NOTIFICATION_THRESHOLD = 5;
+const NOTIFICATION_THRESHOLD = 3;
 
 /** Trigram similarity threshold for deduplicating similar gap queries */
 const DEDUP_SIMILARITY = 0.5;

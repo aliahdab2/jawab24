@@ -7,6 +7,22 @@ import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
 import { captureError } from '../utils/sentryHelpers';
+import { config } from '../config';
+import { KbIngestionService } from './kb/ingestion';
+import { OpenAIEmbeddingProvider } from './kb/embedding';
+import { PgVectorStore } from './kb/pgvector-store';
+
+/** Lazy-init ingestion service (only created when OPENAI_API_KEY exists) */
+let _ingestionService: KbIngestionService | null = null;
+function getIngestionService(): KbIngestionService | null {
+    if (!config.openai?.apiKey) return null;
+    if (!_ingestionService) {
+        const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
+        const vectorStore = new PgVectorStore();
+        _ingestionService = new KbIngestionService(embeddingProvider, vectorStore);
+    }
+    return _ingestionService;
+}
 
 /**
  * Format Facebook hours object into readable text
@@ -289,6 +305,15 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
+        // Fire-and-forget: trigger KB ingestion when knowledge base content changes
+        if (data.knowledgeBase !== undefined && data.knowledgeBase.trim() && updatedPage?.kbVersion) {
+            const ingestion = getIngestionService();
+            if (ingestion) {
+                ingestion.ingestKnowledgeBase(pageId, data.knowledgeBase, updatedPage.kbVersion)
+                    .catch(err => captureError(err, 'KB ingestion failed during updatePage', { tags: { service: 'kb-ingestion', action: 'updatePage' }, extra: { pageId } }));
+            }
+        }
+
         return updatedPage;
     }
 
@@ -449,6 +474,15 @@ export class PagesService {
                     })
                     .returning();
                 syncedPages.push(created);
+
+                // Fire-and-forget: ingest KB for new page so RAG retrieval works immediately
+                if (suggestedKnowledgeBase && created?.kbVersion) {
+                    const ingestion = getIngestionService();
+                    if (ingestion) {
+                        ingestion.ingestKnowledgeBase(created.id, suggestedKnowledgeBase, created.kbVersion)
+                            .catch(err => captureError(err, 'KB ingestion failed during syncPages', { tags: { service: 'kb-ingestion', action: 'syncPages' }, extra: { pageId: created.id } }));
+                    }
+                }
 
                 if (shouldAutoEnable && remainingSlots !== null) {
                     remainingSlots--;
