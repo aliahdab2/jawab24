@@ -1,18 +1,23 @@
 import { useState, useEffect, useMemo, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import type { GetStaticProps } from 'next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, PageSkeleton } from '@/components/ui';
-import { plansApi, subscriptionApi } from '@/lib/api';
-import { extractArrayData, extractObjectData } from '@/lib/api-utils';
+import { Card, Button } from '@/components/ui';
+import { subscriptionApi } from '@/lib/api';
+import { extractObjectData } from '@/lib/api-utils';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
-import { Check, X, Zap, Crown, Sparkles, AlertCircle, Store, ChevronDown } from 'lucide-react';
+import { Check, X, Zap, Crown, Sparkles, Store, ChevronDown } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
+
+interface PricingPageProps {
+  plans: Plan[];
+}
 
 
 function PlanCard({
@@ -288,63 +293,38 @@ function FeatureRow({
   );
 }
 
-const PricingPage: NextPageWithLayout = () => {
+const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans }) => {
   const router = useRouter();
   const locale = router.locale;
   const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plans] = useState<Plan[]>(serverPlans);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [loading, setLoading] = useState(true);
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
-  const [isSanctioned, setIsSanctioned] = useState<boolean>(false); // Default: not sanctioned
-  const [usingFallback, setUsingFallback] = useState(false);
+  const [isSanctioned, setIsSanctioned] = useState<boolean>(false);
   const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // OPTIMIZED: Parallel loading with non-blocking geo check
+  // Client-side: fetch user-specific data (subscription, usage, geo)
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchUserData = async () => {
       try {
-        // Run geo check and plans fetch in parallel (non-blocking)
-        const [geoResult, plansResult, usageResult] = await Promise.all([
-          // Geo check with 1s timeout (non-blocking for display)
+        const [geoResult, usageResult] = await Promise.all([
           isUserSanctionedNonBlocking(1000).catch(() => ({ sanctioned: false, cached: false, timedOut: true })),
-          // Plans API with fallback and 3s timeout
-          plansApi.getAll({ timeout: 3000 }).catch(() => null),
-          // Usage API (only if authenticated) with 3s timeout
           isAuthenticated ? subscriptionApi.getUsage({ timeout: 3000 }).catch(() => null) : Promise.resolve(null),
         ]);
 
-        // Update geo status
         setIsSanctioned(geoResult.sanctioned);
 
-        // Handle plans (API or fallback)
-        if (plansResult?.data) {
-          setPlans(extractArrayData<Plan>(plansResult.data));
-          setUsingFallback(false);
-        } else {
-          // Offline or API failed - use fallback plans
-          console.warn('Using fallback plans (offline or API unavailable)');
-          setPlans(FALLBACK_PLANS);
-          setUsingFallback(true);
-        }
-
-        // Handle usage
         if (usageResult?.data) {
           setUsage(extractObjectData<UsageSummary>(usageResult.data));
         }
       } catch (error) {
-        captureError(error, 'Failed to load pricing data', { tags: { page: 'pricing' } });
-        // Even on error, show fallback plans
-        setPlans(FALLBACK_PLANS);
-        setUsingFallback(true);
-      } finally {
-        setLoading(false);
+        captureError(error, 'Failed to load user data', { tags: { page: 'pricing' } });
       }
     };
 
-    fetchData();
+    fetchUserData();
   }, [isAuthenticated]);
 
   const handleSelectPlan = async (planId: string) => {
@@ -405,13 +385,6 @@ const PricingPage: NextPageWithLayout = () => {
     [activePlans, currentPlanId]
   );
 
-  // Show loading skeleton
-  if (loading) {
-    return <PageSkeleton />;
-  }
-
-  // NORMAL PRICING FLOW
-
   return (
     <>
       <Head>
@@ -424,24 +397,6 @@ const PricingPage: NextPageWithLayout = () => {
         <meta property="og:url" content="https://jawab24.com/pricing" />
       </Head>
         <div className="lg:-mt-4">
-        {/* Fallback Disclaimer - Only shown when using offline plans */}
-        {usingFallback && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-amber-900 mb-1">
-                {t('pricing.fallbackTitle' as TranslationKey) !== 'pricing.fallbackTitle'
-                  ? t('pricing.fallbackTitle' as TranslationKey)
-                  : 'Displaying Cached Pricing'}
-              </p>
-              <p className="text-xs text-amber-700">
-                {t('pricing.fallbackMessage' as TranslationKey) !== 'pricing.fallbackMessage'
-                  ? t('pricing.fallbackMessage' as TranslationKey)
-                  : 'Prices may be temporarily unavailable or outdated. Final pricing is confirmed at checkout.'}
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Usage Summary if subscribed - Inline */}
         {usage?.subscription?.plan && (
@@ -603,3 +558,29 @@ PricingPage.getLayout = (page: ReactElement) => (
 );
 
 export default PricingPage;
+
+/**
+ * ISR: Fetch plans server-side at build time, revalidate hourly.
+ * Database is the single source of truth — no code changes needed to update prices.
+ */
+export const getStaticProps: GetStaticProps<PricingPageProps> = async () => {
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+    const res = await fetch(`${apiUrl}/plans`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`API responded with ${res.status}`);
+    const json = await res.json();
+    const plans: Plan[] = json.data ?? [];
+
+    return {
+      props: { plans },
+      // ISR: revalidate every hour (omitted for mobile static export which doesn't support it)
+      ...(process.env.IS_MOBILE_BUILD !== 'true' ? { revalidate: 3600 } : {}),
+    };
+  } catch {
+    // API unreachable at build time — use fallback plans, retry sooner
+    return {
+      props: { plans: FALLBACK_PLANS },
+      ...(process.env.IS_MOBILE_BUILD !== 'true' ? { revalidate: 60 } : {}),
+    };
+  }
+};
