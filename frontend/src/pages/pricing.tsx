@@ -464,9 +464,6 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           <h1 className="text-2xl sm:text-5xl font-display font-bold text-surface-900 leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
-          <p className="hidden sm:block text-base sm:text-xl text-surface-500 leading-relaxed mt-3 mb-6 max-w-xl mx-auto">
-            {t('pricing.tryFullService')}
-          </p>
         </div>
 
         {/* Billing interval toggle */}

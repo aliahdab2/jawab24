@@ -75,9 +75,6 @@ test.describe('Pricing Page', () => {
       page.getByText('Choose the right plan for your business').first()
     ).toBeVisible({ timeout: 15000 });
 
-    await expect(
-      page.getByText('Try the full service free').first()
-    ).toBeVisible();
   });
 
   test('should render all plan cards', async ({ page }) => {
