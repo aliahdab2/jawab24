@@ -10,6 +10,7 @@
  *  2. Demo seed refresh path → workspaceId set on existing pages
  *  3. Settings → workspaceSettings sync (critical disconnect)
  *  4. Comments IDOR — workspace isolation on getOne / delete
+ *  5. Instagram comments IDOR — getCommentForWorkspace covers Instagram table
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -19,6 +20,8 @@ import {
     createTestPage,
     insertPost,
     insertComment,
+    insertInstagramMedia,
+    insertInstagramComment,
 } from './setup';
 import { pagesService } from '../../src/services/pages';
 import { commentsService } from '../../src/services/comments';
@@ -182,7 +185,72 @@ describe('Comments — workspace isolation', () => {
     });
 });
 
-// ── 4. Workspace auto-create on login (ensureWorkspace) ──────────────────────
+// ── 4. Instagram comments — workspace isolation (IDOR prevention) ─────────────
+//
+// Regression: getCommentForWorkspace originally only queried the Facebook
+// `comments` table. Instagram comments (instagramComments → instagramMedia →
+// pages) were not checked, meaning a cross-workspace ID lookup would return
+// null (silently safe in the happy path) but would also never resolve a
+// legitimate Instagram comment as "owned" by the requesting workspace.
+
+describe('Instagram comments — workspace isolation', () => {
+    it('getCommentForWorkspace returns an Instagram comment that belongs to the workspace', async () => {
+        const owner = await createTestUser();
+        const ws = await createTestWorkspace(owner.id);
+        const page = await createTestPage(owner.id, { workspaceId: ws.id });
+        const media = await insertInstagramMedia(page.id, { caption: 'My reel' });
+        const igComment = await insertInstagramComment(media.id, { message: 'Great post!' });
+
+        const found = await commentsService.getCommentForWorkspace(igComment.id, ws.id);
+
+        expect(found).not.toBeNull();
+        expect(found!.id).toBe(igComment.id);
+        expect(found!.message).toBe('Great post!');
+    });
+
+    it('getCommentForWorkspace returns null for an Instagram comment that belongs to a different workspace', async () => {
+        // Workspace A owns the page, media, and comment
+        const ownerA = await createTestUser();
+        const wsA = await createTestWorkspace(ownerA.id);
+        const pageA = await createTestPage(ownerA.id, { workspaceId: wsA.id });
+        const mediaA = await insertInstagramMedia(pageA.id);
+        const igComment = await insertInstagramComment(mediaA.id, { message: 'Secret IG comment' });
+
+        // Workspace B tries to access it by raw ID (IDOR attempt)
+        const ownerB = await createTestUser();
+        const wsB = await createTestWorkspace(ownerB.id);
+
+        const found = await commentsService.getCommentForWorkspace(igComment.id, wsB.id);
+
+        expect(found).toBeNull();
+    });
+
+    it('getCommentForWorkspace does not confuse a Facebook comment ID with an Instagram comment', async () => {
+        const owner = await createTestUser();
+        const ws = await createTestWorkspace(owner.id);
+        const page = await createTestPage(owner.id, { workspaceId: ws.id });
+
+        // Create a Facebook comment
+        const post = await insertPost(page.id);
+        const fbComment = await insertComment(post.id, { message: 'Facebook comment' });
+
+        // Create an Instagram comment on a different page in the same workspace
+        const media = await insertInstagramMedia(page.id);
+        const igComment = await insertInstagramComment(media.id, { message: 'Instagram comment' });
+
+        // Each ID resolves to the correct record
+        const foundFb = await commentsService.getCommentForWorkspace(fbComment.id, ws.id);
+        const foundIg = await commentsService.getCommentForWorkspace(igComment.id, ws.id);
+
+        expect(foundFb).not.toBeNull();
+        expect(foundFb!.id).toBe(fbComment.id);
+
+        expect(foundIg).not.toBeNull();
+        expect(foundIg!.id).toBe(igComment.id);
+    });
+});
+
+// ── 5. Workspace auto-create on login (ensureWorkspace) ──────────────────────
 
 describe('Auth — ensureWorkspace', () => {
     it('a new user gets a workspace automatically after login', async () => {
