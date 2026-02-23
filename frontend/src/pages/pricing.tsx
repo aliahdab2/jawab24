@@ -76,15 +76,19 @@ function PlanCard({
   // SAR equivalent (USD is pegged at 3.75 SAR)
   const sarMonthly = !isFree ? Math.round((isAnnual ? monthlyEquivalent : plan.price) / 100 * 3.75) : 0;
 
+  const isPro = plan.slug === 'pro';
+
   const highlightClasses = isCurrentPlan
     ? 'ring-2 ring-emerald-400 shadow-[0_20px_40px_rgba(16,185,129,0.18)] md:scale-105 z-10'
     : (isPopular && !isCurrentPlan)
       ? 'ring-2 ring-blue-500 shadow-[0_20px_40px_rgba(59,130,246,0.18)] md:scale-105 z-10'
-      : 'border-surface-200 shadow-[0_4px_6px_rgba(0,0,0,0.07)]';
+      : isPro
+        ? 'ring-2 ring-amber-400 shadow-[0_20px_40px_rgba(217,161,12,0.15)] md:scale-[1.02] z-[5]'
+        : 'border-surface-200 shadow-[0_4px_6px_rgba(0,0,0,0.07)]';
 
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${highlightClasses} ${isCurrentPlan ? 'bg-emerald-50/40' : 'bg-white'}`}
+      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${highlightClasses} ${isCurrentPlan ? 'bg-emerald-50/40' : isPro ? 'bg-amber-50/30' : 'bg-white'}`}
     >
       {/* Popular badge */}
       {isPopular && (
@@ -92,6 +96,16 @@ function PlanCard({
           <span className="bg-gradient-to-r from-blue-500 to-brand-500 text-white text-[13px] font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-[0_4px_8px_rgba(0,0,0,0.2)] whitespace-nowrap uppercase tracking-wider">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             {t('pricing.popular')}
+          </span>
+        </div>
+      )}
+
+      {/* Pro/Premium badge */}
+      {isPro && !isCurrentPlan && (
+        <div className="absolute -top-4 start-0 end-0 flex justify-center z-20">
+          <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[13px] font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-[0_4px_8px_rgba(180,130,0,0.3)] whitespace-nowrap uppercase tracking-wider">
+            <Crown className="w-3.5 h-3.5" />
+            {t('pricing.premium' as TranslationKey)}
           </span>
         </div>
       )}
@@ -158,9 +172,9 @@ function PlanCard({
             {t('pricing.sarEquivalent' as TranslationKey).replace('{amount}', sarMonthly.toLocaleString())}
           </p>
         )}
-        {/* Trial badge — hidden on mobile (shown as banner above card instead) */}
+        {/* Trial badge — inside the card, visible on all breakpoints */}
         {plan.trialDays > 0 && !hasActiveSubscription && (
-          <div className="hidden md:inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
+          <div className="inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
             <Zap className="w-3 h-3" />
             {t('pricing.trialDays', { days: plan.trialDays })}
           </div>
@@ -255,11 +269,6 @@ function PlanCard({
                   : t('pricing.subscribe')
             }
           </Button>
-        )}
-        {((isFree || (plan.trialDays > 0 && !hasActiveSubscription)) && !isSanctioned && !isCurrentPlan) && (
-          <p className="text-xs text-surface-400 text-center mt-3 font-medium">
-            {t('pricing.noCreditCard')}
-          </p>
         )}
       </div>
     </Card>
@@ -505,11 +514,8 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           <h1 className="text-2xl sm:text-5xl font-display font-bold text-surface-900 leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
-          <p className="mt-2 text-sm sm:text-base text-surface-500 font-medium">
-            {t('pricing.flexiblePlans')}
-          </p>
-          {/* Social proof */}
-          <div className="flex items-center justify-center gap-2 mt-3">
+          {/* Social proof — desktop/tablet only, saves vertical space on mobile */}
+          <div className="hidden sm:flex items-center justify-center gap-2 mt-3">
             <div className="flex" aria-hidden="true">
               {[0, 1, 2, 3, 4].map((i) => (
                 <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
@@ -522,7 +528,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         </div>
 
         {/* Billing interval toggle */}
-        <div className="flex justify-center mb-3 sm:mb-6 lg:mb-9">
+        <div className="flex justify-center mb-3 sm:mb-8 lg:mb-12">
           <div className="inline-flex items-center p-1 bg-surface-100 rounded-xl border border-surface-200 shadow-inner">
             <button
               type="button"
@@ -548,7 +554,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
         {/* Plan tabs — mobile only (Shopify-style segmented control) */}
         <div
-          className="grid mx-4 mb-2 border border-surface-200 rounded-lg overflow-hidden md:hidden"
+          className="grid mx-4 mb-8 border border-surface-200 rounded-lg overflow-hidden md:hidden"
           style={{ gridTemplateColumns: `repeat(${activePlans.length}, 1fr)` }}
           role="tablist"
           aria-label={t('pricing.planTabs' as TranslationKey)}
@@ -582,17 +588,6 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             );
           })}
         </div>
-
-        {/* Trial promo banner — mobile only (Shopify-style) */}
-        {activePlans[activeTab]?.trialDays > 0 && !hasActiveSubscription && (
-          <div className="mx-4 mb-2 py-2.5 px-4 bg-brand-500 rounded-lg text-center md:hidden">
-            <span className="text-sm font-bold text-white">
-              {t('pricing.trialDays', { days: activePlans[activeTab].trialDays })}
-              {' — '}
-              {t('pricing.noCreditCard')}
-            </span>
-          </div>
-        )}
 
         {/* Plans — single container: stacked grid on mobile, multi-col grid on md+ */}
         <div
@@ -642,10 +637,6 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           <span className="flex items-center gap-1.5">
             <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" aria-hidden="true" />
             {t('pricing.trustCancelAnytime' as TranslationKey)}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" aria-hidden="true" />
-            {t('pricing.trialDays', { days: 30 })}
           </span>
         </div>
 
