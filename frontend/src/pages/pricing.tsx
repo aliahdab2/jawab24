@@ -562,82 +562,53 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           </div>
         </div>
 
-        {/* Tablet/Desktop: Original grid */}
-        <div className={`hidden md:grid ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'} gap-6 lg:gap-8 pb-8 items-stretch max-w-7xl mx-auto md:px-6 lg:px-0`}>
-          {activePlans.map((plan) => (
-            <PlanCard
+        {/* Plans — single container: horizontal scroll-snap on mobile, grid on md+ */}
+        <div
+          ref={carouselRef}
+          className={`flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory -mx-4 px-4 pt-6 pb-4 md:overflow-visible md:snap-none md:mx-0 md:px-6 md:pt-0 md:pb-8 md:grid ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'} md:gap-6 lg:gap-8 md:items-stretch max-w-7xl md:mx-auto lg:px-0`}
+          role="region"
+          aria-label={t('pricing.plansCarousel' as TranslationKey)}
+        >
+          {activePlans.map((plan, index) => (
+            <div
               key={plan.id}
-              plan={plan}
-              isCurrentPlan={plan.id === currentPlanId}
-              hasActiveSubscription={hasActiveSubscription}
-              onSelect={() => handleSelectPlan(plan.id)}
-              loading={changingPlan === plan.id}
-              currentPlanPrice={currentPlanPrice}
-              subscriptionStatus={usage?.subscription?.status}
-              t={t}
-              isSanctioned={isSanctioned === true}
-              billingInterval={billingInterval}
-              locale={locale}
-            />
+              ref={(el) => { cardRefs.current[index] = el; }}
+              className="w-[85vw] flex-shrink-0 snap-center md:w-auto md:flex-shrink"
+            >
+              <PlanCard
+                plan={plan}
+                isCurrentPlan={plan.id === currentPlanId}
+                hasActiveSubscription={hasActiveSubscription}
+                onSelect={() => handleSelectPlan(plan.id)}
+                loading={changingPlan === plan.id}
+                currentPlanPrice={currentPlanPrice}
+                subscriptionStatus={usage?.subscription?.status}
+                t={t}
+                isSanctioned={isSanctioned === true}
+                billingInterval={billingInterval}
+                locale={locale}
+              />
+            </div>
           ))}
         </div>
 
-        {/* Mobile: Horizontal scroll-snap carousel */}
-        <div className="md:hidden">
-          <div
-            ref={carouselRef}
-            className="flex gap-4 overflow-x-auto scrollbar-hide -mx-4 px-4 pt-6 pb-4"
-            style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
-            role="region"
-            aria-label={t('pricing.plansCarousel' as TranslationKey)}
-            aria-roledescription="carousel"
-            tabIndex={0}
-          >
-            {activePlans.map((plan, index) => (
-              <div
-                key={plan.id}
-                ref={(el) => { cardRefs.current[index] = el; }}
-                className="w-[85vw] flex-shrink-0"
-                style={{ scrollSnapAlign: 'center' }}
-                role="group"
-                aria-roledescription="slide"
-                aria-label={t('pricing.planSlideLabel' as TranslationKey, { current: index + 1, total: activePlans.length })}
-              >
-                <PlanCard
-                  plan={plan}
-                  isCurrentPlan={plan.id === currentPlanId}
-                  hasActiveSubscription={hasActiveSubscription}
-                  onSelect={() => handleSelectPlan(plan.id)}
-                  loading={changingPlan === plan.id}
-                  currentPlanPrice={currentPlanPrice}
-                  subscriptionStatus={usage?.subscription?.status}
-                  t={t}
-                  isSanctioned={isSanctioned === true}
-                  billingInterval={billingInterval}
-                  locale={locale}
-                />
-              </div>
-            ))}
-          </div>
-
-          {/* Dot indicators */}
-          <div className="flex justify-center gap-2 pb-6" role="tablist" aria-label={t('pricing.planIndicators' as TranslationKey)}>
-            {activePlans.map((plan, index) => (
-              <button
-                key={plan.id}
-                type="button"
-                role="tab"
-                aria-selected={activeSlide === index}
-                aria-label={t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}` ? t(`pricing.${plan.slug}` as TranslationKey) : plan.name}
-                onClick={() => scrollToSlide(index)}
-                className={`rounded-full transition-all duration-300 ${
-                  activeSlide === index
-                    ? 'w-6 h-2 bg-brand-500'
-                    : 'w-2 h-2 bg-surface-300 hover:bg-surface-400'
-                }`}
-              />
-            ))}
-          </div>
+        {/* Dot indicators — mobile only */}
+        <div className="flex justify-center gap-2 pb-6 md:hidden" role="tablist" aria-label={t('pricing.planIndicators' as TranslationKey)}>
+          {activePlans.map((plan, index) => (
+            <button
+              key={plan.id}
+              type="button"
+              role="tab"
+              aria-selected={activeSlide === index}
+              aria-label={t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}` ? t(`pricing.${plan.slug}` as TranslationKey) : plan.name}
+              onClick={() => scrollToSlide(index)}
+              className={`rounded-full transition-all duration-300 ${
+                activeSlide === index
+                  ? 'w-6 h-2 bg-brand-500'
+                  : 'w-2 h-2 bg-surface-300 hover:bg-surface-400'
+              }`}
+            />
+          ))}
         </div>
 
         {/* Trust bar */}

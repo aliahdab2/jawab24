@@ -69,6 +69,22 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// Mock IntersectionObserver (not available in jsdom)
+class IntersectionObserverMock {
+  readonly root: Element | null = null;
+  readonly rootMargin: string = '';
+  readonly thresholds: ReadonlyArray<number> = [];
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  takeRecords = vi.fn().mockReturnValue([]);
+  constructor(_cb: IntersectionObserverCallback, _opts?: IntersectionObserverInit) {}
+}
+Object.defineProperty(window, 'IntersectionObserver', { value: IntersectionObserverMock });
+
+// Mock Element.scrollIntoView (not implemented in jsdom)
+Element.prototype.scrollIntoView = vi.fn();
+
 // Mock localStorage with functional implementation
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
