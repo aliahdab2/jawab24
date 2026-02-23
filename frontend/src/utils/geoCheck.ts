@@ -133,7 +133,7 @@ export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Pro
 
         if (!response.ok) {
             // Display mode: permissive (don't block UI)
-            console.warn('Geo check failed, assuming not sanctioned for display');
+            captureError(new Error(`Geo check HTTP ${response.status}`), 'Geo check failed (display mode)', { tags: { context: 'geo-display' }, level: 'warning' });
             return { sanctioned: false, cached: false, timedOut: false };
         }
 
@@ -153,9 +153,9 @@ export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Pro
         const isTimeout = error instanceof Error && error.message === 'Timeout';
 
         if (isTimeout) {
-            console.warn('Geo check timed out, assuming not sanctioned for display');
+            captureError(error, 'Geo check timed out (display mode)', { tags: { context: 'geo-display' }, level: 'warning' });
         } else {
-            console.warn('Geo check error, assuming not sanctioned for display:', error);
+            captureError(error, 'Geo check error (display mode)', { tags: { context: 'geo-display' }, level: 'warning' });
         }
 
         // Display mode: permissive (don't block UI)
@@ -194,7 +194,7 @@ export async function isUserSanctioned(): Promise<boolean> {
 
         if (!response.ok) {
             // Payment mode: strict (block if check fails)
-            console.warn('Geo check failed, defaulting to blocked for payment');
+            captureError(new Error(`Geo check HTTP ${response.status}`), 'Geo check failed (payment mode)', { tags: { context: 'geo-payment' }, level: 'warning' });
             return true;
         }
 

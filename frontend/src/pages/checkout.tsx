@@ -75,7 +75,7 @@ export default function CheckoutPage() {
 
     // SANCTIONS CHECK: Do not proceed if sanctioned
     if (isSanctioned) {
-      console.warn('[Checkout] Blocked: user is in sanctioned jurisdiction');
+      captureError(new Error('Checkout blocked: sanctioned jurisdiction'), 'Sanctions block on checkout', { tags: { page: 'checkout', action: 'sanctions_block' }, level: 'warning' });
       return;
     }
 

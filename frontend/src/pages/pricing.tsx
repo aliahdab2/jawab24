@@ -350,7 +350,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     // (Display is permissive, but payments are strict)
     const sanctioned = await isUserSanctioned();
     if (sanctioned) {
-      console.warn('[Pricing] Payment blocked: user is in sanctioned jurisdiction');
+      captureError(new Error('Payment blocked: sanctioned jurisdiction'), 'Sanctions block on pricing', { tags: { page: 'pricing', action: 'sanctions_block' }, level: 'warning' });
       return;
     }
 

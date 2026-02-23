@@ -79,9 +79,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
     // Configure StatusBar overlay EARLY (before full init) for consistent safe areas
     import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
-      StatusBar.setOverlaysWebView({ overlay: true }).catch((e) => console.warn('StatusBar overlay init:', e));
-      StatusBar.setStyle({ style: Style.Default }).catch((e) => console.warn('StatusBar style init:', e));
-    }).catch((e) => console.warn('StatusBar import failed:', e));
+      StatusBar.setOverlaysWebView({ overlay: true }).catch((e) => addErrorBreadcrumb('capacitor', 'StatusBar overlay init failed', { error: String(e) }));
+      StatusBar.setStyle({ style: Style.Default }).catch((e) => addErrorBreadcrumb('capacitor', 'StatusBar style init failed', { error: String(e) }));
+    }).catch((e) => addErrorBreadcrumb('capacitor', 'StatusBar import failed', { error: String(e) }));
   }, []); // Empty deps = runs once on mount
 
   // Sync Next.js locale with language store
@@ -131,7 +131,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       try {
         await Keyboard.setResizeMode({ mode: 'body' } as any);
       } catch (err) {
-        console.warn('Keyboard resize mode setup:', err);
+        addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });
       }
 
       // Clear existing listeners if any (prevent duplicates)

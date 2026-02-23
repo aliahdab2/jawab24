@@ -126,7 +126,7 @@ class AuthManager {
             }
           }
         } catch (e) {
-          console.warn('Failed to remove push token:', e);
+          captureError(e, 'Failed to remove push token during logout', { tags: { context: 'auth-logout' } });
         }
       }
 
