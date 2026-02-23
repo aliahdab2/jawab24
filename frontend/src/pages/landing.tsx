@@ -293,19 +293,18 @@ export default function LandingPage() {
                 </p>
 
                 {/* CTA Buttons */}
-                <div className="flex flex-col items-stretch gap-2 sm:gap-4 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
-                  <div className="flex flex-col items-center sm:items-start gap-2">
-                    <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
-                      <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
-                        {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.hero.cta1')}
-                      </Button>
-                    </Link>
-                    {!isAuthenticated && (
-                      <p className="text-xs sm:text-sm text-surface-600 font-medium">
-                        {t('landing.cta.note')}
-                      </p>
-                    )}
-                  </div>
+                <div className="flex flex-col items-center sm:items-start gap-3 sm:gap-5 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
+                  <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
+                    <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
+                      {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.hero.cta1')}
+                    </Button>
+                  </Link>
+                  {!isAuthenticated && (
+                    <p className="flex items-center gap-1.5 text-xs sm:text-sm text-surface-500 font-medium">
+                      <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-500" aria-hidden="true" />
+                      {t('landing.cta.note')}
+                    </p>
+                  )}
                   {!isAuthenticated && (
                     <Link href="/pricing" className="w-full sm:w-auto">
                       <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-gray-300 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">

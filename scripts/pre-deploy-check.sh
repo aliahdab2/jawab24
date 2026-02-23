@@ -461,7 +461,15 @@ else
     (cd frontend && npx playwright install chromium) > /dev/null 2>&1 || true
 fi
 
-if (cd frontend && CI=true npx playwright test); then
+# CI=true triggers: forbidOnly, retries:2, single worker, no server reuse.
+# Locally that OOM-kills Chromium (Next dev server + browser + retries).
+# Use --retries=0 and list reporter locally to keep memory in check.
+E2E_EXTRA_ARGS=""
+if [ "$CI" != "true" ]; then
+    E2E_EXTRA_ARGS="--retries=0 --reporter=list"
+fi
+
+if (cd frontend && CI=true npx playwright test $E2E_EXTRA_ARGS); then
     echo -e "${GREEN}   ✅ Frontend E2E tests pass${NC}"
 else
     echo -e "${RED}   ❌ Frontend E2E tests failed!${NC}"
