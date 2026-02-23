@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ReactElement } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import type { GetStaticProps } from 'next';
@@ -110,7 +110,7 @@ function PlanCard({
         </div>
       )}
 
-      <div className="text-center mb-2 md:mb-3 pt-3 md:pt-4 px-3">
+      <div className="text-center mb-1 md:mb-3 pt-2 md:pt-4 px-3">
         <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'bg-slate-100 text-slate-600' :
           plan.slug === 'starter' ? 'bg-blue-100 text-blue-600' :
             plan.slug === 'business' ? 'bg-brand-100 text-brand-600' :
@@ -131,7 +131,7 @@ function PlanCard({
       </div>
 
       {/* Price */}
-      <div className="text-center mb-3 md:mb-4 py-2 md:py-3 bg-surface-50/50 rounded-xl mx-3">
+      <div className="text-center mb-2 md:mb-4 py-1.5 md:py-3 bg-surface-50/50 rounded-xl mx-3">
         <div className="flex items-baseline justify-center gap-1">
           <span className="text-3xl md:text-4xl font-extrabold text-surface-900">
             {isFree ? '$0' : isAnnual ? formatPrice(monthlyEquivalent) : formatPrice(plan.price)}
@@ -211,7 +211,7 @@ function PlanCard({
       )}
 
       {/* CTA */}
-      <div className="mt-auto pt-2 md:pt-3 px-3 pb-1">
+      <div className="mt-auto pt-1.5 md:pt-3 px-3 pb-1">
         {isSanctioned ? (
           <div className="text-center p-3 bg-slate-50 rounded-xl border border-slate-100">
             <p className="text-xs font-bold text-slate-500 mb-1">
@@ -393,6 +393,55 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     [activePlans, currentPlanId]
   );
 
+  // --- Mobile carousel state ---
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  const popularIndex = useMemo(
+    () => {
+      const idx = activePlans.findIndex(p => p.slug === 'business');
+      return idx >= 0 ? idx : 0;
+    },
+    [activePlans]
+  );
+
+  // Track which card is most visible via IntersectionObserver
+  useEffect(() => {
+    const container = carouselRef.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const idx = cardRefs.current.indexOf(entry.target as HTMLDivElement);
+            if (idx !== -1) setActiveSlide(idx);
+          }
+        }
+      },
+      { root: container, threshold: 0.6 }
+    );
+
+    for (const ref of cardRefs.current) {
+      if (ref) observer.observe(ref);
+    }
+    return () => observer.disconnect();
+  }, [activePlans]);
+
+  // Auto-scroll to popular plan on mount
+  useEffect(() => {
+    const el = cardRefs.current[popularIndex];
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'center' });
+    });
+  }, [popularIndex]);
+
+  const scrollToSlide = useCallback((index: number) => {
+    cardRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, []);
+
   return (
     <>
       <Head>
@@ -513,8 +562,8 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           </div>
         </div>
 
-        {/* Plans Grid - Responsive grid based on count */}
-        <div className={`grid grid-cols-1 ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'} gap-6 md:gap-6 lg:gap-8 pb-8 items-stretch max-w-7xl mx-auto px-0 md:px-6 lg:px-0`}>
+        {/* Tablet/Desktop: Original grid */}
+        <div className={`hidden md:grid ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'} gap-6 lg:gap-8 pb-8 items-stretch max-w-7xl mx-auto md:px-6 lg:px-0`}>
           {activePlans.map((plan) => (
             <PlanCard
               key={plan.id}
@@ -531,6 +580,64 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               locale={locale}
             />
           ))}
+        </div>
+
+        {/* Mobile: Horizontal scroll-snap carousel */}
+        <div className="md:hidden">
+          <div
+            ref={carouselRef}
+            className="flex gap-4 overflow-x-auto scrollbar-hide -mx-4 px-4 pt-6 pb-4"
+            style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+            role="region"
+            aria-label={t('pricing.plansCarousel' as TranslationKey)}
+            aria-roledescription="carousel"
+            tabIndex={0}
+          >
+            {activePlans.map((plan, index) => (
+              <div
+                key={plan.id}
+                ref={(el) => { cardRefs.current[index] = el; }}
+                className="w-[85vw] flex-shrink-0"
+                style={{ scrollSnapAlign: 'center' }}
+                role="group"
+                aria-roledescription="slide"
+                aria-label={t('pricing.planSlideLabel' as TranslationKey, { current: index + 1, total: activePlans.length })}
+              >
+                <PlanCard
+                  plan={plan}
+                  isCurrentPlan={plan.id === currentPlanId}
+                  hasActiveSubscription={hasActiveSubscription}
+                  onSelect={() => handleSelectPlan(plan.id)}
+                  loading={changingPlan === plan.id}
+                  currentPlanPrice={currentPlanPrice}
+                  subscriptionStatus={usage?.subscription?.status}
+                  t={t}
+                  isSanctioned={isSanctioned === true}
+                  billingInterval={billingInterval}
+                  locale={locale}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Dot indicators */}
+          <div className="flex justify-center gap-2 pb-6" role="tablist" aria-label={t('pricing.planIndicators' as TranslationKey)}>
+            {activePlans.map((plan, index) => (
+              <button
+                key={plan.id}
+                type="button"
+                role="tab"
+                aria-selected={activeSlide === index}
+                aria-label={t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}` ? t(`pricing.${plan.slug}` as TranslationKey) : plan.name}
+                onClick={() => scrollToSlide(index)}
+                className={`rounded-full transition-all duration-300 ${
+                  activeSlide === index
+                    ? 'w-6 h-2 bg-brand-500'
+                    : 'w-2 h-2 bg-surface-300 hover:bg-surface-400'
+                }`}
+              />
+            ))}
+          </div>
         </div>
 
         {/* Trust bar */}
