@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
+import { useState, useEffect, useMemo, useRef, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import type { GetStaticProps } from 'next';
+import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button } from '@/components/ui';
 import { subscriptionApi } from '@/lib/api';
@@ -438,9 +439,9 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     });
   }, [popularIndex]);
 
-  const scrollToSlide = useCallback((index: number) => {
+  const scrollToSlide = (index: number) => {
     cardRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-  }, []);
+  };
 
   return (
     <>
@@ -565,7 +566,16 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         {/* Plans — single container: horizontal scroll-snap on mobile, grid on md+ */}
         <div
           ref={carouselRef}
-          className={`flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory -mx-4 px-4 pt-6 pb-4 md:overflow-visible md:snap-none md:mx-0 md:px-6 md:pt-0 md:pb-8 md:grid ${activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3'} md:gap-6 lg:gap-8 md:items-stretch max-w-7xl md:mx-auto lg:px-0`}
+          className={clsx(
+            // Mobile: horizontal scroll-snap carousel
+            'flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory',
+            '-mx-4 px-4 pt-6 pb-4',
+            // Desktop: standard grid
+            'md:overflow-visible md:snap-none md:mx-0 md:px-6 md:pt-0 md:pb-8',
+            'md:grid md:gap-6 lg:gap-8 md:items-stretch',
+            activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3',
+            'max-w-7xl md:mx-auto lg:px-0',
+          )}
           role="region"
           aria-label={t('pricing.plansCarousel' as TranslationKey)}
         >
@@ -573,7 +583,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             <div
               key={plan.id}
               ref={(el) => { cardRefs.current[index] = el; }}
-              className="w-[85vw] flex-shrink-0 snap-center md:w-auto md:flex-shrink"
+              className="w-[85vw] flex-shrink-0 snap-center md:w-auto"
             >
               <PlanCard
                 plan={plan}
