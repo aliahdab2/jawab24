@@ -35,6 +35,7 @@ import analyticsRoutes from "./routes/analytics";
 import workspaceRoutes from "./routes/workspace";
 import { translationRoutes } from "./routes/translation";
 import integrationsRoutes from "./routes/integrations";
+import waitlistRoutes from "./routes/waitlist";
 import { integrationRegistry } from "./integrations";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
@@ -218,6 +219,9 @@ const start = async () => {
 
     // Integrations status route (authenticated)
     await server.register(integrationsRoutes, { prefix: "/api/integrations" });
+
+    // Waitlist (public - no auth required)
+    await server.register(waitlistRoutes, { prefix: "/api/waitlist" });
 
     // Register e-commerce integration routes (Shopify, future WooCommerce, etc.)
     for (const integration of integrationRegistry.getEnabled()) {

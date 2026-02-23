@@ -52,6 +52,6 @@ describe('PricingPage Offline Mode', () => {
         // The component renders whatever plans it receives as props.
         render(<PricingPage plans={FALLBACK_PLANS} />);
 
-        expect(screen.getByText(/Starter/i)).toBeInTheDocument();
+        expect(screen.getAllByText(/Starter/i).length).toBeGreaterThan(0);
     });
 });

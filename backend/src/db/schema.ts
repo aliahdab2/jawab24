@@ -799,3 +799,13 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
         createdAtIdx: index('idx_admin_audit_created_at').on(table.createdAt),
     };
 });
+
+// Waitlist - collects emails for upcoming features
+export const waitlistEmails = pgTable('waitlist_emails', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    email: varchar('email', { length: 255 }).notNull(),
+    feature: varchar('feature', { length: 50 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+    emailFeatureUnique: uniqueIndex('idx_waitlist_email_feature').on(table.email, table.feature),
+}));

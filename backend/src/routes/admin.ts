@@ -1,9 +1,18 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs, pages, usage } from '../db/schema';
-import { eq, ilike, desc, and, gte, lte } from 'drizzle-orm';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps } from '../db/schema';
+import { eq, ilike, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
+import { config } from '../config';
+import { aiService } from '../services/ai';
+import { rulesService } from '../services/rules';
+import { templatesService } from '../services/templates';
+import { RetrievalService } from '../services/kb/retrieval';
+import { OpenAIEmbeddingProvider } from '../services/kb/embedding';
+import { gapDetectorService } from '../services/kb/gap-detector';
+import { shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../services/reply/generator';
+import { RetrievedChunkContext } from '../types';
 
 // Request body types
 interface ManualUpgradeBody {
@@ -546,6 +555,292 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     success: false,
                     error: 'Failed to get audit logs',
                 });
+            }
+        });
+
+        // ============================================
+        // AI Playground — Admin-only reply testing
+        // ============================================
+
+        /**
+         * GET /admin/pages - List all pages (for playground dropdown)
+         */
+        adminProtected.get('/pages', {
+            schema: { tags: ['Admin'], summary: 'List all pages for playground', security: auth },
+        }, async (_request: FastifyRequest, reply: FastifyReply) => {
+            try {
+                const allPages = await db
+                    .select({
+                        id: pages.id,
+                        name: pages.name,
+                        kbVersion: pages.kbVersion,
+                        kbActiveVersion: pages.kbActiveVersion,
+                        userId: pages.userId,
+                    })
+                    .from(pages)
+                    .orderBy(pages.name);
+
+                return reply.send({ success: true, data: allPages });
+            } catch (error) {
+                _request.log.error(error, 'Admin list pages failed');
+                return reply.status(500).send({ success: false, error: 'Failed to list pages' });
+            }
+        });
+
+        /**
+         * GET /admin/kb/status/:pageId - KB status for a page
+         */
+        adminProtected.get<{ Params: { pageId: string } }>('/kb/status/:pageId', {
+            schema: { tags: ['Admin'], summary: 'Get KB status for a page', security: auth },
+        }, async (request: FastifyRequest<{ Params: { pageId: string } }>, reply: FastifyReply) => {
+            const { pageId } = request.params;
+
+            try {
+                const [page] = await db
+                    .select({
+                        id: pages.id,
+                        name: pages.name,
+                        knowledgeBase: pages.knowledgeBase,
+                        kbVersion: pages.kbVersion,
+                        kbActiveVersion: pages.kbActiveVersion,
+                        kbUpdatedAt: pages.kbUpdatedAt,
+                    })
+                    .from(pages)
+                    .where(eq(pages.id, pageId))
+                    .limit(1);
+
+                if (!page) {
+                    return reply.status(404).send({ success: false, error: 'Page not found' });
+                }
+
+                // Count chunks for the active version
+                const [chunkCount] = await db
+                    .select({ count: sql<number>`count(*)::int` })
+                    .from(kbChunks)
+                    .where(
+                        and(
+                            eq(kbChunks.pageId, pageId),
+                            page.kbActiveVersion !== null
+                                ? eq(kbChunks.kbVersion, page.kbActiveVersion)
+                                : sql`false`
+                        )
+                    );
+
+                // Count unresolved gaps
+                const [gapCount] = await db
+                    .select({ count: sql<number>`count(*)::int` })
+                    .from(kbGaps)
+                    .where(and(eq(kbGaps.pageId, pageId), eq(kbGaps.resolved, false)));
+
+                return reply.send({
+                    success: true,
+                    data: {
+                        pageId: page.id,
+                        pageName: page.name,
+                        kbLength: page.knowledgeBase?.length || 0,
+                        kbVersion: page.kbVersion,
+                        kbActiveVersion: page.kbActiveVersion,
+                        kbUpdatedAt: page.kbUpdatedAt,
+                        chunksCount: chunkCount?.count || 0,
+                        gapsCount: gapCount?.count || 0,
+                    },
+                });
+            } catch (error) {
+                request.log.error(error, 'Admin KB status failed');
+                return reply.status(500).send({ success: false, error: 'Failed to get KB status' });
+            }
+        });
+
+        /**
+         * GET /admin/kb/gaps/:pageId - List KB gaps for a page
+         */
+        adminProtected.get<{ Params: { pageId: string } }>('/kb/gaps/:pageId', {
+            schema: { tags: ['Admin'], summary: 'List KB gaps for a page', security: auth },
+        }, async (request: FastifyRequest<{ Params: { pageId: string } }>, reply: FastifyReply) => {
+            const { pageId } = request.params;
+
+            try {
+                const gaps = await db
+                    .select({
+                        id: kbGaps.id,
+                        queryText: kbGaps.queryText,
+                        detectedIntent: kbGaps.detectedIntent,
+                        occurrenceCount: kbGaps.occurrenceCount,
+                        firstSeenAt: kbGaps.firstSeenAt,
+                        lastSeenAt: kbGaps.lastSeenAt,
+                        resolved: kbGaps.resolved,
+                    })
+                    .from(kbGaps)
+                    .where(eq(kbGaps.pageId, pageId))
+                    .orderBy(desc(kbGaps.occurrenceCount));
+
+                return reply.send({ success: true, data: gaps });
+            } catch (error) {
+                request.log.error(error, 'Admin KB gaps failed');
+                return reply.status(500).send({ success: false, error: 'Failed to get KB gaps' });
+            }
+        });
+
+        /**
+         * POST /admin/ai/playground - Test AI reply with full metadata
+         * Body: { pageId, question, channel }
+         */
+        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm' } }>('/ai/playground', {
+            schema: { tags: ['Admin'], summary: 'Test AI reply generation with full metadata', security: auth },
+        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm' } }>, reply: FastifyReply) => {
+            const { pageId, question, channel } = request.body;
+            const startTime = Date.now();
+
+            if (!pageId || !question?.trim()) {
+                return reply.status(400).send({ success: false, error: 'pageId and question are required' });
+            }
+
+            try {
+                // 1. Fetch page data
+                const [page] = await db
+                    .select({
+                        id: pages.id,
+                        name: pages.name,
+                        workspaceId: pages.workspaceId,
+                        knowledgeBase: pages.knowledgeBase,
+                        kbActiveVersion: pages.kbActiveVersion,
+                    })
+                    .from(pages)
+                    .where(eq(pages.id, pageId))
+                    .limit(1);
+
+                if (!page) {
+                    return reply.status(404).send({ success: false, error: 'Page not found' });
+                }
+
+                // 2. Try template match
+                let templateMatch: { name?: string; message?: string; id?: string } | null = null;
+                if (page.workspaceId) {
+                    const matchingRule = await rulesService.findMatchingRule(page.workspaceId, question);
+                    if (matchingRule?.templateId) {
+                        const template = await templatesService.getTemplate(page.workspaceId, matchingRule.templateId);
+                        if (template?.message && template.active !== false) {
+                            templateMatch = { name: template.name, message: template.message, id: template.id };
+                        }
+                    }
+                }
+
+                if (templateMatch) {
+                    return reply.send({
+                        success: true,
+                        data: {
+                            reply: templateMatch.message,
+                            replyMethod: 'template',
+                            templateName: templateMatch.name,
+                            ragMode: config.ragMode || 'off',
+                            chunksRetrieved: 0,
+                            chunks: [],
+                            intent: null,
+                            confidence: null,
+                            flags: [],
+                            needsAttention: false,
+                            cached: false,
+                            detectedLanguage: null,
+                            latencyMs: Date.now() - startTime,
+                            tokensUsed: 0,
+                            model: null,
+                            gapRecorded: false,
+                        },
+                    });
+                }
+
+                // 3. RAG retrieval (capture chunks for display)
+                let retrievedChunks: RetrievedChunkContext[] = [];
+                let queryEmbedding: number[] | undefined;
+                let gapRecorded = false;
+                const ragMode = config.ragMode || 'off';
+
+                const activeVersion = page.kbActiveVersion;
+                if (ragMode !== 'off' && config.openai?.apiKey && activeVersion !== null) {
+                    try {
+                        const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
+                        const retrievalService = new RetrievalService(embeddingProvider);
+                        const result = await retrievalService.retrieve(pageId, question, activeVersion);
+                        queryEmbedding = result.queryEmbedding;
+
+                        if (result.chunks.length > 0) {
+                            retrievedChunks = result.chunks.map(c => ({
+                                type: c.type,
+                                title: c.title,
+                                content: c.content,
+                                score: c.finalScore,
+                            }));
+                        } else {
+                            // Record gap (fire-and-forget)
+                            gapDetectorService.recordGap(pageId, question).catch(() => {});
+                            gapRecorded = true;
+                        }
+                    } catch {
+                        // Retrieval failed — fall back to static KB
+                    }
+                }
+
+                // 4. Call AI service
+                const effectiveKB = (ragMode === 'on' && retrievedChunks.length > 0)
+                    ? undefined
+                    : page.knowledgeBase || undefined;
+
+                const aiResponse = await aiService.generateReply({
+                    comment: question,
+                    context: {
+                        pageId,
+                        pageName: page.name ?? undefined,
+                        knowledgeBase: effectiveKB,
+                        retrievedChunks: retrievedChunks.length > 0 ? retrievedChunks : undefined,
+                        channel,
+                        kbActiveVersion: page.kbActiveVersion,
+                        queryEmbedding,
+                    },
+                });
+
+                // 5. Process flags (same logic as generator.ts)
+                const flags = [...(aiResponse.flags || [])];
+                if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
+                    flags.push('low_confidence');
+                }
+                const needsAttention = flags.length > 0 ||
+                    aiResponse.intent === 'COMPLAINT' ||
+                    aiResponse.intent === 'OFFENSIVE';
+                const skipped = shouldSkipReply(flags.join(','), aiResponse.intent);
+                const useFallback = shouldUseFallback(flags.join(','));
+
+                let finalReply = aiResponse.reply;
+                if (skipped) {
+                    finalReply = null as unknown as string;
+                } else if (useFallback) {
+                    const lang = aiResponse.language === 'ar' ? 'ar' : 'en';
+                    finalReply = PRICE_FALLBACK[lang] || PRICE_FALLBACK.en;
+                }
+
+                return reply.send({
+                    success: true,
+                    data: {
+                        reply: finalReply,
+                        replyMethod: skipped ? 'skipped' : 'ai',
+                        templateName: null,
+                        ragMode,
+                        chunksRetrieved: retrievedChunks.length,
+                        chunks: retrievedChunks,
+                        intent: aiResponse.intent || null,
+                        confidence: aiResponse.confidence || null,
+                        flags,
+                        needsAttention,
+                        cached: aiResponse.cached,
+                        detectedLanguage: aiResponse.language || null,
+                        latencyMs: Date.now() - startTime,
+                        tokensUsed: aiResponse.tokensUsed || 0,
+                        model: aiResponse.model || null,
+                        gapRecorded,
+                    },
+                });
+            } catch (error) {
+                request.log.error(error, 'Admin AI playground failed');
+                return reply.status(500).send({ success: false, error: 'Failed to generate AI reply' });
             }
         });
     });

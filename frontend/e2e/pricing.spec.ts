@@ -84,10 +84,10 @@ test.describe('Pricing Page', () => {
       page.getByText('Choose the right plan for your business').first()
     ).toBeVisible({ timeout: 15000 });
 
-    // All 4 plans should be visible
-    await expect(page.getByText('Starter').first()).toBeVisible();
-    await expect(page.getByText('Business').first()).toBeVisible();
-    await expect(page.getByText('Pro').first()).toBeVisible();
+    // All plan cards should be visible (use heading role with exact match to target card titles)
+    await expect(page.getByRole('heading', { name: 'Starter', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Business', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible();
   });
 
   test('should show Most Popular badge on Business plan', async ({ page }) => {

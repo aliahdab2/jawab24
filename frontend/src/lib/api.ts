@@ -430,6 +430,30 @@ export const adminApi = {
     const response = await api.get('/admin/audit-logs');
     return response.data;
   },
+
+  // AI Playground — list all pages
+  getPages: async () => {
+    const response = await api.get('/admin/pages');
+    return response.data;
+  },
+
+  // AI Playground — KB status for a page
+  getKbStatus: async (pageId: string) => {
+    const response = await api.get(`/admin/kb/status/${pageId}`);
+    return response.data;
+  },
+
+  // AI Playground — KB gaps for a page
+  getKbGaps: async (pageId: string) => {
+    const response = await api.get(`/admin/kb/gaps/${pageId}`);
+    return response.data;
+  },
+
+  // AI Playground — test AI reply
+  testReply: async (data: { pageId: string; question: string; channel: 'comment' | 'dm' }) => {
+    const response = await api.post('/admin/ai/playground', data);
+    return response.data;
+  },
 };
 
 // E-commerce API - Manage connected store (Shopify, Salla, Zid)

@@ -43,7 +43,7 @@ const TEST_PLANS = [
         ecommerceEnabled: false,
         prioritySupport: false,
         currency: 'USD',
-        interval: 'month',
+        interval: 'month' as const,
         regionalPricing: {},
         isDefault: true,
         sortOrder: 0,
@@ -103,7 +103,7 @@ describe('PricingPage Navigation Logic', () => {
         render(<PricingPage plans={TEST_PLANS} />);
 
         // Plans are passed as props (SSR via getStaticProps), so they render immediately
-        expect(screen.getByText('Starter')).toBeInTheDocument();
+        expect(screen.getAllByText('Starter').length).toBeGreaterThan(0);
 
         // Find button by text content (mocked t() returns the key)
         const subscribeButton = screen.getByText('pricing.subscribe');
@@ -136,7 +136,7 @@ describe('PricingPage Navigation Logic', () => {
         render(<PricingPage plans={TEST_PLANS} />);
 
         // Plans are passed as props (SSR via getStaticProps), so they render immediately
-        expect(screen.getByText('Starter')).toBeInTheDocument();
+        expect(screen.getAllByText('Starter').length).toBeGreaterThan(0);
 
         // Wait for usage data to load (async useEffect fetches subscription info)
         // Once loaded, button changes from "subscribe" to "upgrade"

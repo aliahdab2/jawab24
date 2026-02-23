@@ -123,7 +123,8 @@
       "Bash(npm run lint:fix:*)",
       "WebFetch(domain:docs.salla.dev)",
       "WebFetch(domain:docs.zid.sa)",
-      "WebFetch(domain:docs-v2.zid.dev)"
+      "WebFetch(domain:docs-v2.zid.dev)",
+      "WebFetch(domain:salla.com)"
     ]
   }
 }

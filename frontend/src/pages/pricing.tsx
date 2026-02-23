@@ -158,9 +158,9 @@ function PlanCard({
             {t('pricing.sarEquivalent' as TranslationKey).replace('{amount}', sarMonthly.toLocaleString())}
           </p>
         )}
-        {/* Only show trial badge if user doesn't have an active subscription */}
+        {/* Trial badge — hidden on mobile (shown as banner above card instead) */}
         {plan.trialDays > 0 && !hasActiveSubscription && (
-          <div className="inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
+          <div className="hidden md:inline-flex items-center gap-1.5 bg-brand-100 text-brand-700 text-xs font-semibold mt-3 px-3 py-1 rounded-full">
             <Zap className="w-3 h-3" />
             {t('pricing.trialDays', { days: plan.trialDays })}
           </div>
@@ -394,10 +394,9 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     [activePlans, currentPlanId]
   );
 
-  // --- Mobile carousel state ---
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const [activeSlide, setActiveSlide] = useState(0);
+  // --- Mobile tab state ---
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [activeTab, setActiveTab] = useState(0);
 
   const popularIndex = useMemo(
     () => {
@@ -407,40 +406,24 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     [activePlans]
   );
 
-  // Track which card is most visible via IntersectionObserver
-  useEffect(() => {
-    const container = carouselRef.current;
-    if (!container) return;
+  // Default to popular plan tab on mount
+  useEffect(() => { setActiveTab(popularIndex); }, [popularIndex]);
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const idx = cardRefs.current.indexOf(entry.target as HTMLDivElement);
-            if (idx !== -1) setActiveSlide(idx);
-          }
-        }
-      },
-      { root: container, threshold: 0.6 }
-    );
+  // Keyboard navigation for tab bar (RTL-aware)
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const isRTL = document.documentElement.dir === 'rtl';
+    const forward = isRTL ? 'ArrowLeft' : 'ArrowRight';
+    const backward = isRTL ? 'ArrowRight' : 'ArrowLeft';
+    let next = activeTab;
 
-    for (const ref of cardRefs.current) {
-      if (ref) observer.observe(ref);
-    }
-    return () => observer.disconnect();
-  }, [activePlans]);
+    if (e.key === forward) { e.preventDefault(); next = (activeTab + 1) % activePlans.length; }
+    else if (e.key === backward) { e.preventDefault(); next = (activeTab - 1 + activePlans.length) % activePlans.length; }
+    else if (e.key === 'Home') { e.preventDefault(); next = 0; }
+    else if (e.key === 'End') { e.preventDefault(); next = activePlans.length - 1; }
+    else return;
 
-  // Auto-scroll to popular plan on mount
-  useEffect(() => {
-    const el = cardRefs.current[popularIndex];
-    if (!el) return;
-    requestAnimationFrame(() => {
-      el.scrollIntoView({ behavior: 'instant', block: 'nearest', inline: 'center' });
-    });
-  }, [popularIndex]);
-
-  const scrollToSlide = (index: number) => {
-    cardRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    setActiveTab(next);
+    tabRefs.current[next]?.focus();
   };
 
   return (
@@ -563,27 +546,75 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           </div>
         </div>
 
-        {/* Plans — single container: horizontal scroll-snap on mobile, grid on md+ */}
+        {/* Plan tabs — mobile only (Shopify-style segmented control) */}
         <div
-          ref={carouselRef}
+          className="grid mx-4 mb-2 border border-surface-200 rounded-lg overflow-hidden md:hidden"
+          style={{ gridTemplateColumns: `repeat(${activePlans.length}, 1fr)` }}
+          role="tablist"
+          aria-label={t('pricing.planTabs' as TranslationKey)}
+          onKeyDown={handleTabKeyDown}
+        >
+          {activePlans.map((plan, index) => {
+            const tabLabel = t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
+              ? t(`pricing.${plan.slug}` as TranslationKey)
+              : plan.name;
+            return (
+              <button
+                key={plan.id}
+                ref={(el) => { tabRefs.current[index] = el; }}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === index}
+                aria-controls={`plan-panel-${plan.slug}`}
+                tabIndex={activeTab === index ? 0 : -1}
+                onClick={() => setActiveTab(index)}
+                className={clsx(
+                  'py-3 text-sm font-semibold text-center transition-all duration-200 whitespace-nowrap',
+                  'border-surface-200',
+                  index > 0 && 'border-s',
+                  activeTab === index
+                    ? 'bg-white text-surface-900 shadow-sm'
+                    : 'bg-surface-50 text-surface-500 hover:text-surface-700 hover:bg-surface-100',
+                )}
+              >
+                {tabLabel}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Trial promo banner — mobile only (Shopify-style) */}
+        {activePlans[activeTab]?.trialDays > 0 && !hasActiveSubscription && (
+          <div className="mx-4 mb-2 py-2.5 px-4 bg-brand-500 rounded-lg text-center md:hidden">
+            <span className="text-sm font-bold text-white">
+              {t('pricing.trialDays', { days: activePlans[activeTab].trialDays })}
+              {' — '}
+              {t('pricing.noCreditCard')}
+            </span>
+          </div>
+        )}
+
+        {/* Plans — single container: stacked grid on mobile, multi-col grid on md+ */}
+        <div
           className={clsx(
-            // Mobile: horizontal scroll-snap carousel
-            'flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory',
-            '-mx-4 px-4 pt-6 pb-4',
-            // Desktop: standard grid
-            'md:overflow-visible md:snap-none md:mx-0 md:px-6 md:pt-0 md:pb-8',
-            'md:grid md:gap-6 lg:gap-8 md:items-stretch',
+            // Mobile: single-cell grid so all cards overlap — tallest sets height
+            'grid px-4 pt-1 pb-4',
+            // Desktop: multi-column grid
+            'md:px-6 md:pt-0 md:pb-8',
+            'md:gap-6 lg:gap-8 md:items-stretch',
             activePlans.length === 4 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2 lg:grid-cols-3',
             'max-w-7xl md:mx-auto lg:px-0',
           )}
-          role="region"
-          aria-label={t('pricing.plansCarousel' as TranslationKey)}
         >
           {activePlans.map((plan, index) => (
             <div
               key={plan.id}
-              ref={(el) => { cardRefs.current[index] = el; }}
-              className="w-[85vw] flex-shrink-0 snap-center md:w-auto"
+              id={`plan-panel-${plan.slug}`}
+              className={clsx(
+                // Mobile: all cards in same cell, only active one visible
+                'col-start-1 row-start-1 md:col-auto md:row-auto',
+                index !== activeTab && 'invisible md:visible',
+              )}
             >
               <PlanCard
                 plan={plan}
@@ -599,25 +630,6 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 locale={locale}
               />
             </div>
-          ))}
-        </div>
-
-        {/* Dot indicators — mobile only */}
-        <div className="flex justify-center gap-2 pb-6 md:hidden" role="tablist" aria-label={t('pricing.planIndicators' as TranslationKey)}>
-          {activePlans.map((plan, index) => (
-            <button
-              key={plan.id}
-              type="button"
-              role="tab"
-              aria-selected={activeSlide === index}
-              aria-label={t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}` ? t(`pricing.${plan.slug}` as TranslationKey) : plan.name}
-              onClick={() => scrollToSlide(index)}
-              className={`rounded-full transition-all duration-300 ${
-                activeSlide === index
-                  ? 'w-6 h-2 bg-brand-500'
-                  : 'w-2 h-2 bg-surface-300 hover:bg-surface-400'
-              }`}
-            />
           ))}
         </div>
 

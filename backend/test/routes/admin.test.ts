@@ -73,6 +73,7 @@ vi.mock('drizzle-orm', () => ({
     and: vi.fn(),
     gte: vi.fn(),
     lte: vi.fn(),
+    sql: vi.fn(),
 }));
 
 vi.mock('../../src/db/schema', () => ({
@@ -80,8 +81,46 @@ vi.mock('../../src/db/schema', () => ({
     subscriptions: { id: 'id', userId: 'userId', status: 'status', planId: 'planId', currentPeriodStart: 'cps', currentPeriodEnd: 'cpe', paymentMethod: 'pm', trialEndsAt: 'te' },
     plans: { id: 'id', name: 'name', slug: 'slug', price: 'price', isActive: 'isActive', sortOrder: 'sortOrder', maxAiRepliesPerMonth: 'max_ai', maxPages: 'max_pages' },
     adminAuditLogs: { id: 'id', action: 'action', previousValue: 'pv', newValue: 'nv', paymentReference: 'pr', note: 'note', createdAt: 'createdAt', adminUserId: 'adminUserId', targetUserId: 'targetUserId' },
-    pages: { id: 'id', userId: 'userId' },
+    pages: { id: 'id', userId: 'userId', name: 'name', workspaceId: 'workspaceId', knowledgeBase: 'kb', kbVersion: 'kbv', kbActiveVersion: 'kbav', kbUpdatedAt: 'kbua' },
     usage: { userId: 'userId', aiRepliesCount: 'airc', templateRepliesCount: 'trc', periodStart: 'ps', periodEnd: 'pe' },
+    kbChunks: { pageId: 'pageId', kbVersion: 'kbVersion' },
+    kbGaps: { id: 'id', pageId: 'pageId', queryText: 'qt', detectedIntent: 'di', occurrenceCount: 'oc', firstSeenAt: 'fsa', lastSeenAt: 'lsa', resolved: 'resolved' },
+}));
+
+vi.mock('../../src/config', () => ({
+    config: { ragMode: 'on', openai: { apiKey: 'test-key' } },
+}));
+
+vi.mock('../../src/services/ai', () => ({
+    aiService: { generateReply: vi.fn().mockResolvedValue({ reply: 'test reply', language: 'en', cached: false }) },
+}));
+
+vi.mock('../../src/services/rules', () => ({
+    rulesService: { findMatchingRule: vi.fn().mockResolvedValue(null) },
+}));
+
+vi.mock('../../src/services/templates', () => ({
+    templatesService: { getTemplate: vi.fn().mockResolvedValue(null) },
+}));
+
+vi.mock('../../src/services/kb/retrieval', () => ({
+    RetrievalService: vi.fn().mockImplementation(() => ({
+        retrieve: vi.fn().mockResolvedValue({ chunks: [], queryEmbedding: [] }),
+    })),
+}));
+
+vi.mock('../../src/services/kb/embedding', () => ({
+    OpenAIEmbeddingProvider: vi.fn(),
+}));
+
+vi.mock('../../src/services/kb/gap-detector', () => ({
+    gapDetectorService: { recordGap: vi.fn().mockResolvedValue(undefined) },
+}));
+
+vi.mock('../../src/services/reply/generator', () => ({
+    shouldSkipReply: vi.fn().mockReturnValue(false),
+    shouldUseFallback: vi.fn().mockReturnValue(false),
+    PRICE_FALLBACK: { ar: 'price fallback ar', en: 'price fallback en' },
 }));
 
 vi.mock('../../src/utils/swagger', () => ({

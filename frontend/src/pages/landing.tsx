@@ -20,19 +20,34 @@ import {
   Mail,
   Check,
   ShoppingBag,
-  Store,
   Rocket
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
+import { publicApi } from '@/lib/api';
+import { toast } from 'sonner';
 import { BRAND_ASSETS } from '@/constants/brand';
+
+function SallaIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M18.862 13.439a1.27 1.27 0 0 0-.81-.555 1.27 1.27 0 0 0-.964.18c-3.422 2.231-6.75 2.231-10.178 0a1.27 1.27 0 0 0-.964-.18 1.283 1.283 0 0 0-.434 2.327c2.142 1.394 4.326 2.1 6.49 2.1 2.166 0 4.348-.706 6.488-2.102a1.27 1.27 0 0 0 .555-.81 1.27 1.27 0 0 0-.18-.964zm5.103 2.82-1.171-9.764a5.24 5.24 0 0 0-5.2-4.614H6.406a5.236 5.236 0 0 0-5.198 4.612l-1.17 9.766a5.235 5.235 0 0 0 5.198 5.86h13.529a5.238 5.238 0 0 0 5.198-5.86zm-3.21 2.4c-.532.6-1.265.929-2.066.929H5.311c-.801 0-1.536-.33-2.066-.929a2.73 2.73 0 0 1-.676-2.16l1.157-9.657A2.764 2.764 0 0 1 6.468 4.41h11.064a2.765 2.765 0 0 1 2.742 2.432l1.157 9.656a2.72 2.72 0 0 1-.676 2.161" />
+    </svg>
+  );
+}
 
 export default function LandingPage() {
   const { t, language, setLanguage } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [integrationsNotified, setIntegrationsNotified] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [waitlistLoading, setWaitlistLoading] = useState(false);
+  const [bannerNotified, setBannerNotified] = useState(false);
+  const [bannerEmail, setBannerEmail] = useState('');
+  const [bannerLoading, setBannerLoading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -193,14 +208,60 @@ export default function LandingPage() {
         </nav>
 
         {/* Coming Soon Banner */}
-        <div className="relative z-40 mt-16 sm:mt-20 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white text-center py-3 sm:py-4 px-4 shadow-lg">
-          <div className="flex items-center justify-center gap-2 sm:gap-3">
-            <Rocket className="w-5 h-5 sm:w-6 sm:h-6 animate-bounce" aria-hidden="true" />
-            <div>
-              <p className="font-bold text-sm sm:text-lg">{t('landing.comingSoon.banner')}</p>
-              <p className="text-xs sm:text-sm text-white/90 font-medium">{t('landing.comingSoon.subtitle')}</p>
+        <div className="relative z-40 mt-16 sm:mt-20 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white py-3 sm:py-4 px-4 shadow-lg">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-2">
+              <Rocket className="w-5 h-5 sm:w-6 sm:h-6 animate-bounce" aria-hidden="true" />
+              <div className="text-center sm:text-start">
+                <p className="font-bold text-sm sm:text-lg">{t('landing.comingSoon.banner')}</p>
+                <p className="text-xs sm:text-sm text-white/90 font-medium">{t('landing.comingSoon.subtitle')}</p>
+              </div>
             </div>
-            <Rocket className="w-5 h-5 sm:w-6 sm:h-6 animate-bounce hidden sm:block" aria-hidden="true" />
+            {bannerNotified ? (
+              <p className="font-bold text-sm sm:text-base">✓ {t('landing.comingSoon.notified')}</p>
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                  if (!EMAIL_REGEX.test(bannerEmail)) {
+                    toast.error(t('landing.features.integrationsError'));
+                    return;
+                  }
+                  setBannerLoading(true);
+                  try {
+                    await publicApi.post('/api/waitlist', {
+                      email: bannerEmail,
+                      feature: 'early_access',
+                    });
+                    setBannerNotified(true);
+                    toast.success(t('landing.comingSoon.notified'));
+                  } catch {
+                    toast.error(t('landing.features.integrationsNetworkError'));
+                  } finally {
+                    setBannerLoading(false);
+                  }
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  type="email"
+                  value={bannerEmail}
+                  onChange={(e) => setBannerEmail(e.target.value)}
+                  placeholder={t('landing.comingSoon.placeholder')}
+                  required
+                  className="px-3 py-1.5 sm:py-2 rounded-full text-surface-900 text-sm sm:text-base border-0 focus:outline-none focus:ring-2 focus:ring-white/50 min-w-0 w-40 sm:w-52"
+                  dir="ltr"
+                />
+                <button
+                  type="submit"
+                  disabled={bannerLoading}
+                  className="flex-shrink-0 px-4 py-1.5 sm:py-2 rounded-full bg-white/20 text-white font-bold text-sm sm:text-base hover:bg-white/30 transition-all disabled:opacity-60 border border-white/30"
+                >
+                  {bannerLoading ? '...' : t('landing.comingSoon.notify')}
+                </button>
+              </form>
+            )}
           </div>
         </div>
 
@@ -263,20 +324,6 @@ export default function LandingPage() {
                   <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 font-bold text-sm sm:text-base hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white transition-all cursor-default">
                     <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>{t('landing.platforms.instagram')}</span>
-                  </div>
-                  <div className="group flex items-center gap-2 px-4 py-2 rounded-full bg-[#96bf48]/10 text-[#96bf48] font-bold text-sm sm:text-base hover:bg-[#96bf48] hover:text-white transition-all cursor-default opacity-80">
-                    <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>{t('landing.platforms.shopify')}</span>
-                    <span className="text-[10px] sm:text-xs font-semibold bg-[#96bf48]/20 text-[#96bf48] group-hover:bg-white/20 group-hover:text-white px-1.5 py-0.5 rounded-full leading-none transition-all">
-                      {t('landing.platforms.comingSoon')}
-                    </span>
-                  </div>
-                  <div className="group flex items-center gap-2 px-4 py-2 rounded-full bg-[#5236d6]/10 text-[#5236d6] font-bold text-sm sm:text-base hover:bg-[#5236d6] hover:text-white transition-all cursor-default opacity-80">
-                    <Store className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>{t('landing.platforms.salla')}</span>
-                    <span className="text-[10px] sm:text-xs font-semibold bg-[#5236d6]/20 text-[#5236d6] group-hover:bg-white/20 group-hover:text-white px-1.5 py-0.5 rounded-full leading-none transition-all">
-                      {t('landing.platforms.comingSoon')}
-                    </span>
                   </div>
                 </div>
               </div>
@@ -367,9 +414,9 @@ export default function LandingPage() {
 
                   {/* Salla Floating Icon */}
                   <div className="absolute -end-4 sm:-end-8 top-2/3 animate-float-orbit z-10">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-violet-500/20 border-b-2 border-violet-100">
-                      <div className="w-full h-full rounded-full bg-[#5236d6] flex items-center justify-center relative">
-                        <Store className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-teal-500/20 border-b-2 border-teal-100">
+                      <div className="w-full h-full rounded-full bg-[#BAF3E6] flex items-center justify-center relative">
+                        <SallaIcon className="w-5 h-5 sm:w-7 sm:h-7 text-[#004956]" />
                       </div>
                     </div>
                   </div>
@@ -389,6 +436,80 @@ export default function LandingPage() {
                 <div className="text-brand-300 font-bold uppercase tracking-widest text-xs sm:text-sm lg:text-base">{stat.label}</div>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* Upcoming Integrations Section */}
+        <section className="py-10 sm:py-16 bg-gradient-to-br from-surface-50 via-white to-emerald-50/30">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="relative rounded-2xl sm:rounded-3xl bg-white border border-surface-100 shadow-xl shadow-surface-200/50 overflow-hidden">
+              <div className="absolute top-0 start-0 end-0 h-1 bg-gradient-to-r from-[#96bf48] to-[#004956]" />
+              <div className="p-6 sm:p-10 flex flex-col items-center text-center gap-5 sm:gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#96bf48]/10 flex items-center justify-center">
+                    <ShoppingBag className="w-7 h-7 sm:w-8 sm:h-8 text-[#96bf48]" />
+                  </div>
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#BAF3E6] flex items-center justify-center">
+                    <SallaIcon className="w-7 h-7 sm:w-8 sm:h-8 text-[#004956]" />
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-lg sm:text-2xl font-display font-bold text-surface-900 mb-2">
+                    {t('landing.features.integrationsTitle')}
+                  </h3>
+                  <p className="text-sm sm:text-base text-surface-500 font-medium max-w-md mx-auto">
+                    {t('landing.features.integrationsDesc')}
+                  </p>
+                </div>
+                {integrationsNotified ? (
+                  <p className="text-brand-600 font-bold text-sm sm:text-base">
+                    ✓ {t('landing.features.integrationsNotified')}
+                  </p>
+                ) : (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                      if (!EMAIL_REGEX.test(waitlistEmail)) {
+                        toast.error(t('landing.features.integrationsError'));
+                        return;
+                      }
+                      setWaitlistLoading(true);
+                      try {
+                        await publicApi.post('/api/waitlist', {
+                          email: waitlistEmail,
+                          feature: 'ecommerce_integrations',
+                        });
+                        setIntegrationsNotified(true);
+                        toast.success(t('landing.features.integrationsNotified'));
+                      } catch {
+                        toast.error(t('landing.features.integrationsNetworkError'));
+                      } finally {
+                        setWaitlistLoading(false);
+                      }
+                    }}
+                    className="flex w-full max-w-sm gap-2"
+                  >
+                    <input
+                      type="email"
+                      value={waitlistEmail}
+                      onChange={(e) => setWaitlistEmail(e.target.value)}
+                      placeholder={t('landing.features.integrationsPlaceholder')}
+                      required
+                      className="flex-1 min-w-0 px-4 py-2.5 rounded-full border border-surface-200 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                      dir="ltr"
+                    />
+                    <button
+                      type="submit"
+                      disabled={waitlistLoading}
+                      className="flex-shrink-0 px-5 py-2.5 sm:px-6 rounded-full bg-surface-900 text-white font-bold text-sm sm:text-base hover:bg-surface-800 hover:shadow-lg transition-all disabled:opacity-60"
+                    >
+                      {waitlistLoading ? '...' : t('landing.features.integrationsNotify')}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -415,6 +536,7 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
+
           </div>
         </section>
 
