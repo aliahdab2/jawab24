@@ -359,10 +359,10 @@ export default function LoginPage() {
                       </div>
                       <div>
                         <p className="font-bold text-emerald-900 text-sm">
-                          {t('shopify.installDetected' as any)}
+                          {t('shopify.installDetected')}
                         </p>
                         <p className="text-emerald-700 text-sm mt-1">
-                          {t('shopify.loginToConnect' as any)}
+                          {t('shopify.loginToConnect')}
                         </p>
                       </div>
                     </div>
@@ -372,7 +372,7 @@ export default function LoginPage() {
                 {router.query.shopify_error === 'already_connected' && (
                   <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
                     <p className="font-bold text-red-900 text-sm">
-                      {t('shopify.errorAlreadyConnected' as any)}
+                      {t('shopify.errorAlreadyConnected')}
                     </p>
                   </div>
                 )}

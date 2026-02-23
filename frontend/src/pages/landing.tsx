@@ -1,53 +1,27 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
-import Image from 'next/image';
 import Link from 'next/link';
-import {
-  MessageCircle,
-  Facebook,
-  ArrowRight,
-  Zap,
-  Clock,
-  Star,
-  ChevronDown,
-  Sparkles,
-  Bot,
-  Languages,
-  BookOpen,
-  Instagram,
-  Crown,
-  Smartphone,
-  Mail,
-  Check,
-  ShoppingBag,
-  Rocket
-} from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { Rocket, ShoppingBag } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
-import { publicApi } from '@/lib/api';
-import { toast } from 'sonner';
 import { BRAND_ASSETS } from '@/constants/brand';
-
-function SallaIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M18.862 13.439a1.27 1.27 0 0 0-.81-.555 1.27 1.27 0 0 0-.964.18c-3.422 2.231-6.75 2.231-10.178 0a1.27 1.27 0 0 0-.964-.18 1.283 1.283 0 0 0-.434 2.327c2.142 1.394 4.326 2.1 6.49 2.1 2.166 0 4.348-.706 6.488-2.102a1.27 1.27 0 0 0 .555-.81 1.27 1.27 0 0 0-.18-.964zm5.103 2.82-1.171-9.764a5.24 5.24 0 0 0-5.2-4.614H6.406a5.236 5.236 0 0 0-5.198 4.612l-1.17 9.766a5.235 5.235 0 0 0 5.198 5.86h13.529a5.238 5.238 0 0 0 5.198-5.86zm-3.21 2.4c-.532.6-1.265.929-2.066.929H5.311c-.801 0-1.536-.33-2.066-.929a2.73 2.73 0 0 1-.676-2.16l1.157-9.657A2.764 2.764 0 0 1 6.468 4.41h11.064a2.765 2.765 0 0 1 2.742 2.432l1.157 9.656a2.72 2.72 0 0 1-.676 2.161" />
-    </svg>
-  );
-}
+import {
+  WaitlistForm,
+  SallaIcon,
+  LandingHero,
+  LandingFeatures,
+  LandingHowItWorks,
+  LandingSocialProof,
+  LandingPricing,
+  LandingFAQ,
+  LandingFooter,
+} from '@/components/landing';
 
 export default function LandingPage() {
   const { t, language, setLanguage } = useTranslation();
   const { isAuthenticated } = useAuthStore();
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [integrationsNotified, setIntegrationsNotified] = useState(false);
-  const [waitlistEmail, setWaitlistEmail] = useState('');
-  const [waitlistLoading, setWaitlistLoading] = useState(false);
-  const [bannerNotified, setBannerNotified] = useState(false);
-  const [bannerEmail, setBannerEmail] = useState('');
-  const [bannerLoading, setBannerLoading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -57,74 +31,11 @@ export default function LandingPage() {
     setLanguage(language === 'ar' ? 'en' : 'ar');
   };
 
-  const features = [
-    {
-      icon: Bot,
-      title: t('landing.features.aiTitle'),
-      description: t('landing.features.aiDesc'),
-    },
-    {
-      icon: Instagram,
-      title: t('landing.features.platformsTitle'),
-      description: t('landing.features.platformsDesc'),
-    },
-    {
-      icon: Languages,
-      title: t('landing.features.languageTitle'),
-      description: t('landing.features.languageDesc'),
-    },
-    {
-      icon: Zap,
-      title: t('landing.features.instantTitle'),
-      description: t('landing.features.instantDesc'),
-    },
-    {
-      icon: BookOpen,
-      title: t('landing.features.knowledgeTitle'),
-      description: t('landing.features.knowledgeDesc'),
-    },
-    {
-      icon: Smartphone,
-      title: t('landing.features.mobileTitle'),
-      description: t('landing.features.mobileDesc'),
-    },
-  ];
-
-  const howItWorks = [
-    {
-      step: '1',
-      title: t('landing.howItWorks.step1Title'),
-      description: t('landing.howItWorks.step1Desc'),
-    },
-    {
-      step: '2',
-      title: t('landing.howItWorks.step2Title'),
-      description: t('landing.howItWorks.step2Desc'),
-    },
-    {
-      step: '3',
-      title: t('landing.howItWorks.step3Title'),
-      description: t('landing.howItWorks.step3Desc'),
-    },
-  ];
-
   const faqs = [
-    {
-      question: t('landing.faq.q1'),
-      answer: t('landing.faq.a1'),
-    },
-    {
-      question: t('landing.faq.q2'),
-      answer: t('landing.faq.a2'),
-    },
-    {
-      question: t('landing.faq.q3'),
-      answer: t('landing.faq.a3'),
-    },
-    {
-      question: t('landing.faq.q4'),
-      answer: t('landing.faq.a4'),
-    },
+    { question: t('landing.faq.q1'), answer: t('landing.faq.a1') },
+    { question: t('landing.faq.q2'), answer: t('landing.faq.a2') },
+    { question: t('landing.faq.q3'), answer: t('landing.faq.a3') },
+    { question: t('landing.faq.q4'), answer: t('landing.faq.a4') },
   ];
 
   const statsList = [
@@ -162,14 +73,12 @@ export default function LandingPage() {
       </Head>
 
       <div className="flex-1 overflow-y-auto bg-white overflow-x-hidden">
-        {/* Navigation - Mobile optimized */}
-        <nav 
+        {/* Navigation */}
+        <nav
           className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe px-safe-landscape"
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16 sm:h-20">
-              {/* Logo */}
-              {/* Logo */}
               <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
                 <BrandLogo
                   variant="main"
@@ -178,7 +87,6 @@ export default function LandingPage() {
                 <span className="font-display font-bold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
               </Link>
 
-              {/* Actions */}
               <div className="flex items-center gap-1 sm:gap-4">
                 <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
                   {t('landing.nav.pricing')}
@@ -217,215 +125,13 @@ export default function LandingPage() {
                 <p className="text-xs sm:text-sm text-white/90 font-medium">{t('landing.comingSoon.subtitle')}</p>
               </div>
             </div>
-            {bannerNotified ? (
-              <p className="font-bold text-sm sm:text-base">✓ {t('landing.comingSoon.notified')}</p>
-            ) : (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                  if (!EMAIL_REGEX.test(bannerEmail)) {
-                    toast.error(t('landing.features.integrationsError'));
-                    return;
-                  }
-                  setBannerLoading(true);
-                  try {
-                    await publicApi.post('/api/waitlist', {
-                      email: bannerEmail,
-                      feature: 'early_access',
-                    });
-                    setBannerNotified(true);
-                    toast.success(t('landing.comingSoon.notified'));
-                  } catch {
-                    toast.error(t('landing.features.integrationsNetworkError'));
-                  } finally {
-                    setBannerLoading(false);
-                  }
-                }}
-                className="flex gap-2"
-              >
-                <input
-                  type="email"
-                  value={bannerEmail}
-                  onChange={(e) => setBannerEmail(e.target.value)}
-                  placeholder={t('landing.comingSoon.placeholder')}
-                  required
-                  className="px-3 py-1.5 sm:py-2 rounded-full text-surface-900 text-sm sm:text-base border-0 focus:outline-none focus:ring-2 focus:ring-white/50 min-w-0 w-40 sm:w-52"
-                  dir="ltr"
-                />
-                <button
-                  type="submit"
-                  disabled={bannerLoading}
-                  className="flex-shrink-0 px-4 py-1.5 sm:py-2 rounded-full bg-white/20 text-white font-bold text-sm sm:text-base hover:bg-white/30 transition-all disabled:opacity-60 border border-white/30"
-                >
-                  {bannerLoading ? '...' : t('landing.comingSoon.notify')}
-                </button>
-              </form>
-            )}
+            <WaitlistForm feature="early_access" variant="banner" />
           </div>
         </div>
 
-        {/* Hero Section - Uses pt-hero for consistent spacing below fixed nav + breathing room */}
-        <section className="relative pt-8 sm:pt-12 lg:pt-20 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
-          {/* Animated Background Elements */}
-          <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
-          <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
-          {/* Centered Glowing Background */}
-          <div className="absolute top-1/2 inset-x-0 flex justify-center -translate-y-1/2 pointer-events-none">
-            <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
-          </div>
+        <LandingHero isAuthenticated={isAuthenticated} />
 
-          <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 sm:grid-cols-2 items-center gap-3 sm:gap-8 lg:gap-12">
-              {/* Text Content */}
-              <div className="text-start order-1">
-                {/* Heading */}
-                <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
-                  {t('landing.hero.title1')}
-                  <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-1 sm:mt-2">
-                    {t('landing.hero.title2')}
-                  </span>
-                </h1>
-
-                {/* Description */}
-                <p className="text-xs min-[375px]:text-sm sm:text-lg lg:text-xl text-surface-600 mb-4 sm:mb-12 leading-relaxed animate-slide-up animation-delay-100">
-                  {t('landing.hero.description')}
-                </p>
-
-                {/* CTA Buttons */}
-                <div className="flex flex-col items-center sm:items-start gap-3 sm:gap-5 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
-                  <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
-                    <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
-                      {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.hero.cta1')}
-                    </Button>
-                  </Link>
-                  {!isAuthenticated && (
-                    <p className="flex items-center gap-1.5 text-xs sm:text-sm text-surface-500 font-medium">
-                      <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-500" aria-hidden="true" />
-                      {t('landing.cta.note')}
-                    </p>
-                  )}
-                  {!isAuthenticated && (
-                    <Link href="/pricing" className="w-full sm:w-auto">
-                      <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-gray-300 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
-                        {t('landing.hero.cta2')}
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-
-                {/* Platform Icons */}
-                <div className="hidden sm:flex items-center gap-3 sm:gap-6 animate-slide-up animation-delay-300">
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#1877F2]/10 text-[#1877F2] font-bold text-sm sm:text-base hover:bg-[#1877F2] hover:text-white transition-all cursor-default">
-                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>{t('landing.platforms.facebook')}</span>
-                  </div>
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 font-bold text-sm sm:text-base hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white transition-all cursor-default">
-                    <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>{t('landing.platforms.instagram')}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Hero Illustration - Phone Mockup with Floating Icons */}
-              <div className="relative animate-slide-up order-2 flex justify-center">
-                <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
-                  {/* Glowing Background - More Vibrant like your image */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
-
-                  {/* Phone Mockup - Titanium/Silver Frame instead of Black */}
-                  <div className="relative bg-[#E5E7EB] rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5 shadow-2xl shadow-brand-900/20 border-[6px] border-[#F3F4F6]">
-                    {/* Notch - Physical Centering */}
-                    <div className="absolute top-4 sm:top-5 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 bg-[#1F2937] rounded-full z-10"></div>
-
-                    {/* Screen Content - Cleaner, more integrated look */}
-                    <div className="bg-gradient-to-br from-white to-brand-50/30 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative border border-white/50">
-                      {/* App Interface */}
-                      <div className="p-2.5 sm:p-4 h-full flex flex-col justify-evenly">
-                        {/* Status Bar */}
-                        <div className="flex items-center justify-between pt-1 sm:pt-2 px-4">
-                          <div className="flex items-center gap-0.5 sm:gap-1">
-                            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-500 rounded-full" />
-                            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-300 rounded-full" />
-                          </div>
-                          <div className="text-[8px] sm:text-[9px] lg:text-xs font-bold text-brand-900/30">9:41</div>
-                          <div className="w-3 sm:w-4 lg:w-5 h-1.5 sm:h-2 bg-brand-500/10 rounded-sm" />
-                        </div>
-
-                        {/* Robot Avatar - Subtler Colors with Pulse Animation */}
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-1 sm:mb-2 animate-float-pulse border border-brand-50">
-                            <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500" />
-                          </div>
-                          <span className="font-display font-bold text-[8px] sm:text-xs lg:text-base text-brand-600">jawab24.com</span>
-                        </div>
-
-                        {/* Chat Bubbles - Brand Colors */}
-                        <div className="space-y-1.5 sm:space-y-3 lg:space-y-4 pb-2 sm:pb-4">
-                          <div className="flex items-end gap-1 sm:gap-1.5 lg:gap-2 rtl:flex-row-reverse animate-slide-up">
-                            <div className="w-4 h-4 sm:w-5 sm:h-5 lg:w-7 lg:h-7 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
-                              <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-surface-600" />
-                            </div>
-                            <div className="bg-white rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-sm border border-brand-50 max-w-full">
-                              <p className="text-[8px] sm:text-[11px] lg:text-base text-surface-700 font-medium leading-tight lg:leading-relaxed">{t('landing.hero.chatQuery')}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-end gap-1 sm:gap-1.5 lg:gap-2 justify-end rtl:flex-row-reverse rtl:justify-start animate-slide-up animation-delay-500">
-                            <div className="bg-brand-500 rounded-xl sm:rounded-2xl rounded-br-none rtl:rounded-br-xl sm:rtl:rounded-br-2xl rtl:rounded-bl-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-lg shadow-brand-500/20 max-w-[85%]">
-                              <p className="text-[8px] sm:text-[11px] lg:text-base text-white font-bold leading-tight lg:leading-relaxed">{t('landing.hero.chatResponse')}</p>
-                            </div>
-                            <div className="w-4 h-4 sm:w-5 sm:h-5 lg:w-7 lg:h-7 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0 shadow-sm">
-                              <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-brand-500" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Floating Elements - Each with unique animation */}
-                  {/* Facebook - Original Blue Color */}
-                  <div className="absolute -start-4 sm:-start-8 top-1/4 animate-float-rotate">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-blue-500/20 border-b-2 border-blue-100">
-                      <div className="w-full h-full rounded-full bg-[#1877F2] flex items-center justify-center">
-                        <Facebook className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Instagram - Original Gradient Colors */}
-                  <div className="absolute -end-4 sm:-end-8 top-1/3 animate-float-orbit">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-pink-500/20 border-b-2 border-pink-100">
-                      <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
-                        <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Shopify Floating Icon - Circular SVG matching others */}
-                  <div className="absolute -start-4 sm:-start-8 top-2/3 animate-float-rotate z-10">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-emerald-500/20 border-b-2 border-emerald-100">
-                      <div className="w-full h-full rounded-full bg-[#96bf48] flex items-center justify-center relative">
-                        <ShoppingBag className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Salla Floating Icon */}
-                  <div className="absolute -end-4 sm:-end-8 top-2/3 animate-float-orbit z-10">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-teal-500/20 border-b-2 border-teal-100">
-                      <div className="w-full h-full rounded-full bg-[#BAF3E6] flex items-center justify-center relative">
-                        <SallaIcon className="w-5 h-5 sm:w-7 sm:h-7 text-[#004956]" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Stats Section - Compact on mobile */}
+        {/* Stats Section */}
         <section className="py-8 sm:py-16 bg-surface-900 relative">
           <div className="absolute top-0 start-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent"></div>
           <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
@@ -460,370 +166,18 @@ export default function LandingPage() {
                     {t('landing.features.integrationsDesc')}
                   </p>
                 </div>
-                {integrationsNotified ? (
-                  <p className="text-brand-600 font-bold text-sm sm:text-base">
-                    ✓ {t('landing.features.integrationsNotified')}
-                  </p>
-                ) : (
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                      if (!EMAIL_REGEX.test(waitlistEmail)) {
-                        toast.error(t('landing.features.integrationsError'));
-                        return;
-                      }
-                      setWaitlistLoading(true);
-                      try {
-                        await publicApi.post('/api/waitlist', {
-                          email: waitlistEmail,
-                          feature: 'ecommerce_integrations',
-                        });
-                        setIntegrationsNotified(true);
-                        toast.success(t('landing.features.integrationsNotified'));
-                      } catch {
-                        toast.error(t('landing.features.integrationsNetworkError'));
-                      } finally {
-                        setWaitlistLoading(false);
-                      }
-                    }}
-                    className="flex w-full max-w-sm gap-2"
-                  >
-                    <input
-                      type="email"
-                      value={waitlistEmail}
-                      onChange={(e) => setWaitlistEmail(e.target.value)}
-                      placeholder={t('landing.features.integrationsPlaceholder')}
-                      required
-                      className="flex-1 min-w-0 px-4 py-2.5 rounded-full border border-surface-200 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                      dir="ltr"
-                    />
-                    <button
-                      type="submit"
-                      disabled={waitlistLoading}
-                      className="flex-shrink-0 px-5 py-2.5 sm:px-6 rounded-full bg-surface-900 text-white font-bold text-sm sm:text-base hover:bg-surface-800 hover:shadow-lg transition-all disabled:opacity-60"
-                    >
-                      {waitlistLoading ? '...' : t('landing.features.integrationsNotify')}
-                    </button>
-                  </form>
-                )}
+                <WaitlistForm feature="ecommerce_integrations" variant="card" />
               </div>
             </div>
           </div>
         </section>
 
-        {/* Features Section - Optimized for mobile */}
-        <section id="features" className="py-12 sm:py-20 lg:py-32 bg-surface-50 relative">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-8 sm:mb-16 lg:mb-24">
-              <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-3 sm:mb-6 tracking-tight">
-                {t('landing.features.sectionTitle')}
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-10">
-              {features.map((feature, i) => (
-                <div
-                  key={i}
-                  className="group bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 lg:p-10 shadow-lg sm:shadow-xl shadow-surface-200/50 hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 border border-surface-100 flex flex-col items-center text-center"
-                >
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-4 sm:mb-6 lg:mb-8 group-hover:bg-brand-600 group-hover:text-white transition-colors duration-500 shadow-inner">
-                    <feature.icon className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10" />
-                  </div>
-                  <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-surface-900 mb-2 sm:mb-4">{feature.title}</h3>
-                  <p className="text-sm sm:text-base text-surface-600 leading-relaxed font-medium">{feature.description}</p>
-                </div>
-              ))}
-            </div>
-
-          </div>
-        </section>
-
-        {/* How It Works - Optimized for mobile */}
-        <section className="py-12 sm:py-20 lg:py-32 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-2 gap-4 sm:gap-8 lg:gap-16 items-center">
-              {/* Steps - Takes half width on mobile */}
-              <div className="space-y-4 sm:space-y-8 col-span-1">
-                <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-relaxed text-start">
-                  {t('landing.howItWorks.title1')}
-                  <span className="block text-brand-600 mt-2">{t('landing.howItWorks.title2')}</span>
-                </h2>
-                <div className="space-y-3 sm:space-y-6 lg:space-y-10">
-                  {howItWorks.map((item, i) => (
-                    <div key={i} className="flex flex-row gap-3 sm:gap-6 items-start">
-                      <div className="flex-shrink-0 w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl bg-brand-600 text-white flex items-center justify-center text-sm sm:text-2xl font-bold shadow-lg shadow-brand-200">
-                        {item.step}
-                      </div>
-                      <div className="text-start">
-                        <h3 className="text-sm sm:text-xl font-bold text-surface-900 mb-1 sm:mb-2">{item.title}</h3>
-                        <p className="text-[10px] sm:text-base text-surface-600 font-medium leading-relaxed">{item.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-start">
-                  <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="inline-block mt-4 sm:mt-12">
-                    <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
-                      <span className="flex items-center gap-2">
-                        {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.howItWorks.cta')}
-                        <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </span>
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Dashboard Preview - Takes half width on mobile */}
-              <div className="relative col-span-1 pt-8 sm:pt-0">
-                <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-2 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700 bg-surface-50">
-                  <Image 
-                    src="/images/social-icons-3d.png" 
-                    alt={t('landing.images.dashboardPreview' as TranslationKey) as string} 
-                    width={1200}
-                    height={675}
-                    className="w-full h-auto"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-brand-900/20 to-transparent"></div>
-                  
-                </div>
-                {/* Decorative Elements */}
-                <div className="absolute -top-5 sm:-top-10 -end-5 sm:-end-10 w-16 sm:w-32 h-16 sm:h-32 bg-accent-100 rounded-full -z-10 blur-xl sm:blur-2xl"></div>
-                <div className="absolute -bottom-5 sm:-bottom-10 -start-5 sm:-start-10 w-20 sm:w-40 h-20 sm:h-40 bg-brand-100 rounded-full -z-10 blur-xl sm:blur-3xl"></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Social Proof Section - Compact on mobile */}
-        <section className="py-10 sm:py-16 lg:py-24 bg-brand-600 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-            <div className="inline-flex items-center gap-1 sm:gap-2 mb-4 sm:mb-8 bg-white/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-white/20">
-              <Star className="w-3 h-3 sm:w-4 sm:h-4 text-amber-400 fill-amber-400" />
-              <Star className="w-3 h-3 sm:w-4 sm:h-4 text-amber-400 fill-amber-400" />
-              <Star className="w-3 h-3 sm:w-4 sm:h-4 text-amber-400 fill-amber-400" />
-              <Star className="w-3 h-3 sm:w-4 sm:h-4 text-amber-400 fill-amber-400" />
-              <Star className="w-3 h-3 sm:w-4 sm:h-4 text-amber-400 fill-amber-400" />
-            </div>
-            <h2 className="text-lg sm:text-2xl lg:text-4xl font-display font-bold text-white mb-4 sm:mb-8 leading-relaxed italic italic-arabic px-2">
-              "{t('landing.testimonials.quote1')}"
-            </h2>
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 sm:border-4 border-white/30 mb-2 sm:mb-4 shadow-xl bg-white flex items-center justify-center">
-                <span className="text-brand-700 font-bold text-sm sm:text-xl select-none">AS</span>
-              </div>
-              <div className="text-white font-bold text-base sm:text-xl">{t('landing.testimonials.author1')}</div>
-            </div>
-          </div>
-        </section>
-
-        {/* Pricing Section - Compact on mobile */}
-        <section id="pricing" className="py-12 sm:py-20 lg:py-32 bg-white relative">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-8 sm:mb-16">
-              <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full bg-brand-50 text-brand-600 border border-brand-100 mb-4 sm:mb-6 font-bold text-[10px] sm:text-xs uppercase tracking-widest">
-                {t('pricing.description')}
-              </div>
-              <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-3 sm:mb-6 tracking-tight">
-                {t('pricing.startTrial')}
-              </h2>
-              <p className="text-sm sm:text-lg lg:text-xl text-surface-600 max-w-2xl mx-auto leading-relaxed mb-4 sm:mb-10">
-                {t('pricing.noCreditCard')}
-              </p>
-            </div>
-
-            {/* Plan Features Preview - Horizontal scroll on mobile */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-8 mb-8 sm:mb-16 max-w-4xl mx-auto">
-              {/* Starter */}
-              <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 transition-colors">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center">
-                  <Zap className="w-5 h-5 sm:w-7 sm:h-7" />
-                </div>
-                <h3 className="text-sm sm:text-lg font-bold text-surface-900 mb-1 sm:mb-2">{t('pricing.starter')}</h3>
-                <p className="text-[10px] sm:text-sm text-surface-500 mb-2 sm:mb-3 hidden sm:block">
-                  {t('pricing.starterDesc')}
-                </p>
-                <ul className="text-[10px] sm:text-sm text-surface-600 space-y-0.5 sm:space-y-1">
-                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.starterFeature1')}</li>
-                  <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {t('pricing.starterFeature2')}</li>
-                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.starterFeature3')}</li>
-                </ul>
-              </div>
-
-              {/* Business */}
-              <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl bg-brand-50 border sm:border-2 border-brand-200 relative">
-                <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-700 text-white text-[10px] sm:text-xs font-bold rounded-full whitespace-nowrap">
-                  {t('pricing.popular')}
-                </div>
-                <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center mt-2 sm:mt-0">
-                  <Sparkles className="w-5 h-5 sm:w-7 sm:h-7" />
-                </div>
-                <h3 className="text-sm sm:text-lg font-bold text-surface-900 mb-1 sm:mb-2">{t('pricing.business')}</h3>
-                <p className="text-[10px] sm:text-sm text-surface-500 mb-2 sm:mb-3 hidden sm:block">
-                  {t('pricing.businessDesc')}
-                </p>
-                <ul className="text-[10px] sm:text-sm text-surface-600 space-y-0.5 sm:space-y-1">
-                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.businessFeature1')}</li>
-                  <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {t('pricing.businessFeature2')}</li>
-                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.businessFeature3')}</li>
-                </ul>
-              </div>
-
-              {/* Pro */}
-              <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 transition-colors">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center">
-                  <Crown className="w-5 h-5 sm:w-7 sm:h-7" />
-                </div>
-                <h3 className="text-sm sm:text-lg font-bold text-surface-900 mb-1 sm:mb-2">{t('pricing.pro')}</h3>
-                <p className="text-[10px] sm:text-sm text-surface-500 mb-2 sm:mb-3 hidden sm:block">
-                  {t('pricing.proDesc')}
-                </p>
-                <ul className="text-[10px] sm:text-sm text-surface-600 space-y-0.5 sm:space-y-1">
-                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.proFeature1')}</li>
-                  <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {t('pricing.proFeature2')}</li>
-                  <li><Check className="w-3 h-3 inline-block" /> {t('pricing.proFeature3')}</li>
-                </ul>
-              </div>
-            </div>
-
-            {/* CTA - Compact on mobile */}
-            <div className="text-center">
-              <Link href="/pricing">
-                <Button size="lg" className="px-6 sm:px-12 py-4 sm:py-6 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl shadow-xl shadow-brand-200">
-                  <span className="flex items-center gap-2">
-                    {t('pricing.viewPricingDetails')}
-                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </span>
-                </Button>
-              </Link>
-              <p className="text-xs sm:text-sm text-surface-600 mt-3 sm:mt-4">
-                {t('landing.cta.note')}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* FAQ Section - Compact on mobile */}
-        <section className="py-12 sm:py-20 lg:py-32 bg-surface-50 relative overflow-hidden">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="text-center mb-8 sm:mb-20">
-              <h2 className="text-2xl sm:text-4xl font-display font-extrabold text-surface-900 mb-2 sm:mb-4">
-                {t('landing.faq.title')}
-              </h2>
-            </div>
-
-            <div className="space-y-3 sm:space-y-4">
-              {faqs.map((faq, i) => (
-                <div
-                  key={i}
-                  className={`bg-white rounded-2xl sm:rounded-3xl border-2 transition-all duration-300 overflow-hidden ${openFaq === i ? 'border-brand-500 shadow-xl shadow-brand-100' : 'border-transparent shadow-sm hover:border-surface-200'
-                    }`}
-                >
-                  <button
-                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                    className="w-full px-4 sm:px-8 py-4 sm:py-6 text-start flex items-center justify-between group"
-                  >
-                    <span className={`font-bold text-sm sm:text-lg transition-colors rtl:text-start ${openFaq === i ? 'text-brand-600' : 'text-surface-900 group-hover:text-brand-600'}`}>
-                      {faq.question}
-                    </span>
-                    <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 ms-2 ${openFaq === i ? 'bg-brand-600 text-white rotate-180' : 'bg-surface-100 text-surface-400 group-hover:bg-brand-100 group-hover:text-brand-600'}`}>
-                      <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </div>
-                  </button>
-                  {openFaq === i && (
-                    <div className="px-4 sm:px-8 pb-4 sm:pb-8 text-sm sm:text-base text-surface-600 font-medium leading-relaxed animate-slide-up">
-                      {faq.answer}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Footer - Compact on mobile */}
-        <footer className="bg-surface-900 text-white pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
-          <div className="absolute bottom-0 end-0 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-500/5 rounded-full blur-[80px] sm:blur-[120px] pointer-events-none"></div>
-
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-16 mb-10 sm:mb-20">
-              <div className="col-span-2">
-                <Link href="/landing" className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-8 group">
-                  <BrandLogo
-                    variant="main"
-                    className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0"
-                  />
-                  <span className="font-display font-bold text-xl sm:text-2xl tracking-tight">{BRAND_ASSETS.meta.appName}</span>
-                </Link>
-                <p className="text-surface-400 text-sm sm:text-lg max-w-sm mb-6 sm:mb-10 leading-relaxed font-medium">
-                  {t('landing.footer.description')}
-                </p>
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <a
-                    href={`https://wa.me/46700224720?text=${encodeURIComponent(t('landing.footer.whatsappMessage' as TranslationKey))}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={t('landing.footer.whatsappAriaLabel' as TranslationKey)}
-                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
-                  >
-                    <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hover:scale-110 transition-all" aria-hidden="true" />
-                  </a>
-                  <a
-                    href="https://facebook.com/jawab24app"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={t('landing.footer.facebookAriaLabel' as TranslationKey)}
-                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#1877F2]/10 flex items-center justify-center hover:bg-[#1877F2] transition-colors border border-[#1877F2]/20 group"
-                  >
-                    <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-[#1877F2] group-hover:text-white group-hover:scale-110 transition-all" aria-hidden="true" />
-                  </a>
-                  <a
-                    href="mailto:support@jawab24.com"
-                    aria-label={t('landing.footer.emailAriaLabel' as TranslationKey)}
-                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group"
-                  >
-                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
-                  </a>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.quickLinks')}</h3>
-                <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
-                  <li><Link href="/pricing" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.pricingPlans')}</Link></li>
-                  <li><Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="text-surface-400 hover:text-brand-400 transition-colors">{isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.footer.startTrial')}</Link></li>
-                  <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.termsOfService')}</Link></li>
-                  <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.privacyPolicy')}</Link></li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.support')}</h3>
-                <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
-                  <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
-                    <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
-                      <Zap className="w-3 h-3 sm:w-4 sm:h-4" />
-                    </div>
-                    <span className="text-[11px] sm:text-base whitespace-nowrap">support@jawab24.com</span>
-                  </li>
-                  <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
-                    <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400">
-                      <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
-                    </div>
-                    <span className="text-xs sm:text-base">{t('landing.footer.responseTime')}</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="pt-6 sm:pt-12 border-t border-white/10 flex items-center justify-start pb-safe">
-              <div className="text-surface-500 font-bold text-xs sm:text-sm tracking-widest uppercase text-start" dir="ltr">
-                © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
-              </div>
-            </div>
-          </div>
-        </footer>
+        <LandingFeatures />
+        <LandingHowItWorks isAuthenticated={isAuthenticated} />
+        <LandingSocialProof />
+        <LandingPricing />
+        <LandingFAQ />
+        <LandingFooter isAuthenticated={isAuthenticated} />
 
         {/* Fixed bottom safe area background (native/PWA only via --min-safe-bottom) */}
         <div
@@ -834,4 +188,3 @@ export default function LandingPage() {
     </div>
   );
 }
-

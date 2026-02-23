@@ -246,7 +246,7 @@ export function CommentCard({
                      }}
                      icon={<CheckCheck className="w-3.5 h-3.5" />}
                    >
-                     {t('comments.resolve' as any)}
+                     {t('comments.resolve')}
                    </Button>
                  )}
                  {onQuickReply && (

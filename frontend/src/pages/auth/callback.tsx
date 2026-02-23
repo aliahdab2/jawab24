@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { useAuthStore, useUIStore } from '@/lib/store';
+import { useAuthStore, useUIStore, type Language } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { AppSkeleton } from '@/components/ui';
@@ -112,7 +112,7 @@ export default function AuthCallback() {
       // Apply language setting if available
       // Priority: 1. User Profile Settings, 2. Preferred Locale from State, 3. Default
       const finalLocale = data.settings?.dashboardLanguage || preferredLocale || 'ar';
-      useUIStore.getState().setLanguage(finalLocale as any);
+      useUIStore.getState().setLanguage(finalLocale as Language);
 
       // Reconnect flow: sync pages with the fresh token then redirect back to pages
       if (isReconnect && data.fbAccessToken) {

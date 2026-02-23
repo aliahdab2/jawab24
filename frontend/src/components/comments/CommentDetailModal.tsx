@@ -306,7 +306,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             {pauseStatus?.paused && (
               <Badge variant="info">
                 <PauseCircle className="w-3 h-3 me-1" />
-                {t('messages.smartReplyPaused' as any)}
+                {t('messages.smartReplyPaused')}
               </Badge>
             )}
             {needsAttention && (
@@ -392,16 +392,16 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                       {isGenerating
                         ? generationStatus || t('common.loading')
                         : !aiLimit.allowed
-                          ? t('pricing.limitReached' as any)
+                          ? t('pricing.limitReached')
                           : replyText
-                            ? t('comments.regenerate' as any)
+                            ? t('comments.regenerate')
                             : t('dashboard.aiReply')}
                     </Button>
 
                     {/* Tooltip for disabled state */}
                     {!aiLimit.allowed && (
                       <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
-                        {aiLimit.reason || t('pricing.limitReached' as any)}
+                        {aiLimit.reason || t('pricing.limitReached')}
                       </div>
                     )}
                   </div>
@@ -424,7 +424,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     disabled={isSending}
                     icon={<CheckCircle className="w-4 h-4" />}
                   >
-                    {t('comments.resolve' as any)}
+                    {t('comments.resolve')}
                   </Button>
                 )}
                 <Button variant="secondary" onClick={onClose} disabled={isSending}>
@@ -465,12 +465,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   {pauseStatus?.paused ? (
                     <>
                       <PlayCircle className="w-3.5 h-3.5" />
-                      {t('messages.resumeSmartReply' as any)}
+                      {t('messages.resumeSmartReply')}
                     </>
                   ) : (
                     <>
                       <PauseCircle className="w-3.5 h-3.5" />
-                      {t('messages.pauseSmartReply' as any)}
+                      {t('messages.pauseSmartReply')}
                     </>
                   )}
                 </button>

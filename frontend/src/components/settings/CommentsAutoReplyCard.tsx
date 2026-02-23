@@ -191,7 +191,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
               </div>
               {dualNudgeInput.length === 0 && settings.commentsAutoReply && (
                 <p className="mt-2 text-xs text-amber-600 font-medium">
-                  {t('settings.dualReplyEmptyWarning' as any)}
+                  {t('settings.dualReplyEmptyWarning')}
                 </p>
               )}
             </div>

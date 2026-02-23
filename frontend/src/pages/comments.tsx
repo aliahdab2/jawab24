@@ -229,9 +229,9 @@ const CommentsPage: NextPageWithLayout = () => {
   // Update Page Title
   useEffect(() => {
     const filterLabels: Record<FilterType, string> = {
-      needs_action: t('comments.needsAction' as any),
+      needs_action: t('comments.needsAction'),
       all: '',
-      auto_replied: t('comments.autoReplied' as any),
+      auto_replied: t('comments.autoReplied'),
     };
     const filterLabel = filterLabels[filter] ? ` — ${filterLabels[filter]}` : '';
     const countLabel = filteredComments.length > 0 ? ` (${filteredComments.length})` : '';
@@ -344,13 +344,13 @@ const CommentsPage: NextPageWithLayout = () => {
           <AlertTriangle className="w-8 h-8 text-red-400" />
         </div>
         <p className="text-base font-semibold text-surface-600 mb-2">
-          {t('errors.somethingWentWrong' as any)}
+          {t('errors.somethingWentWrong')}
         </p>
         <p className="text-sm text-surface-500 mb-5">
-          {(error as Error)?.message || t('errors.tryAgain' as any)}
+          {(error as Error)?.message || t('errors.tryAgain')}
         </p>
         <Button variant="primary" size="sm" onClick={() => refetch()}>
-          {t('errors.tryAgain' as any)}
+          {t('errors.tryAgain')}
         </Button>
       </div>
     );
@@ -366,7 +366,7 @@ const CommentsPage: NextPageWithLayout = () => {
             <button
               onClick={() => setMenuOpen(prev => !prev)}
               className="p-2 rounded-xl text-surface-500 hover:text-surface-700 hover:bg-surface-100 transition-colors"
-              aria-label={t('common.export' as any)}
+              aria-label={t('common.export')}
               aria-expanded={menuOpen}
             >
               <MoreVertical className="w-5 h-5" />
@@ -391,9 +391,9 @@ const CommentsPage: NextPageWithLayout = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
         <div className="w-full sm:flex-1 sm:min-w-0 flex flex-wrap items-center gap-2">
           {([
-            { key: 'needs_action' as FilterType, label: t('comments.needsAction' as any), count: stats.unreplied },
+            { key: 'needs_action' as FilterType, label: t('comments.needsAction'), count: stats.unreplied },
             { key: 'all' as FilterType, label: t('comments.allComments'), count: stats.total },
-            { key: 'auto_replied' as FilterType, label: t('comments.autoReplied' as any), count: stats.autoReplied },
+            { key: 'auto_replied' as FilterType, label: t('comments.autoReplied'), count: stats.autoReplied },
           ]).map(chip => (
             <button
               key={chip.key}

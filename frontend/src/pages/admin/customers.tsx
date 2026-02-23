@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 
 import { Search, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { Card } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
@@ -263,7 +263,7 @@ export default function AdminCustomersPage() {
                                                         'inline-flex px-2 py-1 text-xs font-medium rounded-full',
                                                         STATUS_COLORS[customer.subscription.status] || 'bg-gray-100 text-gray-800'
                                                     )}>
-                                                        {t(`admin.customers.status.${customer.subscription.status}` as any) || customer.subscription.status}
+                                                        {t(`admin.customers.status.${customer.subscription.status}` as TranslationKey) || customer.subscription.status}
                                                     </span>
                                                 ) : (
                                                     <span className="text-surface-400 text-sm">-</span>

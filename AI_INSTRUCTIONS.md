@@ -104,8 +104,9 @@ className="ps-4 pe-2 ms-auto text-start float-start"
 1. **NEVER** use physical directional properties (`left`, `right`, `pl-*`, `pr-*`, etc.)
 2. **ALWAYS** use Tailwind's logical properties (`start`, `end`, `ps-*`, `pe-*`, etc.)
 3. **Set `dir` attribute** on containers when switching languages
-4. **Use Tailwind classes** for all styling - avoid inline styles that use left/right
-5. **Test in both languages** before committing
+4. **Use `dir="auto"` on inputs with translated placeholders** — never `dir="ltr"`. Email/URL inputs still need LTR text direction for typed values, but `dir="auto"` lets the browser show RTL placeholders correctly and switches to LTR once the user types Latin characters.
+5. **Use Tailwind classes** for all styling - avoid inline styles that use left/right
+6. **Test in both languages** before committing
 
 ```tsx
 // ✅ CORRECT - Complete example
@@ -666,6 +667,7 @@ return (
 | Ignoring landscape mode | Test both orientations, use `landscape:` |
 | Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |
 | Stripe call without country check | ALWAYS check sanctioned countries first |
+| `dir="ltr"` on inputs with translated placeholders | Use `dir="auto"` so RTL placeholders display correctly |
 
 ---
 
