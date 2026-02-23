@@ -389,6 +389,64 @@ Dashboard pages (`/settings`, `/comments`, `/messages`, etc.) are used daily and
 npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility --output=json --chrome-flags="--headless" | jq '.categories.accessibility.score'
 ```
 
+### 11. Code Quality & Clean Patterns
+
+**Every change must be clean, minimal, and idiomatic. No "quick hacks" that create tech debt.**
+
+**Rules:**
+
+1. **Never duplicate DOM for responsive layouts** — Use a single container with responsive CSS classes, not two separate DOM trees with `md:hidden` / `hidden md:block`.
+   ```tsx
+   // ❌ WRONG - duplicates content, doubles DOM size, breaks tests
+   <div className="md:hidden">
+     {plans.map(p => <PlanCard key={p.id} {...p} />)}
+   </div>
+   <div className="hidden md:grid md:grid-cols-3">
+     {plans.map(p => <PlanCard key={p.id} {...p} />)}
+   </div>
+
+   // ✅ CORRECT - single DOM, responsive CSS on the container
+   <div className="flex snap-x snap-mandatory overflow-x-auto md:grid md:grid-cols-3 md:snap-none md:overflow-visible">
+     {plans.map(p => <PlanCard key={p.id} {...p} />)}
+   </div>
+   ```
+
+2. **Prefer Tailwind utilities over inline styles** — Use `snap-x snap-mandatory` instead of `style={{ scrollSnapType: 'x mandatory' }}`. Inline styles bypass Tailwind's responsive system.
+   ```tsx
+   // ❌ WRONG
+   <div style={{ scrollSnapType: 'x mandatory' }}>
+
+   // ✅ CORRECT
+   <div className="snap-x snap-mandatory">
+   ```
+
+3. **Use `clsx` for long className strings** — When a className has more than ~4 responsive states, use `clsx()` with grouped comments for readability.
+   ```tsx
+   // ❌ WRONG - unreadable wall of classes
+   className={`flex gap-4 overflow-x-auto snap-x snap-mandatory -mx-4 px-4 md:overflow-visible md:snap-none md:grid md:grid-cols-3`}
+
+   // ✅ CORRECT - grouped and commented
+   className={clsx(
+     // Mobile: horizontal scroll carousel
+     'flex gap-4 overflow-x-auto snap-x snap-mandatory -mx-4 px-4',
+     // Desktop: standard grid
+     'md:overflow-visible md:snap-none md:grid md:grid-cols-3',
+   )}
+   ```
+
+4. **Don't add CSS classes that have no effect** — e.g., `flex-shrink` on grid items, `z-index` on static elements, or responsive overrides for properties that don't apply in that layout context.
+
+5. **Don't use `useCallback`/`useMemo` unnecessarily** — Only memoize when:
+   - Passing callbacks to memoized child components (`React.memo`)
+   - The function is in a dependency array of another hook
+   - Expensive computation in `useMemo`
+
+   Don't memoize inline event handlers on a few elements.
+
+6. **Browser API mocks belong in test setup, not individual tests** — When using browser APIs not available in jsdom (`IntersectionObserver`, `ResizeObserver`, `scrollIntoView`), add mocks to `frontend/test/setup.ts` so all tests benefit.
+
+7. **Verify all tests pass after ANY change** — Run `npm run test` (unit) and relevant E2E specs. Never commit code that breaks existing tests.
+
 ---
 
 ## 📁 Project Structure
