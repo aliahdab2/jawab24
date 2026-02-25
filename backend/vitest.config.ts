@@ -29,6 +29,9 @@ export default defineConfig({
         'src/types/payment.ts',
         'src/types/settings.ts',
         'src/services/kb/interfaces.ts',
+        // BullMQ queue/worker setup (requires Redis connection)
+        'src/lib/ecommerceSyncQueue.ts',
+        'src/workers/ecommerceSyncWorker.ts',
         // Deprecated re-export shims
         'src/lib/shopifySyncQueue.ts',
         'src/workers/shopifySyncWorker.ts',
