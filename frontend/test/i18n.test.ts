@@ -28,6 +28,12 @@ describe('Internationalization (i18n)', () => {
     it('Parameterized strings should have matching placeholders', () => {
         const placeholderRegex = /\{([^}]+)\}/g;
 
+        // Arabic _one and _two plural forms may omit {count} because the quantity
+        // is grammatically embedded in the word (e.g. "قاعدة واحدة" = one rule,
+        // "قاعدتين" = two rules). These forms never display a number.
+        const isPluralFormWithImplicitCount = (key: string) =>
+            key.endsWith('_one') || key.endsWith('_two');
+
         Object.entries(en).forEach(([key, enValue]) => {
             const arValue = (ar as Record<string, string>)[key];
             if (!arValue) return;
@@ -35,7 +41,14 @@ describe('Internationalization (i18n)', () => {
             const enPlaceholders = [...enValue.matchAll(placeholderRegex)].map(m => m[1]).sort();
             const arPlaceholders = [...arValue.matchAll(placeholderRegex)].map(m => m[1]).sort();
 
-            expect(arPlaceholders, `Placeholder mismatch for key "${key}". \nEnglish: "${enValue}" \nArabic: "${arValue}"`).toEqual(enPlaceholders);
+            if (isPluralFormWithImplicitCount(key)) {
+                // Arabic may omit {count} but must have all other placeholders
+                const enWithoutCount = enPlaceholders.filter(p => p !== 'count');
+                const arWithoutCount = arPlaceholders.filter(p => p !== 'count');
+                expect(arWithoutCount, `Non-count placeholder mismatch for plural key "${key}". \nEnglish: "${enValue}" \nArabic: "${arValue}"`).toEqual(enWithoutCount);
+            } else {
+                expect(arPlaceholders, `Placeholder mismatch for key "${key}". \nEnglish: "${enValue}" \nArabic: "${arValue}"`).toEqual(enPlaceholders);
+            }
         });
     });
 });
