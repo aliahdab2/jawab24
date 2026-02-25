@@ -8,6 +8,7 @@ interface Section {
   text: string;
   items?: string[];
   email?: string;
+  phone?: { label: string; href: string };
   corporate?: {
     name: string;
     type: string;
@@ -21,8 +22,8 @@ interface LegalPageLayoutProps {
   seoTitle: string;
   metaDescription: string;
   canonicalUrl: string;
-  lastUpdatedLabel: string;
-  lastUpdatedDate: string;
+  lastUpdatedLabel?: string;
+  lastUpdatedDate?: string;
   backToHomeLabel: string;
   sections: Section[];
   ogImage?: string;
@@ -73,9 +74,12 @@ export function LegalPageLayout({
           </Link>
 
           <h1 className="text-4xl font-bold mb-2">{title}</h1>
-          <p className="text-slate-400 mb-8">
-            {lastUpdatedLabel} {lastUpdatedDate}
-          </p>
+          {lastUpdatedLabel && lastUpdatedDate && (
+            <p className="text-slate-400 mb-8">
+              {lastUpdatedLabel} {lastUpdatedDate}
+            </p>
+          )}
+          {!lastUpdatedLabel && <div className="mb-8" />}
 
           <div className="space-y-8">
             {sections.map((section, index) => (
@@ -92,7 +96,19 @@ export function LegalPageLayout({
                 )}
 
                 {section.email && (
-                  <p className="mt-3 text-brand-400">{section.email}</p>
+                  <p className="mt-3">
+                    <a href={`mailto:${section.email}`} className="text-brand-400 hover:text-brand-300 transition-colors underline underline-offset-2">
+                      {section.email}
+                    </a>
+                  </p>
+                )}
+
+                {section.phone && (
+                  <p className="mt-3">
+                    <a href={section.phone.href} className="text-brand-400 hover:text-brand-300 transition-colors underline underline-offset-2" dir="ltr">
+                      {section.phone.label}
+                    </a>
+                  </p>
                 )}
 
                 {section.corporate && (

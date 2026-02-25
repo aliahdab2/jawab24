@@ -149,6 +149,16 @@ start_new_env() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     docker-compose up -d postgres redis nginx
 
+    # Stop legacy (non-blue/green) app containers that should not run alongside blue-green
+    echo "🧹 Stopping legacy non-blue/green app containers..."
+    for legacy in jawab24-backend jawab24-frontend jawab24-ai-worker; do
+        if docker ps --format '{{.Names}}' | grep -q "^${legacy}$"; then
+            echo "   Stopping $legacy..."
+            docker stop "$legacy" 2>/dev/null || true
+            docker rm "$legacy" 2>/dev/null || true
+        fi
+    done
+
     echo "🧹 Cleaning up old $DEPLOY_ENV containers..."
     # Stop containers first
     docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml stop \
