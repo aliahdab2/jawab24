@@ -461,6 +461,12 @@ export const adminApi = {
     const response = await api.post('/admin/ai/playground', data);
     return response.data;
   },
+
+  // AI Playground — update KB text for a page
+  updateKb: async (pageId: string, knowledgeBase: string) => {
+    const response = await api.patch(`/admin/pages/${pageId}/kb`, { knowledgeBase });
+    return response.data;
+  },
 };
 
 // E-commerce API - Manage connected store (Shopify, Salla, Zid)

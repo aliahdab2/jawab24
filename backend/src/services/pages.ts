@@ -14,7 +14,7 @@ import { PgVectorStore } from './kb/pgvector-store';
 
 /** Lazy-init ingestion service (only created when OPENAI_API_KEY exists) */
 let _ingestionService: KbIngestionService | null = null;
-function getIngestionService(): KbIngestionService | null {
+export function getIngestionService(): KbIngestionService | null {
     if (!config.openai?.apiKey) return null;
     if (!_ingestionService) {
         const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);

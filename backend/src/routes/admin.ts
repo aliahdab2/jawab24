@@ -12,6 +12,7 @@ import { RetrievalService } from '../services/kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../services/kb/embedding';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { settingsService } from '../services/settings';
+import { getIngestionService } from '../services/pages';
 import { shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../services/reply/generator';
 import { RetrievedChunkContext } from '../types';
 
@@ -577,8 +578,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         kbVersion: pages.kbVersion,
                         kbActiveVersion: pages.kbActiveVersion,
                         userId: pages.userId,
+                        userEmail: users.email,
                     })
                     .from(pages)
+                    .leftJoin(users, eq(pages.userId, users.id))
                     .orderBy(pages.name);
 
                 return reply.send({ success: true, data: allPages });
@@ -638,6 +641,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     data: {
                         pageId: page.id,
                         pageName: page.name,
+                        kbText: page.knowledgeBase || '',
                         kbLength: page.knowledgeBase?.length || 0,
                         kbVersion: page.kbVersion,
                         kbActiveVersion: page.kbActiveVersion,
@@ -679,6 +683,61 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             } catch (error) {
                 request.log.error(error, 'Admin KB gaps failed');
                 return reply.status(500).send({ success: false, error: 'Failed to get KB gaps' });
+            }
+        });
+
+        /**
+         * PATCH /admin/pages/:pageId/kb - Update KB text and trigger re-ingestion
+         */
+        adminProtected.patch<{ Params: { pageId: string }; Body: { knowledgeBase: string } }>('/pages/:pageId/kb', {
+            schema: { tags: ['Admin'], summary: 'Update KB text for a page and trigger re-ingestion', security: auth },
+        }, async (request: FastifyRequest<{ Params: { pageId: string }; Body: { knowledgeBase: string } }>, reply: FastifyReply) => {
+            const { pageId } = request.params;
+            const { knowledgeBase } = request.body;
+
+            if (typeof knowledgeBase !== 'string') {
+                return reply.status(400).send({ success: false, error: 'knowledgeBase (string) is required' });
+            }
+
+            try {
+                const [page] = await db
+                    .select({ id: pages.id, kbVersion: pages.kbVersion })
+                    .from(pages)
+                    .where(eq(pages.id, pageId))
+                    .limit(1);
+
+                if (!page) {
+                    return reply.status(404).send({ success: false, error: 'Page not found' });
+                }
+
+                const newVersion = (page.kbVersion ?? 0) + 1;
+                const [updated] = await db
+                    .update(pages)
+                    .set({
+                        knowledgeBase,
+                        kbVersion: newVersion,
+                        kbUpdatedAt: new Date(),
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(pages.id, pageId))
+                    .returning();
+
+                // Fire-and-forget: trigger KB ingestion
+                if (knowledgeBase.trim() && updated?.kbVersion) {
+                    const ingestion = getIngestionService();
+                    if (ingestion) {
+                        ingestion.ingestKnowledgeBase(pageId, knowledgeBase, updated.kbVersion)
+                            .catch(err => request.log.error(err, 'Admin KB ingestion failed'));
+                    }
+                }
+
+                return reply.send({
+                    success: true,
+                    data: { pageId: updated.id, kbVersion: updated.kbVersion, kbLength: knowledgeBase.length },
+                });
+            } catch (error) {
+                request.log.error(error, 'Admin KB update failed');
+                return reply.status(500).send({ success: false, error: 'Failed to update KB' });
             }
         });
 

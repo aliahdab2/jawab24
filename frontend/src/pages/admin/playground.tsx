@@ -15,11 +15,13 @@ interface PageOption {
     name: string;
     kbVersion: number;
     kbActiveVersion: number | null;
+    userEmail: string | null;
 }
 
 interface KbStatus {
     pageId: string;
     pageName: string;
+    kbText: string;
     kbLength: number;
     kbVersion: number;
     kbActiveVersion: number | null;
@@ -132,6 +134,7 @@ export default function AdminPlaygroundPage() {
     const [conversationHistory, setConversationHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
     const [loading, setLoading] = useState(false);
     const [gaps, setGaps] = useState<GapData[]>([]);
+    const [emailFilter, setEmailFilter] = useState('');
 
     // Chat state
     const [messages, setMessages] = useState<PlaygroundMessage[]>([]);
@@ -142,6 +145,12 @@ export default function AdminPlaygroundPage() {
     const [contextExpanded, setContextExpanded] = useState(true);
     const [historyExpanded, setHistoryExpanded] = useState(true);
 
+    // KB editor state
+    const [kbText, setKbText] = useState('');
+    const [kbEditing, setKbEditing] = useState(false);
+    const [kbSaving, setKbSaving] = useState(false);
+    const [kbDirty, setKbDirty] = useState(false);
+
     // Refs
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -149,6 +158,11 @@ export default function AdminPlaygroundPage() {
 
     // Platform detection for keyboard hint
     const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
+
+    // Filtered pages by email
+    const filteredPages = emailFilter.trim()
+        ? allPages.filter(p => p.userEmail?.toLowerCase().includes(emailFilter.trim().toLowerCase()))
+        : allPages;
 
     // ── Data loading ──
 
@@ -189,6 +203,15 @@ export default function AdminPlaygroundPage() {
         setMessages([]);
         setExpandedChunks(new Set());
     }, [selectedPageId]);
+
+    // Sync KB text when status loads
+    useEffect(() => {
+        if (kbStatus?.kbText !== undefined) {
+            setKbText(kbStatus.kbText);
+            setKbDirty(false);
+            setKbEditing(false);
+        }
+    }, [kbStatus?.kbText]);
 
     // ── Auto-scroll ──
 
@@ -279,6 +302,24 @@ export default function AdminPlaygroundPage() {
         });
     }, []);
 
+    // ── KB save handler ──
+
+    const handleKbSave = useCallback(async () => {
+        if (!selectedPageId || !kbDirty || kbSaving) return;
+        setKbSaving(true);
+        try {
+            await adminApi.updateKb(selectedPageId, kbText);
+            const statusRes = await adminApi.getKbStatus(selectedPageId);
+            setKbStatus(statusRes.data || null);
+            setKbDirty(false);
+            setKbEditing(false);
+        } catch (err) {
+            captureError(err, 'Failed to save KB', { tags: { page: 'admin-playground', action: 'saveKb' } });
+        } finally {
+            setKbSaving(false);
+        }
+    }, [selectedPageId, kbText, kbDirty, kbSaving]);
+
     // ── Auto-resize helpers ──
 
     const autoResizeContext = useCallback(() => {
@@ -318,6 +359,18 @@ export default function AdminPlaygroundPage() {
 
                 {/* ── Controls Bar ── */}
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-200 bg-white rounded-t-xl flex-shrink-0">
+                    {/* Email filter */}
+                    <label htmlFor="email-filter" className="sr-only">{t('admin.playground.emailFilter')}</label>
+                    <input
+                        id="email-filter"
+                        type="text"
+                        dir="auto"
+                        value={emailFilter}
+                        onChange={(e) => setEmailFilter(e.target.value)}
+                        placeholder={t('admin.playground.emailFilterPlaceholder')}
+                        className="max-w-[180px] px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder:text-surface-400"
+                    />
+
                     {/* Page selector */}
                     <label htmlFor="page-select" className="sr-only">{t('admin.playground.selectPage')}</label>
                     <select
@@ -327,9 +380,9 @@ export default function AdminPlaygroundPage() {
                         className="flex-1 max-w-xs px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
                         <option value="">{t('admin.playground.selectPagePlaceholder')}</option>
-                        {allPages.map((p) => (
+                        {filteredPages.map((p) => (
                             <option key={p.id} value={p.id}>
-                                {p.name} {p.kbActiveVersion === null ? '(no chunks)' : `(v${p.kbActiveVersion})`}
+                                {p.name} {p.userEmail ? `(${p.userEmail})` : ''} {p.kbActiveVersion === null ? '— no chunks' : `— v${p.kbActiveVersion}`}
                             </option>
                         ))}
                     </select>
@@ -968,6 +1021,77 @@ export default function AdminPlaygroundPage() {
                                                     </dd>
                                                 </div>
                                             </dl>
+
+                                            {/* KB Content Editor */}
+                                            <div className="mt-4">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <h4 className="text-xs font-medium text-surface-600">
+                                                        {t('admin.playground.kbContent')}
+                                                    </h4>
+                                                    <div className="flex items-center gap-2">
+                                                        {kbEditing && kbDirty && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleKbSave}
+                                                                disabled={kbSaving}
+                                                                className={clsx(
+                                                                    'text-xs font-medium px-2 py-1 rounded transition-colors',
+                                                                    'bg-brand-600 text-white hover:bg-brand-700',
+                                                                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                                                                )}
+                                                            >
+                                                                {kbSaving ? t('common.saving') : t('common.save')}
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (kbEditing && kbDirty) {
+                                                                    setKbText(kbStatus?.kbText || '');
+                                                                    setKbDirty(false);
+                                                                }
+                                                                setKbEditing(!kbEditing);
+                                                            }}
+                                                            className="text-xs text-brand-600 hover:text-brand-700 transition-colors"
+                                                        >
+                                                            {kbEditing ? t('common.cancel') : t('admin.playground.editKb')}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                {kbEditing ? (
+                                                    <>
+                                                        <label htmlFor="kb-editor" className="sr-only">
+                                                            {t('admin.playground.kbContent')}
+                                                        </label>
+                                                        <textarea
+                                                            id="kb-editor"
+                                                            dir="auto"
+                                                            value={kbText}
+                                                            onChange={(e) => {
+                                                                setKbText(e.target.value);
+                                                                setKbDirty(true);
+                                                            }}
+                                                            className={clsx(
+                                                                'w-full rounded-lg border border-surface-200 bg-white',
+                                                                'px-3 py-2 text-xs text-surface-800',
+                                                                'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20',
+                                                                'outline-none resize-y min-h-[200px] max-h-[50vh]'
+                                                            )}
+                                                        />
+                                                    </>
+                                                ) : (
+                                                    <div
+                                                        className={clsx(
+                                                            'rounded-lg border border-surface-200 bg-surface-50 p-3',
+                                                            'text-xs text-surface-700 whitespace-pre-wrap',
+                                                            'max-h-[300px] overflow-y-auto',
+                                                            !kbText && 'italic text-surface-400'
+                                                        )}
+                                                    >
+                                                        {kbText || t('admin.playground.kbEmpty')}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     ) : selectedPageId ? (
                                         <p className="text-sm text-surface-400 italic">{t('common.loading')}</p>
