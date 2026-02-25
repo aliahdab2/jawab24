@@ -127,6 +127,15 @@ vi.mock('../../src/services/reply/generator', () => ({
     PRICE_FALLBACK: { ar: 'price fallback ar', en: 'price fallback en' },
 }));
 
+vi.mock('../../src/services/settings', () => ({
+    settingsService: {
+        getSettings: vi.fn().mockResolvedValue({
+            commentReplyMode: 'public',
+            dualReplyNudge: null,
+        }),
+    },
+}));
+
 vi.mock('../../src/utils/swagger', () => ({
     auth: [{ bearerAuth: [] }],
 }));
@@ -847,6 +856,191 @@ describe('Admin Routes', () => {
             expect(body.data).toHaveLength(1);
             expect(body.data[0].action).toBe('manual_upgrade');
             expect(body.data[0].adminEmail).toBe('admin@test.com');
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // 10. POST /admin/ai/playground - test AI reply generation
+    // ---------------------------------------------------------------
+    describe('POST /admin/ai/playground', () => {
+        const authHeaders = {
+            authorization: 'Bearer valid-token',
+            'content-type': 'application/json',
+        };
+
+        const TEST_PAGE = {
+            id: 'page-1',
+            name: 'Test Page',
+            userId: 'user-1',
+            workspaceId: 'ws-1',
+            knowledgeBase: 'Some KB text',
+            kbActiveVersion: 3,
+        };
+
+        /** Set up mocks so the AI path runs (page found, no template match). */
+        async function setupAiPath(pageOverrides?: Partial<typeof TEST_PAGE>) {
+            const { db } = await import('../../src/db');
+            const { aiService } = await import('../../src/services/ai');
+            const { rulesService } = await import('../../src/services/rules');
+            const { settingsService } = await import('../../src/services/settings');
+
+            const page = { ...TEST_PAGE, ...pageOverrides };
+
+            // First db.select: page lookup
+            const pageChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([page]),
+            };
+            vi.mocked(db.select).mockReturnValueOnce(pageChain as any);
+
+            vi.mocked(settingsService.getSettings).mockResolvedValue({
+                commentReplyMode: 'public',
+                dualReplyNudge: null,
+            } as any);
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'AI test reply',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            return { db, aiService, rulesService };
+        }
+
+        it('returns 400 when pageId or question is missing', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/ai/playground',
+                headers: authHeaders,
+                payload: {},
+            });
+
+            expect(response.statusCode).toBe(400);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('pageId and question are required');
+        });
+
+        it('returns 404 for non-existent page', async () => {
+            const { db } = await import('../../src/db');
+
+            const emptyChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([]),
+            };
+            vi.mocked(db.select).mockReturnValueOnce(emptyChain as any);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/ai/playground',
+                headers: authHeaders,
+                payload: { pageId: 'nonexistent', question: 'Hello', channel: 'comment' },
+            });
+
+            expect(response.statusCode).toBe(404);
+        });
+
+        it('passes postMessage to AI context when channel is comment', async () => {
+            const { aiService } = await setupAiPath();
+
+            await app.inject({
+                method: 'POST',
+                url: '/admin/ai/playground',
+                headers: authHeaders,
+                payload: { pageId: 'page-1', question: 'What is the price?', channel: 'comment', postMessage: 'New shoes on sale!' },
+            });
+
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.objectContaining({
+                        postMessage: 'New shoes on sale!',
+                    }),
+                }),
+            );
+        });
+
+        it('omits postMessage from AI context when channel is dm', async () => {
+            const { aiService } = await setupAiPath();
+
+            await app.inject({
+                method: 'POST',
+                url: '/admin/ai/playground',
+                headers: authHeaders,
+                payload: { pageId: 'page-1', question: 'Hello', channel: 'dm', postMessage: 'Should be ignored' },
+            });
+
+            const callArg = vi.mocked(aiService.generateReply).mock.calls[0][0];
+            expect(callArg.context).toBeDefined();
+            expect(callArg.context).not.toHaveProperty('postMessage');
+        });
+
+        it('passes conversationHistory to AI context when channel is dm', async () => {
+            const { aiService } = await setupAiPath();
+            const history = [
+                { role: 'user', content: 'Hi' },
+                { role: 'assistant', content: 'Hello!' },
+            ];
+
+            await app.inject({
+                method: 'POST',
+                url: '/admin/ai/playground',
+                headers: authHeaders,
+                payload: { pageId: 'page-1', question: 'Follow up', channel: 'dm', conversationHistory: history },
+            });
+
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.objectContaining({
+                        conversationHistory: history,
+                    }),
+                }),
+            );
+        });
+
+        it('omits conversationHistory from AI context when channel is comment', async () => {
+            const { aiService } = await setupAiPath();
+            const history = [{ role: 'user', content: 'Should be ignored' }];
+
+            await app.inject({
+                method: 'POST',
+                url: '/admin/ai/playground',
+                headers: authHeaders,
+                payload: { pageId: 'page-1', question: 'Hello', channel: 'comment', conversationHistory: history },
+            });
+
+            const callArg = vi.mocked(aiService.generateReply).mock.calls[0][0];
+            expect(callArg.context).toBeDefined();
+            expect(callArg.context).not.toHaveProperty('conversationHistory');
+        });
+
+        it('passes kbActiveVersion from page record to AI context', async () => {
+            const { aiService } = await setupAiPath({ kbActiveVersion: 7 });
+
+            await app.inject({
+                method: 'POST',
+                url: '/admin/ai/playground',
+                headers: authHeaders,
+                payload: { pageId: 'page-1', question: 'Hello', channel: 'comment' },
+            });
+
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.objectContaining({
+                        kbActiveVersion: 7,
+                    }),
+                }),
+            );
         });
     });
 });

@@ -265,6 +265,40 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(postsService.findOrCreateFromWebhook).toHaveBeenCalledWith('page-1', 'post-1', undefined, 'token-123');
         });
 
+        it('should pass kbActiveVersion and postMessage to AI context', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Great shoes!',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment({
+                ...baseContext,
+                postMessage: 'New shoes on sale!',
+                kbActiveVersion: 4,
+            }, true);
+
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.objectContaining({
+                        postMessage: 'New shoes on sale!',
+                        kbActiveVersion: 4,
+                        channel: 'comment',
+                    }),
+                }),
+            );
+        });
+
         it('should increment AI reply counter after successful AI reply', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
@@ -414,6 +448,46 @@ describe('ReplyGenerator - Flagging System', () => {
 
             expect(result.replyText).toBe('Thank you for your message! We will get back to you soon.');
             expect(result.replyMethod).toBe('template');
+        });
+
+        it('should pass kbActiveVersion and conversationHistory to AI context', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { messagesService } = await import('../../src/services/messages');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+                { role: 'user', content: 'What sizes do you have?' },
+                { role: 'assistant', content: 'We have S, M, L, XL.' },
+            ] as any);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Yes, XL is available!',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForMessage({
+                ...baseContext,
+                kbActiveVersion: 5,
+            }, true);
+
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.objectContaining({
+                        kbActiveVersion: 5,
+                        channel: 'dm',
+                        conversationHistory: expect.arrayContaining([
+                            expect.objectContaining({ role: 'user', content: 'What sizes do you have?' }),
+                        ]),
+                    }),
+                }),
+            );
         });
 
         it('should fetch conversation history for AI context', async () => {
