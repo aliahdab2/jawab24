@@ -203,14 +203,17 @@ export class CommentProcessor {
             }
 
             // 9b. Enforce max length for public comment replies (280 chars, tweet-length)
-            const MAX_COMMENT_REPLY_CHARS = 280;
-            if (replyText.length > MAX_COMMENT_REPLY_CHARS) {
-                const originalLength = replyText.length;
-                replyText = truncateAtSentence(replyText, MAX_COMMENT_REPLY_CHARS);
-                this.logger.info('[CommentProcessor] Reply truncated to max length', {
-                    originalLength,
-                    truncatedLength: replyText.length,
-                });
+            // Skip truncation for dual/private modes — the reply is sent as a DM where length is fine.
+            if (commentReplyMode === 'public') {
+                const MAX_COMMENT_REPLY_CHARS = 280;
+                if (replyText.length > MAX_COMMENT_REPLY_CHARS) {
+                    const originalLength = replyText.length;
+                    replyText = truncateAtSentence(replyText, MAX_COMMENT_REPLY_CHARS);
+                    this.logger.info('[CommentProcessor] Reply truncated to max length', {
+                        originalLength,
+                        truncatedLength: replyText.length,
+                    });
+                }
             }
 
             // 9c. Auto-append DM CTA for question/purchase intents (public mode only)
