@@ -173,6 +173,8 @@ export function RuleCard({
             size="sm"
             onClick={() => onEdit(rule)}
             className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
+            aria-label={t('common.edit')}
+            title={t('common.edit')}
           >
             <Edit className="w-4 h-4" />
             <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('common.edit')}</span>
@@ -182,15 +184,19 @@ export function RuleCard({
             size="sm"
             onClick={() => onDuplicate(rule)}
             className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
+            aria-label={t('common.duplicate')}
+            title={t('common.duplicate')}
           >
             <Copy className="w-4 h-4" />
-            <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('rules.duplicateRule')}</span>
+            <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('common.duplicate')}</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onDelete(rule.id)}
             className="text-surface-400 hover:text-red-600 hover:bg-red-50 flex items-center gap-2"
+            aria-label={t('common.delete')}
+            title={t('common.delete')}
           >
             <Trash2 className="w-4 h-4" />
             <span className="lg:hidden text-xs font-bold uppercase tracking-wider text-red-600">{t('common.delete')}</span>

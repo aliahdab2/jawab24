@@ -126,7 +126,7 @@ test.describe('Rules Page', () => {
 
     // Page header
     await expect(
-      page.locator('h1').filter({ hasText: /Auto Rules|قواعد الرد التلقائي/i }).first()
+      page.locator('h1').filter({ hasText: /Reply Rules|قواعد الرد/i }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Rule name should be visible
@@ -178,7 +178,7 @@ test.describe('Rules Page', () => {
     await page.goto('/en/rules');
 
     await expect(
-      page.locator('h1').filter({ hasText: /Auto Rules|قواعد الرد التلقائي/i }).first()
+      page.locator('h1').filter({ hasText: /Reply Rules|قواعد الرد/i }).first()
     ).toBeVisible({ timeout: 15000 });
 
     const bodyText = await page.locator('body').innerText();
@@ -199,7 +199,7 @@ test.describe('Rules Page', () => {
     await page.goto('/en/rules');
 
     await expect(
-      page.locator('h1').filter({ hasText: /Auto Rules/i }).first()
+      page.locator('h1').filter({ hasText: /Reply Rules/i }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Should show the first-match-wins hint

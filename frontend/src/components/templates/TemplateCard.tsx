@@ -101,7 +101,7 @@ export function TemplateCard({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => onEdit(template)} className="text-surface-400 hover:text-brand-600 hover:bg-brand-50">
+          <Button variant="ghost" size="sm" onClick={() => onEdit(template)} className="text-surface-400 hover:text-brand-600 hover:bg-brand-50" aria-label={t('common.edit')} title={t('common.edit')}>
             <Edit className="w-4 h-4" />
           </Button>
           <Button
@@ -109,10 +109,12 @@ export function TemplateCard({
             size="sm"
             onClick={() => onDuplicate(template)}
             className="text-surface-400 hover:text-brand-600 hover:bg-brand-50"
+            aria-label={t('common.duplicate')}
+            title={t('common.duplicate')}
           >
             <Copy className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onDelete(template.id)} className="text-surface-400 hover:text-red-600 hover:bg-red-50">
+          <Button variant="ghost" size="sm" onClick={() => onDelete(template.id)} className="text-surface-400 hover:text-red-600 hover:bg-red-50" aria-label={t('common.delete')} title={t('common.delete')}>
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
