@@ -627,7 +627,7 @@ describe('Shopify Service', () => {
             expect(mockCaptureError).toHaveBeenCalledWith(
                 expect.any(Error),
                 'E-commerce cache invalidation failed',
-                expect.objectContaining({ tags: { service: 'shopify' } }),
+                expect.objectContaining({ tags: { service: 'ecommerce' } }),
             );
         });
     });

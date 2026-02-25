@@ -48,6 +48,26 @@ export const SHOPIFY_NONCE_COOKIE_OPTIONS = {
     maxAge: 10 * 60,  // 10 minutes
 };
 
+// Salla pending install cookie (lax sameSite for cross-site redirect from Salla)
+export const PENDING_SALLA_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax' as const,
+    path: '/',
+    signed: true,
+    maxAge: 30 * 60,  // 30 minutes
+};
+
+// Salla OAuth nonce cookie (CSRF protection during OAuth round-trip)
+export const SALLA_NONCE_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax' as const,
+    path: '/',
+    signed: true,
+    maxAge: 10 * 60,  // 10 minutes
+};
+
 export class CookiesService {
     /**
      * Set authentication cookies

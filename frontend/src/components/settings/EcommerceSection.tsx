@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { Card, Button } from '@/components/ui';
-import { ecommerceApi, pagesApi } from '@/lib/api';
+import { ecommerceApi, sallaApi, pagesApi } from '@/lib/api';
 import { toast } from 'sonner';
 import {
   ShoppingBag,
@@ -25,8 +25,16 @@ export function EcommerceSection() {
   }, []);
 
   const fetchStore = useCallback(async () => {
+    // Try Shopify first, then Salla
     try {
       const data = await ecommerceApi.getStore();
+      if (isMounted.current) setStore(data);
+      return;
+    } catch {
+      // Not a Shopify store — try Salla
+    }
+    try {
+      const data = await sallaApi.getStore();
       if (isMounted.current) setStore(data);
     } catch {
       if (isMounted.current) setStore(null);
@@ -50,10 +58,16 @@ export function EcommerceSection() {
     init();
   }, [fetchStore, fetchPages]);
 
+  const getApiForPlatform = (platform?: string) => {
+    if (platform === 'salla') return sallaApi;
+    return ecommerceApi;
+  };
+
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await ecommerceApi.syncProducts();
+      const storeApi = getApiForPlatform(store?.platform);
+      await storeApi.syncProducts();
       toast.success(t('shopify.syncSuccess' as TranslationKey));
       await fetchStore();
     } catch {
@@ -66,7 +80,8 @@ export function EcommerceSection() {
   const handleDisconnect = async () => {
     if (!confirm(t('shopify.disconnectConfirm' as TranslationKey))) return;
     try {
-      await ecommerceApi.disconnectStore();
+      const storeApi = getApiForPlatform(store?.platform);
+      await storeApi.disconnectStore();
       if (isMounted.current) setStore(null);
       toast.success(t('shopify.disconnected' as TranslationKey));
     } catch {
@@ -76,7 +91,8 @@ export function EcommerceSection() {
 
   const handleLinkPage = async (pageId: string) => {
     try {
-      await ecommerceApi.linkPage(pageId);
+      const storeApi = getApiForPlatform(store?.platform);
+      await storeApi.linkPage(pageId);
       toast.success(t('shopify.pageLinked' as TranslationKey));
     } catch {
       toast.error(t('shopify.pageLinkError' as TranslationKey));

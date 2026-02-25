@@ -377,6 +377,33 @@ export default function LoginPage() {
                   </div>
                 )}
 
+                {/* Salla-first install banner */}
+                {router.query.salla_pending === 'true' && (
+                  <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200">
+                    <div className="flex gap-3 items-start">
+                      <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center flex-shrink-0">
+                        <ShoppingBag className="w-5 h-5 text-teal-700" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-teal-900 text-sm">
+                          {t('salla.installDetected')}
+                        </p>
+                        <p className="text-teal-700 text-sm mt-1">
+                          {t('salla.loginToConnect')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {router.query.salla_error === 'already_connected' && (
+                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
+                    <p className="font-bold text-red-900 text-sm">
+                      {t('salla.errorAlreadyConnected')}
+                    </p>
+                  </div>
+                )}
+
                 <Button
                   onClick={handleFacebookLogin}
                   size="lg"

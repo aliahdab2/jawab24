@@ -24,10 +24,10 @@ export const ecommerceSyncQueue = new Queue<EcommerceSyncJobData>(ECOMMERCE_SYNC
 /**
  * Enqueue a full product sync for an e-commerce store
  */
-export async function enqueueSyncJob(storeId: string): Promise<void> {
+export async function enqueueSyncJob(storeId: string, platform: 'shopify' | 'salla' | 'zid' = 'shopify'): Promise<void> {
     await ecommerceSyncQueue.add('full_sync', {
         ecommerceStoreId: storeId,
-        platform: 'shopify',
+        platform,
         jobType: 'full_sync',
     });
 }

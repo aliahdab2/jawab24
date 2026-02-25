@@ -496,6 +496,34 @@ export const ecommerceApi = {
 /** @deprecated Use ecommerceApi */
 export const shopifyApi = ecommerceApi;
 
+// Salla E-commerce API
+export const sallaApi = {
+  getStore: async () => {
+    const response = await api.get('/salla/store');
+    return response.data;
+  },
+  connectStore: async () => {
+    const response = await api.post('/salla/store/connect');
+    return response.data;
+  },
+  disconnectStore: async () => {
+    const response = await api.delete('/salla/store');
+    return response.data;
+  },
+  syncProducts: async () => {
+    const response = await api.post('/salla/store/sync');
+    return response.data;
+  },
+  getProducts: async () => {
+    const response = await api.get('/salla/store/products');
+    return response.data;
+  },
+  linkPage: async (pageId: string) => {
+    const response = await api.patch('/salla/store/link-page', { pageId });
+    return response.data;
+  },
+};
+
 // Workspace API
 export const workspaceApi = {
   list: () => api.get('/workspaces'),

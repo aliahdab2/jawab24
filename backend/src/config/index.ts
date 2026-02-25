@@ -68,6 +68,9 @@ export const config = {
     salla: {
         clientId: process.env.SALLA_CLIENT_ID || '',
         clientSecret: process.env.SALLA_CLIENT_SECRET || '',
+        hostName: process.env.SALLA_HOST_NAME || '',
+        webhookSecret: process.env.SALLA_WEBHOOK_SECRET || '',
+        scopes: 'offline_access products.read_write settings.read webhooks.read_write',
     },
 
     // Zid App (disabled until credentials are set)

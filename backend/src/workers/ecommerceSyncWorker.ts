@@ -17,9 +17,22 @@ export function setSyncWorkerLogger(newLogger: Logger): void {
 }
 
 async function processJob(job: Job<EcommerceSyncJobData>) {
-    const { ecommerceStoreId, jobType } = job.data;
-    logger.info('[EcommerceSync] Processing', { ecommerceStoreId, jobType });
+    const { ecommerceStoreId, platform, jobType } = job.data;
+    logger.info('[EcommerceSync] Processing', { ecommerceStoreId, platform, jobType });
 
+    if (platform === 'salla') {
+        const sallaService = await import('../services/salla');
+        switch (jobType) {
+            case 'full_sync':
+                return sallaService.fullSync(ecommerceStoreId);
+            case 'product_update':
+                return sallaService.syncProducts(ecommerceStoreId);
+            default:
+                throw new Error(`[EcommerceSync] Unknown job type: ${jobType}`);
+        }
+    }
+
+    // Default: Shopify
     switch (jobType) {
         case 'full_sync':
             return shopifyService.fullSync(ecommerceStoreId);
@@ -33,6 +46,8 @@ async function processJob(job: Job<EcommerceSyncJobData>) {
 let worker: Worker | null = null;
 
 export function startEcommerceSyncWorker(): Worker {
+    if (worker) return worker; // Idempotent — safe to call from multiple integrations
+
     worker = new Worker<EcommerceSyncJobData>(
         ECOMMERCE_SYNC_QUEUE_NAME,
         processJob,

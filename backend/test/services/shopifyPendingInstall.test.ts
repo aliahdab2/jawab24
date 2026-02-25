@@ -164,6 +164,7 @@ describe('Pending Install Flow', () => {
                 // pending install
                 .mockResolvedValueOnce([{
                     id: 'pending-123',
+                    platform: 'shopify',
                     storeDomain: 'test.myshopify.com',
                     accessToken: 'encrypted',
                     accessTokenIv: 'iv',
@@ -195,6 +196,7 @@ describe('Pending Install Flow', () => {
                 // pending install
                 .mockResolvedValueOnce([{
                     id: 'pending-123',
+                    platform: 'shopify',
                     storeDomain: 'test.myshopify.com',
                     accessToken: 'encrypted',
                     accessTokenIv: 'test_iv',

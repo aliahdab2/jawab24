@@ -6,9 +6,9 @@ const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-    const key = config.shopify.tokenEncryptionKey;
+    const key = process.env.ECOMMERCE_TOKEN_ENCRYPTION_KEY || config.shopify.tokenEncryptionKey;
     if (!key || key.length < 32) {
-        throw new Error('SHOPIFY_TOKEN_ENCRYPTION_KEY must be at least 32 characters');
+        throw new Error('ECOMMERCE_TOKEN_ENCRYPTION_KEY (or SHOPIFY_TOKEN_ENCRYPTION_KEY) must be at least 32 characters');
     }
     // Use first 32 bytes of the key (SHA-256 hash if longer)
     return crypto.createHash('sha256').update(key).digest();

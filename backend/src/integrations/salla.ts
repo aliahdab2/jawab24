@@ -1,48 +1,124 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { EcommerceIntegration } from './registry';
 import type { Logger } from '../types';
 import { config } from '../config';
+import * as Sentry from '@sentry/node';
 
 /**
- * Salla e-commerce integration stub.
+ * Salla e-commerce integration adapter.
  *
- * Salla is a leading Arab e-commerce platform (salla.sa).
- * This stub registers the integration slot so isEnabled() can return false
- * until the implementation is complete.
- *
- * Future implementation notes:
- * - Easy Mode: `app.store.authorize` webhook delivers access + refresh tokens (no OAuth callback needed)
- * - Token expiry: 14 days — must refresh proactively every ~13 days
- * - Products API: GET https://api.salla.dev/admin/v2/products (max 65/page, cursor pagination)
- * - Webhook verification: X-Salla-Signature header (SHA256 HMAC)
- * - Product events: product.created, product.price.updated, product.status.updated
- * - Auth URL: https://accounts.salla.sa/oauth2/auth
- * - Token URL: https://accounts.salla.sa/oauth2/token
+ * Delegates to services/salla.ts, services/ecommerce.ts, routes/salla.ts,
+ * and workers/ecommerceSyncWorker.ts — no business logic lives here.
  */
 export class SallaIntegration implements EcommerceIntegration {
     readonly name = 'salla';
+    private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+    private tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
     isEnabled(): boolean {
         return !!config.salla?.clientId;
     }
 
-    async registerRoutes(_fastify: FastifyInstance): Promise<void> {
-        // Not yet implemented
+    async registerRoutes(fastify: FastifyInstance): Promise<void> {
+        const sallaRoutes = (await import('../routes/salla')).default;
+        await fastify.register(sallaRoutes, { prefix: '/salla' });
     }
 
-    async enrichKnowledgeBase(): Promise<null> {
+    async enrichKnowledgeBase(
+        currentKB: string | undefined,
+        page: Record<string, unknown>,
+    ): Promise<string | null> {
+        const storeId = page.ecommerceStoreId;
+        if (!storeId || typeof storeId !== 'string') return null;
+
+        // Check that the store is actually a Salla store
+        const { getStoreById } = await import('../services/ecommerce');
+        const store = await getStoreById(storeId);
+        if (!store || store.platform !== 'salla') return null;
+
+        const { getEnrichedKnowledgeBase } = await import('../services/ecommerce');
+        return Sentry.startSpan(
+            { name: 'salla.kb.enrich', op: 'db.query' },
+            () => getEnrichedKnowledgeBase(currentKB, storeId),
+        );
+    }
+
+    async claimPendingInstall(
+        request: FastifyRequest,
+        reply: FastifyReply,
+        userId: string,
+    ): Promise<Record<string, unknown> | null> {
+        if (!request.cookies) return null;
+        const cookie = request.cookies.pendingSallaId;
+        if (!cookie) return null;
+        if (!request.unsignCookie) return null;
+
+        const result = request.unsignCookie(cookie);
+        if (!result.valid || !result.value) return null;
+
+        try {
+            const { claimPendingInstall } = await import('../services/ecommerce');
+            const { registerWebhooks } = await import('../services/salla');
+
+            // Claim with Salla webhook registration callback
+            const store = await claimPendingInstall(
+                result.value,
+                userId,
+                'salla',
+                async (_storeDomain: string, accessToken: string) => {
+                    await registerWebhooks(accessToken);
+                },
+            );
+            if (store) {
+                reply.clearCookie('pendingSallaId', { path: '/' });
+                return { sallaOnboarding: true, ecommerceStoreId: store.id };
+            }
+        } catch (err) {
+            request.log.error({ err }, 'Failed to claim pending Salla install');
+        }
         return null;
     }
 
-    async claimPendingInstall(): Promise<null> {
-        return null;
-    }
+    async onStartup(logger: Logger): Promise<void> {
+        if (!this.isEnabled()) return;
 
-    async onStartup(_logger: Logger): Promise<void> {
-        // Not yet implemented
+        // Start the shared sync worker (idempotent — safe if Shopify already started it)
+        const { startEcommerceSyncWorker, setSyncWorkerLogger } = await import('../workers/ecommerceSyncWorker');
+        setSyncWorkerLogger(logger);
+        startEcommerceSyncWorker();
+
+        // Cleanup expired pending installs every hour
+        const { cleanupExpiredInstalls } = await import('../services/ecommerce');
+        this.cleanupInterval = setInterval(async () => {
+            try {
+                const cleaned = await cleanupExpiredInstalls('salla');
+                if (cleaned > 0) logger.info(`Cleaned ${cleaned} expired Salla pending installs`);
+            } catch (err) {
+                logger.error('Salla cleanup failed', { err });
+            }
+        }, 60 * 60 * 1000);
+
+        // Refresh expiring tokens every 6 hours
+        const { refreshExpiringTokens } = await import('../services/salla');
+        this.tokenRefreshInterval = setInterval(async () => {
+            try {
+                const refreshed = await refreshExpiringTokens();
+                if (refreshed > 0) logger.info(`Refreshed ${refreshed} Salla tokens`);
+            } catch (err) {
+                logger.error('Salla token refresh failed', { err });
+            }
+        }, 6 * 60 * 60 * 1000);
     }
 
     async onShutdown(): Promise<void> {
-        // Not yet implemented
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
+        if (this.tokenRefreshInterval) {
+            clearInterval(this.tokenRefreshInterval);
+            this.tokenRefreshInterval = null;
+        }
+        // Worker shutdown is handled by the Shopify adapter (shared worker)
     }
 }

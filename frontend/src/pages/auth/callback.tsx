@@ -147,9 +147,13 @@ export default function AuthCallback() {
         return;
       }
 
-      // Check if Shopify onboarding is needed (Shopify-first install flow)
+      // Check if e-commerce onboarding is needed (install-first flow)
       if (data.shopifyOnboarding) {
         routerRef.current.push('/shopify/onboarding');
+        return;
+      }
+      if (data.sallaOnboarding) {
+        routerRef.current.push('/salla/onboarding');
         return;
       }
 

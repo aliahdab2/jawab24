@@ -1,0 +1,1004 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import crypto from 'crypto';
+
+// --- Hoisted mocks for use inside vi.mock() factories ---
+
+const {
+    mockGetStoreById,
+    mockUpdateStoreTokens,
+    mockReplaceProductsAndRebuildSummary,
+    mockDecrypt,
+    mockCaptureError,
+    mockRedisSet,
+    mockRedisDel,
+} = vi.hoisted(() => ({
+    mockGetStoreById: vi.fn(),
+    mockUpdateStoreTokens: vi.fn(),
+    mockReplaceProductsAndRebuildSummary: vi.fn(),
+    mockDecrypt: vi.fn(),
+    mockCaptureError: vi.fn(),
+    mockRedisSet: vi.fn(),
+    mockRedisDel: vi.fn(),
+}));
+
+// --- vi.mock() calls ---
+
+vi.mock('../../src/config', () => ({
+    config: {
+        salla: {
+            clientId: 'test_salla_client_id',
+            clientSecret: 'test_salla_secret',
+            hostName: 'jawab24.com',
+            webhookSecret: 'test_webhook_secret',
+            scopes: 'offline_access products.read_write settings.read',
+        },
+    },
+}));
+
+vi.mock('../../src/db', () => ({
+    db: {
+        select: vi.fn().mockReturnValue({
+            from: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue([]),
+            }),
+        }),
+        update: vi.fn().mockReturnValue({
+            set: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+            }),
+        }),
+    },
+}));
+
+vi.mock('../../src/db/schema', () => ({
+    ecommerceStores: {
+        id: 'id',
+        platform: 'platform',
+        isActive: 'isActive',
+        tokenExpiresAt: 'tokenExpiresAt',
+    },
+}));
+
+vi.mock('drizzle-orm', () => ({
+    eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+    and: vi.fn((...args) => ({ op: 'and', args })),
+    lt: vi.fn((field, value) => ({ field, value, op: 'lt' })),
+}));
+
+vi.mock('../../src/services/ecommerce', () => ({
+    getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
+    updateStoreTokens: (...args: unknown[]) => mockUpdateStoreTokens(...args),
+    replaceProductsAndRebuildSummary: (...args: unknown[]) => mockReplaceProductsAndRebuildSummary(...args),
+}));
+
+vi.mock('../../src/services/ecommerceCrypto', () => ({
+    decrypt: (...args: unknown[]) => mockDecrypt(...args),
+}));
+
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: (...args: unknown[]) => mockCaptureError(...args),
+}));
+
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        set: (...args: unknown[]) => mockRedisSet(...args),
+        del: (...args: unknown[]) => mockRedisDel(...args),
+    },
+}));
+
+// Mock global fetch
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+// --- Import after mocks ---
+import {
+    buildAuthUrl,
+    exchangeCodeForToken,
+    refreshAccessToken,
+    ensureValidToken,
+    verifyWebhookHmac,
+    fetchStoreInfo,
+    syncProducts,
+    registerWebhooks,
+    getStoresNeedingTokenRefresh,
+    refreshExpiringTokens,
+} from '../../src/services/salla';
+
+// --- Helpers ---
+
+/** Create a mock store object with sensible defaults */
+function makeStore(overrides: Record<string, unknown> = {}) {
+    return {
+        id: 'store-1',
+        platform: 'salla',
+        accessToken: 'enc_access_token',
+        accessTokenIv: 'access_iv',
+        refreshToken: 'enc_refresh_token',
+        refreshTokenIv: 'refresh_iv',
+        tokenExpiresAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // 2 days from now
+        isActive: true,
+        ...overrides,
+    };
+}
+
+/** Create a mock Salla product */
+function makeSallaProduct(overrides: Record<string, unknown> = {}) {
+    return {
+        id: 1001,
+        name: 'Test Product',
+        type: 'product',
+        status: 'sale',
+        price: { amount: 100, currency: 'SAR' },
+        quantity: 50,
+        options: [],
+        categories: [{ name: 'Electronics' }],
+        sku: 'SKU-001',
+        ...overrides,
+    };
+}
+
+/** Build a valid hex HMAC for the given body using the test webhook secret */
+function buildValidHexHmac(body: string): string {
+    return crypto
+        .createHmac('sha256', 'test_webhook_secret')
+        .update(body, 'utf8')
+        .digest('hex');
+}
+
+describe('Salla Service', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        mockDecrypt.mockReturnValue('decrypted_token');
+        mockUpdateStoreTokens.mockResolvedValue(undefined);
+        mockReplaceProductsAndRebuildSummary.mockResolvedValue({ productCount: 0 });
+        mockRedisSet.mockResolvedValue('OK');
+        mockRedisDel.mockResolvedValue(1);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    // ============================================================
+    // OAuth
+    // ============================================================
+
+    describe('buildAuthUrl', () => {
+        it('should build a valid OAuth URL with all required parameters', () => {
+            const url = buildAuthUrl('state_abc123');
+
+            expect(url).toContain('https://accounts.salla.sa/oauth2/auth');
+            expect(url).toContain('client_id=test_salla_client_id');
+            expect(url).toContain(`scope=${encodeURIComponent('offline_access products.read_write settings.read')}`);
+            expect(url).toContain('response_type=code');
+            expect(url).toContain('state=state_abc123');
+            expect(url).toContain(encodeURIComponent('https://jawab24.com/salla/auth/callback'));
+        });
+
+        it('should encode the redirect URI', () => {
+            const url = buildAuthUrl('test');
+
+            expect(url).toContain('redirect_uri=');
+            // The redirect_uri value should be URL-encoded (no raw "://" in the value portion)
+            const redirectParam = url.split('redirect_uri=')[1].split('&')[0];
+            expect(redirectParam).toBe(encodeURIComponent('https://jawab24.com/salla/auth/callback'));
+        });
+
+        it('should include the state parameter for CSRF protection', () => {
+            const state = 'random_csrf_state_xyz';
+            const url = buildAuthUrl(state);
+
+            expect(url).toContain(`state=${state}`);
+        });
+    });
+
+    describe('exchangeCodeForToken', () => {
+        it('should exchange authorization code for tokens', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    access_token: 'salla_access_123',
+                    refresh_token: 'salla_refresh_456',
+                    expires_in: 1209600, // 14 days
+                }),
+            });
+
+            const result = await exchangeCodeForToken('auth_code_abc');
+
+            expect(result).toEqual({
+                accessToken: 'salla_access_123',
+                refreshToken: 'salla_refresh_456',
+                expiresIn: 1209600,
+            });
+
+            expect(mockFetch).toHaveBeenCalledWith(
+                'https://accounts.salla.sa/oauth2/token',
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: expect.stringContaining('auth_code_abc'),
+                }),
+            );
+
+            // Verify the body includes all required fields
+            const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+            expect(body).toEqual({
+                grant_type: 'authorization_code',
+                client_id: 'test_salla_client_id',
+                client_secret: 'test_salla_secret',
+                code: 'auth_code_abc',
+                redirect_uri: 'https://jawab24.com/salla/auth/callback',
+            });
+        });
+
+        it('should throw on failed token exchange', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 400,
+                text: async () => 'invalid_grant',
+            });
+
+            await expect(exchangeCodeForToken('bad_code')).rejects.toThrow(
+                'Salla token exchange failed: 400 invalid_grant',
+            );
+        });
+
+        it('should throw on server error during exchange', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+                text: async () => 'Internal Server Error',
+            });
+
+            await expect(exchangeCodeForToken('code')).rejects.toThrow(
+                'Salla token exchange failed: 500 Internal Server Error',
+            );
+        });
+    });
+
+    // ============================================================
+    // Webhook HMAC Verification (hex-specific)
+    // ============================================================
+
+    describe('verifyWebhookHmac', () => {
+        it('should return true for a valid hex HMAC', () => {
+            const body = '{"event":"product.created","data":{"id":123}}';
+            const signature = buildValidHexHmac(body);
+
+            expect(verifyWebhookHmac(body, signature)).toBe(true);
+        });
+
+        it('should return false for an invalid HMAC', () => {
+            const body = '{"event":"product.created","data":{"id":123}}';
+
+            expect(verifyWebhookHmac(body, 'deadbeef1234567890')).toBe(false);
+        });
+
+        it('should return false for mismatched body content', () => {
+            const body = '{"event":"product.created"}';
+            const signature = buildValidHexHmac('{"event":"product.deleted"}');
+
+            expect(verifyWebhookHmac(body, signature)).toBe(false);
+        });
+
+        it('should return false for different length buffers', () => {
+            expect(verifyWebhookHmac('body', 'short')).toBe(false);
+        });
+
+        it('should use hex digest, not base64', () => {
+            const body = '{"test": true}';
+            const hexHmac = crypto
+                .createHmac('sha256', 'test_webhook_secret')
+                .update(body, 'utf8')
+                .digest('hex');
+            const base64Hmac = crypto
+                .createHmac('sha256', 'test_webhook_secret')
+                .update(body, 'utf8')
+                .digest('base64');
+
+            // hex should pass
+            expect(verifyWebhookHmac(body, hexHmac)).toBe(true);
+            // base64 should fail (different encoding, different length)
+            expect(verifyWebhookHmac(body, base64Hmac)).toBe(false);
+        });
+
+        it('should handle empty body', () => {
+            const body = '';
+            const signature = buildValidHexHmac(body);
+
+            expect(verifyWebhookHmac(body, signature)).toBe(true);
+        });
+    });
+
+    // ============================================================
+    // Token Refresh (CRITICAL)
+    // ============================================================
+
+    describe('refreshAccessToken', () => {
+        it('should successfully refresh tokens and store new encrypted values', async () => {
+            mockRedisSet.mockResolvedValueOnce('OK'); // Lock acquired
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000), // expires in 12h (< 24h)
+            }));
+            mockDecrypt.mockReturnValueOnce('decrypted_refresh_token');
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    access_token: 'new_access_token',
+                    refresh_token: 'new_refresh_token',
+                    expires_in: 1209600,
+                }),
+            });
+
+            await refreshAccessToken('store-1');
+
+            // Should have called fetch to refresh
+            expect(mockFetch).toHaveBeenCalledWith(
+                'https://accounts.salla.sa/oauth2/token',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: expect.stringContaining('refresh_token'),
+                }),
+            );
+
+            const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+            expect(body.grant_type).toBe('refresh_token');
+            expect(body.refresh_token).toBe('decrypted_refresh_token');
+            expect(body.client_id).toBe('test_salla_client_id');
+            expect(body.client_secret).toBe('test_salla_secret');
+
+            // Should have stored new tokens
+            expect(mockUpdateStoreTokens).toHaveBeenCalledWith('store-1', {
+                accessToken: 'new_access_token',
+                refreshToken: 'new_refresh_token',
+                tokenExpiresAt: expect.any(Date),
+            });
+
+            // Should have released the lock
+            expect(mockRedisDel).toHaveBeenCalledWith('salla:token_refresh:store-1');
+        });
+
+        it('should re-check expiry after acquiring lock and skip if already refreshed', async () => {
+            mockRedisSet.mockResolvedValueOnce('OK'); // Lock acquired
+            // Store token was already refreshed by another process (expires in 3 days)
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+            }));
+
+            await refreshAccessToken('store-1');
+
+            // Should NOT have called fetch since token is still valid
+            expect(mockFetch).not.toHaveBeenCalled();
+            expect(mockUpdateStoreTokens).not.toHaveBeenCalled();
+
+            // Lock should still be released
+            expect(mockRedisDel).toHaveBeenCalledWith('salla:token_refresh:store-1');
+        });
+
+        it('should wait and return when lock is not acquired', async () => {
+            mockRedisSet.mockResolvedValueOnce(null); // Lock NOT acquired
+
+            const start = Date.now();
+            const promise = refreshAccessToken('store-1');
+
+            // Advance timers to resolve the 2000ms wait
+            await vi.advanceTimersByTimeAsync(2000);
+            await promise;
+
+            // Should NOT have called any store or fetch operations
+            expect(mockGetStoreById).not.toHaveBeenCalled();
+            expect(mockFetch).not.toHaveBeenCalled();
+            expect(mockUpdateStoreTokens).not.toHaveBeenCalled();
+            // Should NOT release a lock it didn't acquire
+            expect(mockRedisDel).not.toHaveBeenCalled();
+        });
+
+        it('should release lock and propagate error when refresh fails', async () => {
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+            }));
+            mockDecrypt.mockReturnValueOnce('decrypted_refresh_token');
+
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 401,
+                text: async () => 'invalid_token',
+            });
+
+            await expect(refreshAccessToken('store-1')).rejects.toThrow(
+                'Salla token refresh failed: 401 invalid_token',
+            );
+
+            // Lock MUST be released even on error
+            expect(mockRedisDel).toHaveBeenCalledWith('salla:token_refresh:store-1');
+        });
+
+        it('should throw when store has no refresh token', async () => {
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+                refreshToken: null,
+                refreshTokenIv: null,
+            }));
+
+            await expect(refreshAccessToken('store-1')).rejects.toThrow(
+                'No refresh token for Salla store store-1',
+            );
+
+            // Lock must be released
+            expect(mockRedisDel).toHaveBeenCalledWith('salla:token_refresh:store-1');
+        });
+
+        it('should throw when store is not found', async () => {
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockGetStoreById.mockResolvedValueOnce(null);
+
+            await expect(refreshAccessToken('store-1')).rejects.toThrow('Store not found');
+
+            // Lock must be released
+            expect(mockRedisDel).toHaveBeenCalledWith('salla:token_refresh:store-1');
+        });
+
+        it('should acquire Redis lock with NX and 30s TTL', async () => {
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // fresh
+            }));
+
+            await refreshAccessToken('store-1');
+
+            expect(mockRedisSet).toHaveBeenCalledWith(
+                'salla:token_refresh:store-1',
+                '1',
+                'EX',
+                30,
+                'NX',
+            );
+        });
+    });
+
+    describe('ensureValidToken', () => {
+        it('should skip refresh when token is fresh (> 24h until expiry)', async () => {
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days
+            }));
+
+            await ensureValidToken('store-1');
+
+            // Should NOT attempt to refresh
+            expect(mockRedisSet).not.toHaveBeenCalled();
+        });
+
+        it('should skip refresh when tokenExpiresAt is null', async () => {
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: null,
+            }));
+
+            await ensureValidToken('store-1');
+
+            expect(mockRedisSet).not.toHaveBeenCalled();
+        });
+
+        it('should trigger refresh when token expires within 24h', async () => {
+            // First call to ensureValidToken -> getStoreById
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000), // 6h from now
+            }));
+            // Second call inside refreshAccessToken -> getStoreById
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+            }));
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockDecrypt.mockReturnValueOnce('decrypted_refresh');
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    access_token: 'new_at',
+                    refresh_token: 'new_rt',
+                    expires_in: 1209600,
+                }),
+            });
+
+            await ensureValidToken('store-1');
+
+            // Should have called refresh (which calls fetch)
+            expect(mockFetch).toHaveBeenCalled();
+            expect(mockUpdateStoreTokens).toHaveBeenCalled();
+        });
+
+        it('should throw when store is not found', async () => {
+            mockGetStoreById.mockResolvedValueOnce(null);
+
+            await expect(ensureValidToken('store-1')).rejects.toThrow('Store not found');
+        });
+    });
+
+    // ============================================================
+    // Products (page-based pagination)
+    // ============================================================
+
+    describe('syncProducts', () => {
+        /** Helper to set up fetch mocks for product pages */
+        function setupProductFetch(pages: Array<{ data: unknown[]; currentPage: number; totalPages: number }>) {
+            for (const page of pages) {
+                mockFetch.mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({
+                        data: page.data,
+                        pagination: {
+                            currentPage: page.currentPage,
+                            totalPages: page.totalPages,
+                            perPage: 65,
+                            total: page.data.length * page.totalPages,
+                        },
+                    }),
+                });
+            }
+        }
+
+        beforeEach(() => {
+            // ensureValidToken will call getStoreById — token is fresh so no refresh needed
+            mockGetStoreById.mockResolvedValue(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 days
+            }));
+            mockDecrypt.mockReturnValue('decrypted_access_token');
+        });
+
+        it('should sync a single page of products', async () => {
+            const product = makeSallaProduct({ id: 1, name: 'Widget', status: 'sale' });
+            setupProductFetch([
+                { data: [product], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalledWith(
+                'store-1',
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        platformProductId: '1',
+                        title: 'Widget',
+                        status: 'active', // mapped from 'sale'
+                    }),
+                ]),
+            );
+        });
+
+        it('should handle multi-page pagination', async () => {
+            const page1Products = [
+                makeSallaProduct({ id: 1, name: 'Product A', status: 'sale' }),
+                makeSallaProduct({ id: 2, name: 'Product B', status: 'sale' }),
+            ];
+            const page2Products = [
+                makeSallaProduct({ id: 3, name: 'Product C', status: 'out' }),
+            ];
+
+            setupProductFetch([
+                { data: page1Products, currentPage: 1, totalPages: 2 },
+                { data: page2Products, currentPage: 2, totalPages: 2 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mappedProducts = mockReplaceProductsAndRebuildSummary.mock.calls[0][1];
+            expect(mappedProducts).toHaveLength(3);
+            expect(mappedProducts[0].title).toBe('Product A');
+            expect(mappedProducts[1].title).toBe('Product B');
+            expect(mappedProducts[2].title).toBe('Product C');
+        });
+
+        it('should handle empty product response', async () => {
+            setupProductFetch([
+                { data: [], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalledWith('store-1', []);
+        });
+
+        it('should map Salla status "sale" to "active"', async () => {
+            setupProductFetch([
+                { data: [makeSallaProduct({ status: 'sale' })], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1];
+            expect(mapped[0].status).toBe('active');
+        });
+
+        it('should map Salla status "out" to "out_of_stock"', async () => {
+            setupProductFetch([
+                { data: [makeSallaProduct({ status: 'out' })], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1];
+            expect(mapped[0].status).toBe('out_of_stock');
+        });
+
+        it('should map Salla status "hidden" to "hidden"', async () => {
+            setupProductFetch([
+                { data: [makeSallaProduct({ status: 'hidden' })], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1];
+            expect(mapped[0].status).toBe('hidden');
+        });
+
+        it('should filter out deleted products', async () => {
+            setupProductFetch([
+                {
+                    data: [
+                        makeSallaProduct({ id: 1, status: 'sale' }),
+                        makeSallaProduct({ id: 2, status: 'deleted' }),
+                        makeSallaProduct({ id: 3, status: 'out' }),
+                    ],
+                    currentPage: 1,
+                    totalPages: 1,
+                },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1];
+            expect(mapped).toHaveLength(2);
+            expect(mapped.map((p: { platformProductId: string }) => p.platformProductId)).toEqual(['1', '3']);
+        });
+
+        it('should correctly map product fields', async () => {
+            const product = makeSallaProduct({
+                id: 42,
+                name: 'Premium Widget',
+                status: 'sale',
+                price: { amount: 299.99, currency: 'SAR' },
+                quantity: 25,
+                categories: [{ name: 'Gadgets' }],
+                options: [
+                    {
+                        name: 'Size',
+                        values: [{ name: 'Small' }, { name: 'Large' }],
+                    },
+                ],
+            });
+
+            setupProductFetch([
+                { data: [product], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1][0];
+            expect(mapped).toEqual(expect.objectContaining({
+                platformProductId: '42',
+                title: 'Premium Widget',
+                status: 'active',
+                priceRange: '299.99 SAR',
+                currency: 'SAR',
+                totalInventory: 25,
+                productType: 'Gadgets',
+                vendor: null,
+                hasVariants: true,
+                variantSummary: 'Size: Small, Large',
+                tags: null,
+            }));
+        });
+
+        it('should handle products with no categories', async () => {
+            const product = makeSallaProduct({
+                categories: [],
+            });
+
+            setupProductFetch([
+                { data: [product], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1][0];
+            expect(mapped.productType).toBeNull();
+        });
+
+        it('should handle products with null quantity', async () => {
+            const product = makeSallaProduct({
+                quantity: null,
+            });
+
+            setupProductFetch([
+                { data: [product], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1][0];
+            expect(mapped.totalInventory).toBe(0);
+        });
+
+        it('should handle products with multiple option groups', async () => {
+            const product = makeSallaProduct({
+                options: [
+                    { name: 'Color', values: [{ name: 'Red' }, { name: 'Blue' }] },
+                    { name: 'Size', values: [{ name: 'S' }, { name: 'M' }, { name: 'L' }] },
+                ],
+            });
+
+            setupProductFetch([
+                { data: [product], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1][0];
+            expect(mapped.hasVariants).toBe(true);
+            expect(mapped.variantSummary).toBe('Color: Red, Blue | Size: S, M, L');
+        });
+
+        it('should set hasVariants=false and variantSummary=null for products with no options', async () => {
+            const product = makeSallaProduct({
+                options: [],
+            });
+
+            setupProductFetch([
+                { data: [product], currentPage: 1, totalPages: 1 },
+            ]);
+
+            await syncProducts('store-1');
+
+            const mapped = mockReplaceProductsAndRebuildSummary.mock.calls[0][1][0];
+            expect(mapped.hasVariants).toBe(false);
+            expect(mapped.variantSummary).toBeNull();
+        });
+    });
+
+    // ============================================================
+    // Store Info
+    // ============================================================
+
+    describe('fetchStoreInfo', () => {
+        it('should parse store info from API response', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: {
+                        name: 'My Salla Store',
+                        email: 'merchant@example.com',
+                        currency: 'SAR',
+                        domain: 'mystore.salla.sa',
+                        id: 98765,
+                    },
+                }),
+            });
+
+            const result = await fetchStoreInfo('access_token_123');
+
+            expect(result).toEqual({
+                storeName: 'My Salla Store',
+                storeEmail: 'merchant@example.com',
+                storeCurrency: 'SAR',
+                storeDomain: 'mystore.salla.sa',
+                merchantId: '98765',
+            });
+        });
+
+        it('should convert numeric merchant id to string', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: { name: 'Store', email: 'a@b.com', currency: 'SAR', domain: 'x.salla.sa', id: 12345 },
+                }),
+            });
+
+            const result = await fetchStoreInfo('token');
+            expect(typeof result.merchantId).toBe('string');
+            expect(result.merchantId).toBe('12345');
+        });
+
+        it('should pass the access token as Bearer authorization', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: { name: 'S', email: 'e', currency: 'C', domain: 'd', id: 1 },
+                }),
+            });
+
+            await fetchStoreInfo('my_bearer_token');
+
+            expect(mockFetch).toHaveBeenCalledWith(
+                'https://api.salla.dev/admin/v2/store/info',
+                expect.objectContaining({
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer my_bearer_token',
+                    }),
+                }),
+            );
+        });
+    });
+
+    // ============================================================
+    // Webhook Registration
+    // ============================================================
+
+    describe('registerWebhooks', () => {
+        it('should register all 6 webhook events', async () => {
+            mockFetch.mockResolvedValue({ ok: true });
+
+            await registerWebhooks('access_token');
+
+            expect(mockFetch).toHaveBeenCalledTimes(6);
+
+            const events = mockFetch.mock.calls.map(
+                (call: [string, { body: string }]) => JSON.parse(call[1].body).event,
+            );
+            expect(events).toEqual([
+                'product.created',
+                'product.deleted',
+                'product.price.updated',
+                'product.status.updated',
+                'product.quantity.low',
+                'app.uninstalled',
+            ]);
+        });
+
+        it('should not report error on 422 (webhook already exists)', async () => {
+            mockFetch.mockResolvedValue({
+                ok: false,
+                status: 422,
+                text: async () => 'already exists',
+            });
+
+            await registerWebhooks('token');
+
+            expect(mockCaptureError).not.toHaveBeenCalled();
+        });
+
+        it('should capture error on non-422 failure but not throw', async () => {
+            mockFetch.mockResolvedValue({
+                ok: false,
+                status: 500,
+                text: async () => 'server error',
+            });
+
+            // Should not throw
+            await registerWebhooks('token');
+
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
+        it('should capture error when fetch throws but not propagate', async () => {
+            mockFetch.mockRejectedValue(new Error('Network error'));
+
+            await registerWebhooks('token');
+
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
+        it('should format webhook URLs with hyphens instead of dots', async () => {
+            mockFetch.mockResolvedValue({ ok: true });
+
+            await registerWebhooks('token');
+
+            // Check one specific webhook URL format
+            const firstCall = mockFetch.mock.calls[0];
+            const body = JSON.parse(firstCall[1].body);
+            expect(body.url).toBe('https://jawab24.com/salla/webhooks/product-created');
+        });
+    });
+
+    // ============================================================
+    // Periodic Token Refresh
+    // ============================================================
+
+    describe('refreshExpiringTokens', () => {
+        it('should refresh tokens for all stores needing refresh', async () => {
+            // Mock getStoresNeedingTokenRefresh via db.select
+            const { db } = await import('../../src/db');
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([
+                        { id: 'store-1' },
+                        { id: 'store-2' },
+                    ]),
+                }),
+            });
+
+            // For each store's refreshAccessToken call:
+            // store-1
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                id: 'store-1',
+                tokenExpiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+            }));
+            mockDecrypt.mockReturnValueOnce('refresh_1');
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    access_token: 'new_at_1',
+                    refresh_token: 'new_rt_1',
+                    expires_in: 1209600,
+                }),
+            });
+
+            // store-2
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                id: 'store-2',
+                tokenExpiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+            }));
+            mockDecrypt.mockReturnValueOnce('refresh_2');
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    access_token: 'new_at_2',
+                    refresh_token: 'new_rt_2',
+                    expires_in: 1209600,
+                }),
+            });
+
+            const count = await refreshExpiringTokens();
+            expect(count).toBe(2);
+        });
+
+        it('should capture error for failed refresh and continue with others', async () => {
+            const { db } = await import('../../src/db');
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([
+                        { id: 'store-fail' },
+                        { id: 'store-ok' },
+                    ]),
+                }),
+            });
+
+            // store-fail: lock acquired but store not found
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockGetStoreById.mockResolvedValueOnce(null);
+
+            // store-ok: succeeds
+            mockRedisSet.mockResolvedValueOnce('OK');
+            mockGetStoreById.mockResolvedValueOnce(makeStore({
+                id: 'store-ok',
+                tokenExpiresAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+            }));
+            mockDecrypt.mockReturnValueOnce('refresh_ok');
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    access_token: 'new_at',
+                    refresh_token: 'new_rt',
+                    expires_in: 1209600,
+                }),
+            });
+
+            const count = await refreshExpiringTokens();
+
+            // Only one succeeded
+            expect(count).toBe(1);
+            // Error was captured for the failed one
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                expect.stringContaining('store-fail'),
+                expect.objectContaining({ tags: { service: 'salla' } }),
+            );
+        });
+
+        it('should return 0 when no stores need refresh', async () => {
+            const { db } = await import('../../src/db');
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+
+            const count = await refreshExpiringTokens();
+            expect(count).toBe(0);
+        });
+    });
+});
