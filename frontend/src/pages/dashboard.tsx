@@ -696,7 +696,7 @@ const DashboardPage: NextPageWithLayout = () => {
                       </div>
                       <div className="min-w-0 flex-1 text-start">
                         <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                        <h3 className="text-lg sm:text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
+                        <h3 className="text-lg sm:text-2xl font-display font-bold text-surface-900 tracking-tight">
                           {PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}
                           {isTrialing && (
                             <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
@@ -754,8 +754,7 @@ const DashboardPage: NextPageWithLayout = () => {
                       <Link href="/pricing" className="block mt-8">
                         <Button
                           variant="primary"
-                          className="w-full py-5 text-base whitespace-nowrap"
-                          style={{ boxShadow: '0 12px 32px rgba(20, 184, 166, 0.24)' }}
+                          className="w-full py-5 text-base shadow-[0_12px_32px_rgba(20,184,166,0.24)]"
                           icon={<Sparkles className="w-5 h-5" />}
                         >
                           {t('subscription.upgradePlan')}
@@ -815,7 +814,7 @@ const DashboardPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0 text-start">
-                      <p className="font-bold text-surface-900 truncate group-hover:text-brand-600 transition-colors" title={page.name}>
+                      <p className="font-bold text-surface-900 line-clamp-2 group-hover:text-brand-600 transition-colors" title={page.name}>
                         {page.name}
                       </p>
                       <div className="flex items-center gap-3 mt-1.5">

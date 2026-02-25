@@ -477,7 +477,7 @@ function MobileMenuOverlay({
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-2 text-brand-600">
                     <item.icon className="w-6 h-6" />
                   </div>
-                  <span className="font-bold text-xs text-surface-900 text-center line-clamp-1">
+                  <span className="font-bold text-xs text-surface-900 text-center line-clamp-2">
                     {item.label}
                   </span>
                 </button>

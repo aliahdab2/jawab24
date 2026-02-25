@@ -276,7 +276,7 @@ const PagesPage: NextPageWithLayout = () => {
 
                 {/* Page info */}
                 <div className="min-w-0 flex-1 text-start">
-                  <h3 className="text-lg font-bold text-surface-900 truncate" title={page.name}>{page.name}</h3>
+                  <h3 className="text-lg font-bold text-surface-900 line-clamp-2" title={page.name}>{page.name}</h3>
                 </div>
 
                 {/* External link to Facebook page */}
