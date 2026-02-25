@@ -108,15 +108,35 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name, onError }: { 
   );
 })
 
-const navigationKeys = [
-  { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { key: 'nav.pages', href: '/pages', icon: FileText },
-  { key: 'nav.comments', href: '/comments', icon: MessageSquare },
-  { key: 'nav.messages', href: '/messages', icon: MessageCircle },
-  { key: 'nav.templates', href: '/templates', icon: BookTemplate },
-  { key: 'nav.rules', href: '/rules', icon: Zap },
-  { key: 'pricing.title', href: '/pricing', icon: CreditCard },
-  { key: 'nav.settings', href: '/settings', icon: Settings },
+const navigationGroups = [
+  {
+    labelKey: 'sidebar.overview',
+    items: [
+      { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { key: 'nav.pages', href: '/pages', icon: FileText },
+    ],
+  },
+  {
+    labelKey: 'sidebar.inbox',
+    items: [
+      { key: 'nav.comments', href: '/comments', icon: MessageSquare },
+      { key: 'nav.messages', href: '/messages', icon: MessageCircle },
+    ],
+  },
+  {
+    labelKey: 'sidebar.automation',
+    items: [
+      { key: 'nav.templates', href: '/templates', icon: BookTemplate },
+      { key: 'nav.rules', href: '/rules', icon: Zap },
+    ],
+  },
+  {
+    labelKey: 'sidebar.account',
+    items: [
+      { key: 'pricing.title', href: '/pricing', icon: CreditCard },
+      { key: 'nav.settings', href: '/settings', icon: Settings },
+    ],
+  },
 ];
 
 /**
@@ -228,36 +248,52 @@ export const Sidebar = memo(function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-        {navigationKeys.map((item) => {
-          const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
-          return (
-            <Link
-              key={item.key}
-              href={item.href}
-              className={clsx(
-                'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group relative',
-                isActive
-                  ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20'
-                  : 'text-surface-400 hover:bg-white/5 hover:text-white',
-                !sidebarOpen && 'justify-center'
-              )}
-            >
-              <item.icon className={clsx(
-                "w-6 h-6 flex-shrink-0 transition-transform group-hover:scale-110",
-                isActive ? "text-white" : "text-surface-500 group-hover:text-brand-400"
-              )} />
-              {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
+      <nav className="flex-1 px-3 py-6 overflow-y-auto custom-scrollbar">
+        {navigationGroups.map((group, groupIndex) => (
+          <div key={group.labelKey} className={groupIndex > 0 ? 'mt-5' : ''}>
+            {/* Group label — visible only when sidebar is expanded */}
+            {sidebarOpen && (
+              <p className="px-3 mb-2 text-[10px] font-bold text-surface-500 uppercase tracking-[0.15em]">
+                {t(group.labelKey as TranslationKey)}
+              </p>
+            )}
+            {/* Collapsed divider — thin line between groups */}
+            {!sidebarOpen && groupIndex > 0 && (
+              <div className="mx-3 mb-2 border-t border-white/10" />
+            )}
+            <div className="space-y-1">
+              {group.items.map((item) => {
+                const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
+                return (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    className={clsx(
+                      'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group relative',
+                      isActive
+                        ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20'
+                        : 'text-surface-400 hover:bg-white/5 hover:text-white',
+                      !sidebarOpen && 'justify-center'
+                    )}
+                  >
+                    <item.icon className={clsx(
+                      "w-6 h-6 flex-shrink-0 transition-transform group-hover:scale-110",
+                      isActive ? "text-white" : "text-surface-500 group-hover:text-brand-400"
+                    )} />
+                    {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
 
-              {isActive && (
-                <div className={clsx(
-                  "absolute inset-y-2 w-1 bg-white rounded-full transition-all",
-                  sidebarOpen ? "start-0" : "start-1 h-1 top-1/2 -translate-y-1/2 w-1 rounded-full" // Small dot when collapsed? Or just hide it?
-                )}></div>
-              )}
-            </Link>
-          );
-        })}
+                    {isActive && (
+                      <div className={clsx(
+                        "absolute inset-y-2 w-1 bg-white rounded-full transition-all",
+                        sidebarOpen ? "start-0" : "start-1 h-1 top-1/2 -translate-y-1/2 w-1 rounded-full"
+                      )}></div>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
 
         {/* Admin Link - Only visible for admins */}
         {user?.isAdmin && (

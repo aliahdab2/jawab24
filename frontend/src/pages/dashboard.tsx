@@ -28,7 +28,7 @@ import {
   Flag,
   Timer
 } from 'lucide-react';
-import { isToday } from 'date-fns';
+import { isToday, format } from 'date-fns';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
@@ -101,7 +101,7 @@ const PLAN_NAME_KEYS: Record<string, TranslationKey> = {
 };
 
 const DashboardPage: NextPageWithLayout = () => {
-  const { t } = useTranslation();
+  const { t, dateLocale } = useTranslation();
   const { isAuthenticated, fbToken } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
@@ -342,6 +342,9 @@ const DashboardPage: NextPageWithLayout = () => {
 
   const trend = getTrend();
 
+  // Formatted date for section headers
+  const todayFormatted = format(new Date(), 'MMM d', { locale: dateLocale });
+
   // Comments Stats Array
   const commentStats = [
     {
@@ -462,6 +465,9 @@ const DashboardPage: NextPageWithLayout = () => {
           <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
             {t('comments.title')}
+            <span className="text-[11px] font-medium text-surface-400 normal-case tracking-normal">
+              · {t('dashboard.today' as TranslationKey)}, {todayFormatted}
+            </span>
           </h2>
           <Link href="/comments" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
             {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
@@ -492,6 +498,9 @@ const DashboardPage: NextPageWithLayout = () => {
           <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageCircle className="w-4 h-4" />
             {t('messages.title')}
+            <span className="text-[11px] font-medium text-surface-400 normal-case tracking-normal">
+              · {t('dashboard.today' as TranslationKey)}, {todayFormatted}
+            </span>
           </h2>
           <Link href="/messages" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
             {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
@@ -528,6 +537,9 @@ const DashboardPage: NextPageWithLayout = () => {
             <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
               <Gauge className="w-4 h-4" />
               {t('dashboard.performance' as TranslationKey)}
+              <span className="text-[11px] font-medium text-surface-400 normal-case tracking-normal">
+                · {t('dashboard.last30Days' as TranslationKey)}
+              </span>
             </h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
