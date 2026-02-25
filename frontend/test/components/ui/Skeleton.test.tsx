@@ -78,16 +78,15 @@ describe('Skeleton Component', () => {
 
 describe('PageSkeleton Component', () => {
     describe('Dashboard Variant', () => {
-        it('should render dashboard skeleton with header, stats, and content', () => {
+        it('should render dashboard skeleton with header, command center, and content', () => {
             const { container } = render(<PageSkeleton type="dashboard" />);
 
             // Should have animate-pulse wrapper
             expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
 
-            // Should have stats grid (4 items)
-            const statsGrid = container.querySelector('.grid-cols-2.lg\\:grid-cols-4');
-            expect(statsGrid).toBeInTheDocument();
-            expect(statsGrid?.children).toHaveLength(4);
+            // Should have Command Center skeleton (single wide card)
+            const commandCenter = container.querySelector('.rounded-2xl');
+            expect(commandCenter).toBeInTheDocument();
 
             // Should have main content grid (2 items)
             const contentGrid = container.querySelector('.grid-cols-1.lg\\:grid-cols-3');
@@ -165,8 +164,9 @@ describe('PageSkeleton Component', () => {
         it('should have responsive grid classes for dashboard', () => {
             const { container } = render(<PageSkeleton type="dashboard" />);
 
-            const statsGrid = container.querySelector('.grid-cols-2.lg\\:grid-cols-4');
-            expect(statsGrid).toBeInTheDocument();
+            // Command Center skeleton (single rounded card, no stats grid)
+            const commandCenter = container.querySelector('.rounded-2xl');
+            expect(commandCenter).toBeInTheDocument();
 
             const contentGrid = container.querySelector('.grid-cols-1.lg\\:grid-cols-3');
             expect(contentGrid).toBeInTheDocument();
