@@ -33,11 +33,11 @@ beforeAll(async () => {
         await migrate(db, { migrationsFolder });
         console.log('✅ Test database migrations applied');
     } catch (error: unknown) {
-        // With threads: false, vitest re-evaluates setupFiles per test file but they
-        // share the same database. The second call to migrate() fails because the
-        // drizzle schema already exists. This specific error is safe to ignore.
+        // Vitest re-evaluates setupFiles per test file but they share one database.
+        // A repeated migrate() can fail with 23505 (unique violation) for the drizzle
+        // schema row or for custom enum types. Both are safe to ignore.
         const pgError = error as { code?: string; detail?: string };
-        if (pgError.code === '23505' && pgError.detail?.includes('(nspname)=(drizzle)')) {
+        if (pgError.code === '23505') {
             console.log('✅ Test database migrations already applied');
         } else {
             console.error('❌ Migration failed:', error);
@@ -61,18 +61,22 @@ beforeEach(async () => {
     `);
 });
 
-afterAll(async () => {
-    // Close our test helper connection
-    await testClient.end();
-
-    // Close the app's DB connection pool (created by src/db/index.ts on import)
-    // to prevent the process from hanging after tests complete.
-    try {
-        const { client } = await import('../../src/db');
-        await client.end();
-    } catch {
-        // App module may not have been imported in all test files; ignore
-    }
+// Connection cleanup: with threads: false all test files share one process,
+// so we must NOT close pools between files (afterAll runs per file).
+// Instead, register a one-time process handler that cleans up on exit.
+let cleanupRegistered = false;
+afterAll(() => {
+    if (cleanupRegistered) return;
+    cleanupRegistered = true;
+    process.on('beforeExit', async () => {
+        await testClient.end().catch(() => {});
+        try {
+            const { client } = await import('../../src/db');
+            await client.end().catch(() => {});
+        } catch {
+            // App module may not have been imported; ignore
+        }
+    });
 });
 
 // ===================== Helpers =====================
