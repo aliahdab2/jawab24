@@ -208,7 +208,7 @@ export default function CompleteProfilePage() {
                         ? 'border-green-300 focus:ring-green-500 bg-green-50' 
                         : 'border-surface-300 focus:ring-brand-500'
                   }`}
-                  dir="ltr"
+                  dir="auto"
                   disabled={saving}
                   required
                   autoFocus

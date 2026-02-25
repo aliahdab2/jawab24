@@ -12,3 +12,4 @@ export { useEscapeKey } from './useEscapeKey';
 export { useLandscape } from './useLandscape';
 export { useBodyScrollLock } from './useBodyScrollLock';
 export { useSwipe } from './useSwipe';
+export { useDebounce } from './useDebounce';

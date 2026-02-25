@@ -60,8 +60,15 @@ module.exports = {
         'slide-in-right': 'slideInRight 0.3s ease-out',
         'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
         'shimmer': 'shimmer 2s infinite linear',
+        'float': 'float 3s ease-in-out infinite',
+        'float-delayed': 'float 2.5s ease-in-out infinite 0.5s',
+        'float-slow': 'float 3.5s ease-in-out infinite 1s',
       },
       keyframes: {
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-8px)' },
+        },
         shimmer: {
           '100%': { transform: 'translateX(100%)' },
         },

@@ -99,6 +99,7 @@ export function KnowledgeBaseSection({
             ref={textareaRef}
             className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed text-surface-900 placeholder:text-surface-300"
             placeholder={t(config.placeholderKey as TranslationKey)}
+            aria-label={t(config.titleKey as TranslationKey)}
             value={section.content}
             onChange={(e) => onChange(e.target.value)}
             onInput={autoResize}

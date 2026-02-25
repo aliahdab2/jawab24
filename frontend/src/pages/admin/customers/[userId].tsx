@@ -380,7 +380,7 @@ export default function AdminCustomerDetailPage() {
                                             <option value="">{t('admin.customer.upgradeForm.selectPlan')}</option>
                                             {plans.filter(p => p.isActive).map((plan) => (
                                                 <option key={plan.id} value={plan.id}>
-                                                    {plan.name} (${plan.price}/mo)
+                                                    {plan.name} (${(plan.price / 100).toFixed(0)}/mo)
                                                 </option>
                                             ))}
                                         </select>

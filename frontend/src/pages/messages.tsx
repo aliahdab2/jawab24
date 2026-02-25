@@ -8,6 +8,7 @@ import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/component
 import { MessageCard, type Conversation } from '@/components/messages';
 import { MessageDetailModal } from '@/components/messages/MessageDetailModal';
 import { useAuthStore } from '@/lib/store';
+import { useDebounce } from '@/hooks';
 import { messagesApi, pagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import {
@@ -57,18 +58,6 @@ function getApiParams(filter: FilterType): MessagesQueryParams {
     default:
       return {};
   }
-}
-
-// Custom hook for debounced value
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-
-  return debouncedValue;
 }
 
 const MESSAGES_PER_PAGE = 50;

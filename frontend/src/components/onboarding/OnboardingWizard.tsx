@@ -247,6 +247,7 @@ function ReviewInfoStep({
                 isLandscape ? 'h-[20vh]' : 'h-[30vh]'
               }`}
               placeholder={t('pages.writeBusinessInfo')}
+              aria-label={t('pages.writeBusinessInfo')}
               dir="auto"
               autoFocus
             />

@@ -374,7 +374,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           {!comment.replied && (
             <div className="bg-surface-50 rounded-xl p-4 border border-surface-200">
               <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium text-surface-700">{t('comments.reply')}</label>
+                <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-surface-700">{t('comments.reply')}</label>
                 
                 {mode === 'full' && (
                   <div className="relative group/tooltip inline-block">
@@ -408,6 +408,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 )}
               </div>
               <textarea
+                id="comment-reply-textarea"
                 ref={textareaRef}
                 className="w-full p-3 rounded-lg border border-surface-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-surface-900 placeholder:text-surface-400 resize-y"
                 placeholder={t('comments.typeReply')}

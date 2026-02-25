@@ -56,7 +56,7 @@ function makeMessage(overrides: Partial<Message>): Message {
   };
 }
 
-function makeConversation(overrides: Partial<Conversation>): Conversation {
+function makeConversation(overrides: Partial<Conversation> = {}): Conversation {
   const incoming = makeMessage({});
   return {
     senderId: 'sender1',

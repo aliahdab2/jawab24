@@ -310,9 +310,9 @@ describe('CompleteProfilePage', () => {
     expect(input).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('should have input dir=ltr for email (always LTR)', () => {
+  it('should have input dir=auto for email', () => {
     render(<CompleteProfilePage />);
     const input = screen.getByLabelText('Email Address');
-    expect(input).toHaveAttribute('dir', 'ltr');
+    expect(input).toHaveAttribute('dir', 'auto');
   });
 });

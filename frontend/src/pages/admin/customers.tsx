@@ -56,7 +56,7 @@ export default function AdminCustomersPage() {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('');
     const [planFilter, setPlanFilter] = useState<string>('');
-    const [plans, setPlans] = useState<Array<{ id: string; name: string; slug: string }>>([]);
+    const [plans, setPlans] = useState<Array<{ id: string; name: string; slug: string; isActive: boolean }>>([]);
 
     // Debounced search
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -159,6 +159,7 @@ export default function AdminCustomersPage() {
                             <input
                                 type="text"
                                 placeholder={t('admin.customers.searchPlaceholder')}
+                                aria-label={t('admin.customers.searchPlaceholder')}
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="w-full ps-10 pe-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
@@ -169,6 +170,7 @@ export default function AdminCustomersPage() {
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
+                            aria-label={t('admin.customers.allStatuses')}
                             className="px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-white"
                         >
                             <option value="">{t('admin.customers.allStatuses')}</option>
@@ -182,10 +184,11 @@ export default function AdminCustomersPage() {
                         <select
                             value={planFilter}
                             onChange={(e) => setPlanFilter(e.target.value)}
+                            aria-label={t('admin.customers.allPlans')}
                             className="px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-white"
                         >
                             <option value="">{t('admin.customers.allPlans')}</option>
-                            {plans.map((plan) => (
+                            {plans.filter(p => p.isActive).map((plan) => (
                                 <option key={plan.id} value={plan.slug}>
                                     {plan.name}
                                 </option>

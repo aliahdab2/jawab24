@@ -164,6 +164,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               value={rawText}
               onChange={setRawText}
               maxLength={MAX_LENGTH}
+              ariaLabel={t('kb.title')}
             />
           ) : (
             <KnowledgeBaseSections

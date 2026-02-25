@@ -187,7 +187,7 @@ export const Sidebar = memo(function Sidebar() {
           "ltr:right-0 ltr:translate-x-1/2",
           "opacity-0 group-hover/sidebar:opacity-100 focus:opacity-100 transition-opacity duration-300"
         )}
-        aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        aria-label={sidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
       >
         {sidebarOpen ? (
           <>

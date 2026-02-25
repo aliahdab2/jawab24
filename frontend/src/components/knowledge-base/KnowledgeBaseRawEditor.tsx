@@ -3,9 +3,10 @@ interface KnowledgeBaseRawEditorProps {
   value: string;
   onChange: (value: string) => void;
   maxLength: number;
+  ariaLabel?: string;
 }
 
-export function KnowledgeBaseRawEditor({ value, onChange, maxLength }: KnowledgeBaseRawEditorProps) {
+export function KnowledgeBaseRawEditor({ value, onChange, maxLength, ariaLabel }: KnowledgeBaseRawEditorProps) {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -15,6 +16,7 @@ export function KnowledgeBaseRawEditor({ value, onChange, maxLength }: Knowledge
         onChange={(e) => onChange(e.target.value.slice(0, maxLength))}
         maxLength={maxLength}
         dir="auto"
+        aria-label={ariaLabel}
       />
       <div className="flex items-center justify-end mt-2 px-1">
         <span

@@ -1,17 +1,20 @@
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslation } from '@/i18n';
-import { BrandLogo } from '@/components/ui';
+import { BrandLogo, Button } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { Home, MessageCircle, Search } from 'lucide-react';
+import { Home, ArrowLeft, ArrowRight, MessageCircle, Search, HelpCircle } from 'lucide-react';
 
 const WHATSAPP_NUMBER = '46700224720';
 
 export default function Custom404() {
   const { t, language } = useTranslation();
+  const router = useRouter();
   const isRTL = language === 'ar';
-
+  const attemptedPath = router.asPath;
   const supportMessage = encodeURIComponent('Hi, I need help — I reached a broken page on Jawab24.');
+  const BackArrow = isRTL ? ArrowRight : ArrowLeft;
 
   return (
     <>
@@ -19,55 +22,85 @@ export default function Custom404() {
         <title>404 - {BRAND_ASSETS.meta.appName}</title>
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-surface-50 flex flex-col items-center justify-center px-4">
+      <div
+        dir={isRTL ? 'rtl' : 'ltr'}
+        className="min-h-screen bg-surface-50 flex flex-col items-center justify-center px-4"
+      >
         {/* Brand header */}
-        <Link href="/landing" className="flex items-center gap-3 mb-10 group">
+        <Link href="/landing" className="flex items-center gap-3 mb-12 group">
           <BrandLogo
             variant="main"
-            className="w-12 h-12 group-hover:rotate-6 transition-transform"
+            className="w-10 h-10 group-hover:rotate-6 transition-transform"
           />
-          <span className="font-display font-bold text-2xl text-surface-900 tracking-tight">
+          <span className="font-display font-bold text-xl text-surface-900 tracking-tight">
             {BRAND_ASSETS.meta.appName}
           </span>
         </Link>
 
-        {/* Illustration */}
-        <div className="relative mb-6">
-          <div className="w-24 h-24 rounded-3xl bg-brand-50 flex items-center justify-center">
-            <Search className="w-12 h-12 text-brand-300" />
+        {/* Illustration — larger with floating satellite elements */}
+        <div className="relative mb-8">
+          <div className="w-36 h-36 rounded-full bg-brand-50 flex items-center justify-center animate-float">
+            <Search className="w-16 h-16 text-brand-300" strokeWidth={1.5} aria-hidden="true" />
           </div>
-          <div className="absolute -top-1 -end-1 w-6 h-6 rounded-full bg-accent-100 flex items-center justify-center">
-            <span className="text-accent-500 text-xs font-bold">?</span>
+          <div className="absolute -top-2 -end-2 w-10 h-10 rounded-full bg-accent-100 flex items-center justify-center animate-float-delayed">
+            <HelpCircle className="w-5 h-5 text-accent-500" aria-hidden="true" />
+          </div>
+          <div className="absolute -bottom-1 -start-3 w-7 h-7 rounded-full bg-brand-100 flex items-center justify-center animate-float-slow">
+            <span className="text-brand-400 text-xs font-bold" aria-hidden="true">?</span>
           </div>
         </div>
 
         {/* Content */}
         <div className="text-center max-w-md">
-          <p className="text-7xl font-display font-extrabold text-brand-500 mb-4">404</p>
+          <p
+            className="text-8xl font-display font-extrabold text-brand-500/20 mb-1 select-none"
+            aria-hidden="true"
+          >
+            404
+          </p>
           <h1 className="text-2xl font-bold text-surface-900 mb-2">
             {t('errors.notFoundTitle')}
           </h1>
-          <p className="text-surface-500 mb-8 leading-relaxed">
+          <p className="text-surface-500 mb-4 leading-relaxed">
             {t('errors.notFoundDesc')}
           </p>
 
-          {/* Recovery actions */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20"
-            >
-              <Home className="w-5 h-5" />
-              {t('errors.goHome')}
-            </Link>
+          {/* Broken path — gives the user context on what URL failed */}
+          {attemptedPath && attemptedPath !== '/404' && (
+            <p className="text-xs text-surface-400 font-mono bg-surface-100 rounded-lg px-3 py-2 mb-4 break-all inline-block">
+              {attemptedPath}
+            </p>
+          )}
 
+          {/* Recovery actions */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
+            <Button
+              variant="primary"
+              size="lg"
+              icon={<Home className="w-5 h-5" aria-hidden="true" />}
+              onClick={() => router.push('/dashboard')}
+            >
+              {t('errors.goHome')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              icon={<BackArrow className="w-5 h-5" aria-hidden="true" />}
+              onClick={() => router.back()}
+            >
+              {t('errors.goBack')}
+            </Button>
+          </div>
+
+          {/* Contact support — visible but doesn't compete with main actions */}
+          <div className="mt-8 pt-6 border-t border-surface-200">
             <a
               href={`https://wa.me/${WHATSAPP_NUMBER}?text=${supportMessage}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 py-3 text-surface-600 font-bold rounded-xl hover:bg-surface-100 transition-colors"
+              className="inline-flex items-center gap-2 text-sm text-surface-500 hover:text-brand-600 transition-colors"
             >
-              <MessageCircle className="w-5 h-5" />
+              <MessageCircle className="w-4 h-4" aria-hidden="true" />
               {t('errors.contactSupport')}
             </a>
           </div>

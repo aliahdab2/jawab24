@@ -94,6 +94,7 @@ export function KnowledgeBaseCustomSection({
               onChange={handleTitleChange}
               onClick={(e) => e.stopPropagation()}
               placeholder={t('kb.customSection.titlePlaceholder' as TranslationKey)}
+              aria-label={t('kb.customSection.titlePlaceholder' as TranslationKey)}
               maxLength={40}
               dir="auto"
             />
@@ -143,6 +144,7 @@ export function KnowledgeBaseCustomSection({
             ref={textareaRef}
             className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed text-surface-900 placeholder:text-surface-300"
             placeholder={t('kb.customSection.placeholder' as TranslationKey)}
+            aria-label={t('kb.customSection.placeholder' as TranslationKey)}
             value={section.content}
             onChange={(e) => onChange(e.target.value)}
             onInput={autoResize}

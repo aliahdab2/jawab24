@@ -59,6 +59,7 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
           required
           className="px-3 py-1.5 sm:py-2 rounded-full text-surface-900 text-sm sm:text-base border-0 focus:outline-none focus:ring-2 focus:ring-white/50 min-w-0 w-40 sm:w-52"
           dir="auto"
+          aria-label={t('landing.comingSoon.placeholder')}
         />
         <button
           type="submit"
@@ -81,6 +82,7 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
         required
         className="flex-1 min-w-0 px-4 py-2.5 rounded-full border border-surface-200 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         dir="auto"
+        aria-label={t('landing.features.integrationsPlaceholder')}
       />
       <button
         type="submit"
