@@ -391,7 +391,7 @@
   "templates.preview": "معاينة الرد",
   "templates.usedByRules": "مستخدم في {count} قاعدة",
   "templates.notUsedByRules": "غير مستخدم في أي قاعدة",
-  "rules.title": "قواعد الرد التلقائي",
+  "rules.title": "قواعد الرد",
   "rules.description": "أنشئ قواعد للرد تلقائياً بناءً على الكلمات المفتاحية",
   "rules.firstMatchHint": "يتم فحص القواعد من الأعلى للأسفل. أول قاعدة مطابقة هي التي تُنفَّذ.",
   "rules.addRule": "إضافة قاعدة",
