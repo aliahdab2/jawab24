@@ -130,12 +130,8 @@ export function PageSkeleton({ type = 'default' }: { type?: 'default' | 'grid' |
                         <Skeleton variant="text" width={300} />
                     </div>
                 </div>
-                {/* Stats */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[1, 2, 3, 4].map((i) => (
-                        <Skeleton key={i} height={120} className="rounded-2xl" />
-                    ))}
-                </div>
+                {/* Command Center */}
+                <Skeleton height={140} className="rounded-2xl" />
                 {/* Main Content */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <Skeleton height={400} className="lg:col-span-2 rounded-3xl" />

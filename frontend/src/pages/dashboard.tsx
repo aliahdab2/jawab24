@@ -10,32 +10,22 @@ import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, analy
 import type { AnalyticsOverview } from '@/lib/api';
 import {
   MessageSquare,
-  MessageCircle,
   Zap,
-  Clock,
   FileText,
   Sparkles,
   Crown,
   AlertTriangle,
   ChevronRight,
   ArrowRight,
-  TrendingUp,
-  TrendingDown,
   Bot,
   Minus,
-  CheckCircle,
-  Gauge,
-  Flag,
-  Timer
 } from 'lucide-react';
-import { isToday, format } from 'date-fns';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
-import { StatCard, AutoReplyStatusCard } from '@/components/dashboard';
+import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
-import { formatDuration } from '@/lib/formatDuration';
 import { useIsDemoUser } from '@/features/demo';
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
@@ -101,7 +91,7 @@ const PLAN_NAME_KEYS: Record<string, TranslationKey> = {
 };
 
 const DashboardPage: NextPageWithLayout = () => {
-  const { t, dateLocale } = useTranslation();
+  const { t } = useTranslation();
   const { isAuthenticated, fbToken } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
@@ -122,16 +112,16 @@ const DashboardPage: NextPageWithLayout = () => {
     pendingReplies: 0,
     needsAttention: 0,
     activePages: 0,
-    commentsToday: 0,
-    commentsYesterday: 0,
     aiReplies: 0,
     templateReplies: 0,
+    manualReplies: 0,
     // Message stats
     totalMessages: 0,
-    messagesReplied: 0,
     messagesPending: 0,
     messagesNeedsAttention: 0,
-    messagesRepliedToday: 0
+    messagesAiReplies: 0,
+    messagesTemplateReplies: 0,
+    messagesManualReplies: 0
   });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
@@ -230,23 +220,10 @@ const DashboardPage: NextPageWithLayout = () => {
       };
 
       // Messages Stats
-      const msgStats = messagesStatsRes?.data || { total: 0, replied: 0, pending: 0, needsAttention: 0 };
+      const msgStats = messagesStatsRes?.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
 
-      // Calculate Comments Today using recent list (Approximate/Fallback)
-      // Note: Ideal would be a 'today' field in getStats(), but we use available data
-      const commentsToday = recentCommentsList.filter(c =>
-        c.createdAt && isToday(new Date(c.createdAt))
-      ).length;
-
-      // Same for yesterday (heuristic: won't be accurate if > 5 comments today/yesterday)
-      // We accept this limitation for the "Trend" widget or should ask backend for trend data
-      // For now, initialized to 0 to avoid misleading drops
-      const commentsYesterday = 0; 
-      
       // Calculate active pages
       const activePages = fetchedPages.filter(p => p.autoReplyEnabled).length;
-
-      const messagesNeedsAttention = msgStats.needsAttention ?? 0;
 
       setStatsData({
         totalComments: stats.total,
@@ -254,16 +231,16 @@ const DashboardPage: NextPageWithLayout = () => {
         pendingReplies: stats.unreplied,
         needsAttention: stats.needsAttention,
         activePages,
-        commentsToday,
-        commentsYesterday,
         aiReplies: stats.byMethod.ai,
         templateReplies: stats.byMethod.template,
+        manualReplies: stats.byMethod.manual,
         // Message stats
         totalMessages: msgStats.total,
-        messagesReplied: msgStats.replied,
         messagesPending: msgStats.pending,
-        messagesNeedsAttention: messagesNeedsAttention,
-        messagesRepliedToday: msgStats.replied // Using total as proxy
+        messagesNeedsAttention: msgStats.needsAttention ?? 0,
+        messagesAiReplies: msgStats.byMethod?.ai ?? 0,
+        messagesTemplateReplies: msgStats.byMethod?.template ?? 0,
+        messagesManualReplies: msgStats.byMethod?.manual ?? 0,
       });
 
       // Update section error state
@@ -331,92 +308,6 @@ const DashboardPage: NextPageWithLayout = () => {
   };
 
   // Calculate trend for today vs yesterday
-  const getTrend = () => {
-    const { commentsToday, commentsYesterday } = statsData;
-    if (commentsYesterday === 0) return { direction: 'neutral' as const, percent: 0 };
-    const change = ((commentsToday - commentsYesterday) / commentsYesterday) * 100;
-    if (change > 0) return { direction: 'up' as const, percent: Math.round(change) };
-    if (change < 0) return { direction: 'down' as const, percent: Math.abs(Math.round(change)) };
-    return { direction: 'neutral' as const, percent: 0 };
-  };
-
-  const trend = getTrend();
-
-  // Formatted date for section headers
-  const todayFormatted = format(new Date(), 'MMM d', { locale: dateLocale });
-
-  // Comments Stats Array
-  const commentStats = [
-    {
-      id: 'all',
-      nameKey: 'comments.totalComments' as TranslationKey,
-      value: statsData.totalComments.toLocaleString(),
-      icon: MessageSquare,
-      color: 'brand' as const,
-      href: '/comments?filter=all'
-    },
-    {
-      id: 'pending',
-      nameKey: 'comments.pending' as TranslationKey,
-      value: statsData.pendingReplies.toLocaleString(),
-      icon: Clock,
-      color: 'amber' as const,
-      href: '/comments'
-    },
-    {
-      id: 'replied_today',
-      nameKey: 'comments.repliedToday' as TranslationKey,
-      value: statsData.repliedToday.toLocaleString(),
-      icon: CheckCircle,
-      color: 'emerald' as const,
-      href: '/comments?filter=auto_replied'
-    },
-    {
-      id: 'needs_attention',
-      nameKey: 'comments.needsAttention' as TranslationKey,
-      value: statsData.needsAttention.toLocaleString(),
-      icon: AlertTriangle,
-      color: 'red' as const,
-      href: '/comments'
-    }
-  ];
-
-  // Messages Stats Array
-  const messageStats = [
-    {
-      id: 'all',
-      nameKey: 'messages.totalMessages' as TranslationKey,
-      value: statsData.totalMessages.toLocaleString(),
-      icon: MessageCircle,
-      color: 'brand' as const,
-      href: '/messages?filter=all'
-    },
-    {
-      id: 'pending',
-      nameKey: 'messages.pending' as TranslationKey,
-      value: statsData.messagesPending.toLocaleString(),
-      icon: Clock,
-      color: 'amber' as const,
-      href: '/messages'
-    },
-    {
-      id: 'replied_today',
-      nameKey: 'messages.repliedToday' as TranslationKey,
-      value: statsData.messagesRepliedToday.toLocaleString(),
-      icon: CheckCircle,
-      color: 'emerald' as const,
-      href: '/messages?filter=auto_replied'
-    },
-    {
-      id: 'needs_attention',
-      nameKey: 'messages.needsAttention' as TranslationKey,
-      value: statsData.messagesNeedsAttention.toLocaleString(),
-      icon: AlertTriangle,
-      color: 'red' as const,
-      href: '/messages'
-    }
-  ];
-
   // Handle onboarding completion
   const handleOnboardingComplete = () => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
@@ -459,175 +350,28 @@ const DashboardPage: NextPageWithLayout = () => {
         />
       )}
 
-      {/* Comments Stats Section */}
-      <div className="mb-8 lg:mb-10">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" />
-            {t('comments.title')}
-            <span className="text-[11px] font-medium text-surface-400 normal-case tracking-normal">
-              · {t('dashboard.today' as TranslationKey)}, {todayFormatted}
-            </span>
-          </h2>
-          <Link href="/comments" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-            {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
-          </Link>
-        </div>
-        {sectionErrors.comments ? (
-          <SectionError onRetry={fetchDashboardData} />
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            {commentStats.map((stat, i) => (
-              <StatCard
-                key={stat.id}
-                nameKey={stat.nameKey}
-                value={stat.value}
-                icon={stat.icon}
-                color={stat.color}
-                index={i}
-                href={stat.href}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Smart Status Banner — needs attention or all caught up */}
+      <SmartStatusBanner
+        needsAttention={statsData.needsAttention + statsData.messagesNeedsAttention}
+        commentNeedsAttention={statsData.needsAttention}
+        messageNeedsAttention={statsData.messagesNeedsAttention}
+        totalItems={statsData.totalComments + statsData.totalMessages}
+      />
 
-      {/* Messages Stats Section */}
-      <div className="mb-8 lg:mb-10">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
-            <MessageCircle className="w-4 h-4" />
-            {t('messages.title')}
-            <span className="text-[11px] font-medium text-surface-400 normal-case tracking-normal">
-              · {t('dashboard.today' as TranslationKey)}, {todayFormatted}
-            </span>
-          </h2>
-          <Link href="/messages" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-            {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
-          </Link>
-        </div>
-        {sectionErrors.messages ? (
-          <SectionError onRetry={fetchDashboardData} />
-        ) : statsData.totalMessages === 0 && statsData.messagesPending === 0 && statsData.messagesNeedsAttention === 0 && statsData.messagesRepliedToday === 0 ? (
-          <div className="py-6 text-center rounded-2xl bg-surface-50 border border-dashed border-surface-200">
-            <MessageCircle className="w-6 h-6 text-surface-300 mx-auto mb-2" />
-            <p className="text-sm text-surface-500">{t('dashboard.noMessagesYet' as TranslationKey)}</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            {messageStats.map((stat, i) => (
-              <StatCard
-                key={stat.id}
-                nameKey={stat.nameKey}
-                value={stat.value}
-                icon={stat.icon}
-                color={stat.color}
-                index={i + 4}
-                href={stat.href}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Performance Section — from /analytics/overview */}
-      {analytics?.totals && (analytics.totals.comments + analytics.totals.messages) > 0 && (
-        <div className="mb-8 lg:mb-10">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
-              <Gauge className="w-4 h-4" />
-              {t('dashboard.performance' as TranslationKey)}
-              <span className="text-[11px] font-medium text-surface-400 normal-case tracking-normal">
-                · {t('dashboard.last30Days' as TranslationKey)}
-              </span>
-            </h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-            <StatCard
-              nameKey={'dashboard.replyRateValue' as TranslationKey}
-              value={`${analytics.totals.replyRate}%`}
-              icon={Gauge}
-              color="brand"
-              index={8}
-            />
-            <StatCard
-              nameKey={'dashboard.flaggedItems' as TranslationKey}
-              value={analytics.totals.flagged.toLocaleString()}
-              icon={Flag}
-              color={analytics.totals.flagged > 0 ? 'amber' : 'emerald'}
-              index={9}
-              href="/comments"
-            />
-            <StatCard
-              nameKey={'dashboard.avgSpeed' as TranslationKey}
-              value={analytics.responseTime.avgSeconds != null ? formatDuration(analytics.responseTime.avgSeconds, t) : '—'}
-              icon={Timer}
-              color="violet"
-              index={10}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Today's Activity Summary */}
-      {(statsData.commentsToday > 0 || statsData.aiReplies > 0 || statsData.templateReplies > 0) && (
-        <div className="mb-8 lg:mb-10 p-4 bg-white rounded-2xl border border-surface-100 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            {/* Today vs Yesterday */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-surface-100 flex items-center justify-center">
-                {trend.direction === 'up' ? (
-                  <TrendingUp className="w-5 h-5 text-emerald-600" />
-                ) : trend.direction === 'down' ? (
-                  <TrendingDown className="w-5 h-5 text-red-500" />
-                ) : (
-                  <Minus className="w-5 h-5 text-surface-400" />
-                )}
-              </div>
-              <div>
-                <p className="text-sm font-bold text-surface-900">
-                  {statsData.commentsToday} {t('dashboard.todayComments' as TranslationKey)}
-                </p>
-                {statsData.commentsYesterday > 0 && (
-                  <p className="text-xs text-surface-500">
-                    {trend.direction === 'up' && (
-                      <span className="text-emerald-600">+{trend.percent}% {t('dashboard.vsYesterday')}</span>
-                    )}
-                    {trend.direction === 'down' && (
-                      <span className="text-red-500">-{trend.percent}% {t('dashboard.vsYesterday')}</span>
-                    )}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="hidden sm:block w-px h-10 bg-surface-200"></div>
-
-            {/* AI vs Manual Breakdown */}
-            <div className="flex items-center gap-4 sm:gap-6">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-brand-100 flex items-center justify-center">
-                  <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-surface-900">{statsData.aiReplies}</p>
-                  <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">{t('dashboard.aiReply' as TranslationKey)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-100 flex items-center justify-center">
-                  <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-surface-900">{statsData.templateReplies}</p>
-                  <p className="text-xs font-semibold text-surface-400 uppercase tracking-wide">{t('dashboard.templateReply' as TranslationKey)}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Command Center — consolidated metrics */}
+      <CommandCenter
+        smartReplies={statsData.aiReplies + statsData.messagesAiReplies}
+        repliedToday={statsData.repliedToday}
+        replyRate={analytics?.totals?.replyRate ?? '0'}
+        avgSpeedSeconds={analytics?.responseTime?.avgSeconds ?? null}
+        byMethod={{
+          ai: statsData.aiReplies + statsData.messagesAiReplies,
+          template: statsData.templateReplies + statsData.messagesTemplateReplies,
+          manual: statsData.manualReplies + statsData.messagesManualReplies,
+        }}
+        hasError={sectionErrors.comments && sectionErrors.messages && sectionErrors.analytics}
+        onRetry={fetchDashboardData}
+      />
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -5,8 +5,8 @@ import en from '../src/i18n/en.json';
  * Dashboard E2E Tests
  *
  * Verifies the dashboard page renders correctly with mocked API data.
- * These tests would have caught the broken deployment where the dashboard
- * displayed only the app icon instead of actual content.
+ * Tests cover the Command Center metrics strip, Smart Status Banner,
+ * recent comments, pages widget, and graceful error handling.
  */
 
 const MOCK_COMMENT_STATS = {
@@ -24,6 +24,25 @@ const MOCK_MESSAGE_STATS = {
   replied: 10,
   pending: 5,
   needsAttention: 1,
+  byMethod: { ai: 5, template: 3, manual: 2 },
+};
+
+const MOCK_ANALYTICS = {
+  period: { from: '2026-01-26', to: '2026-02-25', days: 30 },
+  totals: {
+    comments: 42,
+    messages: 15,
+    replied: 40,
+    unreplied: 17,
+    replyRate: '70.2',
+    flagged: 2,
+  },
+  byMethod: { ai: 25, template: 11, manual: 4 },
+  byIntent: {},
+  byLanguage: {},
+  byPlatform: {},
+  flags: {},
+  responseTime: { avgSeconds: 45, p50Seconds: 30, p95Seconds: 120 },
 };
 
 const MOCK_PAGES = [
@@ -77,7 +96,6 @@ test.describe('Dashboard Page', () => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
 
     // Set auth state in localStorage before navigating
-    // This mimics an authenticated user session
     await page.addInitScript(() => {
       localStorage.setItem(
         'auth-storage',
@@ -123,6 +141,13 @@ test.describe('Dashboard Page', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify(MOCK_MESSAGE_STATS),
+        });
+      }
+      if (url.includes('/analytics/overview')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_ANALYTICS),
         });
       }
       if (url.includes('/comments')) {
@@ -174,38 +199,83 @@ test.describe('Dashboard Page', () => {
     });
   });
 
-  test('should render dashboard with stats cards and content', async ({ page }) => {
+  test('should render dashboard with Command Center metrics', async ({ page }) => {
     await page.goto('/en/dashboard');
 
     // The page title should be set (DashboardLayout sets "Dashboard | Jawab24")
     await expect(page).toHaveTitle(/Dashboard.*Jawab24/i);
 
-    // Dashboard header must be visible - en.json: "dashboard.title" = "Home", ar.json: "الرئيسية"
+    // Dashboard header must be visible
     await expect(
       page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Comment stats section should render with actual numbers (not just the icon)
-    await expect(page.getByText('42', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+    // Command Center should show Smart Replies count: 20 (comments AI) + 5 (messages AI) = 25
+    await expect(page.getByText('25', { exact: true }).first()).toBeVisible({ timeout: 15000 });
 
-    // Message stats should also be visible
-    await expect(page.getByText('15', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+    // Replied Today should show 5
+    await expect(page.getByText('5', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+
+    // Reply Rate from analytics should show 70.2%
+    await expect(page.getByText('70.2%')).toBeVisible({ timeout: 15000 });
 
     // Navigation should be present (bottom nav on mobile or sidebar on desktop)
     const hasNav = await page.locator('nav').count();
     expect(hasNav).toBeGreaterThan(0);
   });
 
+  test('should show needs-attention banner when items are flagged', async ({ page }) => {
+    await page.goto('/en/dashboard');
+
+    // Wait for dashboard to load
+    await expect(
+      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // SmartStatusBanner should show needs attention count: 3 (comments) + 1 (messages) = 4
+    // The banner text contains the count interpolated
+    await expect(page.getByText(/4.*items need your attention/i)).toBeVisible({ timeout: 15000 });
+
+    // Review Now CTA should be visible
+    await expect(page.getByText(en['dashboard.smartBanner.reviewNow'])).toBeVisible();
+  });
+
+  test('should show all-caught-up banner when no attention needed', async ({ page }) => {
+    // Override both stats to have needsAttention = 0
+    await page.route('**/api/comments/stats**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...MOCK_COMMENT_STATS, needsAttention: 0 }),
+      });
+    });
+    await page.route('**/api/messages/stats**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...MOCK_MESSAGE_STATS, needsAttention: 0 }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+
+    await expect(
+      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // All caught up banner should appear
+    await expect(page.getByText(en['dashboard.smartBanner.allCaughtUp'])).toBeVisible({ timeout: 15000 });
+  });
+
   test('should not show only an image or icon as page content', async ({ page }) => {
     await page.goto('/en/dashboard');
 
-    // Wait for dashboard content to render (not networkidle — Next.js HMR keeps connections open)
+    // Wait for dashboard content to render
     await expect(
       page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // The page should have meaningful text content, not just an image
-    // This catches the specific bug where only app-icon.png was displayed
     const bodyText = await page.locator('body').innerText();
     expect(bodyText.length).toBeGreaterThan(50);
 
@@ -223,7 +293,6 @@ test.describe('Dashboard Page', () => {
     await page.goto('/en/dashboard');
 
     // Within 15 seconds, actual stat values should appear
-    // This catches hydration failures where the page stays blank
     await expect(
       page.locator('text=/\\d+/').first()
     ).toBeVisible({ timeout: 15000 });
@@ -234,8 +303,6 @@ test.describe('Dashboard Page', () => {
   });
 
   test('should not crash when user has no active subscription', async ({ page }) => {
-    // Regression test for: "Cannot read properties of null (reading 'status')"
-    // Happens when usage.subscription is null (new user without a plan yet)
     await page.route('**/api/subscription/usage**', async (route) => {
       return route.fulfill({
         status: 200,
@@ -273,48 +340,6 @@ test.describe('Dashboard Page', () => {
     // The href must deep-link to the individual page card via hash, not just /pages
     const href = await pageLink.getAttribute('href');
     expect(href).toContain('/pages#page-page_1');
-  });
-
-  test('should link stat cards with valid filter values only', async ({ page }) => {
-    await page.goto('/en/dashboard');
-
-    // Wait for stat cards to render
-    await expect(page.getByText('42', { exact: true }).first()).toBeVisible({ timeout: 15000 });
-
-    // All comment filter links must use valid filter values (not pending/flagged/replied_today)
-    const commentLinks = page.locator('a[href*="/comments?filter="]');
-    const commentCount = await commentLinks.count();
-    for (let i = 0; i < commentCount; i++) {
-      const href = await commentLinks.nth(i).getAttribute('href');
-      expect(href).toMatch(/filter=(needs_action|all|auto_replied)/);
-    }
-
-    // All message filter links must also use valid values
-    const messageLinks = page.locator('a[href*="/messages?filter="]');
-    const messageCount = await messageLinks.count();
-    for (let i = 0; i < messageCount; i++) {
-      const href = await messageLinks.nth(i).getAttribute('href');
-      expect(href).toMatch(/filter=(needs_action|all|auto_replied)/);
-    }
-  });
-
-  test('should show proper empty state for messages when all stats are zero', async ({ page }) => {
-    // Override messages stats to return all zeros
-    await page.route('**/api/messages/stats**', async (route) => {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ total: 0, replied: 0, pending: 0, needsAttention: 0 }),
-      });
-    });
-
-    await page.goto('/en/dashboard');
-    await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
-    ).toBeVisible({ timeout: 15000 });
-
-    // Should show proper empty state text, NOT opacity-50 stat cards
-    await expect(page.locator('text=/No messages yet/i')).toBeVisible({ timeout: 10000 });
   });
 
   test('should show empty state gracefully when APIs fail', async ({ page }) => {
