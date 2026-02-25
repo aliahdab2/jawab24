@@ -596,6 +596,68 @@ describe('AI Service', () => {
             expect(result).toBeNull();
         });
     });
+
+    describe('Post-context scoped exact cache', () => {
+        it('should produce different cache keys for different posts on the same page', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            // Same comment on post about shoes
+            await service.saveToCache('What is the price?', 'Shoes cost $50', 'en', 'page-1', undefined, 1, 'Check out our new shoes!');
+            const keyShoes = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            // Same comment on post about bags
+            await service.saveToCache('What is the price?', 'Bags cost $80', 'en', 'page-1', undefined, 1, 'Check out our new bags!');
+            const keyBags = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(keyShoes).not.toBe(keyBags);
+        });
+
+        it('should produce same cache key for same post content', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            await service.saveToCache('What is the price?', 'Shoes cost $50', 'en', 'page-1', undefined, 1, 'New shoes available!');
+            const key1 = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('What is the price?', 'Shoes cost $50', 'en', 'page-1', undefined, 1, 'New shoes available!');
+            const key2 = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(key1).toBe(key2);
+        });
+
+        it('should handle DMs without post context (postMessage undefined)', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            await service.saveToCache('Hello', 'Hi there', 'en', 'page-1', undefined, 1, undefined);
+            const key1 = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('Hello', 'Hi there', 'en', 'page-1', undefined, 1, undefined);
+            const key2 = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(key1).toBe(key2);
+        });
+
+        it('should differentiate between no post and a specific post', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            // DM (no post context)
+            await service.saveToCache('What is the price?', 'General price info', 'en', 'page-1', undefined, 1, undefined);
+            const keyNoPost = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            // Comment on a post
+            await service.saveToCache('What is the price?', 'Product X costs $50', 'en', 'page-1', undefined, 1, 'Product X now available!');
+            const keyWithPost = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(keyNoPost).not.toBe(keyWithPost);
+        });
+    });
 });
 
 describe('AI Service - Semantic Cache Integration', () => {

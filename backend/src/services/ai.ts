@@ -33,10 +33,11 @@ export class AiService {
     }
 
     /**
-     * Generate a hash for a comment to use as cache key
-     * Includes pageId and kbActiveVersion to prevent cross-page and stale-KB cache collisions
+     * Generate a hash for a comment to use as cache key.
+     * Includes pageId, kbActiveVersion, and postMessage to prevent cross-page,
+     * stale-KB, and cross-post cache collisions.
      */
-    private hashComment(comment: string, language?: string, pageId?: string, kbActiveVersion?: number | null): string {
+    private hashComment(comment: string, language?: string, pageId?: string, kbActiveVersion?: number | null, postMessage?: string): string {
         // Remove punctuation, emojis, and extra whitespace to increase cache hits
         const normalized = comment
             .toLowerCase()
@@ -44,20 +45,21 @@ export class AiService {
             .replace(/\s+/g, ' ') // Collapse multiple spaces
             .trim();
 
-        const key = `${normalized}:${language || 'auto'}:${pageId || 'global'}:kbv:${kbActiveVersion ?? 0}`;
+        const postCtx = postMessage ? crypto.createHash('md5').update(postMessage).digest('hex').slice(0, 8) : 'nopost';
+        const key = `${normalized}:${language || 'auto'}:${pageId || 'global'}:kbv:${kbActiveVersion ?? 0}:p:${postCtx}`;
         return crypto.createHash('sha256').update(key).digest('hex');
     }
 
     /**
      * Check cache for existing reply (returns full AI metadata when available)
      */
-    async checkCache(comment: string, language?: string, pageId?: string, kbActiveVersion?: number | null): Promise<{ reply: string; intent?: string; confidence?: string; flags?: string[] } | null> {
+    async checkCache(comment: string, language?: string, pageId?: string, kbActiveVersion?: number | null, postMessage?: string): Promise<{ reply: string; intent?: string; confidence?: string; flags?: string[] } | null> {
         if (!config.ai.cacheEnabled) {
             return null;
         }
 
         return Sentry.startSpan({ name: 'ai.cache.exact', op: 'cache.get' }, async () => {
-            const hash = this.hashComment(comment, language, pageId, kbActiveVersion);
+            const hash = this.hashComment(comment, language, pageId, kbActiveVersion, postMessage);
             const cacheKey = `cache:ai_reply:${hash}`;
 
             try {
@@ -131,13 +133,14 @@ export class AiService {
         language?: string,
         pageId?: string,
         metadata?: { intent?: string; confidence?: string; flags?: string[] },
-        kbActiveVersion?: number | null
+        kbActiveVersion?: number | null,
+        postMessage?: string
     ): Promise<void> {
         if (!config.ai.cacheEnabled) {
             return;
         }
 
-        const hash = this.hashComment(comment, language, pageId, kbActiveVersion);
+        const hash = this.hashComment(comment, language, pageId, kbActiveVersion, postMessage);
         const cacheKey = `cache:ai_reply:${hash}`;
         const cacheData = JSON.stringify({ reply, intent: metadata?.intent, confidence: metadata?.confidence, flags: metadata?.flags });
 
@@ -179,12 +182,13 @@ export class AiService {
     async generateReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
         const pageId = request.context?.pageId;
         const kbActiveVersion = request.context?.kbActiveVersion;
+        const postMessage = request.context?.postMessage;
 
         const userId = request.context?.userId;
         const pipeline = request.context?.pipeline;
 
-        // Layer 1: Exact cache (scoped per page + KB version to avoid stale replies)
-        const cachedData = await this.checkCache(request.comment, request.language, pageId, kbActiveVersion);
+        // Layer 1: Exact cache (scoped per page + KB version + post context)
+        const cachedData = await this.checkCache(request.comment, request.language, pageId, kbActiveVersion, postMessage);
         if (cachedData) {
             // Fire-and-forget: log zero-cost cache hit
             if (userId) {
@@ -291,8 +295,8 @@ export class AiService {
                 flags: response.data.flags,
             };
 
-            // Save to exact cache (version-scoped so KB updates invalidate stale entries)
-            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, aiMetadata, kbActiveVersion);
+            // Save to exact cache (scoped by KB version + post context)
+            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, aiMetadata, kbActiveVersion, postMessage);
 
             // Fire-and-forget: log real token usage
             if (userId) {
