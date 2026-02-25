@@ -17,7 +17,7 @@ import { redis } from '../lib/redis';
 
 export type EcommercePlatform = 'shopify' | 'salla' | 'zid';
 
-export const KB_MAX_CHARS = 1500; // Must match ai-worker's KB_MAX_CHARS
+export const KB_MAX_CHARS = 4000; // Must match ai-worker's KB_MAX_CHARS
 
 // --- Store CRUD ---
 

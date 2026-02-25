@@ -483,4 +483,32 @@ describe('matchesKeyword', () => {
         expect(() => matchesKeyword('price is $10.00', '$10.00')).not.toThrow();
         expect(() => matchesKeyword('call (555) 123', '(555)')).not.toThrow();
     });
+
+    // Arabic broken plural matching (root-consonant tier)
+    it('matches Arabic keyword against broken plural form (سعر ↔ الاسعار)', () => {
+        // سعر (price) should match الاسعار (the prices) via root-consonant matching
+        expect(matchesKeyword('الاسعار', 'سعر')).toBe(true);
+        expect(matchesKeyword('ما هي الاسعار', 'سعر')).toBe(true);
+    });
+
+    it('matches Arabic keyword against broken plural (ثمن ↔ اثمان)', () => {
+        expect(matchesKeyword('اثمان', 'ثمن')).toBe(true);
+    });
+
+    it('matches Arabic keyword with ال prefix on text', () => {
+        // الاسعار → strip ال → اسعار → strip alif → سعر
+        expect(matchesKeyword('الاسعار', 'سعر')).toBe(true);
+    });
+
+    it('does NOT match short Arabic keywords via root matching (< 3 root consonants)', () => {
+        // Short keywords (< 3 chars after alif stripping) should not use root matching
+        // to avoid false positives
+        expect(matchesKeyword('الاسعار', 'سر')).toBe(false);
+    });
+
+    it('still matches Arabic keyword via direct substring (tier 1)', () => {
+        // Direct substring should still work
+        expect(matchesKeyword('كم السعر', 'سعر')).toBe(true);
+        expect(matchesKeyword('بكم', 'بكم')).toBe(true);
+    });
 });

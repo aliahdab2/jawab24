@@ -53,7 +53,7 @@ export const config = {
     },
 
     // RAG mode: 'off' = static KB, 'shadow' = run RAG but use static KB, 'on' = full RAG
-    ragMode: (process.env.RAG_MODE || 'off') as 'off' | 'shadow' | 'on',
+    ragMode: (process.env.RAG_MODE || 'on') as 'off' | 'shadow' | 'on',
 
     // Shopify App
     shopify: {

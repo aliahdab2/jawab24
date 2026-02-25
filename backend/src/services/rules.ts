@@ -11,18 +11,49 @@ function escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Strip alif (ا) from a string — used to compare Arabic root consonants */
+function stripAlif(s: string): string {
+    return s.replace(/\u0627/g, '');
+}
+
 /**
  * Match a keyword against text with proper boundary handling.
- * - English keywords: word-boundary regex (\b) to avoid "price" matching "surprise"
- * - Arabic keywords: substring matching (Arabic morphology expects partial stem matching)
+ *
+ * English keywords: word-boundary regex (\b) to avoid "price" matching "surprise".
+ *
+ * Arabic keywords (two-tier):
+ *  1. Substring match (fast path) — works for most cases including prefixed forms.
+ *  2. Root-consonant match — handles broken plurals where alif is inserted
+ *     between root letters (e.g., سعر ↔ اسعار, ثمن ↔ اثمان).
+ *     We strip the definite article "ال" and all alif characters, then
+ *     compare consonant skeletons. Requires ≥ 3 root consonants remaining
+ *     to avoid false positives.
+ *
  * Both sides are pre-normalized with normalizeArabic() before this is called.
  */
 export function matchesKeyword(normalizedText: string, normalizedKeyword: string): boolean {
     if (!normalizedKeyword) return false;
 
-    // Arabic keywords: use substring matching (stems naturally overlap)
     if (ARABIC_RE.test(normalizedKeyword)) {
-        return normalizedText.includes(normalizedKeyword);
+        // Tier 1: direct substring matching (handles prefixed forms, exact stems)
+        if (normalizedText.includes(normalizedKeyword)) return true;
+
+        // Tier 2: root-consonant matching for broken plurals
+        // Only for keywords with ≥ 3 chars (avoids matching very short words)
+        if (normalizedKeyword.length >= 3) {
+            const keywordRoot = stripAlif(normalizedKeyword);
+            // After stripping alif, require ≥ 3 consonants to prevent loose matches
+            if (keywordRoot.length >= 3) {
+                const words = normalizedText.split(/\s+/);
+                for (const word of words) {
+                    // Strip definite article "ال" prefix, then strip alif
+                    const wordRoot = stripAlif(word.replace(/^ال/, ''));
+                    if (wordRoot.includes(keywordRoot)) return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     // English/Latin keywords: word-boundary matching

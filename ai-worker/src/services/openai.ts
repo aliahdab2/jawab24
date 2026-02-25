@@ -3,8 +3,8 @@ import * as Sentry from '@sentry/node';
 import { config } from '../config';
 
 // Token budget constants
-const KB_MAX_CHARS = 1500;       // ~400 tokens — prevents catalog-sized KB from nuking costs
-const MAX_INPUT_TOKENS = 2000;   // Hard cap on total input tokens (system + history + user message)
+const KB_MAX_CHARS = 4000;       // ~1150 tokens — static KB fallback limit (RAG bypasses this)
+const MAX_INPUT_TOKENS = 4000;   // Hard cap on total input tokens (system + history + user message)
 const PROMPT_VERSION = 'v4';     // Bump when prompt structure changes (useful for cache diagnostics)
 
 /** Conservative token estimate: ~3.5 chars per token (safe across Latin + Arabic) */
