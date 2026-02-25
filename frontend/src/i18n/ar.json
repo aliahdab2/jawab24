@@ -1136,7 +1136,7 @@
   "admin.playground.clearContext": "مسح محتوى المنشور",
   "admin.playground.expandHistory": "توسيع سجل المحادثة",
   "admin.playground.collapseHistory": "طي سجل المحادثة",
-  "admin.playground.historyCount_one": "رسالة واحدة في السجل",
+  "admin.playground.historyCount_one": "{{count}} رسالة في السجل",
   "admin.playground.historyCount_other": "{{count}} رسائل في السجل",
   "admin.playground.emptyTitle": "ساحة تجريب الذكاء الاصطناعي",
   "admin.playground.emptyDescription": "جرّب كيف يرد جواب٢٤ على رسائل العملاء باستخدام قاعدة المعرفة",
