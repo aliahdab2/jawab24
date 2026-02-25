@@ -237,7 +237,7 @@ test.describe('Dashboard Page', () => {
     await expect(page.getByText(/4.*items need your attention/i)).toBeVisible({ timeout: 15000 });
 
     // Review Now CTA should be visible
-    await expect(page.getByText(en['dashboard.smartBanner.reviewNow'])).toBeVisible();
+    await expect(page.getByText(en['dashboard.smartBanner.reviewNow']).first()).toBeVisible();
   });
 
   test('should show all-caught-up banner when no attention needed', async ({ page }) => {
