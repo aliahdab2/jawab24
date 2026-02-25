@@ -927,6 +927,160 @@ describe('ReplyGenerator - Template Priority Guard', () => {
     });
 });
 
+// --- Template Dedup for DMs ---
+// When the same template text was already sent to a sender in a DM conversation,
+// skip the template and let AI handle the follow-up with conversation context.
+
+describe('ReplyGenerator - Template Dedup for DMs', () => {
+    let generator: ReplyGenerator;
+
+    const dmContext = {
+        workspaceId: 'ws-123',
+        userId: 'user-123',
+        text: 'تفاصيل الاسعار',
+        pageName: 'Test Page',
+        pageId: 'page-1',
+        senderId: 'sender-1',
+    };
+
+    const templateReplyText = 'أسعارنا تبدأ من ٩ دولار شهرياً';
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        generator = new ReplyGenerator();
+    });
+
+    it('first DM: template fires when no conversation history', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { messagesService } = await import('../../src/services/messages');
+        const { aiService } = await import('../../src/services/ai');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1', templateId: 'template-1', keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1', name: 'Price', message: templateReplyText, active: true,
+        } as any);
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValue([]);
+
+        const result = await generator.generateForMessage(dmContext, true);
+
+        expect(result.replyMethod).toBe('template');
+        expect(result.replyText).toBe(templateReplyText);
+        expect(aiService.generateReply).not.toHaveBeenCalled();
+    });
+
+    it('repeat DM: same template text in history → AI takes over', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { messagesService } = await import('../../src/services/messages');
+        const { aiService } = await import('../../src/services/ai');
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1', templateId: 'template-1', keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1', name: 'Price', message: templateReplyText, active: true,
+        } as any);
+        // History already contains the exact same template reply
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+            { role: 'user', content: 'عطيني السعر', timestamp: new Date() },
+            { role: 'assistant', content: templateReplyText, timestamp: new Date() },
+        ] as any);
+        vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+            allowed: true, limit: 1500, used: 0, remaining: 1500,
+        } as any);
+        vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+        vi.mocked(aiService.generateReply).mockResolvedValue({
+            reply: 'الباقة التجريبية ٩ دولار، باقة الأعمال ٢٩ دولار. ايش الباقة اللي تناسبك؟',
+            language: 'ar', cached: false, intent: 'QUESTION', confidence: 'high', flags: [],
+        });
+
+        const result = await generator.generateForMessage(dmContext, true);
+
+        // Template was skipped because it's a repeat — AI handled it
+        expect(result.replyMethod).toBe('ai');
+        expect(aiService.generateReply).toHaveBeenCalled();
+    });
+
+    it('different template: fires even with history from another template', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { messagesService } = await import('../../src/services/messages');
+        const { aiService } = await import('../../src/services/ai');
+
+        const differentTemplateText = 'ساعات العمل من ٩ صباحاً لـ ٥ مساءً';
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-2', templateId: 'template-2', keywords: ['ساعات'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-2', name: 'Hours', message: differentTemplateText, active: true,
+        } as any);
+        // History has a DIFFERENT template reply (the pricing one)
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+            { role: 'user', content: 'عطيني السعر', timestamp: new Date() },
+            { role: 'assistant', content: templateReplyText, timestamp: new Date() },
+        ] as any);
+
+        const result = await generator.generateForMessage(
+            { ...dmContext, text: 'شو ساعات العمل' }, true,
+        );
+
+        // Different template text → not a repeat → template fires
+        expect(result.replyMethod).toBe('template');
+        expect(result.replyText).toBe(differentTemplateText);
+        expect(aiService.generateReply).not.toHaveBeenCalled();
+    });
+
+    it('AI disabled: template always fires (no dedup) even with history', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { messagesService } = await import('../../src/services/messages');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1', templateId: 'template-1', keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1', name: 'Price', message: templateReplyText, active: true,
+        } as any);
+        // Even though history has the same reply, AI is disabled so dedup is skipped
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+            { role: 'assistant', content: templateReplyText, timestamp: new Date() },
+        ] as any);
+
+        const result = await generator.generateForMessage(dmContext, false);
+
+        // AI disabled → dedup not checked → template fires as-is
+        expect(result.replyMethod).toBe('template');
+        expect(result.replyText).toBe(templateReplyText);
+    });
+
+    it('no senderId: template fires (no dedup possible)', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { messagesService } = await import('../../src/services/messages');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1', templateId: 'template-1', keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1', name: 'Price', message: templateReplyText, active: true,
+        } as any);
+
+        // No senderId → can't check conversation history → dedup skipped
+        const contextNoSender = { ...dmContext, senderId: undefined };
+        const result = await generator.generateForMessage(contextNoSender, true);
+
+        expect(result.replyMethod).toBe('template');
+        expect(result.replyText).toBe(templateReplyText);
+        // getConversationHistory should NOT be called when senderId is missing
+        expect(messagesService.getConversationHistory).not.toHaveBeenCalled();
+    });
+});
+
 // --- shouldSkipReply tests ---
 
 import { shouldSkipReply } from '../../src/services/reply/generator';

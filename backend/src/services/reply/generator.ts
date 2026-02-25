@@ -165,7 +165,9 @@ export class ReplyGenerator {
         // Use templateMatchText (latest message) for keyword matching to avoid
         // stale consolidated messages hijacking the user's current intent.
         const templateResult = await this.tryTemplateMatch(workspaceId, context.templateMatchText || text);
-        if (templateResult) return templateResult;
+        if (templateResult && !await this.isRepeatTemplate(templateResult, aiEnabled, pageId, senderId)) {
+            return templateResult;
+        }
 
         // 2. If no template, use AI with conversation context
         if (aiEnabled) {
@@ -262,6 +264,31 @@ export class ReplyGenerator {
             });
             return { effectiveKB: staticKB };
         }
+    }
+
+    /**
+     * Check if the same template text was already sent to this sender in conversation history.
+     * DM-only dedup: avoids sending the same canned reply twice when the customer
+     * asks about the same topic again. When true, the pipeline skips the template
+     * and lets AI handle the follow-up with full conversation context.
+     */
+    private async isRepeatTemplate(
+        result: GenerateReplyResult,
+        aiEnabled: boolean,
+        pageId?: string,
+        senderId?: string,
+    ): Promise<boolean> {
+        // Only dedup in DMs when AI can handle the fallback
+        if (!aiEnabled || !pageId || !senderId || !result.replyText) return false;
+
+        const history = await messagesService.getConversationHistory(pageId, senderId, 6);
+        const isRepeat = history.some(m => m.role === 'assistant' && m.content === result.replyText);
+
+        if (isRepeat) {
+            this.logger.debug('[Generator] Template dedup: skipping repeated template for DM');
+        }
+
+        return isRepeat;
     }
 
     /**
