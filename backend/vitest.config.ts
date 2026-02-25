@@ -29,6 +29,9 @@ export default defineConfig({
         'src/types/payment.ts',
         'src/types/settings.ts',
         'src/services/kb/interfaces.ts',
+        // KB infrastructure (requires OpenAI API / pgvector extension)
+        'src/services/kb/embedding.ts',
+        'src/services/kb/pgvector-store.ts',
         // BullMQ queue/worker setup (requires Redis connection)
         'src/lib/ecommerceSyncQueue.ts',
         'src/workers/ecommerceSyncWorker.ts',
