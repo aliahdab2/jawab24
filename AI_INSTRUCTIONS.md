@@ -463,6 +463,19 @@ npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility
 
 10. **UI components must enforce accessibility by default** — The `Input` and `Textarea` components in `components/ui/` auto-generate `id` via `useId()` and link `<label htmlFor>`. When creating or modifying UI wrapper components for form elements, always include this pattern so consumers get accessibility for free without remembering to pass `id`.
 
+11. **E2E tests must import translation JSON files — never hardcode translated strings** — Import `en.json` and `ar.json` in E2E test files and use `en['key']` / `ar['key']` for all UI text assertions. This prevents tests from breaking when translations change and keeps tests aligned with the single source of truth.
+   ```typescript
+   // ❌ WRONG - hardcoded strings break when translations change
+   await expect(page.locator('h1').filter({ hasText: 'Reply Rules' })).toBeVisible();
+   await expect(page.locator('h1').filter({ hasText: /Auto Rules|قواعد الرد/i })).toBeVisible();
+
+   // ✅ CORRECT - import from translation files
+   import en from '../src/i18n/en.json';
+   import ar from '../src/i18n/ar.json';
+
+   await expect(page.locator('h1').filter({ hasText: en['rules.title'] })).toBeVisible();
+   ```
+
 ---
 
 ## 📁 Project Structure
@@ -571,11 +584,9 @@ This section documents known issues, technical debt, and production readiness ga
 
 ### Testing Gaps
 
-1. **Thin E2E test coverage**
-   - Status: Only `payment.spec.ts` and `dashboard.spec.ts` exist
-   - Missing: Settings, login, templates, comments, messages pages
-   - Files: `frontend/e2e/` directory
-   - Impact: Major features lack automated E2E testing
+1. **~~Thin E2E test coverage~~ — RESOLVED**
+   - Full E2E coverage: comments, dashboard, landing, login, messages, pages, payment, pricing, rules, settings, templates, visual
+   - All tests import from `en.json`/`ar.json` instead of hardcoding translated strings
 
 2. **No visual regression testing**
    - Status: No visual regression tests configured
@@ -687,6 +698,7 @@ return (
 | Inline `useX()` hook in a page | Check `frontend/src/hooks/` first, create shared hook if missing |
 | `<input>` or `<textarea>` without `aria-label` or linked `<label>` | Use UI components (`Input`, `Textarea`) which auto-link labels, or add `aria-label={t('...')}` |
 | Hardcoded English in `aria-label` | Use `aria-label={t('key')}` — screen readers need translated labels too |
+| Hardcoded translated strings in E2E tests | Import `en.json`/`ar.json` and use `en['key']`/`ar['key']` — tests break when translations change |
 
 ---
 
