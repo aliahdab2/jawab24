@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import en from '../src/i18n/en.json';
 
 /**
  * Dashboard E2E Tests
@@ -181,7 +182,7 @@ test.describe('Dashboard Page', () => {
 
     // Dashboard header must be visible - en.json: "dashboard.title" = "Home", ar.json: "الرئيسية"
     await expect(
-      page.locator('h1').filter({ hasText: /Home|الرئيسية/i }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Comment stats section should render with actual numbers (not just the icon)
@@ -200,7 +201,7 @@ test.describe('Dashboard Page', () => {
 
     // Wait for dashboard content to render (not networkidle — Next.js HMR keeps connections open)
     await expect(
-      page.locator('h1').filter({ hasText: /Home|الرئيسية/i }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // The page should have meaningful text content, not just an image
@@ -258,7 +259,7 @@ test.describe('Dashboard Page', () => {
 
     // Header should be visible
     await expect(
-      page.locator('h1').filter({ hasText: /Home|الرئيسية/i }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
@@ -309,7 +310,7 @@ test.describe('Dashboard Page', () => {
 
     await page.goto('/en/dashboard');
     await expect(
-      page.locator('h1').filter({ hasText: /Home|الرئيسية/i }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Should show proper empty state text, NOT opacity-50 stat cards

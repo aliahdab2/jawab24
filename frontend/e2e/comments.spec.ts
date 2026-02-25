@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import en from '../src/i18n/en.json';
 
 /**
  * Comments Page E2E Tests
@@ -105,7 +106,7 @@ test.describe('Comments Page', () => {
     await page.goto('/en/comments');
 
     await expect(page).toHaveTitle(/Comments/i, { timeout: 15000 });
-    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').filter({ hasText: en['comments.title'] }).first()).toBeVisible({ timeout: 15000 });
 
     // Should show comment text from mock data
     await expect(page.locator('text=What are your business hours?').first()).toBeVisible({ timeout: 10000 });
@@ -120,25 +121,25 @@ test.describe('Comments Page', () => {
     await page.goto('/en/comments');
 
     // Wait for page to load
-    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').filter({ hasText: en['comments.title'] }).first()).toBeVisible({ timeout: 15000 });
 
     // Should show "Needs Action" filter chip with unreplied count
-    await expect(page.locator('button').filter({ hasText: /Needs Action/i }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('button').filter({ hasText: en['comments.needsAction'] }).first()).toBeVisible({ timeout: 10000 });
 
     // Should show "All" filter chip
-    await expect(page.locator('button').filter({ hasText: /All/i }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('button').filter({ hasText: en['common.all'] }).first()).toBeVisible({ timeout: 10000 });
 
     // Should show "Auto-replied" filter chip
-    await expect(page.locator('button').filter({ hasText: /Auto-replied/i }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('button').filter({ hasText: en['comments.autoReplied'] }).first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should default to Needs Action filter', async ({ page }) => {
     await page.goto('/en/comments');
 
-    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').filter({ hasText: en['comments.title'] }).first()).toBeVisible({ timeout: 15000 });
 
     // The "Needs Action" chip should have active styling (brand color)
-    const needsActionBtn = page.locator('button').filter({ hasText: /Needs Action/i }).first();
+    const needsActionBtn = page.locator('button').filter({ hasText: en['comments.needsAction'] }).first();
     await expect(needsActionBtn).toBeVisible({ timeout: 10000 });
 
     // URL should NOT have filter=all param (needs_action is default)
@@ -148,7 +149,7 @@ test.describe('Comments Page', () => {
   test('should show post context on comment cards', async ({ page }) => {
     await page.goto('/en/comments');
 
-    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').filter({ hasText: en['comments.title'] }).first()).toBeVisible({ timeout: 15000 });
 
     // Should show post message text from mock data
     await expect(page.locator('text=Check out our new schedule!').first()).toBeVisible({ timeout: 10000 });
@@ -158,18 +159,18 @@ test.describe('Comments Page', () => {
     await page.goto('/en/comments?filter=pending');
 
     // Should NOT crash — should fall back to "Needs Action" filter
-    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').filter({ hasText: en['comments.title'] }).first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
 
     // The "Needs Action" chip should be active (fallback from invalid "pending")
-    const needsActionBtn = page.locator('button[aria-pressed="true"]').filter({ hasText: /Needs Action/i });
+    const needsActionBtn = page.locator('button[aria-pressed="true"]').filter({ hasText: en['comments.needsAction'] });
     await expect(needsActionBtn).toBeVisible({ timeout: 10000 });
   });
 
   test('should handle legacy filter=flagged param without crashing', async ({ page }) => {
     await page.goto('/en/comments?filter=flagged');
 
-    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').filter({ hasText: en['comments.title'] }).first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
 

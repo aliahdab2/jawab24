@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
+import en from '../src/i18n/en.json';
+import ar from '../src/i18n/ar.json';
 
 /**
  * Settings Page E2E Tests
@@ -75,7 +77,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     await expect(page).toHaveTitle(/Settings.*Jawab24/i);
-    await expect(page.locator('h1').filter({ hasText: /Settings/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').filter({ hasText: en['settings.title'] }).first()).toBeVisible({ timeout: 15000 });
 
     // Should show language selector (visible by default)
     await expect(page.locator('text=English').first()).toBeVisible({ timeout: 10000 });
@@ -85,7 +87,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     await expect(
-      page.locator('button').filter({ hasText: /Save/i }).first()
+      page.locator('button').filter({ hasText: en['common.save'] }).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
@@ -93,7 +95,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     await expect(
-      page.locator('text=Reply to Comments').first()
+      page.getByText(en['settings.commentsAutoReply']).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Toggle should be visible with role="switch"
@@ -105,7 +107,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     await expect(
-      page.locator('text=Reply to Messages').first()
+      page.getByText(en['settings.messagesAutoReply']).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
@@ -113,13 +115,13 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Find and click "Show Advanced Settings" button
-    const advancedBtn = page.locator('button').filter({ hasText: /Advanced/i }).first();
+    const advancedBtn = page.locator('button').filter({ hasText: en['settings.advancedMode'] }).first();
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 
     // Business Hours heading should now be visible
     await expect(
-      page.locator('h4').filter({ hasText: /Business Hours/i }).first()
+      page.locator('h4').filter({ hasText: en['settings.businessHours'] }).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -146,13 +148,13 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Open advanced settings
-    const advancedBtn = page.locator('button').filter({ hasText: /Advanced/i }).first();
+    const advancedBtn = page.locator('button').filter({ hasText: en['settings.advancedMode'] }).first();
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 
     // Business Hours heading should be visible
     await expect(
-      page.locator('h4').filter({ hasText: /Business Hours/i }).first()
+      page.locator('h4').filter({ hasText: en['settings.businessHours'] }).first()
     ).toBeVisible({ timeout: 10000 });
 
     // Time selects should show the start/end time labels
@@ -163,7 +165,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Save button should initially be disabled (no changes)
-    const saveBtn = page.locator('button').filter({ hasText: /Save/i }).first();
+    const saveBtn = page.locator('button').filter({ hasText: en['common.save'] }).first();
     await expect(saveBtn).toBeVisible({ timeout: 15000 });
     await expect(saveBtn).toBeDisabled();
 
@@ -184,13 +186,13 @@ test.describe('Settings Page', () => {
     await firstToggle.click();
 
     // Click save
-    const saveBtn = page.locator('button').filter({ hasText: /Save/i }).first();
+    const saveBtn = page.locator('button').filter({ hasText: en['common.save'] }).first();
     await expect(saveBtn).toBeEnabled({ timeout: 5000 });
     await saveBtn.click();
 
     // Should show "Saved" state
     await expect(
-      page.locator('button').filter({ hasText: /Saved/i }).first()
+      page.locator('button').filter({ hasText: en['settings.settingsSaved'] }).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -208,9 +210,10 @@ test.describe('Settings Page', () => {
     // Page title should contain Arabic or Settings
     await expect(page).toHaveTitle(/Jawab24/i, { timeout: 15000 });
 
-    // Arabic heading should be visible
+    // Arabic heading should be visible (accept English fallback during hydration)
+    const titlePattern = new RegExp(`${ar['settings.title']}|${en['settings.title']}`, 'i');
     await expect(
-      page.locator('h1').filter({ hasText: /الإعدادات|Settings/i }).first()
+      page.locator('h1').filter({ hasText: titlePattern }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Arabic content should be present
@@ -222,12 +225,12 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Open advanced settings
-    const advancedBtn = page.locator('button').filter({ hasText: /Advanced/i }).first();
+    const advancedBtn = page.locator('button').filter({ hasText: en['settings.advancedMode'] }).first();
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 
     // Find the greeting message textarea (last textarea on the page, in the greeting card)
-    const greetingHeading = page.locator('h4').filter({ hasText: /First Message/i }).first();
+    const greetingHeading = page.locator('h4').filter({ hasText: en['settings.greetingMessage.title'] }).first();
     await expect(greetingHeading).toBeVisible({ timeout: 10000 });
 
     // The textarea is a sibling of the heading's parent div, inside the same card
@@ -239,7 +242,7 @@ test.describe('Settings Page', () => {
     await expect(textarea).toHaveValue('Welcome to our store!');
 
     // Save button should be enabled after typing
-    const saveBtn = page.locator('button').filter({ hasText: /Save/i }).first();
+    const saveBtn = page.locator('button').filter({ hasText: en['common.save'] }).first();
     await expect(saveBtn).toBeEnabled({ timeout: 5000 });
   });
 
@@ -273,11 +276,11 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Open advanced settings
-    const advancedBtn = page.locator('button').filter({ hasText: /Advanced/i }).first();
+    const advancedBtn = page.locator('button').filter({ hasText: en['settings.advancedMode'] }).first();
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 
-    const greetingHeading = page.locator('h4').filter({ hasText: /First Message/i }).first();
+    const greetingHeading = page.locator('h4').filter({ hasText: en['settings.greetingMessage.title'] }).first();
     const textarea = greetingHeading.locator('../../..').locator('textarea');
     await expect(textarea).toBeVisible();
 

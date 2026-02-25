@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import en from '../src/i18n/en.json';
 
 /**
  * Pages Page E2E Tests
@@ -120,7 +121,7 @@ test.describe('Pages Page', () => {
 
     // Page header should show "My Pages"
     await expect(
-      page.locator('h1').filter({ hasText: /My Pages|إدارة الصفحات/i }).first()
+      page.locator('h1').filter({ hasText: en['pages.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Page name should be visible
@@ -166,7 +167,7 @@ test.describe('Pages Page', () => {
     await page.goto('/en/pages');
 
     await expect(
-      page.locator('h1').filter({ hasText: /My Pages|إدارة الصفحات/i }).first()
+      page.locator('h1').filter({ hasText: en['pages.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Should not crash — page should have content
@@ -272,7 +273,7 @@ test.describe('Pages Page', () => {
     await page2FbToggle.click();
 
     // Toast should appear with limit message
-    await expect(page.getByText(/Page limit reached|الحد الأقصى/i).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(en['pages.pageLimitReached'], { exact: false }).first()).toBeVisible({ timeout: 5000 });
 
     // Toggle should revert back to OFF
     await expect(page2FbToggle).toHaveAttribute('aria-checked', 'false');
