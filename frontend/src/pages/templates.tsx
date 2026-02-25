@@ -207,6 +207,7 @@ const TemplatesPage: NextPageWithLayout = () => {
 
           <div>
             <Textarea
+              label={t('templates.templateContent')}
               placeholder={t('templates.messagePlaceholder')}
               value={formData.message}
               onChange={(e) => setFormData({ ...formData, message: e.target.value })}
