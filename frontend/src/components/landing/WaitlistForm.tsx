@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from '@/i18n';
 import { publicApi } from '@/lib/api';
 import { toast } from 'sonner';
+import { Mail, Loader2, CheckCircle } from 'lucide-react';
+import clsx from 'clsx';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -16,6 +18,8 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
   const [loading, setLoading] = useState(false);
   const [notified, setNotified] = useState(false);
 
+  const isBanner = variant === 'banner';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!EMAIL_REGEX.test(email)) {
@@ -27,7 +31,7 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
       await publicApi.post('/api/waitlist', { email, feature });
       setNotified(true);
       toast.success(
-        variant === 'banner'
+        isBanner
           ? t('landing.comingSoon.notified')
           : t('landing.features.integrationsNotified'),
       );
@@ -39,57 +43,74 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
   };
 
   if (notified) {
-    return variant === 'banner' ? (
-      <p className="font-bold text-sm sm:text-base">✓ {t('landing.comingSoon.notified')}</p>
-    ) : (
-      <p className="text-brand-600 font-bold text-sm sm:text-base">
-        ✓ {t('landing.features.integrationsNotified')}
-      </p>
-    );
-  }
-
-  if (variant === 'banner') {
     return (
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder={t('landing.comingSoon.placeholder')}
-          required
-          className="px-3 py-1.5 sm:py-2 rounded-full text-surface-900 text-sm sm:text-base border-0 focus:outline-none focus:ring-2 focus:ring-white/50 min-w-0 w-40 sm:w-52"
-          dir="auto"
-          aria-label={t('landing.comingSoon.placeholder')}
+      <div className="flex items-center gap-2 animate-fade-in">
+        <CheckCircle
+          className={clsx(
+            'w-5 h-5 flex-shrink-0',
+            isBanner ? 'text-white' : 'text-brand-600',
+          )}
+          aria-hidden="true"
         />
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex-shrink-0 px-4 py-1.5 sm:py-2 rounded-full bg-white/20 text-white font-bold text-sm sm:text-base hover:bg-white/30 transition-all disabled:opacity-60 border border-white/30"
-        >
-          {loading ? '...' : t('landing.comingSoon.notify')}
-        </button>
-      </form>
+        <p className={clsx('font-bold text-sm sm:text-base', !isBanner && 'text-brand-600')}>
+          {isBanner ? t('landing.comingSoon.notified') : t('landing.features.integrationsNotified')}
+        </p>
+      </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-sm gap-2">
+    <form
+      onSubmit={handleSubmit}
+      className={clsx(
+        'flex items-center rounded-full transition-all duration-200 w-full max-w-sm',
+        isBanner
+          ? 'bg-white shadow-lg shadow-black/10'
+          : 'bg-white border border-surface-200 shadow-sm focus-within:shadow-md focus-within:border-brand-400',
+      )}
+    >
+      <Mail
+        className={clsx(
+          'w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 ms-3 sm:ms-4',
+          isBanner ? 'text-surface-400' : 'text-surface-300',
+        )}
+        aria-hidden="true"
+      />
       <input
         type="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder={t('landing.features.integrationsPlaceholder')}
-        required
-        className="flex-1 min-w-0 px-4 py-2.5 rounded-full border border-surface-200 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-        dir="auto"
-        aria-label={t('landing.features.integrationsPlaceholder')}
+        placeholder={
+          isBanner
+            ? t('landing.comingSoon.placeholder')
+            : t('landing.features.integrationsPlaceholder')
+        }
+        className="flex-1 min-w-0 bg-transparent px-2 sm:px-3 py-2 sm:py-2.5 text-sm sm:text-base text-surface-900 placeholder:text-surface-400 focus:outline-none"
+        dir={email ? 'ltr' : undefined}
+        aria-label={
+          isBanner
+            ? t('landing.comingSoon.placeholder')
+            : t('landing.features.integrationsPlaceholder')
+        }
       />
       <button
         type="submit"
         disabled={loading}
-        className="flex-shrink-0 px-5 py-2.5 sm:px-6 rounded-full bg-surface-900 text-white font-bold text-sm sm:text-base hover:bg-surface-800 hover:shadow-lg transition-all disabled:opacity-60"
+        aria-busy={loading}
+        className={clsx(
+          'flex-shrink-0 flex items-center justify-center rounded-full font-bold text-sm sm:text-base transition-all duration-200',
+          'me-1 sm:me-1.5 px-4 sm:px-5 py-1.5 sm:py-2',
+          isBanner
+            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-sm shadow-amber-500/25'
+            : 'bg-surface-900 text-white hover:bg-surface-800 shadow-sm shadow-surface-900/15',
+          'disabled:opacity-60 disabled:cursor-not-allowed',
+        )}
       >
-        {loading ? '...' : t('landing.features.integrationsNotify')}
+        {loading ? (
+          <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" aria-hidden="true" />
+        ) : (
+          isBanner ? t('landing.comingSoon.notify') : t('landing.features.integrationsNotify')
+        )}
       </button>
     </form>
   );
