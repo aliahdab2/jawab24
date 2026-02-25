@@ -24,7 +24,7 @@ export default function Custom404() {
 
       <div
         dir={isRTL ? 'rtl' : 'ltr'}
-        className="min-h-screen bg-surface-50 flex flex-col items-center justify-center px-4"
+        className="min-h-dvh bg-surface-50 flex flex-col items-center justify-center px-4"
       >
         {/* Brand header */}
         <Link href="/landing" className="flex items-center gap-3 mb-12 group">

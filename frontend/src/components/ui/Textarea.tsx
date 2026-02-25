@@ -1,4 +1,4 @@
-import React, { TextareaHTMLAttributes, forwardRef } from 'react';
+import React, { TextareaHTMLAttributes, forwardRef, useId } from 'react';
 import clsx from 'clsx';
 
 interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'children'> {
@@ -8,14 +8,18 @@ interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, error, helperText, className, ...props }, ref) => {
+  ({ label, error, helperText, className, id, ...props }, ref) => {
+    const generatedId = useId();
+    const textareaId = id || generatedId;
+
     return (
       <div className="w-full">
         {label && (
-          <label className="label">{label}</label>
+          <label htmlFor={textareaId} className="label">{label}</label>
         )}
         <textarea
           ref={ref}
+          id={textareaId}
           className={clsx(
             'input min-h-[100px] resize-y',
             error && 'border-red-500 focus:ring-red-500',

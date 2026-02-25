@@ -459,10 +459,10 @@ const DashboardPage: NextPageWithLayout = () => {
       {/* Comments Stats Section */}
       <div className="mb-8 lg:mb-10">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
+          <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
             {t('comments.title')}
-          </h3>
+          </h2>
           <Link href="/comments" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
             {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
           </Link>
@@ -489,10 +489,10 @@ const DashboardPage: NextPageWithLayout = () => {
       {/* Messages Stats Section */}
       <div className="mb-8 lg:mb-10">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
+          <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageCircle className="w-4 h-4" />
             {t('messages.title')}
-          </h3>
+          </h2>
           <Link href="/messages" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
             {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
           </Link>
@@ -525,10 +525,10 @@ const DashboardPage: NextPageWithLayout = () => {
       {analytics?.totals && (analytics.totals.comments + analytics.totals.messages) > 0 && (
         <div className="mb-8 lg:mb-10">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
+            <h2 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
               <Gauge className="w-4 h-4" />
               {t('dashboard.performance' as TranslationKey)}
-            </h3>
+            </h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
             <StatCard
@@ -623,7 +623,7 @@ const DashboardPage: NextPageWithLayout = () => {
         <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-white" padding="none">
           <div className="p-4 sm:p-5 border-b border-surface-100 flex items-center justify-between gap-4 bg-surface-50/50">
             <div>
-              <h3 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.recentComments')}</h3>
+              <h2 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.recentComments')}</h2>
               <p className="text-sm text-surface-500 mt-0.5">{t('dashboard.latestCommentsDesc')}</p>
             </div>
             {recentComments.length > 0 && (
@@ -696,14 +696,14 @@ const DashboardPage: NextPageWithLayout = () => {
                       </div>
                       <div className="min-w-0 flex-1 text-start">
                         <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                        <h4 className="text-lg sm:text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
+                        <h3 className="text-lg sm:text-2xl font-display font-bold text-surface-900 truncate tracking-tight">
                           {PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}
                           {isTrialing && (
                             <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
                               {t('subscription.trialBadge' as TranslationKey)}
                             </span>
                           )}
-                        </h4>
+                        </h3>
                       </div>
                     </div>
 
@@ -771,7 +771,7 @@ const DashboardPage: NextPageWithLayout = () => {
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-white overflow-hidden">
             <div className="p-5 sm:p-6 border-b border-surface-100 bg-surface-50/50">
-              <h3 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.topPages')}</h3>
+              <h2 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.topPages')}</h2>
               <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.topPagesDesc')}</p>
             </div>
             <div className="divide-y divide-surface-100">

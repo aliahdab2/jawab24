@@ -21,7 +21,7 @@ export default function Custom500() {
         <title>500 - {BRAND_ASSETS.meta.appName}</title>
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-surface-50 flex flex-col items-center justify-center px-4">
+      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-dvh bg-surface-50 flex flex-col items-center justify-center px-4">
         {/* Brand header */}
         <Link href="/landing" className="flex items-center gap-3 mb-10 group">
           <BrandLogo
