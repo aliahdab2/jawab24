@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 
 // Load environment variables from env/backend.env
 dotenv.config({ path: path.resolve(__dirname, '../../../env/backend.env') });
@@ -43,8 +44,8 @@ export const config = {
         serviceUrl: process.env.AI_SERVICE_URL || 'http://localhost:3002',
         enabled: process.env.AI_ENABLED === 'true',
         cacheEnabled: process.env.AI_CACHE_ENABLED !== 'false',
-        // Always use gpt-4o-mini for cost efficiency - not configurable by users
-        model: 'gpt-4o-mini',
+        // Always use DEFAULT_AI_MODEL for cost efficiency - not configurable by users
+        model: DEFAULT_AI_MODEL,
     },
 
     // OpenAI (for KB embeddings — same key as ai-worker)

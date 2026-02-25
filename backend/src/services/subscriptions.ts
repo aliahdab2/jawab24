@@ -653,9 +653,9 @@ export const subscriptionsService = {
         tokensUsed: number | undefined,
         model: string
     ): Promise<void> {
-        // gpt-4o-mini pricing: ~$0.15 per 1M input tokens, ~$0.60 per 1M output tokens
-        // Using blended estimate of ~$0.30 per 1M total tokens
-        const estimatedCost = tokensUsed ? (tokensUsed / 1_000_000) * 0.30 : 0;
+        // gpt-4.1-mini pricing: ~$0.40 per 1M input tokens, ~$1.60 per 1M output tokens
+        // Using blended estimate of ~$0.80 per 1M total tokens
+        const estimatedCost = tokensUsed ? (tokensUsed / 1_000_000) * 0.80 : 0;
 
         await this.logUsageEvent(userId, 'ai_token_usage', {
             tokensUsed: tokensUsed || 0,

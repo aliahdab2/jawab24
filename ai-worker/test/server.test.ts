@@ -14,7 +14,7 @@ vi.mock('../src/lib/sentry', () => ({
 
 vi.mock('../src/config', () => ({
     config: {
-        openai: { model: 'gpt-4o-mini', maxTokens: 300, temperature: 0.8 },
+        openai: { model: 'gpt-4.1-mini', maxTokens: 300, temperature: 0.8 },
     },
 }));
 

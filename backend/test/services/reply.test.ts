@@ -100,7 +100,7 @@ describe('Reply Service', () => {
             defaultReplyLanguage: 'en',
             supportedLanguages: ['en', 'ar'],
             autoDetectLanguage: true,
-            aiModel: 'gpt-4o-mini',
+            aiModel: 'gpt-4.1-mini',
             commentReplyMode: 'public',
             dualReplyNudge: '',
             commentsAutoReply: true,

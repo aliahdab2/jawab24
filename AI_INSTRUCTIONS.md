@@ -275,7 +275,7 @@ greetingMessageSourceLang: varchar('greeting_message_source_lang'),
 **Cost Optimization:**
 - Translation only happens when user saves settings (one-time cost)
 - No translation on every message sent to customers (would be expensive!)
-- Uses cost-effective `gpt-4o-mini` model
+- Uses cost-effective `gpt-4.1-mini` model
 - System prompt enforces consistent, emoji-preserving translations
 
 **User Experience:**

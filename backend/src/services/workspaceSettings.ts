@@ -3,7 +3,7 @@ import { db } from '../db';
 import { workspaces } from '../db/schema';
 import { redis } from '../lib/redis';
 import type { WorkspaceSettings } from '@jawab24/shared';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
@@ -15,7 +15,7 @@ const DEFAULTS: WorkspaceSettings = {
     supportedLanguages: ['en', 'ar'],
     autoDetectLanguage: true,
     aiEnabled: true,
-    aiModel: 'gpt-4o-mini',
+    aiModel: DEFAULT_AI_MODEL,
     commentReplyMode: 'public',
     dualReplyNudge: '',
     commentsAutoReply: true,

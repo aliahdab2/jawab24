@@ -316,6 +316,9 @@ export const REPLY_QUEUE_NAME = 'reply-processing-queue';
 /** Default handoff pause duration (minutes) when a user manually replies to a customer */
 export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 
+/** Default AI model used across backend and ai-worker services */
+export const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
+
 // --- E-commerce Types (Shopify, Salla, Zid) ---
 export interface EcommerceStore {
   id: string;

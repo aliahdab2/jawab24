@@ -7,7 +7,7 @@ import { eq, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 import { redis } from '../lib/redis';
-import { normalizeArabic } from '@jawab24/shared';
+import { normalizeArabic, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
@@ -217,7 +217,7 @@ export class AiService {
         if (cachedData) {
             // Fire-and-forget: log zero-cost cache hit
             if (userId) {
-                this.logUsage({ userId, pageId, model: config.ai.model || 'gpt-4o-mini', tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch(() => {});
+                this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch(() => {});
             }
             return {
                 reply: cachedData.reply,
@@ -328,7 +328,7 @@ export class AiService {
             if (userId) {
                 const tokensIn = response.data.tokensIn ?? 0;
                 const tokensOut = response.data.tokensOut ?? 0;
-                this.logUsage({ userId, pageId, model: config.ai.model || 'gpt-4o-mini', tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
+                this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
             }
 
             // Save to semantic cache (fire-and-forget, non-blocking)

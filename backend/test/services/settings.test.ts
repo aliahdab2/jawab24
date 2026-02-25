@@ -44,7 +44,7 @@ const baseSettings = {
     supportedLanguages: ['en', 'ar'],
     autoDetectLanguage: true,
     aiEnabled: true,
-    aiModel: 'gpt-4o-mini',
+    aiModel: 'gpt-4.1-mini',
     commentReplyMode: 'public' as const,
     commentsAutoReply: true,
     messagesAutoReply: true,

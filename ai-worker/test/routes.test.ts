@@ -25,7 +25,7 @@ vi.mock('../src/lib/sentry', () => ({
 vi.mock('../src/config', () => ({
     config: {
         openai: {
-            model: 'gpt-4o-mini',
+            model: 'gpt-4.1-mini',
             maxTokens: 300,
             temperature: 0.8,
         },
@@ -92,7 +92,7 @@ describe('Routes', () => {
             const body = res.json();
             expect(body.service).toBe('ai-worker');
             expect(body.version).toBe('1.0.0');
-            expect(body.openai.model).toBe('gpt-4o-mini');
+            expect(body.openai.model).toBe('gpt-4.1-mini');
             expect(body.config.maxTokens).toBe(300);
             expect(body.config.temperature).toBe(0.8);
         });

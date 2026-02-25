@@ -4,6 +4,7 @@
  */
 export const AI_PRICING = {
     'gpt-4o-mini': { inputPer1K: 0.00015, outputPer1K: 0.0006 },
+    'gpt-4.1-mini': { inputPer1K: 0.0004, outputPer1K: 0.0016 },
 } as const;
 
 export type ModelName = keyof typeof AI_PRICING;

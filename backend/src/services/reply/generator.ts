@@ -10,6 +10,7 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService } from '../kb/gap-detector';
 import { detectLanguageCode } from '../../utils/language';
+import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive', 'low_confidence'] as const;
@@ -334,7 +335,7 @@ export class ReplyGenerator {
 
         // Log token usage for cost tracking (skip for cached responses)
         if (!aiResponse.cached) {
-            await subscriptionsService.logAiUsage(userId, pageId, aiResponse.tokensUsed, aiResponse.model || 'gpt-4o-mini');
+            await subscriptionsService.logAiUsage(userId, pageId, aiResponse.tokensUsed, aiResponse.model || DEFAULT_AI_MODEL);
         }
 
         return {

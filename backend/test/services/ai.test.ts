@@ -714,7 +714,7 @@ describe('AI Service - Semantic Cache Integration', () => {
 
         vi.doMock('../../src/config', () => ({
             config: {
-                ai: { enabled: true, cacheEnabled: true, serviceUrl: 'http://localhost:3002', model: 'gpt-4o-mini' },
+                ai: { enabled: true, cacheEnabled: true, serviceUrl: 'http://localhost:3002', model: 'gpt-4.1-mini' },
                 openai: { apiKey: overrides.openaiApiKey ?? 'test-key' },
             },
         }));

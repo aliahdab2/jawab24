@@ -63,7 +63,7 @@ const MOCK_USAGE = {
 
 const MOCK_SETTINGS = {
   dashboardLanguage: 'en', defaultReplyLanguage: 'auto', autoDetectLanguage: true,
-  aiEnabled: true, aiModel: 'gpt-4o-mini', notificationsEnabled: true, emailNotifications: false,
+  aiEnabled: true, aiModel: 'gpt-4.1-mini', notificationsEnabled: true, emailNotifications: false,
   webhookRetries: 3, commentReplyMode: 'auto', commentsAutoReply: true, messagesAutoReply: true,
   businessHoursOnly: false, businessHoursStart: '09:00', businessHoursEnd: '17:00',
   awayMessage: '', greetingMessage: '', replyDelay: 0,

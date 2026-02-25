@@ -29,7 +29,7 @@ vi.mock('../src/config', () => ({
     config: {
         openai: {
             apiKey: 'test-api-key',
-            model: 'gpt-4o-mini',
+            model: 'gpt-4.1-mini',
             maxTokens: 150,
             temperature: 0.7,
         },
@@ -138,7 +138,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
         }));
         vi.doMock('../src/config', () => ({
             config: {
-                openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
             },
         }));
 
@@ -175,7 +175,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
         }));
         vi.doMock('../src/config', () => ({
             config: {
-                openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
             },
         }));
 
@@ -209,7 +209,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
         }));
         vi.doMock('../src/config', () => ({
             config: {
-                openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
             },
         }));
 
@@ -237,7 +237,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
         }));
         vi.doMock('../src/config', () => ({
             config: {
-                openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
             },
         }));
 
@@ -270,7 +270,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
         }));
         vi.doMock('../src/config', () => ({
             config: {
-                openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
             },
         }));
 
@@ -306,7 +306,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
         }));
         vi.doMock('../src/config', () => ({
             config: {
-                openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
             },
         }));
 
@@ -330,7 +330,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
         }));
         vi.doMock('../src/config', () => ({
             config: {
-                openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
             },
         }));
 
@@ -369,7 +369,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -403,7 +403,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -439,7 +439,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -478,7 +478,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -505,7 +505,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -542,7 +542,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -577,7 +577,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -596,7 +596,7 @@ describe('OpenAI Service - Conversation Fallback', () => {
 
     it('should return message-specific fallback when conversationHistory is present', async () => {
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: '', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+            config: { openai: { apiKey: '', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -622,7 +622,7 @@ describe('OpenAI Service (unconfigured)', () => {
             config: {
                 openai: {
                     apiKey: '',
-                    model: 'gpt-4o-mini',
+                    model: 'gpt-4.1-mini',
                     maxTokens: 150,
                     temperature: 0.7,
                 },
@@ -645,7 +645,7 @@ describe('OpenAI Service (unconfigured)', () => {
             config: {
                 openai: {
                     apiKey: '',
-                    model: 'gpt-4o-mini',
+                    model: 'gpt-4.1-mini',
                     maxTokens: 150,
                     temperature: 0.7,
                 },
@@ -687,7 +687,7 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
     }
 
@@ -860,7 +860,7 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
 
     it('should use channel=dm for fallback when channel is explicitly dm', async () => {
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: '', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7 } },
+            config: { openai: { apiKey: '', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
@@ -896,7 +896,7 @@ describe('OpenAI Service - Prompt Injection Sanitization', () => {
             })),
         }));
         vi.doMock('../src/config', () => ({
-            config: { openai: { apiKey: 'test-key', model: 'gpt-4o-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
         }));
     }
 

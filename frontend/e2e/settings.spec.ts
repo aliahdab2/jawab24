@@ -12,7 +12,7 @@ const MOCK_SETTINGS = {
   defaultReplyLanguage: 'auto',
   autoDetectLanguage: true,
   aiEnabled: true,
-  aiModel: 'gpt-4o-mini',
+  aiModel: 'gpt-4.1-mini',
   notificationsEnabled: true,
   emailNotifications: false,
   webhookRetries: 3,

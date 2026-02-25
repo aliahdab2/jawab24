@@ -43,9 +43,9 @@ describe('Config', () => {
         expect(config.redis.password).toBeUndefined();
     });
 
-    it('should always use gpt-4o-mini model', async () => {
+    it('should always use gpt-4.1-mini model', async () => {
         const { config } = await import('../src/config');
-        expect(config.openai.model).toBe('gpt-4o-mini');
+        expect(config.openai.model).toBe('gpt-4.1-mini');
     });
 
     it('should parse OPENAI_MAX_TOKENS with default 300', async () => {

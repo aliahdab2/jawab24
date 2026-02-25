@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { settings, workspaceMembers } from '../db/schema';
 import { UserSettings, UpdateSettingsDTO } from '../types';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
@@ -291,7 +291,7 @@ export class SettingsService {
             supportedLanguages: record.supportedLanguages || ['en', 'ar'],
             autoDetectLanguage: record.autoDetectLanguage ?? true,
             aiEnabled: record.aiEnabled ?? true,
-            aiModel: record.aiModel || 'gpt-4o-mini',
+            aiModel: record.aiModel || DEFAULT_AI_MODEL,
             commentReplyMode: (record.commentReplyMode as 'public' | 'private' | 'dual') || 'public',
             commentsAutoReply: record.commentsAutoReply ?? true,
             messagesAutoReply: record.messagesAutoReply ?? true,

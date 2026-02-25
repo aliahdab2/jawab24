@@ -2,6 +2,7 @@ import { db } from '../../db';
 import { pages, posts, comments, templates, settings, notifications, messages, ecommerceStores, ecommerceProducts } from '../../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
+import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 
 /**
  * Demo settings configuration
@@ -13,7 +14,7 @@ const DEMO_SETTINGS = {
     supportedLanguages: ['ar', 'en'],
     autoDetectLanguage: true,
     aiEnabled: true,
-    aiModel: 'gpt-4o-mini',
+    aiModel: DEFAULT_AI_MODEL,
     // Dual mode: sends private message + short public nudge
     commentReplyMode: 'dual',
     dualReplyNudge: 'تم إرسال التفاصيل برسالة خاصة 📩',

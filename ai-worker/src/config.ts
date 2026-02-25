@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 
 dotenv.config();
 
@@ -14,11 +15,11 @@ export const config = {
         password: process.env.REDIS_PASSWORD || undefined,
     },
 
-    // OpenAI - Always use gpt-4o-mini for cost efficiency
+    // OpenAI - Always use gpt-4.1-mini for cost efficiency
     openai: {
         apiKey: process.env.OPENAI_API_KEY || '',
         // Fixed model - not configurable for cost control
-        model: 'gpt-4o-mini',
+        model: DEFAULT_AI_MODEL,
         maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '300', 10),
         temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
         timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10),

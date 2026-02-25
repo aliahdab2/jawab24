@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 
 // 1. Users Table
 export const users = pgTable('users', {
@@ -281,7 +281,7 @@ export const settings = pgTable('settings', {
     supportedLanguages: text('supported_languages').array().default(sql`ARRAY['en', 'ar']`),
     autoDetectLanguage: boolean('auto_detect_language').default(true),
     aiEnabled: boolean('ai_enabled').default(true),
-    aiModel: varchar('ai_model', { length: 100 }).default('gpt-4o-mini'),
+    aiModel: varchar('ai_model', { length: 100 }).default(DEFAULT_AI_MODEL),
     // Auto-reply settings
     commentReplyMode: varchar('comment_reply_mode', { length: 20 }).default('public'), // 'public', 'private', or 'dual'
     dualReplyNudge: text('dual_reply_nudge').default(''),
@@ -763,7 +763,7 @@ export const aiUsageLog = pgTable('ai_usage_log', {
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
     workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),
-    model: varchar('model', { length: 100 }).notNull(),     // e.g. 'gpt-4o-mini'
+    model: varchar('model', { length: 100 }).notNull(),     // e.g. 'gpt-4.1-mini'
     tokensIn: integer('tokens_in').notNull().default(0),
     tokensOut: integer('tokens_out').notNull().default(0),
     costUsd: real('cost_usd').notNull().default(0),          // pre-computed from pricing table
