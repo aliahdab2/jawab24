@@ -448,6 +448,21 @@ npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility
 
 7. **Verify all tests pass after ANY change** — Run `npm run test` (unit) and relevant E2E specs. Never commit code that breaks existing tests.
 
+8. **Check for existing hooks before writing inline ones** — Before defining a local `useX()` function in a page/component, check `frontend/src/hooks/` for an existing implementation. If one exists, import it. If not, create a shared hook in `frontend/src/hooks/` and export it from the barrel (`index.ts`) instead of defining it inline. Inline hooks lead to duplication.
+
+9. **Use `dir="auto"` on ALL user-editable inputs and textareas** — Not just those with translated placeholders. `dir="auto"` lets the browser detect text direction from what the user types, which is correct for bilingual users. The only exception is inputs that are **always** a specific direction by nature (e.g., code editors).
+   ```tsx
+   // ❌ WRONG - forces one direction
+   <textarea dir={language === 'ar' ? 'rtl' : 'ltr'} />
+   <input dir="ltr" />
+
+   // ✅ CORRECT - browser detects direction from typed content
+   <textarea dir="auto" />
+   <input dir="auto" />
+   ```
+
+10. **UI components must enforce accessibility by default** — The `Input` and `Textarea` components in `components/ui/` auto-generate `id` via `useId()` and link `<label htmlFor>`. When creating or modifying UI wrapper components for form elements, always include this pattern so consumers get accessibility for free without remembering to pass `id`.
+
 ---
 
 ## 📁 Project Structure
@@ -668,6 +683,10 @@ return (
 | Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |
 | Stripe call without country check | ALWAYS check sanctioned countries first |
 | `dir="ltr"` on inputs with translated placeholders | Use `dir="auto"` so RTL placeholders display correctly |
+| `dir={lang === 'ar' ? 'rtl' : 'ltr'}` on user inputs | Use `dir="auto"` — browser detects direction from typed content |
+| Inline `useX()` hook in a page | Check `frontend/src/hooks/` first, create shared hook if missing |
+| `<input>` or `<textarea>` without `aria-label` or linked `<label>` | Use UI components (`Input`, `Textarea`) which auto-link labels, or add `aria-label={t('...')}` |
+| Hardcoded English in `aria-label` | Use `aria-label={t('key')}` — screen readers need translated labels too |
 
 ---
 
