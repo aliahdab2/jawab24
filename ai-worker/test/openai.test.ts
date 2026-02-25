@@ -349,9 +349,9 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         vi.resetModules();
     });
 
-    it('should truncate knowledge base to 1500 chars', async () => {
+    it('should truncate knowledge base to 4000 chars', async () => {
         let capturedMessages: any[] = [];
-        const longKB = 'A'.repeat(3000);
+        const longKB = 'A'.repeat(5000);
 
         vi.doMock('openai', () => ({
             default: vi.fn().mockImplementation(() => ({
@@ -377,13 +377,13 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         await service.generateReply({ comment: 'What is this?', context: { knowledgeBase: longKB } });
 
         const systemPrompt = capturedMessages[0].content;
-        // Should contain truncated KB (1500 chars) plus the [...] marker
+        // Should contain truncated KB (4000 chars) plus the [...] marker
         expect(systemPrompt).toContain('[...]');
-        // Should NOT contain the full 3000-char KB
-        expect(systemPrompt.length).toBeLessThan(systemPrompt.replace(longKB, '').length + 3000);
+        // Should NOT contain the full 5000-char KB
+        expect(systemPrompt.length).toBeLessThan(systemPrompt.replace(longKB, '').length + 5000);
     });
 
-    it('should not truncate knowledge base under 1500 chars', async () => {
+    it('should not truncate knowledge base under 4000 chars', async () => {
         let capturedMessages: any[] = [];
         const shortKB = 'Product info: Great quality shoes.';
 
@@ -517,7 +517,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         const parsed = JSON.parse(logCall![0]);
         expect(parsed.event).toBe('ai_call_token_usage');
         expect(parsed.estimated_tokens_in).toBeDefined();
-        expect(parsed.max_input_tokens).toBe(2000);
+        expect(parsed.max_input_tokens).toBe(4000);
         expect(parsed.prompt_version).toBe('v4');
 
         logSpy.mockRestore();
