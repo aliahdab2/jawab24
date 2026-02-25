@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Send, Database, AlertTriangle, Zap, MessageSquare, ChevronDown, ChevronUp, Trash2, FlaskConical, X, Sparkles, Plus, Minus } from 'lucide-react';
+import { Send, Database, AlertTriangle, Zap, MessageSquare, ChevronDown, ChevronUp, Trash2, FlaskConical, X, Sparkles, Plus, Minus, Pin, Check, Pencil } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslation } from '@/i18n';
 import clsx from 'clsx';
@@ -138,9 +138,17 @@ export default function AdminPlaygroundPage() {
     const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
+    // Context panel state
+    const [contextExpanded, setContextExpanded] = useState(true);
+    const [historyExpanded, setHistoryExpanded] = useState(true);
+
     // Refs
     const bottomRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const contextTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Platform detection for keyboard hint
+    const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 
     // ── Data loading ──
 
@@ -202,6 +210,7 @@ export default function AdminPlaygroundPage() {
 
         setMessages(prev => [...prev, userMsg]);
         setQuestion('');
+        if (inputRef.current) inputRef.current.style.height = 'auto';
         setLoading(true);
 
         try {
@@ -269,6 +278,30 @@ export default function AdminPlaygroundPage() {
             return next;
         });
     }, []);
+
+    // ── Auto-resize helpers ──
+
+    const autoResizeContext = useCallback(() => {
+        const el = contextTextareaRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${Math.max(144, Math.min(el.scrollHeight, window.innerHeight * 0.3))}px`;
+    }, []);
+
+    const autoResizeInput = useCallback(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    }, []);
+
+    // Focus context textarea when expanding
+    useEffect(() => {
+        if (contextExpanded && contextTextareaRef.current) {
+            contextTextareaRef.current.focus();
+            autoResizeContext();
+        }
+    }, [contextExpanded, autoResizeContext]);
 
     const formatTime = (date: Date) => {
         return date.toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
@@ -364,74 +397,175 @@ export default function AdminPlaygroundPage() {
                     <>
                         {/* Post Context — visible when channel = comment */}
                         {channel === 'comment' && (
-                            <div className="px-4 py-3 border-b border-surface-200 bg-surface-50/50 flex-shrink-0">
-                                <label htmlFor="post-context" className="block text-xs font-medium text-surface-600 mb-1.5">
-                                    {t('admin.playground.postContext')}
-                                </label>
-                                <textarea
-                                    id="post-context"
-                                    dir="auto"
-                                    value={postMessage}
-                                    onChange={(e) => setPostMessage(e.target.value)}
-                                    placeholder={t('admin.playground.postContextPlaceholder')}
-                                    rows={2}
-                                    className="w-full resize-none rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
-                                />
-                            </div>
+                            contextExpanded ? (
+                                /* ── Expanded context panel ── */
+                                <div className="px-4 py-3 border-b border-surface-200 bg-surface-50/50 flex-shrink-0">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label htmlFor="post-context" className="flex items-center gap-1.5 text-xs font-medium text-surface-600">
+                                            <Pin className="w-3 h-3" aria-hidden="true" />
+                                            {t('admin.playground.postContext')}
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setContextExpanded(false)}
+                                            className="p-1 rounded text-surface-400 hover:text-surface-600 transition-colors"
+                                            aria-label={t('admin.playground.collapseContext')}
+                                        >
+                                            <ChevronUp className="w-4 h-4" aria-hidden="true" />
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        id="post-context"
+                                        ref={contextTextareaRef}
+                                        dir="auto"
+                                        value={postMessage}
+                                        onChange={(e) => setPostMessage(e.target.value)}
+                                        onInput={autoResizeContext}
+                                        placeholder={t('admin.playground.postContextPlaceholder')}
+                                        rows={6}
+                                        className={clsx(
+                                            'w-full resize-y rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm',
+                                            'text-surface-900 placeholder:text-surface-400',
+                                            'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20',
+                                            'transition-all outline-none',
+                                            'min-h-[144px] max-h-[30vh]'
+                                        )}
+                                    />
+                                </div>
+                            ) : (
+                                /* ── Collapsed context bar (pinned indicator) ── */
+                                <div
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => setContextExpanded(true)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setContextExpanded(true); } }}
+                                    className={clsx(
+                                        'flex items-center gap-2 px-4 py-2.5 border-b flex-shrink-0 cursor-pointer transition-colors',
+                                        postMessage.trim()
+                                            ? 'bg-brand-50/50 border-brand-200 hover:bg-brand-50'
+                                            : 'bg-surface-50/50 border-surface-200 border-dashed hover:bg-surface-100'
+                                    )}
+                                    aria-label={t('admin.playground.expandContext')}
+                                >
+                                    <Pin className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />
+                                    <span className="text-sm text-surface-700 truncate flex-1" dir="auto">
+                                        {postMessage.trim()
+                                            ? postMessage.split('\n')[0].slice(0, 80) + (postMessage.length > 80 ? '...' : '')
+                                            : t('admin.playground.postContextEmpty')
+                                        }
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setContextExpanded(true); }}
+                                        className="p-1 rounded text-surface-400 hover:text-surface-600 transition-colors flex-shrink-0"
+                                        aria-label={t('admin.playground.expandContext')}
+                                    >
+                                        <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                                    </button>
+                                    {postMessage.trim() && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setPostMessage(''); }}
+                                            className="p-1 rounded text-surface-400 hover:text-red-500 transition-colors flex-shrink-0"
+                                            aria-label={t('admin.playground.clearContext')}
+                                        >
+                                            <X className="w-3.5 h-3.5" aria-hidden="true" />
+                                        </button>
+                                    )}
+                                </div>
+                            )
                         )}
 
                         {/* Conversation History — visible when channel = dm */}
                         {channel === 'dm' && (
-                            <div className="px-4 py-3 border-b border-surface-200 bg-surface-50/50 flex-shrink-0">
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <label className="text-xs font-medium text-surface-600">
-                                        {t('admin.playground.conversationHistory')}
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={addHistoryMessage}
-                                        className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 transition-colors"
-                                    >
-                                        <Plus className="w-3 h-3" aria-hidden="true" />
-                                        {t('admin.playground.addMessage')}
-                                    </button>
-                                </div>
-                                {conversationHistory.length === 0 ? (
-                                    <p className="text-xs text-surface-400 italic">{t('admin.playground.conversationHistoryHint')}</p>
-                                ) : (
-                                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                                        {conversationHistory.map((msg, i) => (
-                                            <div key={i} className="flex items-start gap-2">
-                                                <select
-                                                    value={msg.role}
-                                                    onChange={(e) => updateHistoryMessage(i, 'role', e.target.value)}
-                                                    className="flex-shrink-0 rounded-lg border border-surface-200 bg-white px-2 py-1.5 text-xs text-surface-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-                                                    aria-label={`${t('admin.playground.conversationHistory')} ${i + 1}`}
-                                                >
-                                                    <option value="user">{t('admin.playground.roleCustomer')}</option>
-                                                    <option value="assistant">{t('admin.playground.roleBusiness')}</option>
-                                                </select>
-                                                <input
-                                                    type="text"
-                                                    dir="auto"
-                                                    value={msg.content}
-                                                    onChange={(e) => updateHistoryMessage(i, 'content', e.target.value)}
-                                                    placeholder={t('admin.playground.messagePlaceholder')}
-                                                    className="flex-1 rounded-lg border border-surface-200 bg-white px-3 py-1.5 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeHistoryMessage(i)}
-                                                    className="flex-shrink-0 p-1.5 text-surface-400 hover:text-red-500 transition-colors"
-                                                    aria-label={t('admin.playground.removeMessage')}
-                                                >
-                                                    <Minus className="w-3.5 h-3.5" aria-hidden="true" />
-                                                </button>
-                                            </div>
-                                        ))}
+                            historyExpanded ? (
+                                /* ── Expanded conversation history ── */
+                                <div className="px-4 py-3 border-b border-surface-200 bg-surface-50/50 flex-shrink-0">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="flex items-center gap-1.5 text-xs font-medium text-surface-600">
+                                            <MessageSquare className="w-3 h-3" aria-hidden="true" />
+                                            {t('admin.playground.conversationHistory')}
+                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={addHistoryMessage}
+                                                className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 transition-colors"
+                                            >
+                                                <Plus className="w-3 h-3" aria-hidden="true" />
+                                                {t('admin.playground.addMessage')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setHistoryExpanded(false)}
+                                                className="p-1 rounded text-surface-400 hover:text-surface-600 transition-colors"
+                                                aria-label={t('admin.playground.collapseHistory')}
+                                            >
+                                                <ChevronUp className="w-4 h-4" aria-hidden="true" />
+                                            </button>
+                                        </div>
                                     </div>
-                                )}
-                            </div>
+                                    {conversationHistory.length === 0 ? (
+                                        <p className="text-xs text-surface-400 italic">{t('admin.playground.conversationHistoryHint')}</p>
+                                    ) : (
+                                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                                            {conversationHistory.map((msg, i) => (
+                                                <div key={i} className="flex items-start gap-2">
+                                                    <select
+                                                        value={msg.role}
+                                                        onChange={(e) => updateHistoryMessage(i, 'role', e.target.value)}
+                                                        className="flex-shrink-0 rounded-lg border border-surface-200 bg-white px-2 py-1.5 text-xs text-surface-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                                                        aria-label={`${t('admin.playground.conversationHistory')} ${i + 1}`}
+                                                    >
+                                                        <option value="user">{t('admin.playground.roleCustomer')}</option>
+                                                        <option value="assistant">{t('admin.playground.roleBusiness')}</option>
+                                                    </select>
+                                                    <input
+                                                        type="text"
+                                                        dir="auto"
+                                                        value={msg.content}
+                                                        onChange={(e) => updateHistoryMessage(i, 'content', e.target.value)}
+                                                        placeholder={t('admin.playground.messagePlaceholder')}
+                                                        className="flex-1 rounded-lg border border-surface-200 bg-white px-3 py-1.5 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeHistoryMessage(i)}
+                                                        className="flex-shrink-0 p-1.5 text-surface-400 hover:text-red-500 transition-colors"
+                                                        aria-label={t('admin.playground.removeMessage')}
+                                                    >
+                                                        <Minus className="w-3.5 h-3.5" aria-hidden="true" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* ── Collapsed conversation history bar ── */
+                                <div
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => setHistoryExpanded(true)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setHistoryExpanded(true); } }}
+                                    className={clsx(
+                                        'flex items-center gap-2 px-4 py-2.5 border-b flex-shrink-0 cursor-pointer transition-colors',
+                                        conversationHistory.length > 0
+                                            ? 'bg-brand-50/50 border-brand-200 hover:bg-brand-50'
+                                            : 'bg-surface-50/50 border-surface-200 border-dashed hover:bg-surface-100'
+                                    )}
+                                    aria-label={t('admin.playground.expandHistory')}
+                                >
+                                    <MessageSquare className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />
+                                    <span className="text-sm text-surface-700 truncate flex-1">
+                                        {conversationHistory.length > 0
+                                            ? t('admin.playground.historyCount_other', { count: conversationHistory.length })
+                                            : t('admin.playground.conversationHistoryHint')
+                                        }
+                                    </span>
+                                    <ChevronDown className="w-4 h-4 text-surface-400 flex-shrink-0" aria-hidden="true" />
+                                </div>
+                            )
                         )}
                     </>
                 )}
@@ -445,13 +579,67 @@ export default function AdminPlaygroundPage() {
                         {/* Message Thread */}
                         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-surface-50/50 space-y-4">
 
-                            {/* Empty state */}
+                            {/* Empty state with step guide */}
                             {messages.length === 0 && !loading && (
                                 <div className="flex-1 flex items-center justify-center h-full">
-                                    <div className="text-center">
-                                        <FlaskConical className="w-12 h-12 text-surface-300 mx-auto mb-3" aria-hidden="true" />
-                                        <p className="text-surface-500 text-sm">{t('admin.playground.emptyChat')}</p>
-                                        <p className="text-surface-400 text-xs mt-1">{t('admin.playground.emptyChatHint')}</p>
+                                    <div className="text-center max-w-sm mx-auto px-4">
+                                        <div className="w-14 h-14 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-4">
+                                            <FlaskConical className="w-7 h-7 text-brand-500" aria-hidden="true" />
+                                        </div>
+                                        <h3 className="text-lg font-display font-bold text-surface-900 mb-2">
+                                            {t('admin.playground.emptyTitle')}
+                                        </h3>
+                                        <p className="text-sm text-surface-500 mb-6">
+                                            {t('admin.playground.emptyDescription')}
+                                        </p>
+
+                                        {/* Steps */}
+                                        <div className="space-y-3 text-start">
+                                            {/* Step 1: Select page */}
+                                            <div className={clsx(
+                                                'flex items-center gap-3 p-3 rounded-xl transition-colors',
+                                                selectedPageId
+                                                    ? 'bg-green-50 border border-green-200'
+                                                    : 'bg-brand-50 border border-brand-200'
+                                            )}>
+                                                <div className={clsx(
+                                                    'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
+                                                    selectedPageId ? 'bg-green-500 text-white' : 'bg-brand-500 text-white'
+                                                )}>
+                                                    {selectedPageId ? <Check className="w-3.5 h-3.5" aria-hidden="true" /> : '1'}
+                                                </div>
+                                                <span className={clsx('text-sm', selectedPageId ? 'text-green-700' : 'text-brand-700')}>
+                                                    {t('admin.playground.step1')}
+                                                </span>
+                                            </div>
+
+                                            {/* Step 2: Add context (optional) */}
+                                            <div className={clsx(
+                                                'flex items-center gap-3 p-3 rounded-xl bg-surface-50 border border-surface-200',
+                                                !selectedPageId && 'opacity-50'
+                                            )}>
+                                                <div className="w-6 h-6 rounded-full bg-surface-300 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                                    2
+                                                </div>
+                                                <span className="text-sm text-surface-600 flex-1">
+                                                    {t('admin.playground.step2')}
+                                                </span>
+                                                <Badge className="bg-surface-100 text-surface-500">{t('common.optional')}</Badge>
+                                            </div>
+
+                                            {/* Step 3: Type question */}
+                                            <div className={clsx(
+                                                'flex items-center gap-3 p-3 rounded-xl bg-surface-50 border border-surface-200',
+                                                !selectedPageId && 'opacity-50'
+                                            )}>
+                                                <div className="w-6 h-6 rounded-full bg-surface-300 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                                    3
+                                                </div>
+                                                <span className="text-sm text-surface-600">
+                                                    {t('admin.playground.step3')}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -665,8 +853,12 @@ export default function AdminPlaygroundPage() {
                                     <textarea
                                         id="playground-input"
                                         ref={inputRef}
+                                        dir="auto"
                                         value={question}
-                                        onChange={(e) => setQuestion(e.target.value)}
+                                        onChange={(e) => {
+                                            setQuestion(e.target.value);
+                                            autoResizeInput();
+                                        }}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                                                 e.preventDefault();
@@ -674,9 +866,16 @@ export default function AdminPlaygroundPage() {
                                             }
                                         }}
                                         placeholder={selectedPageId ? t('admin.playground.questionPlaceholder') : t('admin.playground.selectPagePlaceholder')}
-                                        rows={2}
+                                        rows={1}
                                         disabled={loading || !selectedPageId}
-                                        className="w-full resize-none rounded-xl border border-surface-200 bg-surface-50 px-3 sm:px-4 py-2.5 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all outline-none disabled:opacity-50"
+                                        className={clsx(
+                                            'w-full resize-none rounded-xl border border-surface-200 bg-surface-50',
+                                            'px-3 sm:px-4 py-2.5 text-sm text-surface-900',
+                                            'placeholder:text-surface-400',
+                                            'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-white',
+                                            'transition-all outline-none disabled:opacity-50',
+                                            'max-h-[120px]'
+                                        )}
                                     />
                                 </div>
                                 <button
@@ -693,7 +892,9 @@ export default function AdminPlaygroundPage() {
                                     )}
                                 </button>
                             </div>
-                            <p className="text-[10px] text-surface-400 mt-1.5 text-end">{t('admin.playground.sendHint')}</p>
+                            <p className="text-[10px] text-surface-400 mt-1.5 text-end">
+                                {t('admin.playground.sendHintKey', { key: isMac ? '\u2318' : 'Ctrl' })}
+                            </p>
                         </div>
                     </div>
 
