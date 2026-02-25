@@ -34,9 +34,9 @@ export class AiService {
 
     /**
      * Generate a hash for a comment to use as cache key
-     * Includes pageId to prevent cross-page cache collisions
+     * Includes pageId and kbActiveVersion to prevent cross-page and stale-KB cache collisions
      */
-    private hashComment(comment: string, language?: string, pageId?: string): string {
+    private hashComment(comment: string, language?: string, pageId?: string, kbActiveVersion?: number | null): string {
         // Remove punctuation, emojis, and extra whitespace to increase cache hits
         const normalized = comment
             .toLowerCase()
@@ -44,20 +44,20 @@ export class AiService {
             .replace(/\s+/g, ' ') // Collapse multiple spaces
             .trim();
 
-        const key = `${normalized}:${language || 'auto'}:${pageId || 'global'}`;
+        const key = `${normalized}:${language || 'auto'}:${pageId || 'global'}:kbv:${kbActiveVersion ?? 0}`;
         return crypto.createHash('sha256').update(key).digest('hex');
     }
 
     /**
      * Check cache for existing reply (returns full AI metadata when available)
      */
-    async checkCache(comment: string, language?: string, pageId?: string): Promise<{ reply: string; intent?: string; confidence?: string; flags?: string[] } | null> {
+    async checkCache(comment: string, language?: string, pageId?: string, kbActiveVersion?: number | null): Promise<{ reply: string; intent?: string; confidence?: string; flags?: string[] } | null> {
         if (!config.ai.cacheEnabled) {
             return null;
         }
 
         return Sentry.startSpan({ name: 'ai.cache.exact', op: 'cache.get' }, async () => {
-            const hash = this.hashComment(comment, language, pageId);
+            const hash = this.hashComment(comment, language, pageId, kbActiveVersion);
             const cacheKey = `cache:ai_reply:${hash}`;
 
             try {
@@ -130,13 +130,14 @@ export class AiService {
         reply: string,
         language?: string,
         pageId?: string,
-        metadata?: { intent?: string; confidence?: string; flags?: string[] }
+        metadata?: { intent?: string; confidence?: string; flags?: string[] },
+        kbActiveVersion?: number | null
     ): Promise<void> {
         if (!config.ai.cacheEnabled) {
             return;
         }
 
-        const hash = this.hashComment(comment, language, pageId);
+        const hash = this.hashComment(comment, language, pageId, kbActiveVersion);
         const cacheKey = `cache:ai_reply:${hash}`;
         const cacheData = JSON.stringify({ reply, intent: metadata?.intent, confidence: metadata?.confidence, flags: metadata?.flags });
 
@@ -171,18 +172,19 @@ export class AiService {
      * Generate AI reply for a comment.
      *
      * Cache hierarchy:
-     *   1. Exact cache (hash lookup — free)
+     *   1. Exact cache (hash lookup — free, version-scoped)
      *   2. Semantic cache (embedding similarity — 1 embedding call, no GPT)
      *   3. Full AI worker call (GPT)
      */
     async generateReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
         const pageId = request.context?.pageId;
+        const kbActiveVersion = request.context?.kbActiveVersion;
 
         const userId = request.context?.userId;
         const pipeline = request.context?.pipeline;
 
-        // Layer 1: Exact cache (scoped per page to avoid cross-page collisions)
-        const cachedData = await this.checkCache(request.comment, request.language, pageId);
+        // Layer 1: Exact cache (scoped per page + KB version to avoid stale replies)
+        const cachedData = await this.checkCache(request.comment, request.language, pageId, kbActiveVersion);
         if (cachedData) {
             // Fire-and-forget: log zero-cost cache hit
             if (userId) {
@@ -209,7 +211,6 @@ export class AiService {
         }
 
         // Layer 2: Semantic cache (only when we have pageId + kbActiveVersion)
-        const kbActiveVersion = request.context?.kbActiveVersion;
         let queryEmbedding: number[] | null = request.context?.queryEmbedding || null;
         let detectedPreGptIntent: string | null = null;
 
@@ -290,8 +291,8 @@ export class AiService {
                 flags: response.data.flags,
             };
 
-            // Save to exact cache
-            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, aiMetadata);
+            // Save to exact cache (version-scoped so KB updates invalidate stale entries)
+            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, aiMetadata, kbActiveVersion);
 
             // Fire-and-forget: log real token usage
             if (userId) {

@@ -531,6 +531,71 @@ describe('AI Service', () => {
             }
         });
     });
+
+    describe('KB version-scoped exact cache', () => {
+        it('should produce different cache keys for different kbActiveVersion values', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            // Save with kbActiveVersion=1
+            await service.saveToCache('What is the price?', 'Price is $100', 'en', 'page-1', undefined, 1);
+            const keyV1 = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            // Save with kbActiveVersion=2
+            await service.saveToCache('What is the price?', 'Price is $200', 'en', 'page-1', undefined, 2);
+            const keyV2 = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(keyV1).not.toBe(keyV2);
+        });
+
+        it('should produce same cache key for same kbActiveVersion', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            await service.saveToCache('What is the price?', 'Price is $100', 'en', 'page-1', undefined, 1);
+            const key1 = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('What is the price?', 'Price is $100', 'en', 'page-1', undefined, 1);
+            const key2 = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(key1).toBe(key2);
+        });
+
+        it('should treat null and undefined kbActiveVersion the same (non-KB pages)', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            await service.saveToCache('Hello', 'Hi there', 'en', 'page-1', undefined, null);
+            const keyNull = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('Hello', 'Hi there', 'en', 'page-1', undefined, undefined);
+            const keyUndefined = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(keyNull).toBe(keyUndefined);
+        });
+
+        it('should miss exact cache after KB version bump (stale reply scenario)', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            // Save with version 1
+            await service.saveToCache('What is your address?', 'Let me check with the team.', 'en', 'page-1', undefined, 1);
+            const keyV1 = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            // Check with version 2 (after KB update) — should NOT match
+            vi.mocked(redis.get).mockResolvedValue(null);
+            const result = await service.checkCache('What is your address?', 'en', 'page-1', 2);
+
+            // Should have queried with a DIFFERENT key than what was stored
+            const queriedKey = vi.mocked(redis.get).mock.calls[0][0];
+            expect(queriedKey).not.toBe(keyV1);
+            expect(result).toBeNull();
+        });
+    });
 });
 
 describe('AI Service - Semantic Cache Integration', () => {

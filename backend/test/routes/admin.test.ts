@@ -88,7 +88,11 @@ vi.mock('../../src/db/schema', () => ({
 }));
 
 vi.mock('../../src/config', () => ({
-    config: { ragMode: 'on', openai: { apiKey: 'test-key' } },
+    config: {
+        ragMode: 'on',
+        openai: { apiKey: 'test-key' },
+        redis: { host: 'localhost', port: 6379, password: undefined },
+    },
 }));
 
 vi.mock('../../src/services/ai', () => ({
