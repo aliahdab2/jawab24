@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ALTER COLUMN "ai_model" SET DEFAULT 'gpt-4.1-mini';

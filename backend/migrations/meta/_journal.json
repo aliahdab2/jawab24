@@ -253,6 +253,13 @@
       "when": 1771826130576,
       "tag": "0035_mixed_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1772052624399,
+      "tag": "0036_lush_mysterio",
+      "breakpoints": true
     }
   ]
 }
