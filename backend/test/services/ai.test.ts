@@ -503,7 +503,7 @@ describe('AI Service', () => {
 
             // 1. Prime the cache (simulated)
             const baseComment = 'Price';
-            await service.saveToCache(baseComment, 'Cached Response', 'en');
+            await service.saveToCache(baseComment, 'Cached Response', { language: 'en' });
 
             // Capture the exact key used for storage
             const setCall = vi.mocked(redis.set).mock.calls[0];
@@ -525,7 +525,7 @@ describe('AI Service', () => {
             ];
 
             for (const v of variations) {
-                await service.checkCache(v, 'en');
+                await service.checkCache(v, { language: 'en' });
                 expect(redis.get).toHaveBeenCalledWith(storageKey);
                 vi.clearAllMocks();
             }
@@ -536,14 +536,12 @@ describe('AI Service', () => {
         it('should produce different cache keys for different kbActiveVersion values', async () => {
             const { redis } = await import('../../src/lib/redis');
 
-            // Save with kbActiveVersion=1
-            await service.saveToCache('What is the price?', 'Price is $100', 'en', 'page-1', undefined, 1);
+            await service.saveToCache('What is the price?', 'Price is $100', { language: 'en', pageId: 'page-1', kbActiveVersion: 1 });
             const keyV1 = vi.mocked(redis.set).mock.calls[0][0];
 
             vi.clearAllMocks();
 
-            // Save with kbActiveVersion=2
-            await service.saveToCache('What is the price?', 'Price is $200', 'en', 'page-1', undefined, 2);
+            await service.saveToCache('What is the price?', 'Price is $200', { language: 'en', pageId: 'page-1', kbActiveVersion: 2 });
             const keyV2 = vi.mocked(redis.set).mock.calls[0][0];
 
             expect(keyV1).not.toBe(keyV2);
@@ -552,12 +550,12 @@ describe('AI Service', () => {
         it('should produce same cache key for same kbActiveVersion', async () => {
             const { redis } = await import('../../src/lib/redis');
 
-            await service.saveToCache('What is the price?', 'Price is $100', 'en', 'page-1', undefined, 1);
+            await service.saveToCache('What is the price?', 'Price is $100', { language: 'en', pageId: 'page-1', kbActiveVersion: 1 });
             const key1 = vi.mocked(redis.set).mock.calls[0][0];
 
             vi.clearAllMocks();
 
-            await service.saveToCache('What is the price?', 'Price is $100', 'en', 'page-1', undefined, 1);
+            await service.saveToCache('What is the price?', 'Price is $100', { language: 'en', pageId: 'page-1', kbActiveVersion: 1 });
             const key2 = vi.mocked(redis.set).mock.calls[0][0];
 
             expect(key1).toBe(key2);
@@ -566,12 +564,12 @@ describe('AI Service', () => {
         it('should treat null and undefined kbActiveVersion the same (non-KB pages)', async () => {
             const { redis } = await import('../../src/lib/redis');
 
-            await service.saveToCache('Hello', 'Hi there', 'en', 'page-1', undefined, null);
+            await service.saveToCache('Hello', 'Hi there', { language: 'en', pageId: 'page-1', kbActiveVersion: null });
             const keyNull = vi.mocked(redis.set).mock.calls[0][0];
 
             vi.clearAllMocks();
 
-            await service.saveToCache('Hello', 'Hi there', 'en', 'page-1', undefined, undefined);
+            await service.saveToCache('Hello', 'Hi there', { language: 'en', pageId: 'page-1', kbActiveVersion: undefined });
             const keyUndefined = vi.mocked(redis.set).mock.calls[0][0];
 
             expect(keyNull).toBe(keyUndefined);
@@ -581,14 +579,14 @@ describe('AI Service', () => {
             const { redis } = await import('../../src/lib/redis');
 
             // Save with version 1
-            await service.saveToCache('What is your address?', 'Let me check with the team.', 'en', 'page-1', undefined, 1);
+            await service.saveToCache('What is your address?', 'Let me check with the team.', { language: 'en', pageId: 'page-1', kbActiveVersion: 1 });
             const keyV1 = vi.mocked(redis.set).mock.calls[0][0];
 
             vi.clearAllMocks();
 
             // Check with version 2 (after KB update) — should NOT match
             vi.mocked(redis.get).mockResolvedValue(null);
-            const result = await service.checkCache('What is your address?', 'en', 'page-1', 2);
+            const result = await service.checkCache('What is your address?', { language: 'en', pageId: 'page-1', kbActiveVersion: 2 });
 
             // Should have queried with a DIFFERENT key than what was stored
             const queriedKey = vi.mocked(redis.get).mock.calls[0][0];
@@ -601,14 +599,12 @@ describe('AI Service', () => {
         it('should produce different cache keys for different posts on the same page', async () => {
             const { redis } = await import('../../src/lib/redis');
 
-            // Same comment on post about shoes
-            await service.saveToCache('What is the price?', 'Shoes cost $50', 'en', 'page-1', undefined, 1, 'Check out our new shoes!');
+            await service.saveToCache('What is the price?', 'Shoes cost $50', { language: 'en', pageId: 'page-1', kbActiveVersion: 1, postMessage: 'Check out our new shoes!' });
             const keyShoes = vi.mocked(redis.set).mock.calls[0][0];
 
             vi.clearAllMocks();
 
-            // Same comment on post about bags
-            await service.saveToCache('What is the price?', 'Bags cost $80', 'en', 'page-1', undefined, 1, 'Check out our new bags!');
+            await service.saveToCache('What is the price?', 'Bags cost $80', { language: 'en', pageId: 'page-1', kbActiveVersion: 1, postMessage: 'Check out our new bags!' });
             const keyBags = vi.mocked(redis.set).mock.calls[0][0];
 
             expect(keyShoes).not.toBe(keyBags);
@@ -617,12 +613,12 @@ describe('AI Service', () => {
         it('should produce same cache key for same post content', async () => {
             const { redis } = await import('../../src/lib/redis');
 
-            await service.saveToCache('What is the price?', 'Shoes cost $50', 'en', 'page-1', undefined, 1, 'New shoes available!');
+            await service.saveToCache('What is the price?', 'Shoes cost $50', { language: 'en', pageId: 'page-1', kbActiveVersion: 1, postMessage: 'New shoes available!' });
             const key1 = vi.mocked(redis.set).mock.calls[0][0];
 
             vi.clearAllMocks();
 
-            await service.saveToCache('What is the price?', 'Shoes cost $50', 'en', 'page-1', undefined, 1, 'New shoes available!');
+            await service.saveToCache('What is the price?', 'Shoes cost $50', { language: 'en', pageId: 'page-1', kbActiveVersion: 1, postMessage: 'New shoes available!' });
             const key2 = vi.mocked(redis.set).mock.calls[0][0];
 
             expect(key1).toBe(key2);
@@ -631,12 +627,12 @@ describe('AI Service', () => {
         it('should handle DMs without post context (postMessage undefined)', async () => {
             const { redis } = await import('../../src/lib/redis');
 
-            await service.saveToCache('Hello', 'Hi there', 'en', 'page-1', undefined, 1, undefined);
+            await service.saveToCache('Hello', 'Hi there', { language: 'en', pageId: 'page-1', kbActiveVersion: 1 });
             const key1 = vi.mocked(redis.set).mock.calls[0][0];
 
             vi.clearAllMocks();
 
-            await service.saveToCache('Hello', 'Hi there', 'en', 'page-1', undefined, 1, undefined);
+            await service.saveToCache('Hello', 'Hi there', { language: 'en', pageId: 'page-1', kbActiveVersion: 1 });
             const key2 = vi.mocked(redis.set).mock.calls[0][0];
 
             expect(key1).toBe(key2);
@@ -646,13 +642,13 @@ describe('AI Service', () => {
             const { redis } = await import('../../src/lib/redis');
 
             // DM (no post context)
-            await service.saveToCache('What is the price?', 'General price info', 'en', 'page-1', undefined, 1, undefined);
+            await service.saveToCache('What is the price?', 'General price info', { language: 'en', pageId: 'page-1', kbActiveVersion: 1 });
             const keyNoPost = vi.mocked(redis.set).mock.calls[0][0];
 
             vi.clearAllMocks();
 
             // Comment on a post
-            await service.saveToCache('What is the price?', 'Product X costs $50', 'en', 'page-1', undefined, 1, 'Product X now available!');
+            await service.saveToCache('What is the price?', 'Product X costs $50', { language: 'en', pageId: 'page-1', kbActiveVersion: 1, postMessage: 'Product X now available!' });
             const keyWithPost = vi.mocked(redis.set).mock.calls[0][0];
 
             expect(keyNoPost).not.toBe(keyWithPost);

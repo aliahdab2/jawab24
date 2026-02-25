@@ -14,6 +14,22 @@ import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { estimateCostUsd } from '../config/aiPricing';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 
+/** Context used to scope exact-cache lookups and writes. */
+interface CacheContext {
+    language?: string;
+    pageId?: string;
+    kbActiveVersion?: number | null;
+    postMessage?: string;
+}
+
+/** Shape returned by a successful exact-cache hit. */
+interface CacheHit {
+    reply: string;
+    intent?: string;
+    confidence?: string;
+    flags?: string[];
+}
+
 /** Lazy-init embedding provider for semantic cache (only when OPENAI_API_KEY exists) */
 let _embeddingProvider: OpenAIEmbeddingProvider | null = null;
 function getEmbeddingProvider(): OpenAIEmbeddingProvider | null {
@@ -33,33 +49,38 @@ export class AiService {
     }
 
     /**
-     * Generate a hash for a comment to use as cache key.
-     * Includes pageId, kbActiveVersion, and postMessage to prevent cross-page,
-     * stale-KB, and cross-post cache collisions.
+     * Build a Redis/Postgres cache key from comment + context.
+     * Scoped by pageId, kbActiveVersion, and postMessage to prevent
+     * cross-page, stale-KB, and cross-post cache collisions.
      */
-    private hashComment(comment: string, language?: string, pageId?: string, kbActiveVersion?: number | null, postMessage?: string): string {
-        // Remove punctuation, emojis, and extra whitespace to increase cache hits
+    private buildCacheKey(comment: string, ctx: CacheContext): string {
         const normalized = comment
             .toLowerCase()
-            .replace(/[^\p{L}\p{N}\s]/gu, '') // Keep letters, numbers, whitespace
-            .replace(/\s+/g, ' ') // Collapse multiple spaces
+            .replace(/[^\p{L}\p{N}\s]/gu, '')
+            .replace(/\s+/g, ' ')
             .trim();
 
-        const postCtx = postMessage ? crypto.createHash('md5').update(postMessage).digest('hex').slice(0, 8) : 'nopost';
-        const key = `${normalized}:${language || 'auto'}:${pageId || 'global'}:kbv:${kbActiveVersion ?? 0}:p:${postCtx}`;
+        const key = [
+            normalized,
+            ctx.language || 'auto',
+            ctx.pageId || 'global',
+            `kbv:${ctx.kbActiveVersion ?? 0}`,
+            `p:${ctx.postMessage || ''}`,
+        ].join(':');
+
         return crypto.createHash('sha256').update(key).digest('hex');
     }
 
     /**
      * Check cache for existing reply (returns full AI metadata when available)
      */
-    async checkCache(comment: string, language?: string, pageId?: string, kbActiveVersion?: number | null, postMessage?: string): Promise<{ reply: string; intent?: string; confidence?: string; flags?: string[] } | null> {
+    async checkCache(comment: string, ctx: CacheContext): Promise<CacheHit | null> {
         if (!config.ai.cacheEnabled) {
             return null;
         }
 
         return Sentry.startSpan({ name: 'ai.cache.exact', op: 'cache.get' }, async () => {
-            const hash = this.hashComment(comment, language, pageId, kbActiveVersion, postMessage);
+            const hash = this.buildCacheKey(comment, ctx);
             const cacheKey = `cache:ai_reply:${hash}`;
 
             try {
@@ -130,17 +151,14 @@ export class AiService {
     async saveToCache(
         comment: string,
         reply: string,
-        language?: string,
-        pageId?: string,
+        ctx: CacheContext,
         metadata?: { intent?: string; confidence?: string; flags?: string[] },
-        kbActiveVersion?: number | null,
-        postMessage?: string
     ): Promise<void> {
         if (!config.ai.cacheEnabled) {
             return;
         }
 
-        const hash = this.hashComment(comment, language, pageId, kbActiveVersion, postMessage);
+        const hash = this.buildCacheKey(comment, ctx);
         const cacheKey = `cache:ai_reply:${hash}`;
         const cacheData = JSON.stringify({ reply, intent: metadata?.intent, confidence: metadata?.confidence, flags: metadata?.flags });
 
@@ -157,7 +175,7 @@ export class AiService {
             .values({
                 commentHash: hash,
                 replyText: reply,
-                language: language || null,
+                language: ctx.language || null,
                 metadata: metadata || null,
             })
             .onConflictDoUpdate({
@@ -187,8 +205,15 @@ export class AiService {
         const userId = request.context?.userId;
         const pipeline = request.context?.pipeline;
 
+        const cacheCtx: CacheContext = {
+            language: request.language,
+            pageId,
+            kbActiveVersion,
+            postMessage,
+        };
+
         // Layer 1: Exact cache (scoped per page + KB version + post context)
-        const cachedData = await this.checkCache(request.comment, request.language, pageId, kbActiveVersion, postMessage);
+        const cachedData = await this.checkCache(request.comment, cacheCtx);
         if (cachedData) {
             // Fire-and-forget: log zero-cost cache hit
             if (userId) {
@@ -296,7 +321,8 @@ export class AiService {
             };
 
             // Save to exact cache (scoped by KB version + post context)
-            await this.saveToCache(request.comment, aiReply, detectedLanguage, pageId, aiMetadata, kbActiveVersion, postMessage);
+            const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
+            await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
 
             // Fire-and-forget: log real token usage
             if (userId) {
@@ -425,22 +451,22 @@ export class AiService {
     /**
      * Get the status of an async AI generation job
      */
-    async getJobStatus(jobId: string): Promise<{ 
-        jobId: string; 
+    async getJobStatus(jobId: string): Promise<{
+        jobId: string;
         status: 'queued' | 'active' | 'completed' | 'failed' | 'not_found';
         result?: { reply: string };
         error?: string;
     }> {
         const { aiQueue } = await import('../lib/queue');
-        
+
         const job = await aiQueue.getJob(jobId);
-        
+
         if (!job) {
             return { jobId, status: 'not_found' };
         }
 
         const state = await job.getState();
-        
+
         if (state === 'completed') {
             const returnValue = job.returnvalue as { reply: string } | undefined;
             return {
@@ -449,7 +475,7 @@ export class AiService {
                 result: returnValue
             };
         }
-        
+
         if (state === 'failed') {
             return {
                 jobId,
@@ -457,15 +483,14 @@ export class AiService {
                 error: job.failedReason || 'Unknown error'
             };
         }
-        
+
         if (state === 'active') {
             return { jobId, status: 'active' };
         }
-        
+
         // waiting, delayed, etc. -> treat as queued
         return { jobId, status: 'queued' };
     }
 }
 
 export const aiService = new AiService();
-
