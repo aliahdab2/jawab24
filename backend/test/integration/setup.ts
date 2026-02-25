@@ -1,4 +1,14 @@
-import { beforeAll, beforeEach } from 'vitest';
+/**
+ * Per-file setup for integration tests.
+ *
+ * Migrations are handled by globalSetup.ts (runs once before any fork).
+ * This file only:
+ *   - Sets DATABASE_URL for app modules
+ *   - Creates the shared test DB connection
+ *   - Truncates tables between tests
+ *   - Cleans up connections on process exit
+ */
+import { beforeEach } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
@@ -15,39 +25,6 @@ process.env.DATABASE_URL = connectionString;
 const testClient = postgres(connectionString, { prepare: false, max: 3 });
 export const testDb = drizzle(testClient, { schema });
 
-beforeAll(async () => {
-    // Run migrations on the test database instead of using push:pg.
-    // push:pg can hang on interactive prompts even with strict:false (known drizzle-kit v0.20 bug).
-    // Using migrations is more reliable and matches production deployment process.
-    const { drizzle } = await import('drizzle-orm/postgres-js');
-    const { migrate } = await import('drizzle-orm/postgres-js/migrator');
-    const postgres = (await import('postgres')).default;
-    const path = await import('path');
-
-    // Apply migrations programmatically without calling process.exit
-    const migrationsFolder = path.resolve(__dirname, '../../migrations');
-    const migrationClient = postgres(connectionString, { max: 1 });
-    const db = drizzle(migrationClient);
-
-    try {
-        await migrate(db, { migrationsFolder });
-        console.log('✅ Test database migrations applied');
-    } catch (error: unknown) {
-        // Vitest re-evaluates setupFiles per test file but they share one database.
-        // A repeated migrate() can fail with 23505 (unique violation) for the drizzle
-        // schema row or for custom enum types. Both are safe to ignore.
-        const pgError = error as { code?: string; detail?: string };
-        if (pgError.code === '23505') {
-            console.log('✅ Test database migrations already applied');
-        } else {
-            console.error('❌ Migration failed:', error);
-            throw error;
-        }
-    } finally {
-        await migrationClient.end();
-    }
-});
-
 beforeEach(async () => {
     // Truncate all tables that integration tests touch (CASCADE handles FK deps).
     await testDb.execute(sql`
@@ -61,9 +38,14 @@ beforeEach(async () => {
     `);
 });
 
-// Connection cleanup: with threads: false all test files share one process,
-// so we must NOT close pools between files (afterAll runs per file).
-// postgres.js connections auto-close on process exit, so no explicit cleanup needed.
+// Close DB pools on process exit so the pre-deploy script can DROP the database.
+process.once('beforeExit', async () => {
+    await testClient.end().catch(() => {});
+    try {
+        const { client } = await import('../../src/db');
+        await client.end().catch(() => {});
+    } catch { /* app module may not have been imported */ }
+});
 
 // ===================== Helpers =====================
 

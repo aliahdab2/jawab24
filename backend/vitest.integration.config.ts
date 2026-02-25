@@ -7,9 +7,11 @@ export default defineConfig({
     include: ['test/integration/**/*.test.ts'],
     testTimeout: 30000,
     hookTimeout: 30000,
+    // Migrations run exactly once via globalSetup (before any fork spawns).
+    globalSetup: ['./test/integration/globalSetup.ts'],
+    // Per-file setup: truncate tables, export helpers.
     setupFiles: ['./test/integration/setup.ts'],
-    // Serialize test files — they share one Postgres database and truncate between tests.
-    // `threads` is a legacy v1 option; vitest v2 needs fileParallelism + singleFork.
+    // Serialize: all integration tests share one Postgres database.
     fileParallelism: false,
     pool: 'forks',
     poolOptions: { forks: { singleFork: true } },

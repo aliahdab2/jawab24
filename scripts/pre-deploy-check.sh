@@ -415,6 +415,9 @@ fi
 # Integration tests should always start with a fresh database to ensure reproducibility.
 echo "   Setting up clean test database (autoreply_test)..."
 if [[ "$DATABASE_URL" == *"autoreply_test"* ]] || [[ "$PG_HOST" == "localhost" ]] || [[ "$PG_HOST" == "127.0.0.1" ]]; then
+    # Terminate lingering connections (e.g. from a previous test run) so DROP succeeds
+    PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='autoreply_test' AND pid <> pg_backend_pid()" > /dev/null 2>&1
     PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
         "DROP DATABASE IF EXISTS autoreply_test" > /dev/null 2>&1
     PGPASSWORD=postgres psql -h "$PG_HOST" -p "$PG_PORT" -U postgres -c \
