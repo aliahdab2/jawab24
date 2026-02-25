@@ -92,6 +92,7 @@ vi.mock('../../src/config', () => ({
         ragMode: 'on',
         openai: { apiKey: 'test-key' },
         redis: { host: 'localhost', port: 6379, password: undefined },
+        facebook: { graphApiVersion: 'v18.0' },
     },
 }));
 
