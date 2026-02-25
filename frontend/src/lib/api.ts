@@ -451,7 +451,13 @@ export const adminApi = {
   },
 
   // AI Playground — test AI reply
-  testReply: async (data: { pageId: string; question: string; channel: 'comment' | 'dm' }) => {
+  testReply: async (data: {
+    pageId: string;
+    question: string;
+    channel: 'comment' | 'dm';
+    postMessage?: string;
+    conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+  }) => {
     const response = await api.post('/admin/ai/playground', data);
     return response.data;
   },

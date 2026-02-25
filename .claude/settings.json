@@ -1,5 +1,10 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -c \"DROP DATABASE IF EXISTS autoreply_test\")",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -c \"CREATE DATABASE autoreply_test\")",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5433/autoreply_test\" npx vitest run --config vitest.integration.config.ts)"
+    ],
     "additionalDirectories": [
       "/tmp"
     ]

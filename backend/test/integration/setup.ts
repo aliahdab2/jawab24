@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, afterAll } from 'vitest';
+import { beforeAll, beforeEach } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
@@ -63,21 +63,7 @@ beforeEach(async () => {
 
 // Connection cleanup: with threads: false all test files share one process,
 // so we must NOT close pools between files (afterAll runs per file).
-// Instead, register a one-time process handler that cleans up on exit.
-let cleanupRegistered = false;
-afterAll(() => {
-    if (cleanupRegistered) return;
-    cleanupRegistered = true;
-    process.on('beforeExit', async () => {
-        await testClient.end().catch(() => {});
-        try {
-            const { client } = await import('../../src/db');
-            await client.end().catch(() => {});
-        } catch {
-            // App module may not have been imported; ignore
-        }
-    });
-});
+// postgres.js connections auto-close on process exit, so no explicit cleanup needed.
 
 // ===================== Helpers =====================
 

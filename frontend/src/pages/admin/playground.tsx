@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Send, Database, AlertTriangle, Zap, MessageSquare, ChevronDown, ChevronUp, Trash2, FlaskConical, X, Sparkles } from 'lucide-react';
+import { Send, Database, AlertTriangle, Zap, MessageSquare, ChevronDown, ChevronUp, Trash2, FlaskConical, X, Sparkles, Plus, Minus } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslation } from '@/i18n';
 import clsx from 'clsx';
@@ -128,6 +128,8 @@ export default function AdminPlaygroundPage() {
     const [kbStatus, setKbStatus] = useState<KbStatus | null>(null);
     const [question, setQuestion] = useState('');
     const [channel, setChannel] = useState<'comment' | 'dm'>('comment');
+    const [postMessage, setPostMessage] = useState('');
+    const [conversationHistory, setConversationHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
     const [loading, setLoading] = useState(false);
     const [gaps, setGaps] = useState<GapData[]>([]);
 
@@ -207,6 +209,8 @@ export default function AdminPlaygroundPage() {
                 pageId: selectedPageId,
                 question: userMsg.text,
                 channel,
+                ...(channel === 'comment' && postMessage.trim() ? { postMessage: postMessage.trim() } : {}),
+                ...(channel === 'dm' && conversationHistory.length > 0 ? { conversationHistory } : {}),
             });
 
             const assistantMsg: PlaygroundMessage = {
@@ -236,11 +240,25 @@ export default function AdminPlaygroundPage() {
             // Re-focus input
             setTimeout(() => inputRef.current?.focus(), 100);
         }
-    }, [selectedPageId, question, channel, loading, t]);
+    }, [selectedPageId, question, channel, postMessage, conversationHistory, loading, t]);
 
     const handleClear = useCallback(() => {
         setMessages([]);
         setExpandedChunks(new Set());
+    }, []);
+
+    const addHistoryMessage = useCallback(() => {
+        setConversationHistory(prev => [...prev, { role: 'user', content: '' }]);
+    }, []);
+
+    const removeHistoryMessage = useCallback((index: number) => {
+        setConversationHistory(prev => prev.filter((_, i) => i !== index));
+    }, []);
+
+    const updateHistoryMessage = useCallback((index: number, field: 'role' | 'content', value: string) => {
+        setConversationHistory(prev => prev.map((msg, i) =>
+            i === index ? { ...msg, [field]: value } : msg
+        ));
     }, []);
 
     const toggleChunks = useCallback((messageId: string) => {
@@ -340,6 +358,83 @@ export default function AdminPlaygroundPage() {
                         <Trash2 className="w-4 h-4" aria-hidden="true" />
                     </button>
                 </div>
+
+                {/* ── Context Panel (post context / conversation history) ── */}
+                {selectedPageId && (
+                    <>
+                        {/* Post Context — visible when channel = comment */}
+                        {channel === 'comment' && (
+                            <div className="px-4 py-3 border-b border-surface-200 bg-surface-50/50 flex-shrink-0">
+                                <label htmlFor="post-context" className="block text-xs font-medium text-surface-600 mb-1.5">
+                                    {t('admin.playground.postContext')}
+                                </label>
+                                <textarea
+                                    id="post-context"
+                                    dir="auto"
+                                    value={postMessage}
+                                    onChange={(e) => setPostMessage(e.target.value)}
+                                    placeholder={t('admin.playground.postContextPlaceholder')}
+                                    rows={2}
+                                    className="w-full resize-none rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none"
+                                />
+                            </div>
+                        )}
+
+                        {/* Conversation History — visible when channel = dm */}
+                        {channel === 'dm' && (
+                            <div className="px-4 py-3 border-b border-surface-200 bg-surface-50/50 flex-shrink-0">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="text-xs font-medium text-surface-600">
+                                        {t('admin.playground.conversationHistory')}
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={addHistoryMessage}
+                                        className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 transition-colors"
+                                    >
+                                        <Plus className="w-3 h-3" aria-hidden="true" />
+                                        {t('admin.playground.addMessage')}
+                                    </button>
+                                </div>
+                                {conversationHistory.length === 0 ? (
+                                    <p className="text-xs text-surface-400 italic">{t('admin.playground.conversationHistoryHint')}</p>
+                                ) : (
+                                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                                        {conversationHistory.map((msg, i) => (
+                                            <div key={i} className="flex items-start gap-2">
+                                                <select
+                                                    value={msg.role}
+                                                    onChange={(e) => updateHistoryMessage(i, 'role', e.target.value)}
+                                                    className="flex-shrink-0 rounded-lg border border-surface-200 bg-white px-2 py-1.5 text-xs text-surface-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                                                    aria-label={`${t('admin.playground.conversationHistory')} ${i + 1}`}
+                                                >
+                                                    <option value="user">{t('admin.playground.roleCustomer')}</option>
+                                                    <option value="assistant">{t('admin.playground.roleBusiness')}</option>
+                                                </select>
+                                                <input
+                                                    type="text"
+                                                    dir="auto"
+                                                    value={msg.content}
+                                                    onChange={(e) => updateHistoryMessage(i, 'content', e.target.value)}
+                                                    placeholder={t('admin.playground.messagePlaceholder')}
+                                                    className="flex-1 rounded-lg border border-surface-200 bg-white px-3 py-1.5 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeHistoryMessage(i)}
+                                                    className="flex-shrink-0 p-1.5 text-surface-400 hover:text-red-500 transition-colors"
+                                                    aria-label={t('admin.playground.removeMessage')}
+                                                >
+                                                    <Minus className="w-3.5 h-3.5" aria-hidden="true" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
 
                 {/* ── Main Body ── */}
                 <div className="flex flex-1 overflow-hidden">

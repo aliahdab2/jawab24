@@ -686,10 +686,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          * POST /admin/ai/playground - Test AI reply with full metadata
          * Body: { pageId, question, channel }
          */
-        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm' } }>('/ai/playground', {
+        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] } }>('/ai/playground', {
             schema: { tags: ['Admin'], summary: 'Test AI reply generation with full metadata', security: auth },
-        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm' } }>, reply: FastifyReply) => {
-            const { pageId, question, channel } = request.body;
+        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] } }>, reply: FastifyReply) => {
+            const { pageId, question, channel, postMessage, conversationHistory } = request.body;
             const startTime = Date.now();
 
             if (!pageId || !question?.trim()) {
@@ -815,6 +815,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         channel,
                         kbActiveVersion: page.kbActiveVersion,
                         queryEmbedding,
+                        ...(channel === 'comment' && postMessage ? { postMessage } : {}),
+                        ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
                     },
                 });
 
