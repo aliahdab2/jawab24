@@ -274,6 +274,48 @@ test.describe('Dashboard Page', () => {
     expect(href).toContain('/pages#page-page_1');
   });
 
+  test('should link stat cards with valid filter values only', async ({ page }) => {
+    await page.goto('/en/dashboard');
+
+    // Wait for stat cards to render
+    await expect(page.getByText('42', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+
+    // All comment filter links must use valid filter values (not pending/flagged/replied_today)
+    const commentLinks = page.locator('a[href*="/comments?filter="]');
+    const commentCount = await commentLinks.count();
+    for (let i = 0; i < commentCount; i++) {
+      const href = await commentLinks.nth(i).getAttribute('href');
+      expect(href).toMatch(/filter=(needs_action|all|auto_replied)/);
+    }
+
+    // All message filter links must also use valid values
+    const messageLinks = page.locator('a[href*="/messages?filter="]');
+    const messageCount = await messageLinks.count();
+    for (let i = 0; i < messageCount; i++) {
+      const href = await messageLinks.nth(i).getAttribute('href');
+      expect(href).toMatch(/filter=(needs_action|all|auto_replied)/);
+    }
+  });
+
+  test('should show proper empty state for messages when all stats are zero', async ({ page }) => {
+    // Override messages stats to return all zeros
+    await page.route('**/api/messages/stats**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ total: 0, replied: 0, pending: 0, needsAttention: 0 }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+    await expect(
+      page.locator('h1').filter({ hasText: /Home|الرئيسية/i }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Should show proper empty state text, NOT opacity-50 stat cards
+    await expect(page.locator('text=/No messages yet/i')).toBeVisible({ timeout: 10000 });
+  });
+
   test('should show empty state gracefully when APIs fail', async ({ page }) => {
     // Override API mocks to return errors
     await page.route('**/api/**', async (route) => {

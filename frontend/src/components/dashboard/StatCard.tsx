@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
@@ -127,6 +128,9 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
         <Card className={cardClasses} style={cardStyle} padding="none">
           {backgroundDecoration}
           {content}
+          <div className="absolute bottom-2 end-2 opacity-0 group-hover:opacity-50 transition-opacity pointer-events-none">
+            <ChevronRight className="w-3.5 h-3.5 text-surface-400 rtl:rotate-180" />
+          </div>
         </Card>
       </Link>
     );

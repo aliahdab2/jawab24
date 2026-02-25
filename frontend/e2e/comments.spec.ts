@@ -154,6 +154,25 @@ test.describe('Comments Page', () => {
     await expect(page.locator('text=Check out our new schedule!').first()).toBeVisible({ timeout: 10000 });
   });
 
+  test('should handle legacy filter=pending param without crashing', async ({ page }) => {
+    await page.goto('/en/comments?filter=pending');
+
+    // Should NOT crash — should fall back to "Needs Action" filter
+    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('text=Something went wrong')).not.toBeVisible();
+
+    // The "Needs Action" chip should be active (fallback from invalid "pending")
+    const needsActionBtn = page.locator('button[aria-pressed="true"]').filter({ hasText: /Needs Action/i });
+    await expect(needsActionBtn).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should handle legacy filter=flagged param without crashing', async ({ page }) => {
+    await page.goto('/en/comments?filter=flagged');
+
+    await expect(page.locator('h1').filter({ hasText: /Comments/i }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('text=Something went wrong')).not.toBeVisible();
+  });
+
   test('should not crash when APIs fail', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();

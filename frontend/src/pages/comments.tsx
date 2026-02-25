@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
@@ -33,6 +32,21 @@ import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 type FilterType = 'needs_action' | 'all' | 'auto_replied';
+
+const VALID_FILTERS: FilterType[] = ['needs_action', 'all', 'auto_replied'];
+
+// Map legacy/dashboard filter values to valid filter types
+const FILTER_ALIASES: Record<string, FilterType> = {
+  pending: 'needs_action',
+  flagged: 'needs_action',
+  replied_today: 'auto_replied',
+};
+
+function resolveFilter(value: string | undefined): FilterType {
+  if (!value) return 'needs_action';
+  if (VALID_FILTERS.includes(value as FilterType)) return value as FilterType;
+  return FILTER_ALIASES[value] || 'needs_action';
+}
 
 // Map frontend filters to API params
 function getApiParams(filter: FilterType): CommentsQueryParams {
@@ -66,12 +80,10 @@ const CommentsPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  const rawFilter = (searchParams.get('filter') as FilterType) || 'needs_action';
-  const [filter, setFilter] = useState<FilterType>(rawFilter);
+  const [filter, setFilter] = useState<FilterType>('needs_action');
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
@@ -218,13 +230,10 @@ const CommentsPage: NextPageWithLayout = () => {
 
   // Update internal filter when URL changes
   useEffect(() => {
-    const currentParam = searchParams.get('filter');
-    if (currentParam) {
-      setFilter(currentParam as FilterType);
-    } else {
-      setFilter('needs_action');
-    }
-  }, [searchParams]);
+    if (!router.isReady) return;
+    const currentParam = router.query.filter as string | undefined;
+    setFilter(resolveFilter(currentParam));
+  }, [router.isReady, router.query.filter]);
 
   // Update Page Title
   useEffect(() => {

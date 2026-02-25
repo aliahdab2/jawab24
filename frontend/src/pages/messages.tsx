@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, type ReactElement, useMemo, us
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { useRouter } from 'next/router';
-import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
@@ -31,6 +30,21 @@ import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 type FilterType = 'needs_action' | 'all' | 'auto_replied';
+
+const VALID_FILTERS: FilterType[] = ['needs_action', 'all', 'auto_replied'];
+
+// Map legacy/dashboard filter values to valid filter types
+const FILTER_ALIASES: Record<string, FilterType> = {
+  pending: 'needs_action',
+  flagged: 'needs_action',
+  replied_today: 'auto_replied',
+};
+
+function resolveFilter(value: string | undefined): FilterType {
+  if (!value) return 'needs_action';
+  if (VALID_FILTERS.includes(value as FilterType)) return value as FilterType;
+  return FILTER_ALIASES[value] || 'needs_action';
+}
 
 // Map frontend filters to API params
 function getApiParams(filter: FilterType): MessagesQueryParams {
@@ -63,7 +77,6 @@ const MessagesPage: NextPageWithLayout = () => {
   const { t, language, dateLocale } = useTranslation();
   const { isAuthenticated } = useAuthStore();
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -112,13 +125,10 @@ const MessagesPage: NextPageWithLayout = () => {
 
   // Update internal filter when URL changes
   useEffect(() => {
-    const currentParam = searchParams.get('filter');
-    if (currentParam && ['all', 'auto_replied'].includes(currentParam)) {
-      setFilter(currentParam as FilterType);
-    } else {
-      setFilter('needs_action');
-    }
-  }, [searchParams]);
+    if (!router.isReady) return;
+    const currentParam = router.query.filter as string | undefined;
+    setFilter(resolveFilter(currentParam));
+  }, [router.isReady, router.query.filter]);
 
   // API params derived from current filter
   const apiParams = useMemo(() => getApiParams(filter), [filter]);

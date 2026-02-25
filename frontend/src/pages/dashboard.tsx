@@ -38,6 +38,22 @@ import { CommentDetailModal, CommentCard } from '@/components/comments';
 import { formatDuration } from '@/lib/formatDuration';
 import { useIsDemoUser } from '@/features/demo';
 
+function SectionError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-center gap-2 py-4 text-surface-500">
+      <AlertTriangle className="w-4 h-4 text-amber-500" aria-hidden="true" />
+      <span className="text-sm">{t('dashboard.sectionLoadError')}</span>
+      <button
+        onClick={onRetry}
+        className="text-sm font-semibold text-brand-600 hover:text-brand-700 underline"
+      >
+        {t('errors.tryAgain')}
+      </button>
+    </div>
+  );
+}
+
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
   return (
     <div className="space-y-3">
@@ -120,24 +136,47 @@ const DashboardPage: NextPageWithLayout = () => {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
+  const [sectionErrors, setSectionErrors] = useState({
+    comments: false,
+    messages: false,
+    recentComments: false,
+    pages: false,
+    usage: false,
+    settings: false,
+    analytics: false,
+  });
 
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
+      // Track which sections failed to load
+      const errors = {
+        comments: false,
+        messages: false,
+        recentComments: false,
+        pages: false,
+        usage: false,
+        settings: false,
+        analytics: false,
+      };
+
       // Use API instances that handle auth via cookies (web) or Bearer token (mobile)
       const [statsRes, messagesStatsRes, commentsListRes, pagesRes, usageRes, settingsRes, analyticsRes] = await Promise.all([
-        commentsApi.getStats().catch(() => null),
-        messagesApi.getStats().catch(() => null),
-        commentsApi.getAll({ limit: 5 }), // Only fetch recent 5 for the list
-        pagesApi.getAll(),
-        subscriptionApi.getUsage().catch(() => null),
-        settingsApi.get().catch(() => null),
-        analyticsApi.getOverview(30).catch(() => null),
+        commentsApi.getStats().catch(() => { errors.comments = true; return null; }),
+        messagesApi.getStats().catch(() => { errors.messages = true; return null; }),
+        commentsApi.getAll({ limit: 5 }).catch(() => { errors.recentComments = true; return null; }),
+        pagesApi.getAll().catch(() => { errors.pages = true; return null; }),
+        subscriptionApi.getUsage().catch(() => { errors.usage = true; return null; }),
+        settingsApi.get().catch(() => { errors.settings = true; return null; }),
+        analyticsApi.getOverview(30).catch(() => { errors.analytics = true; return null; }),
       ]);
 
-      // Set usage data if available
-      if (usageRes?.data?.data) {
-        setUsage(usageRes.data.data);
+      // Set usage data if available (handle both nested and flat response shapes)
+      if (usageRes?.data) {
+        const usageData = usageRes.data.data ?? usageRes.data;
+        if (usageData?.subscription !== undefined || usageData?.aiReplies !== undefined) {
+          setUsage(usageData);
+        }
       }
 
       // Set analytics data if available
@@ -153,13 +192,17 @@ const DashboardPage: NextPageWithLayout = () => {
         });
       }
 
-      const recentCommentsList: Comment[] = Array.isArray(commentsListRes.data)
-        ? commentsListRes.data as unknown as Comment[]
-        : (Array.isArray(commentsListRes.data?.data) ? commentsListRes.data.data : []) as unknown as Comment[];
+      const recentCommentsList: Comment[] = commentsListRes
+        ? (Array.isArray(commentsListRes.data)
+          ? commentsListRes.data as unknown as Comment[]
+          : (Array.isArray(commentsListRes.data?.data) ? commentsListRes.data.data : []) as unknown as Comment[])
+        : [];
 
-      const fetchedPages: Page[] = Array.isArray(pagesRes.data)
-        ? pagesRes.data
-        : (Array.isArray(pagesRes.data?.data) ? pagesRes.data.data : []);
+      const fetchedPages: Page[] = pagesRes
+        ? (Array.isArray(pagesRes.data)
+          ? pagesRes.data
+          : (Array.isArray(pagesRes.data?.data) ? pagesRes.data.data : []))
+        : [];
 
       setPages(fetchedPages);
 
@@ -222,6 +265,21 @@ const DashboardPage: NextPageWithLayout = () => {
         messagesNeedsAttention: messagesNeedsAttention,
         messagesRepliedToday: msgStats.replied // Using total as proxy
       });
+
+      // Update section error state
+      setSectionErrors(errors);
+
+      // Only show toast for total failure (likely network issue)
+      const failedCount = Object.values(errors).filter(Boolean).length;
+      if (failedCount === 7) {
+        toast.error(t('dashboard.fetchError'));
+      } else if (failedCount > 0) {
+        captureError(
+          new Error(`Dashboard partial load: ${failedCount}/7 sections failed`),
+          'Partial dashboard load failure',
+          { tags: { page: 'dashboard' } }
+        );
+      }
 
     } catch (error) {
       captureError(error, 'Failed to fetch dashboard data', { tags: { page: 'dashboard' } });
@@ -292,7 +350,7 @@ const DashboardPage: NextPageWithLayout = () => {
       value: statsData.totalComments.toLocaleString(),
       icon: MessageSquare,
       color: 'brand' as const,
-      href: '/comments'
+      href: '/comments?filter=all'
     },
     {
       id: 'pending',
@@ -300,7 +358,7 @@ const DashboardPage: NextPageWithLayout = () => {
       value: statsData.pendingReplies.toLocaleString(),
       icon: Clock,
       color: 'amber' as const,
-      href: '/comments?filter=pending'
+      href: '/comments'
     },
     {
       id: 'replied_today',
@@ -308,7 +366,7 @@ const DashboardPage: NextPageWithLayout = () => {
       value: statsData.repliedToday.toLocaleString(),
       icon: CheckCircle,
       color: 'emerald' as const,
-      href: '/comments?filter=replied_today'
+      href: '/comments?filter=auto_replied'
     },
     {
       id: 'needs_attention',
@@ -316,7 +374,7 @@ const DashboardPage: NextPageWithLayout = () => {
       value: statsData.needsAttention.toLocaleString(),
       icon: AlertTriangle,
       color: 'red' as const,
-      href: '/comments?filter=flagged'
+      href: '/comments'
     }
   ];
 
@@ -328,11 +386,11 @@ const DashboardPage: NextPageWithLayout = () => {
       value: statsData.totalMessages.toLocaleString(),
       icon: MessageCircle,
       color: 'brand' as const,
-      href: '/messages'
+      href: '/messages?filter=all'
     },
     {
       id: 'pending',
-      nameKey: 'comments.pending' as TranslationKey,
+      nameKey: 'messages.pending' as TranslationKey,
       value: statsData.messagesPending.toLocaleString(),
       icon: Clock,
       color: 'amber' as const,
@@ -340,15 +398,15 @@ const DashboardPage: NextPageWithLayout = () => {
     },
     {
       id: 'replied_today',
-      nameKey: 'comments.repliedToday' as TranslationKey,
+      nameKey: 'messages.repliedToday' as TranslationKey,
       value: statsData.messagesRepliedToday.toLocaleString(),
       icon: CheckCircle,
       color: 'emerald' as const,
-      href: '/messages'
+      href: '/messages?filter=auto_replied'
     },
     {
       id: 'needs_attention',
-      nameKey: 'comments.needsAttention' as TranslationKey,
+      nameKey: 'messages.needsAttention' as TranslationKey,
       value: statsData.messagesNeedsAttention.toLocaleString(),
       icon: AlertTriangle,
       color: 'red' as const,
@@ -409,23 +467,27 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          {commentStats.map((stat, i) => (
-            <StatCard
-              key={stat.id}
-              nameKey={stat.nameKey}
-              value={stat.value}
-              icon={stat.icon}
-              color={stat.color}
-              index={i}
-              href={stat.href}
-            />
-          ))}
-        </div>
+        {sectionErrors.comments ? (
+          <SectionError onRetry={fetchDashboardData} />
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            {commentStats.map((stat, i) => (
+              <StatCard
+                key={stat.id}
+                nameKey={stat.nameKey}
+                value={stat.value}
+                icon={stat.icon}
+                color={stat.color}
+                index={i}
+                href={stat.href}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Messages Stats Section */}
-      <div className={clsx("mb-8 lg:mb-10", statsData.totalMessages === 0 && statsData.messagesPending === 0 && statsData.messagesNeedsAttention === 0 && statsData.messagesRepliedToday === 0 && "opacity-50")}>
+      <div className="mb-8 lg:mb-10">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-surface-600 uppercase tracking-wider flex items-center gap-2">
             <MessageCircle className="w-4 h-4" />
@@ -435,19 +497,28 @@ const DashboardPage: NextPageWithLayout = () => {
             {t('common.viewAll')} <span className="inline-block rtl:scale-x-[-1]">→</span>
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          {messageStats.map((stat, i) => (
-            <StatCard
-              key={stat.id}
-              nameKey={stat.nameKey}
-              value={stat.value}
-              icon={stat.icon}
-              color={stat.color}
-              index={i + 4}
-              href={stat.href}
-            />
-          ))}
-        </div>
+        {sectionErrors.messages ? (
+          <SectionError onRetry={fetchDashboardData} />
+        ) : statsData.totalMessages === 0 && statsData.messagesPending === 0 && statsData.messagesNeedsAttention === 0 && statsData.messagesRepliedToday === 0 ? (
+          <div className="py-6 text-center rounded-2xl bg-surface-50 border border-dashed border-surface-200">
+            <MessageCircle className="w-6 h-6 text-surface-300 mx-auto mb-2" />
+            <p className="text-sm text-surface-500">{t('dashboard.noMessagesYet' as TranslationKey)}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            {messageStats.map((stat, i) => (
+              <StatCard
+                key={stat.id}
+                nameKey={stat.nameKey}
+                value={stat.value}
+                icon={stat.icon}
+                color={stat.color}
+                index={i + 4}
+                href={stat.href}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Performance Section — from /analytics/overview */}
@@ -473,7 +544,7 @@ const DashboardPage: NextPageWithLayout = () => {
               icon={Flag}
               color={analytics.totals.flagged > 0 ? 'amber' : 'emerald'}
               index={9}
-              href="/comments?filter=flagged"
+              href="/comments"
             />
             <StatCard
               nameKey={'dashboard.avgSpeed' as TranslationKey}
@@ -564,7 +635,9 @@ const DashboardPage: NextPageWithLayout = () => {
           </div>
 
           <div className="divide-y divide-surface-100">
-            {recentComments.length > 0 ? (
+            {sectionErrors.recentComments ? (
+              <SectionError onRetry={fetchDashboardData} />
+            ) : recentComments.length > 0 ? (
               (() => {
                 // Check if user has active pages on BOTH platforms
                 const hasFacebook = pages.some(p => !!p.facebookPageId);
@@ -702,7 +775,9 @@ const DashboardPage: NextPageWithLayout = () => {
               <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.topPagesDesc')}</p>
             </div>
             <div className="divide-y divide-surface-100">
-              {pages.length > 0 ? pages.slice(0, 3).map((page, i) => {
+              {sectionErrors.pages ? (
+                <SectionError onRetry={fetchDashboardData} />
+              ) : pages.length > 0 ? pages.slice(0, 3).map((page, i) => {
                 // Calculate per-page stats from recentComments (approximation)
                 const pageComments = recentComments.filter(c => c.pageId === page.id || c.pageId === page.facebookPageId);
                 const pendingCount = pageComments.filter(c => !c.replied).length;
