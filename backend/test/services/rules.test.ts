@@ -511,4 +511,69 @@ describe('matchesKeyword', () => {
         expect(matchesKeyword('كم السعر', 'سعر')).toBe(true);
         expect(matchesKeyword('بكم', 'بكم')).toBe(true);
     });
+
+    // --- Real-world Arabic pricing comment scenarios ---
+    // Guard net: these are actual phrases customers send on social media
+
+    it('matches "سعر" keyword against "ممكن سعر" (exact keyword in phrase)', () => {
+        expect(matchesKeyword('ممكن سعر', 'سعر')).toBe(true);
+    });
+
+    it('matches "سعر" keyword against "شو الاسعار عندكم"', () => {
+        // الاسعار is the broken plural of سعر — must match via root-consonant tier
+        expect(matchesKeyword('شو الاسعار عندكم', 'سعر')).toBe(true);
+    });
+
+    it('matches "سعر" keyword against "كم الأسعار" (with hamza on alef)', () => {
+        // الأسعار (hamza variant أ) normalizes to الاسعار — then root matching kicks in
+        expect(matchesKeyword('كم الأسعار', 'سعر')).toBe(true);
+    });
+
+    it('matches "سعر" keyword against "بكم السعر"', () => {
+        // السعر contains سعر as substring (tier 1)
+        expect(matchesKeyword('بكم السعر', 'سعر')).toBe(true);
+    });
+
+    it('matches "سعر" keyword against "اعطيني الاسعار لو سمحت"', () => {
+        expect(matchesKeyword('اعطيني الاسعار لو سمحت', 'سعر')).toBe(true);
+    });
+
+    it('matches "سعر" keyword against "ممكن تعطوني الاسعار"', () => {
+        expect(matchesKeyword('ممكن تعطوني الاسعار', 'سعر')).toBe(true);
+    });
+
+    it('matches "سعر" keyword against "وين الاسعار"', () => {
+        expect(matchesKeyword('وين الاسعار', 'سعر')).toBe(true);
+    });
+
+    it('matches "كم" keyword against "بكم هاد" (substring match)', () => {
+        expect(matchesKeyword('بكم هاد', 'كم')).toBe(true);
+    });
+
+    it('matches "كم" keyword against "كم سعره"', () => {
+        expect(matchesKeyword('كم سعره', 'كم')).toBe(true);
+    });
+
+    it('matches "price" keyword against "what is the price?"', () => {
+        expect(matchesKeyword('what is the price?', 'price')).toBe(true);
+    });
+
+    it('matches "price" keyword against "how much / price?"', () => {
+        expect(matchesKeyword('how much / price?', 'price')).toBe(true);
+    });
+
+    it('does NOT match "سعر" keyword against unrelated Arabic text', () => {
+        expect(matchesKeyword('مرحبا كيف الحال', 'سعر')).toBe(false);
+        expect(matchesKeyword('شكرا جزيلا', 'سعر')).toBe(false);
+    });
+
+    // Colloquial Arabic pricing phrases
+    it('matches "باديش" keyword against "باديش عندكم"', () => {
+        expect(matchesKeyword('باديش عندكم', 'باديش')).toBe(true);
+    });
+
+    it('matches Arabic keyword with definite article on keyword itself', () => {
+        // If the keyword stored is "الأسعار" and the text is "الأسعار"
+        expect(matchesKeyword('الاسعار', 'الاسعار')).toBe(true);
+    });
 });

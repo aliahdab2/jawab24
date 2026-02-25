@@ -688,6 +688,245 @@ describe('ReplyGenerator - Flagging System', () => {
     });
 });
 
+// --- Template Priority Guard Tests ---
+// Guard net: template match MUST always take priority over AI.
+// If a rule + template matches the comment, AI should NEVER be called.
+
+describe('ReplyGenerator - Template Priority Guard', () => {
+    let generator: ReplyGenerator;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        generator = new ReplyGenerator();
+    });
+
+    const contextWithWorkspace = {
+        workspaceId: 'ws-123',
+        userId: 'user-123',
+        text: 'ممكن سعر',
+        pageName: 'Test Page',
+        pageId: 'page-1',
+    };
+
+    it('should return template reply and NOT call AI when rule matches', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { aiService } = await import('../../src/services/ai');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1',
+            templateId: 'template-1',
+            keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1',
+            name: 'Price Inquiry',
+            message: 'أسعارنا تبدأ من ٩ دولار شهرياً',
+            active: true,
+        } as any);
+
+        const result = await generator.generateForComment(contextWithWorkspace, true);
+
+        expect(result.replyMethod).toBe('template');
+        expect(result.replyText).toBe('أسعارنا تبدأ من ٩ دولار شهرياً');
+        expect(result.templateId).toBe('template-1');
+        // AI must NOT be called — template takes priority
+        expect(aiService.generateReply).not.toHaveBeenCalled();
+    });
+
+    it('should return template reply in dual mode without calling AI', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { aiService } = await import('../../src/services/ai');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1',
+            templateId: 'template-1',
+            keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1',
+            name: 'Price Inquiry',
+            message: 'الباقة التجريبية $9، باقة الأعمال $29، الباقة الاحترافية $69',
+            active: true,
+        } as any);
+
+        // Dual mode — template should still take priority
+        const result = await generator.generateForComment(contextWithWorkspace, true, 'dual');
+
+        expect(result.replyMethod).toBe('template');
+        expect(result.replyText).toContain('$9');
+        expect(aiService.generateReply).not.toHaveBeenCalled();
+    });
+
+    it('should return template reply in private mode without calling AI', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { aiService } = await import('../../src/services/ai');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1',
+            templateId: 'template-1',
+            keywords: ['price'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1',
+            name: 'Pricing',
+            message: 'Our plans start at $9/month.',
+            active: true,
+        } as any);
+
+        const result = await generator.generateForComment(
+            { ...contextWithWorkspace, text: 'what is the price?' },
+            true,
+            'private',
+        );
+
+        expect(result.replyMethod).toBe('template');
+        expect(aiService.generateReply).not.toHaveBeenCalled();
+    });
+
+    it('should fall through to AI when rule matches but template is inactive', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { aiService } = await import('../../src/services/ai');
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1',
+            templateId: 'template-1',
+            keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1',
+            name: 'Inactive Template',
+            message: 'This should not be sent',
+            active: false,  // INACTIVE
+        } as any);
+        vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+            allowed: true, limit: 1500, used: 0, remaining: 1500,
+        } as any);
+        vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+        vi.mocked(aiService.generateReply).mockResolvedValue({
+            reply: 'AI fallback reply',
+            language: 'ar',
+            cached: false,
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        });
+
+        const result = await generator.generateForComment(contextWithWorkspace, true);
+
+        // Template was inactive, so AI should be called
+        expect(result.replyMethod).toBe('ai');
+        expect(aiService.generateReply).toHaveBeenCalled();
+    });
+
+    it('should fall through to AI when rule has no templateId', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { aiService } = await import('../../src/services/ai');
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1',
+            templateId: null,  // No template linked
+            keywords: ['سعر'],
+        } as any);
+        vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+            allowed: true, limit: 1500, used: 0, remaining: 1500,
+        } as any);
+        vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+        vi.mocked(aiService.generateReply).mockResolvedValue({
+            reply: 'AI reply for unlinked rule',
+            language: 'ar',
+            cached: false,
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        });
+
+        const result = await generator.generateForComment(contextWithWorkspace, true);
+
+        expect(result.replyMethod).toBe('ai');
+        expect(aiService.generateReply).toHaveBeenCalled();
+    });
+
+    it('should fall through to AI when template message is empty', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { aiService } = await import('../../src/services/ai');
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1',
+            templateId: 'template-1',
+            keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1',
+            name: 'Empty Template',
+            message: '',  // Empty message
+            active: true,
+        } as any);
+        vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+            allowed: true, limit: 1500, used: 0, remaining: 1500,
+        } as any);
+        vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+        vi.mocked(aiService.generateReply).mockResolvedValue({
+            reply: 'AI reply',
+            language: 'ar',
+            cached: false,
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        });
+
+        const result = await generator.generateForComment(contextWithWorkspace, true);
+
+        expect(result.replyMethod).toBe('ai');
+        expect(aiService.generateReply).toHaveBeenCalled();
+    });
+
+    it('should pass workspaceId to findMatchingRule (not userId)', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+
+        await generator.generateForComment(contextWithWorkspace, false);
+
+        // Verify workspaceId is passed, not userId
+        expect(rulesService.findMatchingRule).toHaveBeenCalledWith('ws-123', 'ممكن سعر');
+    });
+
+    it('should match template for DM (generateForMessage) the same way as comments', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        const { templatesService } = await import('../../src/services/templates');
+        const { aiService } = await import('../../src/services/ai');
+
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+            id: 'rule-1',
+            templateId: 'template-1',
+            keywords: ['سعر'],
+        } as any);
+        vi.mocked(templatesService.getTemplate).mockResolvedValue({
+            id: 'template-1',
+            name: 'Price DM',
+            message: 'أسعارنا تبدأ من ٩ دولار',
+            active: true,
+        } as any);
+
+        const result = await generator.generateForMessage({
+            ...contextWithWorkspace,
+            senderId: 'sender-1',
+        }, true);
+
+        expect(result.replyMethod).toBe('template');
+        expect(result.replyText).toBe('أسعارنا تبدأ من ٩ دولار');
+        expect(aiService.generateReply).not.toHaveBeenCalled();
+    });
+});
+
 // --- shouldSkipReply tests ---
 
 import { shouldSkipReply } from '../../src/services/reply/generator';
