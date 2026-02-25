@@ -211,7 +211,7 @@ describe('CommentDetailModal', () => {
   it('shows commenter name in the header', async () => {
     await renderModal();
 
-    expect(screen.getByText('Test User')).toBeInTheDocument();
+    expect(screen.getAllByText('Test User').length).toBeGreaterThanOrEqual(1);
   });
 
   describe('page name link', () => {

@@ -18,6 +18,7 @@ import {
   PlayCircle,
   Globe,
   ExternalLink,
+  ChevronRight,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Locale } from 'date-fns';
@@ -125,8 +126,15 @@ export function MessageDetailModal({
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-3 pb-0 text-xs text-surface-400">
+          <span className="font-medium">{t('messages.title')}</span>
+          <ChevronRight className="w-3 h-3 rtl:rotate-180" />
+          <span className="font-semibold text-surface-600 truncate">{conversation.senderName || t('common.user' as TranslationKey)}</span>
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-surface-100 flex-shrink-0">
+        <div className="flex items-center justify-between p-4 sm:p-6 pt-2 sm:pt-3 border-b border-surface-100 flex-shrink-0">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className={clsx(
               "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner flex-shrink-0",

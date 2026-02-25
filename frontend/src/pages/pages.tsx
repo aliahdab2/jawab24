@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
+import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
@@ -316,30 +317,47 @@ const PagesPage: NextPageWithLayout = () => {
 
                   {/* Instagram row */}
                   <div
-                    className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-200' : 'bg-surface-50 border-surface-100') : 'bg-surface-50 border-surface-100 opacity-60 cursor-not-allowed pointer-events-none'}`}
-                    {...(!page.instagramUsername && { title: t('pages.instagramTooltip' as TranslationKey) })}
+                    className={clsx(
+                      'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
+                      page.instagramUsername
+                        ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-200' : 'bg-surface-50 border-surface-100')
+                        : 'bg-surface-50 border-surface-100 border-dashed'
+                    )}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400') : 'bg-surface-200 text-surface-300'}`}>
+                      <div className={clsx(
+                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                        page.instagramUsername
+                          ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400')
+                          : 'bg-surface-100 text-surface-300'
+                      )}>
                         <Instagram className="w-4 h-4" />
                       </div>
                       <div className="min-w-0">
-                        <p className={`text-sm font-bold ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-600') : 'text-surface-400'}`}>Instagram</p>
-                        <p className={`text-xs font-medium ${page.instagramUsername ? (page.instagramAutoReplyEnabled ? 'text-pink-500' : 'text-surface-500') : 'text-surface-300'}`}>
+                        <p className={clsx(
+                          'text-sm font-bold',
+                          page.instagramUsername
+                            ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-600')
+                            : 'text-surface-400'
+                        )}>Instagram</p>
+                        <p className={clsx(
+                          'text-xs font-medium',
+                          page.instagramUsername
+                            ? (page.instagramAutoReplyEnabled ? 'text-pink-500' : 'text-surface-500')
+                            : 'text-surface-400'
+                        )}>
                           {page.instagramUsername
                             ? `@${page.instagramUsername}`
-                            : t('pages.notLinked')}
+                            : t('pages.instagramTooltip' as TranslationKey)}
                         </p>
                       </div>
                     </div>
-                    {page.instagramUsername ? (
+                    {page.instagramUsername && (
                       <Toggle
                         enabled={page.instagramAutoReplyEnabled ?? false}
                         onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
                         aria-label={`${t('pages.autoReply' as TranslationKey)} Instagram - ${page.name}`}
                       />
-                    ) : (
-                      <div className="w-10 h-5 bg-surface-200 rounded-full flex-shrink-0" aria-hidden="true" />
                     )}
                   </div>
                 </div>

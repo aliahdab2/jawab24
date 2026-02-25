@@ -696,10 +696,10 @@ const DashboardPage: NextPageWithLayout = () => {
                       </div>
                       <div className="min-w-0 flex-1 text-start">
                         <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                        <h3 className="text-lg sm:text-2xl font-display font-bold text-surface-900 tracking-tight">
-                          {PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}
+                        <h3 className="text-base sm:text-lg lg:text-xl font-display font-bold text-surface-900 tracking-tight flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span>{PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}</span>
                           {isTrialing && (
-                            <span className="ms-2 inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
+                            <span className="inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
                               {t('subscription.trialBadge' as TranslationKey)}
                             </span>
                           )}

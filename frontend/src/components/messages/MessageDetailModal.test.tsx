@@ -113,7 +113,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('TestUser')).toBeInTheDocument();
+    expect(screen.getAllByText('TestUser').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows reply textarea and send button', () => {

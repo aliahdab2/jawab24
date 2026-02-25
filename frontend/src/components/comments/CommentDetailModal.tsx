@@ -22,6 +22,7 @@ import {
   PlayCircle,
   FileText,
   Globe,
+  ChevronRight,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -270,8 +271,15 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-surface-400">
+          <span className="font-medium">{t('comments.title')}</span>
+          <ChevronRight className="w-3 h-3 rtl:rotate-180" />
+          <span className="font-semibold text-surface-600 truncate">{comment.fromName || t('common.unknownUser')}</span>
+        </div>
+
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 md:p-6 border-b border-surface-100">
+        <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-surface-100">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsAttention ? 'bg-red-100' : 'bg-brand-100'}`}>
               <MessageSquare className={`w-5 h-5 ${needsAttention ? 'text-red-600' : 'text-brand-600'}`} />
