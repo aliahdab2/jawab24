@@ -11,6 +11,7 @@ import { templatesService } from '../services/templates';
 import { RetrievalService } from '../services/kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../services/kb/embedding';
 import { gapDetectorService } from '../services/kb/gap-detector';
+import { settingsService } from '../services/settings';
 import { shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../services/reply/generator';
 import { RetrievedChunkContext } from '../types';
 
@@ -701,6 +702,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     .select({
                         id: pages.id,
                         name: pages.name,
+                        userId: pages.userId,
                         workspaceId: pages.workspaceId,
                         knowledgeBase: pages.knowledgeBase,
                         kbActiveVersion: pages.kbActiveVersion,
@@ -711,6 +713,22 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
                 if (!page) {
                     return reply.status(404).send({ success: false, error: 'Page not found' });
+                }
+
+                // 1b. Fetch page owner's reply mode settings
+                const NUDGE_DEFAULT = 'تم إرسال التفاصيل برسالة خاصة 📩';
+                let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
+                let nudgeText: string | null = null;
+                if (page.userId) {
+                    try {
+                        const ownerSettings = await settingsService.getSettings(page.userId);
+                        commentReplyMode = ownerSettings.commentReplyMode || 'public';
+                        if (commentReplyMode === 'dual') {
+                            nudgeText = ((ownerSettings.dualReplyNudge as string) || NUDGE_DEFAULT).slice(0, 80);
+                        }
+                    } catch {
+                        // Non-critical — fall back to defaults
+                    }
                 }
 
                 // 2. Try template match
@@ -745,6 +763,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             tokensUsed: 0,
                             model: null,
                             gapRecorded: false,
+                            commentReplyMode: channel === 'comment' ? commentReplyMode : null,
+                            nudgeText: channel === 'comment' ? nudgeText : null,
                         },
                     });
                 }
@@ -836,6 +856,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         tokensUsed: aiResponse.tokensUsed || 0,
                         model: aiResponse.model || null,
                         gapRecorded,
+                        commentReplyMode: channel === 'comment' ? commentReplyMode : null,
+                        nudgeText: channel === 'comment' ? nudgeText : null,
                     },
                 });
             } catch (error) {

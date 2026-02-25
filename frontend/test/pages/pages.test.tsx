@@ -13,6 +13,7 @@ vi.mock('@/lib/api', () => ({
   pagesApi: {
     getAll: () => mockPagesApiGetAll(),
     toggle: (id: string, enabled: boolean) => mockPagesApiToggle(id, enabled),
+    getKbGaps: () => Promise.resolve({ data: { data: [] } }),
   },
   api: {
     post: (url: string, data: any) => mockApiPost(url, data),

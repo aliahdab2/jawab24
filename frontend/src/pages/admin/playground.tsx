@@ -52,6 +52,8 @@ interface PlaygroundResult {
     tokensUsed: number;
     model: string | null;
     gapRecorded: boolean;
+    commentReplyMode: 'public' | 'private' | 'dual' | null;
+    nudgeText: string | null;
 }
 
 interface PlaygroundMessage {
@@ -382,33 +384,69 @@ export default function AdminPlaygroundPage() {
                                                     </div>
                                                 </div>
                                             ) : (
-                                                /* Normal reply bubble */
-                                                <div className={clsx(
-                                                    'max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm',
-                                                    msg.metadata?.replyMethod === 'skipped'
-                                                        ? 'bg-red-50 border border-red-200'
-                                                        : 'bg-white border border-surface-100'
-                                                )}>
-                                                    {/* Reply source indicator */}
-                                                    {msg.metadata && (
-                                                        <div className="flex items-center gap-1.5 mb-2">
-                                                            <MethodIcon method={msg.metadata.replyMethod} />
-                                                            <span className={clsx(
-                                                                'text-[10px] font-medium uppercase tracking-wider',
-                                                                msg.metadata.replyMethod === 'ai' ? 'text-violet-600'
-                                                                    : msg.metadata.replyMethod === 'template' ? 'text-emerald-600'
-                                                                        : 'text-red-600'
-                                                            )}>
-                                                                {t(`admin.playground.${msg.metadata.replyMethod}`)}
-                                                                {msg.metadata.templateName && ` · ${msg.metadata.templateName}`}
-                                                            </span>
-                                                        </div>
-                                                    )}
-
-                                                    {msg.text ? (
-                                                        <p className="text-sm leading-relaxed text-surface-900 whitespace-pre-wrap">{msg.text}</p>
+                                                /* Normal reply bubble — split view for dual mode */
+                                                <div className="max-w-[85%] sm:max-w-[75%] space-y-2">
+                                                    {/* Dual mode: nudge (comment) + DM (full reply) */}
+                                                    {msg.metadata?.commentReplyMode === 'dual' && msg.text ? (
+                                                        <>
+                                                            {/* Public comment nudge */}
+                                                            <div className="rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm bg-white border border-surface-100">
+                                                                <div className="flex items-center gap-1.5 mb-2">
+                                                                    <MessageSquare className="w-3 h-3 text-surface-400" aria-hidden="true" />
+                                                                    <span className="text-[10px] font-medium uppercase tracking-wider text-surface-500">
+                                                                        {t('admin.playground.commentReply')}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-sm leading-relaxed text-surface-900">
+                                                                    {msg.metadata.nudgeText || 'تم إرسال التفاصيل برسالة خاصة 📩'}
+                                                                </p>
+                                                            </div>
+                                                            {/* Private DM with full reply */}
+                                                            <div className="rounded-2xl p-3 sm:p-4 shadow-sm bg-brand-50 border border-brand-200">
+                                                                <div className="flex items-center gap-1.5 mb-2">
+                                                                    <MethodIcon method={msg.metadata.replyMethod} />
+                                                                    <span className="text-[10px] font-medium uppercase tracking-wider text-brand-700">
+                                                                        {t('admin.playground.privateMessage')} · {t(`admin.playground.${msg.metadata.replyMethod}`)}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-sm leading-relaxed text-surface-900 whitespace-pre-wrap">{msg.text}</p>
+                                                            </div>
+                                                        </>
                                                     ) : (
-                                                        <p className="text-sm text-red-600 italic">{t('admin.playground.noReply')}</p>
+                                                        /* Single bubble for public / private / skipped */
+                                                        <div className={clsx(
+                                                            'rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm',
+                                                            msg.metadata?.replyMethod === 'skipped'
+                                                                ? 'bg-red-50 border border-red-200'
+                                                                : 'bg-white border border-surface-100'
+                                                        )}>
+                                                            {/* Reply source indicator */}
+                                                            {msg.metadata && (
+                                                                <div className="flex items-center gap-1.5 mb-2">
+                                                                    {msg.metadata.commentReplyMode === 'private' && (
+                                                                        <span className="text-[10px] font-medium uppercase tracking-wider text-brand-600">
+                                                                            {t('admin.playground.privateMessage')} ·{' '}
+                                                                        </span>
+                                                                    )}
+                                                                    <MethodIcon method={msg.metadata.replyMethod} />
+                                                                    <span className={clsx(
+                                                                        'text-[10px] font-medium uppercase tracking-wider',
+                                                                        msg.metadata.replyMethod === 'ai' ? 'text-violet-600'
+                                                                            : msg.metadata.replyMethod === 'template' ? 'text-emerald-600'
+                                                                                : 'text-red-600'
+                                                                    )}>
+                                                                        {t(`admin.playground.${msg.metadata.replyMethod}`)}
+                                                                        {msg.metadata.templateName && ` · ${msg.metadata.templateName}`}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+
+                                                            {msg.text ? (
+                                                                <p className="text-sm leading-relaxed text-surface-900 whitespace-pre-wrap">{msg.text}</p>
+                                                            ) : (
+                                                                <p className="text-sm text-red-600 italic">{t('admin.playground.noReply')}</p>
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </div>
                                             )}

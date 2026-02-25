@@ -125,6 +125,7 @@ export const pagesApi = {
   toggle: (id: string, enabled: boolean) =>
     api.patch(`/pages/${id}/auto-reply`, { enabled }),
   sync: () => api.post('/pages/sync'),
+  getKbGaps: (pageId: string) => api.get(`/pages/${pageId}/kb-gaps`),
 };
 
 // Posts API

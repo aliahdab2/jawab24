@@ -66,5 +66,13 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, pagesController.sync);
+
+        protectedRoutes.get('/pages/:id/kb-gaps', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Get unresolved KB gaps for a page',
+                security: auth,
+            },
+        }, pagesController.getKbGaps);
     });
 }

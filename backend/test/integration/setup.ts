@@ -32,9 +32,17 @@ beforeAll(async () => {
     try {
         await migrate(db, { migrationsFolder });
         console.log('✅ Test database migrations applied');
-    } catch (error) {
-        console.error('❌ Migration failed:', error);
-        throw error;
+    } catch (error: unknown) {
+        // With threads: false, vitest re-evaluates setupFiles per test file but they
+        // share the same database. The second call to migrate() fails because the
+        // drizzle schema already exists. This specific error is safe to ignore.
+        const pgError = error as { code?: string; detail?: string };
+        if (pgError.code === '23505' && pgError.detail?.includes('(nspname)=(drizzle)')) {
+            console.log('✅ Test database migrations already applied');
+        } else {
+            console.error('❌ Migration failed:', error);
+            throw error;
+        }
     } finally {
         await migrationClient.end();
     }

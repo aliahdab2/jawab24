@@ -35,6 +35,7 @@ function getNotificationRoute(notification: Notification): string | null {
         case 'trial_ending':
             return '/pricing';
         case 'page_disconnected':
+        case 'kb_gap':
             return '/pages';
         default:
             return null;
@@ -59,6 +60,8 @@ function getNotificationStyle(type: string): [string, string, string] {
             return ['\u2705', 'bg-emerald-50', 'ring-emerald-200/60'];
         case 'page_disconnected':
             return ['\u{1F50C}', 'bg-slate-100', 'ring-slate-200/60'];
+        case 'kb_gap':
+            return ['\u{1F4DA}', 'bg-amber-50', 'ring-amber-200/60'];
         default:
             return ['\u{1F514}', 'bg-brand-50', 'ring-brand-200/60'];
     }

@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { pagesService } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
+import { gapDetectorService } from '../services/kb/gap-detector';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
@@ -235,6 +236,31 @@ export class PagesController {
                 details: errorMessage,
                 hint: 'This could be due to an expired token. Try logging out and back in.'
             });
+        }
+    }
+    /**
+     * Get unresolved KB gaps for a page
+     * GET /pages/:id/kb-gaps
+     */
+    async getKbGaps(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id } = request.params;
+
+        try {
+            // Verify page belongs to this workspace
+            const page = await pagesService.getPage(req.workspaceId, id);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+
+            const gaps = await gapDetectorService.getUnresolvedGaps(id, 10);
+            return reply.send({ success: true, data: gaps });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to fetch KB gaps' });
         }
     }
 }

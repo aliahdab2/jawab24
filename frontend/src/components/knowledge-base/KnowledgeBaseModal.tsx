@@ -1,14 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, X, Save, Check, FileText, Eye } from 'lucide-react';
+import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { pagesApi } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import type { KnowledgeSection, SectionId, CustomSectionId } from './types';
 import { isCustomSection, MAX_CUSTOM_SECTIONS } from './types';
 import { parseKnowledgeBase, serializeSections } from './knowledgeBaseParser';
 import { KnowledgeBaseSections } from './KnowledgeBaseSections';
 import { KnowledgeBaseRawEditor } from './KnowledgeBaseRawEditor';
+
+interface KbGap {
+  id: string;
+  queryText: string;
+  occurrenceCount: number;
+}
 
 const MAX_LENGTH = 10000;
 
@@ -28,6 +35,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   const [rawMode, setRawMode] = useState(false);
   const [rawText, setRawText] = useState('');
   const [showFacebookBanner, setShowFacebookBanner] = useState(false);
+  const [gaps, setGaps] = useState<KbGap[]>([]);
 
   // Initialize from page data
   useEffect(() => {
@@ -52,6 +60,13 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     const firstEmpty = parsed.find((s) => !s.content.trim());
     setExpandedId(firstEmpty?.id || null);
   }, [page]);
+
+  // Fetch KB gaps for this page
+  useEffect(() => {
+    pagesApi.getKbGaps(page.id)
+      .then((res) => setGaps(res.data?.data || []))
+      .catch(() => { /* non-critical, silently ignore */ });
+  }, [page.id]);
 
   // ESC to close
   useEscapeKey(onClose, true);
@@ -155,6 +170,29 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               >
                 <X className="w-3.5 h-3.5" />
               </button>
+            </div>
+          )}
+
+          {/* Unanswered questions banner */}
+          {gaps.length > 0 && (
+            <div className="mb-3 rounded-xl bg-amber-50 border border-amber-200 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <MessageCircleQuestion className="w-4 h-4 text-amber-600 flex-shrink-0" aria-hidden="true" />
+                <span className="text-xs font-semibold text-amber-800">
+                  {t('kb.gaps.title' as TranslationKey)} ({gaps.length})
+                </span>
+              </div>
+              <p className="text-xs text-amber-700 mb-2">{t('kb.gaps.hint' as TranslationKey)}</p>
+              <ul className="space-y-1">
+                {gaps.map((gap) => (
+                  <li key={gap.id} className="flex items-start justify-between gap-2 text-xs text-amber-900">
+                    <span className="leading-relaxed">{gap.queryText}</span>
+                    <span className="flex-shrink-0 font-medium text-amber-600">
+                      {t('kb.gaps.times' as TranslationKey, { count: String(gap.occurrenceCount) })}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
