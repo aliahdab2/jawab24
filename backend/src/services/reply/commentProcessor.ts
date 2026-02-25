@@ -154,8 +154,9 @@ export class CommentProcessor {
                     ? `${generatorContext.knowledgeBase}\n\n--- Business Info ---\n${profileText}`
                     : profileText;
             }
+            const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
             let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent } =
-                await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false);
+                await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false, commentReplyMode);
 
             // 8b. Replace with safe fallback if AI hallucinated a price
             if (shouldUseFallback(flagReason)) {
@@ -213,8 +214,7 @@ export class CommentProcessor {
             }
 
             // 9c. Auto-append DM CTA for question/purchase intents (public mode only)
-            const replyMode = userSettings.commentReplyMode || 'public';
-            if (replyMode === 'public' && ['QUESTION', 'PURCHASE_INTENT'].includes(aiIntent || '')) {
+            if (commentReplyMode === 'public' && ['QUESTION', 'PURCHASE_INTENT'].includes(aiIntent || '')) {
                 const hasDmMention = /\b(DM|message|رسالة|خاص|الخاص)\b/i.test(replyText);
                 if (!hasDmMention) {
                     const lang = detectLanguageCode(commentMessage);

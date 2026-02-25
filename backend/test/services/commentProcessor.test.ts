@@ -434,6 +434,7 @@ describe('CommentProcessor', () => {
         expect(replyGenerator.generateForComment).toHaveBeenCalledWith(
             expect.objectContaining({ text: 'My specific comment text' }),
             expect.any(Boolean),
+            expect.any(String),
         );
     });
 

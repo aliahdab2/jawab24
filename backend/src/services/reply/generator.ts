@@ -55,6 +55,8 @@ export interface GenerateReplyContext {
     senderId?: string;
 }
 
+export type CommentReplyMode = 'public' | 'private' | 'dual';
+
 export interface GenerateReplyResult {
     replyText: string | null;
     replyMethod: 'template' | 'ai';
@@ -91,10 +93,15 @@ export class ReplyGenerator {
     /**
      * Generate a reply for a comment
      * Tries template first, then AI if enabled
+     *
+     * @param commentReplyMode - When 'dual' or 'private', AI generates a detailed
+     *   DM-style reply (with prices, specs, etc.) because the reply will be sent
+     *   as a private message, not as a public comment.
      */
     async generateForComment(
         context: GenerateReplyContext,
-        aiEnabled: boolean
+        aiEnabled: boolean,
+        commentReplyMode: CommentReplyMode = 'public',
     ): Promise<GenerateReplyResult> {
         const { workspaceId, userId, text, pageName, knowledgeBase, postId, pageId, accessToken } = context;
 
@@ -121,14 +128,19 @@ export class ReplyGenerator {
                 postMessage = post.message || undefined;
             }
 
+            // When reply mode is dual or private, the AI reply will be sent as a DM,
+            // so use 'dm' channel to get a detailed answer (with prices, specs, etc.)
+            // instead of the brief "message us" comment-style reply.
+            const effectiveChannel: 'comment' | 'dm' = (commentReplyMode === 'dual' || commentReplyMode === 'private') ? 'dm' : 'comment';
+
             // Run RAG retrieval if enabled
             const { retrievedChunks, effectiveKB, queryEmbedding } = await this.resolveKnowledge(
-                pageId, text, knowledgeBase, context.kbActiveVersion, 'comment',
+                pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel,
             );
 
             const aiResponse = await aiService.generateReply({
                 comment: text,
-                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: 'comment', kbActiveVersion: context.kbActiveVersion, queryEmbedding }
+                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId);

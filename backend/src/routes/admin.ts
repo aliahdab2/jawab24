@@ -860,6 +860,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 }
 
                 // 4. Call AI service
+                // When comment reply mode is dual or private, the AI reply will be sent
+                // as a DM, so use 'dm' channel for a detailed answer (with prices, etc.)
+                const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))
+                    ? 'dm'
+                    : channel;
+
                 const effectiveKB = (ragMode === 'on' && retrievedChunks.length > 0)
                     ? undefined
                     : page.knowledgeBase || undefined;
@@ -871,7 +877,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         pageName: page.name ?? undefined,
                         knowledgeBase: effectiveKB,
                         retrievedChunks: retrievedChunks.length > 0 ? retrievedChunks : undefined,
-                        channel,
+                        channel: effectiveChannel,
                         kbActiveVersion: page.kbActiveVersion,
                         queryEmbedding,
                         ...(channel === 'comment' && postMessage ? { postMessage } : {}),
