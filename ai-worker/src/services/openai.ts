@@ -5,7 +5,7 @@ import { config } from '../config';
 // Token budget constants
 const KB_MAX_CHARS = 4000;       // ~1150 tokens — static KB fallback limit (RAG bypasses this)
 const MAX_INPUT_TOKENS = 4000;   // Hard cap on total input tokens (system + history + user message)
-const PROMPT_VERSION = 'v4';     // Bump when prompt structure changes (useful for cache diagnostics)
+const PROMPT_VERSION = 'v5';     // Bump when prompt structure changes (useful for cache diagnostics)
 
 /** Conservative token estimate: ~3.5 chars per token (safe across Latin + Arabic) */
 function estimateTokens(text: string): number {
@@ -291,9 +291,11 @@ CRITICAL SAFETY RULES (NEVER BREAK THESE):
 
 CONFIDENCE CHECK:
 Before sending your reply, verify:
+- Does your reply DIRECTLY answer the customer's SPECIFIC question? If the customer asked WHO and you answered WHAT, or asked about a specific detail and you gave general info, that is NOT answering the question — set confidence to "low" and add "info_not_in_kb" flag.
 - Is every fact in your reply backed by <business_knowledge>? If not, remove it.
-- Are you guessing anything? If yes, replace with "Please contact us for details."
-- Could your reply be misleading? If yes, simplify it.`;
+- Are you guessing anything? If yes, replace with "I'll check with the team and get back to you."
+- Could your reply be misleading? If yes, simplify it.
+- Did you give a vague or generic response to avoid saying "I don't know"? If yes, set confidence to "low" — it is better to be honest than to give a non-answer.`;
 
         // Add business knowledge: prefer retrieved chunks, fall back to static KB
         if (retrievedChunks && retrievedChunks.length > 0) {
@@ -335,6 +337,7 @@ IMPORTANT: Output a JSON object with these fields:
 - "intent": the intent you classified (one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, OFFENSIVE, SPAM_OR_IRRELEVANT)
 - "confidence": how confident you are in your reply ("high", "medium", or "low")
 - "flags": an array of flag strings if applicable (empty array [] if none):
+  - "info_not_in_kb" if the customer asked a specific question and the answer is NOT in <business_knowledge>, or if you responded with general info instead of answering their actual question
   - "price_not_in_kb" if your reply mentions any price, cost, or fee NOT found in <business_knowledge>
   - "angry_customer" if the customer seems angry, frustrated, or threatening
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
