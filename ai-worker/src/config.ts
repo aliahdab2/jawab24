@@ -21,7 +21,7 @@ export const config = {
         // Fixed model - not configurable for cost control
         model: DEFAULT_AI_MODEL,
         maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '300', 10),
-        temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
+        temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.3'),
         timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10),
     },
 

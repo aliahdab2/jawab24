@@ -1366,8 +1366,8 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(systemPrompt).toContain('"offensive_or_abusive"');
     });
 
-    it('should use PROMPT_VERSION v9', () => {
-        expect(PROMPT_VERSION).toBe('v9');
+    it('should use PROMPT_VERSION v10', () => {
+        expect(PROMPT_VERSION).toBe('v10');
     });
 
     it('should use json_schema response format with strict schema', async () => {
@@ -1408,6 +1408,189 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         ]);
         expect(rf.json_schema.schema.properties.confidence.enum).toEqual(['high', 'medium', 'low']);
         expect(rf.json_schema.schema.additionalProperties).toBe(false);
+    });
+});
+
+describe('OpenAI Service - Hedge-Word Detection', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    function setupMock(jsonResponse: string) {
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: jsonResponse } }],
+                            usage: { total_tokens: 50 },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.3, timeoutMs: 30000 },
+            },
+        }));
+    }
+
+    it('should downgrade confidence when Arabic reply contains hedge words', async () => {
+        setupMock(JSON.stringify({
+            reply: 'خليني أتحقق من هالمعلومة وأرجعلك',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'مين المدير؟' });
+
+        expect(result.confidence).toBe('low');
+        expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should downgrade confidence when English reply contains hedge words', async () => {
+        setupMock(JSON.stringify({
+            reply: 'Let me check with the team and get back to you!',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'Do you offer installments?' });
+
+        expect(result.confidence).toBe('low');
+        expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should NOT downgrade confidence for non-hedge replies', async () => {
+        setupMock(JSON.stringify({
+            reply: 'السعر 1500 ريال شهرياً',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'كم سعر الدورة؟',
+            context: { knowledgeBase: 'دورة الانجليزي 1500 ريال' },
+        });
+
+        expect(result.confidence).toBe('high');
+        expect(result.flags).not.toContain('info_not_in_kb');
+    });
+
+    it('should downgrade medium confidence hedge replies too', async () => {
+        setupMock(JSON.stringify({
+            reply: "I'll check on that and confirm with the team.",
+            intent: 'QUESTION',
+            confidence: 'medium',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'Is there a discount?' });
+
+        expect(result.confidence).toBe('low');
+        expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should NOT touch low confidence replies', async () => {
+        setupMock(JSON.stringify({
+            reply: 'خليني أتحقق من الفريق',
+            intent: 'QUESTION',
+            confidence: 'low',
+            flags: ['info_not_in_kb'],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'هل في أقساط؟' });
+
+        expect(result.confidence).toBe('low');
+        expect(result.flags).toContain('info_not_in_kb');
+    });
+});
+
+describe('OpenAI Service - v10 Prompt Improvements', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('should include confidence decision tree in system prompt', async () => {
+        let capturedMessages: any[] = [];
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Hi!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 50 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.3, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Hello' });
+
+        const systemPrompt = capturedMessages[0].content;
+        expect(systemPrompt).toContain('CONFIDENCE SCORING');
+        expect(systemPrompt).toContain('Customer asks WHO');
+        expect(systemPrompt).toContain('SPECIFIC city/product/service');
+    });
+
+    it('should include 7 few-shot examples in system prompt', async () => {
+        let capturedMessages: any[] = [];
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Hi!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 50 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.3, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Hello' });
+
+        const systemPrompt = capturedMessages[0].content;
+        expect(systemPrompt).toContain('Example 7');
+        expect(systemPrompt).toContain('Sarcasm');
+        expect(systemPrompt).toContain('Angry customer');
+        expect(systemPrompt).toContain('Geographic specificity');
+        expect(systemPrompt).toContain('"angry_customer"');
     });
 });
 
