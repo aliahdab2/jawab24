@@ -7,7 +7,7 @@ import { eq, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 import { redis } from '../lib/redis';
-import { normalizeArabic, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { normalizeArabic, DEFAULT_AI_MODEL, PROMPT_VERSION } from '@jawab24/shared';
 import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
@@ -66,6 +66,7 @@ export class AiService {
             ctx.pageId || 'global',
             `kbv:${ctx.kbActiveVersion ?? 0}`,
             `p:${ctx.postMessage || ''}`,
+            `pv:${PROMPT_VERSION}`,
         ].join(':');
 
         return crypto.createHash('sha256').update(key).digest('hex');

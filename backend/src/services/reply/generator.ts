@@ -326,8 +326,9 @@ export class ReplyGenerator {
         }
 
         // Post-validation: if KB retrieval found 0 chunks and GPT claims high confidence
-        // on a QUESTION, force info_not_in_kb flag. Catches hallucinations where GPT
-        // invents answers for topics not covered by the KB.
+        // on a QUESTION, force info_not_in_kb + low_confidence flags. Catches hallucinations
+        // where GPT invents answers for topics not covered by the KB.
+        // low_confidence triggers shouldSkipReply() so the hallucinated reply is NOT sent.
         if (
             retrievedChunkCount === 0 &&
             aiResponse.confidence === 'high' &&
@@ -335,6 +336,9 @@ export class ReplyGenerator {
             !flags.includes('info_not_in_kb')
         ) {
             flags.push('info_not_in_kb');
+            if (!flags.includes('low_confidence')) {
+                flags.push('low_confidence');
+            }
         }
         const needsAttention = flags.length > 0 ||
             aiResponse.intent === 'COMPLAINT' ||

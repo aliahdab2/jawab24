@@ -393,6 +393,7 @@ describe('ReplyGenerator - Flagging System', () => {
 
             expect(result.needsAttention).toBe(true);
             expect(result.flagReason).toContain('info_not_in_kb');
+            expect(result.flagReason).toContain('low_confidence');
         });
 
         it('should NOT trigger hallucination guard when confidence is medium (only high triggers)', async () => {

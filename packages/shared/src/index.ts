@@ -319,6 +319,9 @@ export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 /** Default AI model used across backend and ai-worker services */
 export const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
 
+/** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
+export const PROMPT_VERSION = 'v6';
+
 // --- E-commerce Types (Shopify, Salla, Zid) ---
 export interface EcommerceStore {
   id: string;

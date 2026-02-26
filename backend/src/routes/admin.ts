@@ -899,6 +899,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     !flags.includes('info_not_in_kb')
                 ) {
                     flags.push('info_not_in_kb');
+                    if (!flags.includes('low_confidence')) {
+                        flags.push('low_confidence');
+                    }
                 }
                 const needsAttention = flags.length > 0 ||
                     aiResponse.intent === 'COMPLAINT' ||

@@ -1,11 +1,11 @@
 import OpenAI from 'openai';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
+import { PROMPT_VERSION } from '@jawab24/shared';
 
 // Token budget constants
 const KB_MAX_CHARS = 4000;       // ~1150 tokens — static KB fallback limit (RAG bypasses this)
 const MAX_INPUT_TOKENS = 4000;   // Hard cap on total input tokens (system + history + user message)
-const PROMPT_VERSION = 'v6';     // Bump when prompt structure changes (useful for cache diagnostics)
 
 /** Conservative token estimate: ~3.5 chars per token (safe across Latin + Arabic) */
 function estimateTokens(text: string): number {
