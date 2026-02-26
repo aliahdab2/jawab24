@@ -924,12 +924,16 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 }
 
                 // Post-validation: hallucination guard (mirrors generator.ts)
-                // Only fires when RAG retrieval was attempted but found 0 chunks.
+                // Only fires when RAG retrieval was attempted but found 0 chunks
+                // AND static KB was not provided as fallback context.
                 // Static-KB pages (no RAG) always have 0 chunks — that's normal, not hallucination.
+                // When static KB was passed (effectiveKB truthy), the AI had the full KB text
+                // and can assess its own confidence — no need to override.
                 const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
                 if (
                     ragAttempted &&
                     retrievedChunks.length === 0 &&
+                    !effectiveKB &&
                     aiResponse.confidence !== 'low' &&
                     !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
                     !flags.includes('info_not_in_kb')

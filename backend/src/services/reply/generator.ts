@@ -9,8 +9,7 @@ import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '.
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService } from '../kb/gap-detector';
-import { detectLanguageCode } from '../../utils/language';
-import { DEFAULT_AI_MODEL, normalizeAiIntent, VALID_AI_INTENTS } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
 import { isOffensiveContent } from '../offensive-filter';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
@@ -153,7 +152,7 @@ export class ReplyGenerator {
                 context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
             });
 
-            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted);
+            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
         }
 
         // 3. Fallback
@@ -207,7 +206,7 @@ export class ReplyGenerator {
                     context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
                 });
 
-                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted);
+                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
             }
         }
 
@@ -335,6 +334,7 @@ export class ReplyGenerator {
         pageId?: string,
         retrievedChunkCount?: number,
         ragAttempted?: boolean,
+        hasStaticKB?: boolean,
     ): Promise<GenerateReplyResult> {
         // Normalize intent: GPT sometimes invents intents (PRICE, OTHER, LOCATION)
         // instead of using the 8 valid ones. Map them back to the standard taxonomy.
@@ -351,10 +351,13 @@ export class ReplyGenerator {
         // topics not covered by the KB.
         // Only fires when RAG was actually attempted (ragAttempted=true). Static-KB pages
         // (no RAG) always have 0 chunks — that's normal, not hallucination.
+        // Also skips when static KB was provided as fallback (hasStaticKB=true) — the AI
+        // had the full KB text and can assess its own confidence.
         const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
         if (
             ragAttempted &&
             retrievedChunkCount === 0 &&
+            !hasStaticKB &&
             aiResponse.confidence !== 'low' &&
             !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
             !flags.includes('info_not_in_kb')

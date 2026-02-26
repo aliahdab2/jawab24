@@ -13,6 +13,7 @@ import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { estimateCostUsd } from '../config/aiPricing';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
+import { classifyFallback } from './reply/fallbackClassifier';
 
 /** Context used to scope exact-cache lookups and writes. */
 interface CacheContext {
@@ -368,12 +369,16 @@ export class AiService {
                 });
             }
 
-            // Return fallback response
+            // Return fallback response enriched with lightweight classification
+            const fallback = classifyFallback(request.comment);
             return {
                 reply: 'Thank you for your comment!',
                 language: request.language || 'en',
                 cached: false,
                 model: 'fallback',
+                intent: fallback.intent,
+                confidence: fallback.confidence,
+                flags: fallback.flags,
             };
         }
     }
