@@ -33,6 +33,7 @@ beforeEach(async () => {
             messages, conversation_pauses, rules, templates, settings,
             subscriptions, usage, usage_logs, device_tokens, notifications,
             refresh_tokens, workspace_invites, workspace_members, workspaces,
+            kb_chunks, kb_gaps,
             pages, users
         CASCADE
     `);
