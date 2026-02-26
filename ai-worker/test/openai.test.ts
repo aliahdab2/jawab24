@@ -518,7 +518,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         expect(parsed.event).toBe('ai_call_token_usage');
         expect(parsed.estimated_tokens_in).toBeDefined();
         expect(parsed.max_input_tokens).toBe(4000);
-        expect(parsed.prompt_version).toBe('v7');
+        expect(parsed.prompt_version).toBe('v8');
 
         logSpy.mockRestore();
     });
