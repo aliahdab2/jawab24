@@ -1,0 +1,1 @@
+ALTER TABLE "semantic_cache" ADD COLUMN "prompt_version" varchar(10);

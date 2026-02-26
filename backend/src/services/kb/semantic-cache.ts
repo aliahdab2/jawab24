@@ -2,6 +2,7 @@ import { db } from '../../db';
 import { sql } from 'drizzle-orm';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
+import { PROMPT_VERSION } from '@jawab24/shared';
 
 /** Minimum cosine similarity to consider a semantic cache hit */
 const SIMILARITY_THRESHOLD = 0.93;
@@ -31,6 +32,7 @@ export interface SemanticCacheSaveParams {
  * - pageId (no cross-page leaks)
  * - intent (PRICE queries don't match HOURS queries even if words overlap)
  * - kbActiveVersion (stale entries auto-invalidate when KB is re-ingested)
+ * - promptVersion (stale entries auto-invalidate when prompt is updated)
  * - 7-day TTL (eventual expiration)
  */
 export class SemanticCacheService {
@@ -64,6 +66,7 @@ export class SemanticCacheService {
                 WHERE page_id = ${pageId}
                   AND intent = ${intent}
                   AND kb_active_version_at_creation = ${kbActiveVersion}
+                  AND prompt_version = ${PROMPT_VERSION}
                   AND created_at > NOW() - INTERVAL '7 days'
                   AND 1 - (query_embedding <=> ${vectorStr}::vector) >= ${SIMILARITY_THRESHOLD}
                 ORDER BY 1 - (query_embedding <=> ${vectorStr}::vector) DESC
@@ -115,7 +118,7 @@ export class SemanticCacheService {
             await db.execute(sql`
                 INSERT INTO semantic_cache (
                     page_id, query_text, query_embedding, intent,
-                    reply_text, metadata, kb_active_version_at_creation
+                    reply_text, metadata, kb_active_version_at_creation, prompt_version
                 ) VALUES (
                     ${params.pageId},
                     ${params.queryText},
@@ -123,7 +126,8 @@ export class SemanticCacheService {
                     ${params.intent},
                     ${params.replyText},
                     ${JSON.stringify(params.metadata || {})}::jsonb,
-                    ${params.kbActiveVersion}
+                    ${params.kbActiveVersion},
+                    ${PROMPT_VERSION}
                 )
             `);
 

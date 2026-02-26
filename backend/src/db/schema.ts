@@ -725,6 +725,7 @@ export const semanticCache = pgTable('semantic_cache', {
     replyText: text('reply_text').notNull(),
     metadata: jsonb('metadata').default({}),
     kbActiveVersionAtCreation: integer('kb_active_version_at_creation').notNull(),
+    promptVersion: varchar('prompt_version', { length: 10 }),
     hitCount: integer('hit_count').default(0),
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => {

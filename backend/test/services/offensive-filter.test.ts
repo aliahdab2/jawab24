@@ -38,8 +38,19 @@ describe('isOffensiveContent', () => {
         });
 
         it('should detect "f*** you" with asterisks', () => {
-            // Asterisk-censored words won't match word boundaries — only explicit profanity
-            expect(isOffensiveContent('f*** you')).toBe(false);
+            expect(isOffensiveContent('f*** you')).toBe(true);
+        });
+
+        it('should detect "f**k" with asterisks', () => {
+            expect(isOffensiveContent('f**k this')).toBe(true);
+        });
+
+        it('should detect "sh*t" with asterisks', () => {
+            expect(isOffensiveContent('this is sh*t')).toBe(true);
+        });
+
+        it('should detect "a**hole" with asterisks', () => {
+            expect(isOffensiveContent('you a**hole')).toBe(true);
         });
 
         it('should detect "fucking terrible"', () => {

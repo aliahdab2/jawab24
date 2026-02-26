@@ -28,6 +28,17 @@ const ENGLISH_OFFENSIVE_WORDS = [
     'dick', 'piss', 'stfu', 'wtf',
 ];
 
+// Asterisk-censored profanity patterns (f***, f**k, sh*t, a**hole, b*tch, etc.)
+// Note: \b doesn't work after * (non-word char), so we use (?=\s|$) for end boundary
+const CENSORED_PATTERNS = [
+    /\bf[*]+(?:ck|k)?(?=\s|$)/i,       // f***, f**k, f*ck
+    /\bsh[*]+t(?=\s|$)/i,              // sh*t, sh**t
+    /\ba[*]+hole(?=\s|$)/i,            // a**hole, a*hole
+    /\bb[*]+tch(?=\s|$)/i,            // b*tch, b**tch
+    /\bc[*]+nt(?=\s|$)/i,             // c*nt, c**t
+    /\bd[*]+ck(?=\s|$)/i,             // d*ck, d**k
+];
+
 // Pre-normalize Arabic words once at module load
 const NORMALIZED_ARABIC = ARABIC_OFFENSIVE_WORDS.map(w => normalizeArabic(w.toLowerCase()));
 
@@ -55,6 +66,12 @@ export function isOffensiveContent(text: string): boolean {
     const lowerText = text.toLowerCase();
     for (const word of ENGLISH_OFFENSIVE_WORDS) {
         const pattern = new RegExp(`\\b${escapeRegex(word)}\\b`, 'i');
+        if (pattern.test(lowerText)) return true;
+    }
+
+    // Check asterisk-censored profanity (f*** you, sh*t, a**hole, etc.)
+    // Matches words where * replaces letters in common profanity patterns
+    for (const pattern of CENSORED_PATTERNS) {
         if (pattern.test(lowerText)) return true;
     }
 
