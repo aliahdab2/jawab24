@@ -10,7 +10,7 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService } from '../kb/gap-detector';
 import { detectLanguageCode } from '../../utils/language';
-import { DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent, VALID_AI_INTENTS } from '@jawab24/shared';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive', 'low_confidence'] as const;
@@ -320,19 +320,25 @@ export class ReplyGenerator {
         pageId?: string,
         retrievedChunkCount?: number,
     ): Promise<GenerateReplyResult> {
+        // Normalize intent: GPT sometimes invents intents (PRICE, OTHER, LOCATION)
+        // instead of using the 8 valid ones. Map them back to the standard taxonomy.
+        const normalizedIntent = normalizeAiIntent(aiResponse.intent);
+
         const flags = [...(aiResponse.flags || [])];
         if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
             flags.push('low_confidence');
         }
 
         // Post-validation: if KB retrieval found 0 chunks and GPT claims high confidence
-        // on a QUESTION, force info_not_in_kb + low_confidence flags. Catches hallucinations
-        // where GPT invents answers for topics not covered by the KB.
+        // on a question-like intent, force info_not_in_kb + low_confidence flags.
+        // Catches hallucinations where GPT invents answers for topics not covered by the KB.
         // low_confidence triggers shouldSkipReply() so the hallucinated reply is NOT sent.
+        // Intents that don't need KB (greetings, compliments, spam) are excluded.
+        const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
         if (
             retrievedChunkCount === 0 &&
             aiResponse.confidence === 'high' &&
-            aiResponse.intent === 'QUESTION' &&
+            !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
             !flags.includes('info_not_in_kb')
         ) {
             flags.push('info_not_in_kb');
@@ -341,11 +347,11 @@ export class ReplyGenerator {
             }
         }
         const needsAttention = flags.length > 0 ||
-            aiResponse.intent === 'COMPLAINT' ||
-            aiResponse.intent === 'OFFENSIVE';
+            normalizedIntent === 'COMPLAINT' ||
+            normalizedIntent === 'OFFENSIVE';
         const flagReason = flags.join(',') ||
-            (aiResponse.intent === 'COMPLAINT' ? 'complaint' : null) ||
-            (aiResponse.intent === 'OFFENSIVE' ? 'offensive' : null) ||
+            (normalizedIntent === 'COMPLAINT' ? 'complaint' : null) ||
+            (normalizedIntent === 'OFFENSIVE' ? 'offensive' : null) ||
             undefined;
 
         await subscriptionsService.incrementAiReplies(userId);
@@ -360,7 +366,7 @@ export class ReplyGenerator {
             replyMethod: 'ai',
             needsAttention,
             flagReason,
-            aiIntent: aiResponse.intent,
+            aiIntent: normalizedIntent,
         };
     }
 }

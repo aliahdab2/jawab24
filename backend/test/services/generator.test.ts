@@ -449,6 +449,113 @@ describe('ReplyGenerator - Flagging System', () => {
             const flagCount = (result.flagReason || '').split(',').filter(f => f.trim() === 'info_not_in_kb').length;
             expect(flagCount).toBe(1);
         });
+
+        it('should normalize non-standard intent "PRICE" to QUESTION and trigger hallucination guard', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'The price is $50!',
+                language: 'en',
+                cached: false,
+                intent: 'PRICE',  // Non-standard intent GPT invented
+                confidence: 'high',
+                flags: [],
+            });
+
+            const result = await generator.generateForComment({
+                ...baseContext,
+                kbActiveVersion: null,
+            }, true);
+
+            // PRICE normalizes to QUESTION → hallucination guard fires (0 chunks + high confidence)
+            expect(result.aiIntent).toBe('QUESTION');
+            expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toContain('info_not_in_kb');
+            expect(result.flagReason).toContain('low_confidence');
+        });
+
+        it('should normalize non-standard intent "OTHER" and trigger hallucination guard', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Some reply',
+                language: 'en',
+                cached: false,
+                intent: 'OTHER',  // GPT invented catch-all
+                confidence: 'high',
+                flags: [],
+            });
+
+            const result = await generator.generateForComment({
+                ...baseContext,
+                kbActiveVersion: null,
+            }, true);
+
+            // OTHER is not in HALLUCINATION_SAFE_INTENTS → guard fires
+            expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toContain('info_not_in_kb');
+        });
+
+        it('should NOT trigger hallucination guard for COMPLIMENT intent (hallucination-safe)', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Thank you so much!',
+                language: 'en',
+                cached: false,
+                intent: 'COMPLIMENT',
+                confidence: 'high',
+                flags: [],
+            });
+
+            const result = await generator.generateForComment({
+                ...baseContext,
+                kbActiveVersion: null,
+            }, true);
+
+            // COMPLIMENT is in HALLUCINATION_SAFE_INTENTS → guard does NOT fire
+            expect(result.needsAttention).toBe(false);
+            expect(result.flagReason).toBeUndefined();
+        });
+
+        it('should normalize "ABUSE" to OFFENSIVE and set needsAttention', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'We do not tolerate this.',
+                language: 'en',
+                cached: false,
+                intent: 'ABUSE',  // Non-standard → maps to OFFENSIVE
+                confidence: 'high',
+                flags: ['offensive_or_abusive'],
+            });
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            expect(result.aiIntent).toBe('OFFENSIVE');
+            expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toContain('offensive_or_abusive');
+        });
     });
 
     describe('generateForMessage', () => {

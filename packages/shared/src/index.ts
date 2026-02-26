@@ -320,7 +320,73 @@ export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 export const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
 
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
-export const PROMPT_VERSION = 'v6';
+export const PROMPT_VERSION = 'v7';
+
+/** The 8 valid AI intent categories. GPT must return one of these. */
+export const VALID_AI_INTENTS = [
+    'QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
+    'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT',
+] as const;
+export type AiIntent = (typeof VALID_AI_INTENTS)[number];
+
+/**
+ * Map non-standard GPT-invented intents to the closest valid intent.
+ * GPT-4o-mini sometimes ignores the taxonomy and invents custom intents
+ * like PRICE, LOCATION, HOURS, OTHER, etc. This map provides a code-level
+ * safety net so that downstream guards (hallucination, skip, needsAttention)
+ * still work correctly.
+ */
+export const INTENT_NORMALIZATION_MAP: Record<string, AiIntent> = {
+    // Question-like intents GPT invents
+    'PRICE': 'QUESTION',
+    'PRICING': 'QUESTION',
+    'LOCATION': 'QUESTION',
+    'HOURS': 'QUESTION',
+    'AVAILABILITY': 'QUESTION',
+    'PRODUCT': 'QUESTION',
+    'PRODUCT_QUESTION': 'QUESTION',
+    'OFFERING_INFO': 'QUESTION',
+    'INFO_OFFERING': 'QUESTION',
+    'SERVICE': 'QUESTION',
+    'POLICY': 'QUESTION',
+    'INFO': 'QUESTION',
+    'INFORMATION': 'QUESTION',
+    'INQUIRY': 'QUESTION',
+    // Sentiment-like
+    'POSITIVE': 'COMPLIMENT',
+    'PRAISE': 'COMPLIMENT',
+    'NEGATIVE': 'COMPLAINT',
+    'FEEDBACK': 'COMPLAINT',
+    // Purchase-like
+    'ORDER': 'PURCHASE_INTENT',
+    'BUY': 'PURCHASE_INTENT',
+    'BOOKING': 'PURCHASE_INTENT',
+    // Greeting-like
+    'HELLO': 'GREETING',
+    'HI': 'GREETING',
+    // Offensive-like
+    'ABUSE': 'OFFENSIVE',
+    'INSULT': 'OFFENSIVE',
+    'PROFANITY': 'OFFENSIVE',
+    // Spam-like
+    'SPAM': 'SPAM_OR_IRRELEVANT',
+    'IRRELEVANT': 'SPAM_OR_IRRELEVANT',
+    'PROMO': 'SPAM_OR_IRRELEVANT',
+    'SELF_PROMOTION': 'SPAM_OR_IRRELEVANT',
+    'PROMOTION': 'SPAM_OR_IRRELEVANT',
+};
+
+/**
+ * Normalize a raw AI intent to one of the 8 valid intents.
+ * Returns the normalized intent, or the original (uppercased) if no mapping exists.
+ */
+export function normalizeAiIntent(rawIntent?: string): string | undefined {
+    if (!rawIntent) return undefined;
+    const upper = rawIntent.trim().toUpperCase();
+    if (!upper) return undefined;
+    if ((VALID_AI_INTENTS as readonly string[]).includes(upper)) return upper;
+    return INTENT_NORMALIZATION_MAP[upper] || upper;
+}
 
 // --- E-commerce Types (Shopify, Salla, Zid) ---
 export interface EcommerceStore {

@@ -518,7 +518,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         expect(parsed.event).toBe('ai_call_token_usage');
         expect(parsed.estimated_tokens_in).toBeDefined();
         expect(parsed.max_input_tokens).toBe(4000);
-        expect(parsed.prompt_version).toBe('v6');
+        expect(parsed.prompt_version).toBe('v7');
 
         logSpy.mockRestore();
     });
@@ -586,6 +586,45 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
 
         const userMessage = capturedMessages[capturedMessages.length - 1].content;
         expect(userMessage).toContain('Comment:');
+    });
+
+    it('should contain strict intent taxonomy constraint in system prompt', async () => {
+        let capturedMessages: any[] = [];
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Hi', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 40 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Hello' });
+
+        const systemPrompt = capturedMessages[0].content;
+        // v7: strict intent taxonomy
+        expect(systemPrompt).toContain('do NOT invent new intent names');
+        expect(systemPrompt).toContain('MUST use one of these exact values');
+        // Sarcasm detection (v6+)
+        expect(systemPrompt).toContain('SARCASM');
+        expect(systemPrompt).toContain('🙄');
+        // SPAM no-reply instruction (v6+)
+        expect(systemPrompt).toContain('Do NOT reply');
+        // Intent examples (v7)
+        expect(systemPrompt).toContain('Do NOT use "OTHER"');
     });
 });
 

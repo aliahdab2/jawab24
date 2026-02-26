@@ -14,6 +14,7 @@ import { gapDetectorService } from '../services/kb/gap-detector';
 import { settingsService } from '../services/settings';
 import { getIngestionService } from '../services/pages';
 import { shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../services/reply/generator';
+import { normalizeAiIntent } from '@jawab24/shared';
 import { RetrievedChunkContext } from '../types';
 
 // Request body types
@@ -885,17 +886,19 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     },
                 });
 
-                // 5. Process flags (same logic as generator.ts)
+                // 5. Normalize intent + process flags (same logic as generator.ts)
+                const normalizedIntent = normalizeAiIntent(aiResponse.intent);
                 const flags = [...(aiResponse.flags || [])];
                 if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
                     flags.push('low_confidence');
                 }
 
                 // Post-validation: hallucination guard (mirrors generator.ts)
+                const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
                 if (
                     retrievedChunks.length === 0 &&
                     aiResponse.confidence === 'high' &&
-                    aiResponse.intent === 'QUESTION' &&
+                    !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
                     !flags.includes('info_not_in_kb')
                 ) {
                     flags.push('info_not_in_kb');
@@ -904,9 +907,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     }
                 }
                 const needsAttention = flags.length > 0 ||
-                    aiResponse.intent === 'COMPLAINT' ||
-                    aiResponse.intent === 'OFFENSIVE';
-                const skipped = shouldSkipReply(flags.join(','), aiResponse.intent);
+                    normalizedIntent === 'COMPLAINT' ||
+                    normalizedIntent === 'OFFENSIVE';
+                const skipped = shouldSkipReply(flags.join(','), normalizedIntent);
                 const useFallback = shouldUseFallback(flags.join(','));
 
                 let finalReply = aiResponse.reply;
@@ -926,7 +929,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         ragMode,
                         chunksRetrieved: retrievedChunks.length,
                         chunks: retrievedChunks,
-                        intent: aiResponse.intent || null,
+                        intent: normalizedIntent || null,
                         confidence: aiResponse.confidence || null,
                         flags,
                         needsAttention,

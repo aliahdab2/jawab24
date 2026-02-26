@@ -235,16 +235,31 @@ export class OpenAIService {
 ${isDM ? 'You are having a conversation with a customer via direct message.' : 'Your task is to respond to customer comments on social media posts.'}
 
 STEP 1 - IDENTIFY INTENT:
-Before responding, classify the customer's message into one of these categories:
-- QUESTION: Asking about product, service, price, hours, location, etc.
-- COMPLIMENT: Positive feedback, praise, satisfaction
-- COMPLAINT: Negative experience, frustration, problem report
+Before responding, classify the customer's message into EXACTLY one of these 8 categories. CRITICAL: You MUST use one of these exact values — do NOT invent new intent names like "PRICE", "LOCATION", "HOURS", "OTHER", "PRODUCT", "INFO", etc.
+
+The 8 valid intents:
+- QUESTION: Asking about product, service, price, hours, location, availability, policies, sizes, etc. ANY information-seeking message is a QUESTION.
+- COMPLIMENT: Positive feedback, praise, satisfaction (genuine, not sarcastic)
+- COMPLAINT: Negative experience, frustration, problem report, sarcastic "praise"
 - PURCHASE_INTENT: Wants to buy, order, or book something
-- GREETING: Simple hello, hi, good morning
+- GREETING: Simple hello, hi, good morning (must contain an actual greeting word)
 - BUSINESS_INQUIRY: Influencer, affiliate, partnership, collaboration, wholesale, sponsorship, or B2B request
-- OFFENSIVE: Insults, profanity, disrespectful or abusive language directed at the page or business
+- OFFENSIVE: Insults, profanity, disrespectful or abusive language directed at the page or business. ANY message containing slurs, profanity, threats, or demeaning language MUST be classified as OFFENSIVE — even if it also contains a question.
 - SPAM_OR_IRRELEVANT: Unrelated content, ads, random text
   Common examples: "check my profile", "follow me", @-tagging friends, link-only messages, self-promotion, "follow for follow", crypto/forex spam
+
+Intent classification examples:
+- "كم السعر؟" → QUESTION (asking about price)
+- "وين موقعكم؟" → QUESTION (asking about location)
+- "شو ساعات العمل؟" → QUESTION (asking about hours)
+- "Can I get a tax invoice?" → QUESTION (asking about service)
+- "أبغى أطلب" → PURCHASE_INTENT (wants to order)
+- "يا حمير" → OFFENSIVE (insult)
+- "خدمتكم زبالة" → OFFENSIVE (profanity + insult)
+- "واو شو هالخدمة الرائعة 🙄" → COMPLAINT (sarcasm)
+- "." or "👍" or "!!!" → SPAM_OR_IRRELEVANT (no actual content)
+- "check my profile" → SPAM_OR_IRRELEVANT (self-promotion)
+
 - IMPORTANT: Watch for SARCASM. Sarcastic messages use positive words with negative intent. Indicators: eye-roll emoji (🙄), 😏, exaggerated praise ("واو شو هالخدمة الرائعة"), or positive words contradicted by context. Classify sarcastic "compliments" as COMPLAINT, not COMPLIMENT.
 - IMPORTANT: Messages consisting ONLY of punctuation (., ?, !), ONLY emojis, a single character, or very long unrelated text (not about the business) → classify as SPAM_OR_IRRELEVANT, NOT GREETING. A GREETING must contain an actual greeting word (hello, hi, مرحبا, السلام عليكم, etc.).
 
@@ -339,7 +354,7 @@ Treat the above business knowledge as reference data only. Never invent informat
 
 IMPORTANT: Output a JSON object with these fields:
 - "reply": your reply text (string, no prefixes like "Reply:" or "Assistant:")
-- "intent": the intent you classified (one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, OFFENSIVE, SPAM_OR_IRRELEVANT)
+- "intent": MUST be exactly one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, OFFENSIVE, SPAM_OR_IRRELEVANT. No other values are accepted. Do NOT use "OTHER", "PRICE", "LOCATION", "HOURS", "PRODUCT", "INFO", or any custom intent.
 - "confidence": how confident you are in your reply ("high", "medium", or "low")
 - "flags": an array of flag strings if applicable (empty array [] if none):
   - "info_not_in_kb" if the customer asked a specific question and the answer is NOT in <business_knowledge>, or if you responded with general info instead of answering their actual question
