@@ -27,8 +27,8 @@ describe('classifyFallbackIntent', () => {
             expect(classifyFallbackIntent('@friend check this out')).toBe('SPAM_OR_IRRELEVANT');
         });
 
-        it('should detect fire emoji spam', () => {
-            expect(classifyFallbackIntent('🔥🔥🔥')).toBe('SPAM_OR_IRRELEVANT');
+        it('should detect non-compliment emoji spam', () => {
+            expect(classifyFallbackIntent('😂😂😂')).toBe('SPAM_OR_IRRELEVANT');
         });
     });
 

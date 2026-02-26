@@ -264,7 +264,7 @@ describe('AI Service', () => {
             expect(result.intent).toBe('GREETING');
         });
 
-        it('should return no flag data on fallback error response', async () => {
+        it('should return lightweight classification on fallback error response', async () => {
             const { redis } = await import('../../src/lib/redis');
             vi.mocked(redis.get).mockResolvedValue(null);
 
@@ -282,9 +282,10 @@ describe('AI Service', () => {
             });
 
             expect(result.model).toBe('fallback');
-            expect(result.intent).toBeUndefined();
-            expect(result.confidence).toBeUndefined();
-            expect(result.flags).toBeUndefined();
+            // Fallback now includes lightweight keyword-based classification
+            expect(result.intent).toBe('GREETING');
+            expect(result.confidence).toBe('low');
+            expect(result.flags).toEqual([]);
         });
 
         it('should handle AI worker response without flag fields (backward compat)', async () => {
