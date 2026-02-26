@@ -107,16 +107,16 @@ export class RetrievalService {
                     + 0.4 * similarity(content_normalized, ${normalizedQuery}),
                     0
                 ) as text_score,
-                ${VECTOR_WEIGHT} * vec_score
-                + ${TEXT_WEIGHT} * COALESCE(
+                ${sql.raw(String(VECTOR_WEIGHT))} * vec_score
+                + ${sql.raw(String(TEXT_WEIGHT))} * COALESCE(
                     0.6 * similarity(title_normalized, ${normalizedQuery})
                     + 0.4 * similarity(content_normalized, ${normalizedQuery}),
                     0
                 )
-                + CASE WHEN language = ${queryLanguage} THEN ${LANGUAGE_BOOST} ELSE 0 END
+                + CASE WHEN language = ${queryLanguage} THEN ${sql.raw(String(LANGUAGE_BOOST))} ELSE 0 END
                 as final_score
             FROM vector_candidates
-            WHERE vec_score >= ${MIN_SCORE_THRESHOLD}
+            WHERE vec_score >= ${sql.raw(String(MIN_SCORE_THRESHOLD))}
             ORDER BY final_score DESC
             LIMIT ${topK}
         `);
