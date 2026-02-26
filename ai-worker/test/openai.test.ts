@@ -1366,8 +1366,8 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(systemPrompt).toContain('"offensive_or_abusive"');
     });
 
-    it('should use PROMPT_VERSION v10', () => {
-        expect(PROMPT_VERSION).toBe('v10');
+    it('should use PROMPT_VERSION v11', () => {
+        expect(PROMPT_VERSION).toBe('v11');
     });
 
     it('should use json_schema response format with strict schema', async () => {
@@ -1556,9 +1556,10 @@ describe('OpenAI Service - v10 Prompt Improvements', () => {
         expect(systemPrompt).toContain('CONFIDENCE SCORING');
         expect(systemPrompt).toContain('Customer asks WHO');
         expect(systemPrompt).toContain('SPECIFIC city/product/service');
+        expect(systemPrompt).toContain('RELATED but DIFFERENT concept');
     });
 
-    it('should include 7 few-shot examples in system prompt', async () => {
+    it('should include 8 few-shot examples in system prompt', async () => {
         let capturedMessages: any[] = [];
         vi.doMock('openai', () => ({
             default: vi.fn().mockImplementation(() => ({
@@ -1586,11 +1587,12 @@ describe('OpenAI Service - v10 Prompt Improvements', () => {
         await service.generateReply({ comment: 'Hello' });
 
         const systemPrompt = capturedMessages[0].content;
-        expect(systemPrompt).toContain('Example 7');
+        expect(systemPrompt).toContain('Example 8');
         expect(systemPrompt).toContain('Sarcasm');
         expect(systemPrompt).toContain('Angry customer');
         expect(systemPrompt).toContain('Geographic specificity');
         expect(systemPrompt).toContain('"angry_customer"');
+        expect(systemPrompt).toContain('certificate');
     });
 });
 

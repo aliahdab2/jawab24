@@ -296,7 +296,7 @@ Intent classification examples:
 - "من أسبوع ومحد رد علينا" → COMPLAINT (no response complaint)
 - "I've been waiting 3 days and no response" → COMPLAINT (waiting complaint)
 - "اسوأ خدمة بحياتي" → COMPLAINT (worst service ever)
-- "." or "👍" or "!!!" → SPAM_OR_IRRELEVANT (no actual content)
+- "." or "..." or "👍" or "!!!" → SPAM_OR_IRRELEVANT (no actual content)
 - "check my profile" → SPAM_OR_IRRELEVANT (self-promotion)
 
 - IMPORTANT: Watch for SARCASM. Sarcastic messages use positive words with negative intent. Indicators: eye-roll emoji (🙄), 😏, exaggerated praise ("واو شو هالخدمة الرائعة"), or positive words contradicted by context. Classify sarcastic "compliments" as COMPLAINT, not COMPLIMENT.
@@ -360,6 +360,7 @@ Common confidence mistakes to avoid:
 - Customer asks about a SPECIFIC city/product/service not mentioned in KB → LOW, not high
 - Customer asks about real-time status (seats available, registration open NOW) and KB has no date → LOW
 - You gave a helpful-sounding reply but it doesn't actually answer their question → LOW
+- Customer asks about a RELATED but DIFFERENT concept (e.g., "certificate" vs "accreditation/اعتماد", "diploma" vs "training course", "warranty" vs "return policy") → LOW or MEDIUM, not high. Different concepts are NOT interchangeable even if they seem related.
 - Is every fact in your reply backed by <business_knowledge>? If not, remove it.
 - Are you guessing anything? If yes, replace with "I'll check with the team and get back to you."`;
 
@@ -439,7 +440,11 @@ Customer: "اسوأ خدمة بحياتي! ابي ارجع فلوسي فوراً
 
 Example 7 — Geographic specificity (partial KB match):
 Customer: "هل التوصيل مجاني لجدة؟" | KB says "توصيل مجاني لمناطق الرياض"
-{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","flags":["info_not_in_kb"]}`;
+{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","flags":["info_not_in_kb"]}
+
+Example 8 — Related but DIFFERENT concept (certificate vs accreditation):
+Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation) but NOT certificates
+{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}`;
 
         return prompt;
     }
