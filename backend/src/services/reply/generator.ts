@@ -142,7 +142,7 @@ export class ReplyGenerator {
             const effectiveChannel: 'comment' | 'dm' = (commentReplyMode === 'dual' || commentReplyMode === 'private') ? 'dm' : 'comment';
 
             // Run RAG retrieval if enabled
-            const { retrievedChunks, effectiveKB, queryEmbedding } = await this.resolveKnowledge(
+            const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
                 pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel,
             );
 
@@ -151,7 +151,7 @@ export class ReplyGenerator {
                 context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
             });
 
-            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0);
+            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted);
         }
 
         // 3. Fallback
@@ -196,7 +196,7 @@ export class ReplyGenerator {
                 const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 6);
 
                 // Run RAG retrieval if enabled
-                const { retrievedChunks, effectiveKB, queryEmbedding } = await this.resolveKnowledge(
+                const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
                     pageId, text, knowledgeBase, context.kbActiveVersion, 'dm',
                 );
 
@@ -205,7 +205,7 @@ export class ReplyGenerator {
                     context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
                 });
 
-                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0);
+                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted);
             }
         }
 
@@ -226,12 +226,12 @@ export class ReplyGenerator {
         staticKB: string | undefined,
         kbActiveVersion: number | null | undefined,
         channel: 'comment' | 'dm',
-    ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[] }> {
+    ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[]; ragAttempted: boolean }> {
         const retrieval = getRetrievalService();
 
         // No retrieval possible: missing service, pageId, or active version
         if (!retrieval || !pageId || kbActiveVersion === null || kbActiveVersion === undefined) {
-            return { effectiveKB: staticKB };
+            return { effectiveKB: staticKB, ragAttempted: false };
         }
 
         try {
@@ -249,7 +249,7 @@ export class ReplyGenerator {
                     });
                 });
 
-                return { effectiveKB: staticKB, queryEmbedding };
+                return { effectiveKB: staticKB, queryEmbedding, ragAttempted: true };
             }
 
             const retrievedChunks: RetrievedChunkContext[] = chunks.map(c => ({
@@ -267,16 +267,16 @@ export class ReplyGenerator {
                     topScore: retrievedChunks[0]?.score,
                     topChunkType: retrievedChunks[0]?.type,
                 });
-                return { effectiveKB: staticKB, queryEmbedding };
+                return { effectiveKB: staticKB, queryEmbedding, ragAttempted: true };
             }
 
             // RAG_MODE = 'on': use chunks, omit static KB
-            return { retrievedChunks, effectiveKB: undefined, queryEmbedding };
+            return { retrievedChunks, effectiveKB: undefined, queryEmbedding, ragAttempted: true };
         } catch (error) {
             this.logger.error('[Generator] RAG retrieval failed, falling back to static KB', {
                 pageId, error: error instanceof Error ? error.message : String(error),
             });
-            return { effectiveKB: staticKB };
+            return { effectiveKB: staticKB, ragAttempted: true };
         }
     }
 
@@ -332,6 +332,7 @@ export class ReplyGenerator {
         userId: string,
         pageId?: string,
         retrievedChunkCount?: number,
+        ragAttempted?: boolean,
     ): Promise<GenerateReplyResult> {
         // Normalize intent: GPT sometimes invents intents (PRICE, OTHER, LOCATION)
         // instead of using the 8 valid ones. Map them back to the standard taxonomy.
@@ -342,15 +343,15 @@ export class ReplyGenerator {
             flags.push('low_confidence');
         }
 
-        // Post-validation: if KB retrieval found 0 chunks and GPT claims high confidence
-        // on a question-like intent, force info_not_in_kb + low_confidence flags.
-        // Catches hallucinations where GPT invents answers for topics not covered by the KB.
-        // low_confidence triggers shouldSkipReply() so the hallucinated reply is NOT sent.
-        // Intents that don't need KB (greetings, compliments, spam) are excluded.
-        // Note: only "high" triggers — "medium" is left to the prompt's safety rules
-        // because static-KB pages always have retrievedChunkCount=0 even when KB is present.
+        // Post-validation: if RAG retrieval was attempted but found 0 chunks and GPT
+        // claims high confidence on a question-like intent, force info_not_in_kb +
+        // low_confidence flags. Catches hallucinations where GPT invents answers for
+        // topics not covered by the KB.
+        // Only fires when RAG was actually attempted (ragAttempted=true). Static-KB pages
+        // (no RAG) always have 0 chunks — that's normal, not hallucination.
         const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
         if (
+            ragAttempted &&
             retrievedChunkCount === 0 &&
             aiResponse.confidence === 'high' &&
             !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&

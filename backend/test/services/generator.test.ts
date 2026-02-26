@@ -368,7 +368,7 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.flagReason).toBe('angry_customer');
         });
 
-        it('should add info_not_in_kb flag when 0 chunks retrieved and GPT claims high confidence on QUESTION', async () => {
+        it('should add info_not_in_kb flag when RAG attempted, 0 chunks retrieved, and GPT claims high confidence on QUESTION', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
@@ -385,15 +385,47 @@ describe('ReplyGenerator - Flagging System', () => {
                 flags: [],
             });
 
-            // kbActiveVersion: null forces RAG off → 0 retrieved chunks
+            // Simulate RAG-enabled page where retrieval returned 0 chunks
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: true,
+            });
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toContain('info_not_in_kb');
+            expect(result.flagReason).toContain('low_confidence');
+        });
+
+        it('should NOT trigger hallucination guard when RAG not attempted (static KB page)', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Yes we can provide a tax invoice!',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            // Static-KB page: kbActiveVersion null → ragAttempted=false → guard should NOT fire
             const result = await generator.generateForComment({
                 ...baseContext,
                 kbActiveVersion: null,
             }, true);
 
-            expect(result.needsAttention).toBe(true);
-            expect(result.flagReason).toContain('info_not_in_kb');
-            expect(result.flagReason).toContain('low_confidence');
+            // No flags should be added — static KB pages don't trigger hallucination guard
+            expect(result.needsAttention).toBe(false);
+            expect(result.flagReason).toBeUndefined();
         });
 
         it('should NOT trigger hallucination guard when confidence is medium (only high triggers)', async () => {
@@ -450,7 +482,7 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(flagCount).toBe(1);
         });
 
-        it('should normalize non-standard intent "PRICE" to QUESTION and trigger hallucination guard', async () => {
+        it('should normalize non-standard intent "PRICE" to QUESTION and trigger hallucination guard when RAG attempted', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
@@ -467,19 +499,24 @@ describe('ReplyGenerator - Flagging System', () => {
                 flags: [],
             });
 
-            const result = await generator.generateForComment({
-                ...baseContext,
-                kbActiveVersion: null,
-            }, true);
+            // Simulate RAG-enabled page where retrieval returned 0 chunks
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: true,
+            });
 
-            // PRICE normalizes to QUESTION → hallucination guard fires (0 chunks + high confidence)
+            const result = await generator.generateForComment(baseContext, true);
+
+            // PRICE normalizes to QUESTION → hallucination guard fires (RAG attempted + 0 chunks + high confidence)
             expect(result.aiIntent).toBe('QUESTION');
             expect(result.needsAttention).toBe(true);
             expect(result.flagReason).toContain('info_not_in_kb');
             expect(result.flagReason).toContain('low_confidence');
         });
 
-        it('should normalize non-standard intent "OTHER" and trigger hallucination guard', async () => {
+        it('should normalize non-standard intent "OTHER" and trigger hallucination guard when RAG attempted', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
@@ -496,17 +533,22 @@ describe('ReplyGenerator - Flagging System', () => {
                 flags: [],
             });
 
-            const result = await generator.generateForComment({
-                ...baseContext,
-                kbActiveVersion: null,
-            }, true);
+            // Simulate RAG-enabled page where retrieval returned 0 chunks
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: true,
+            });
 
-            // OTHER is not in HALLUCINATION_SAFE_INTENTS → guard fires
+            const result = await generator.generateForComment(baseContext, true);
+
+            // OTHER is not in HALLUCINATION_SAFE_INTENTS → guard fires (RAG attempted + 0 chunks)
             expect(result.needsAttention).toBe(true);
             expect(result.flagReason).toContain('info_not_in_kb');
         });
 
-        it('should NOT trigger hallucination guard for COMPLIMENT intent (hallucination-safe)', async () => {
+        it('should NOT trigger hallucination guard for COMPLIMENT intent even with RAG attempted (hallucination-safe)', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
@@ -523,12 +565,50 @@ describe('ReplyGenerator - Flagging System', () => {
                 flags: [],
             });
 
-            const result = await generator.generateForComment({
-                ...baseContext,
-                kbActiveVersion: null,
-            }, true);
+            // Even with RAG attempted + 0 chunks + high confidence,
+            // COMPLIMENT is safe → guard should NOT fire
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: true,
+            });
+
+            const result = await generator.generateForComment(baseContext, true);
 
             // COMPLIMENT is in HALLUCINATION_SAFE_INTENTS → guard does NOT fire
+            expect(result.needsAttention).toBe(false);
+            expect(result.flagReason).toBeUndefined();
+        });
+
+        it('should NOT trigger hallucination guard when RAG attempted and chunks were found', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'The price is 500 SAR.',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            // RAG attempted AND chunks found → guard should NOT fire
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: [{ type: 'product', title: 'Pricing', content: '500 SAR', score: 0.9 }],
+                effectiveKB: undefined,
+                queryEmbedding: [0.1, 0.2],
+                ragAttempted: true,
+            });
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            // Chunks > 0 means KB covers this topic → no hallucination guard
             expect(result.needsAttention).toBe(false);
             expect(result.flagReason).toBeUndefined();
         });
@@ -726,6 +806,65 @@ describe('ReplyGenerator - Flagging System', () => {
 
             expect(aiService.generateReply).not.toHaveBeenCalled();
             expect(result.replyText).toBeNull();
+        });
+
+        it('should trigger hallucination guard in DM when RAG attempted and 0 chunks', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'We offer free returns within 30 days!',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            // RAG attempted but 0 chunks → hallucination guard should fire
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: true,
+            });
+
+            const result = await generator.generateForMessage(baseContext, true);
+
+            expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toContain('info_not_in_kb');
+            expect(result.flagReason).toContain('low_confidence');
+        });
+
+        it('should NOT trigger hallucination guard in DM when RAG not attempted (static KB)', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'We offer free returns within 30 days!',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            // Static KB page → ragAttempted=false → guard should NOT fire
+            const result = await generator.generateForMessage({
+                ...baseContext,
+                kbActiveVersion: null,
+            }, true);
+
+            expect(result.needsAttention).toBe(false);
+            expect(result.flagReason).toBeUndefined();
         });
 
         it('should use template for messages when rule matches', async () => {

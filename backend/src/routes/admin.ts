@@ -861,10 +861,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 let retrievedChunks: RetrievedChunkContext[] = [];
                 let queryEmbedding: number[] | undefined;
                 let gapRecorded = false;
+                let ragAttempted = false;
                 const ragMode = config.ragMode || 'off';
 
                 const activeVersion = page.kbActiveVersion;
                 if (ragMode !== 'off' && config.openai?.apiKey && activeVersion !== null) {
+                    ragAttempted = true;
                     try {
                         const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
                         const retrievalService = new RetrievalService(embeddingProvider);
@@ -922,8 +924,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 }
 
                 // Post-validation: hallucination guard (mirrors generator.ts)
+                // Only fires when RAG retrieval was attempted but found 0 chunks.
+                // Static-KB pages (no RAG) always have 0 chunks — that's normal, not hallucination.
                 const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
                 if (
+                    ragAttempted &&
                     retrievedChunks.length === 0 &&
                     aiResponse.confidence === 'high' &&
                     !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
