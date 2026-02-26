@@ -23,6 +23,7 @@
     "pre-deploy": "./scripts/pre-deploy-check.sh",
     "check:openai-sync": "node -e \"const fs=require('fs');const b=JSON.parse(fs.readFileSync('backend/package.json','utf8'));const a=JSON.parse(fs.readFileSync('ai-worker/package.json','utf8'));const bv=b.dependencies&&b.dependencies.openai;const av=a.dependencies&&a.dependencies.openai;const exact=/^\\\\d+\\\\.\\\\d+\\\\.\\\\d+$/;if(!bv||!av){console.error('❌ Missing openai dependency in backend or ai-worker package.json');process.exit(1);}if(!exact.test(bv)||!exact.test(av)){console.error('❌ OpenAI versions must be pinned exact (e.g., 6.21.0, no ^ or ~).');console.error('   backend:',bv);console.error('   ai-worker:',av);process.exit(1);}if(bv!==av){console.error('❌ OpenAI SDK versions are out of sync.');console.error('   backend:',bv);console.error('   ai-worker:',av);process.exit(1);}console.log('✅ OpenAI SDK versions are pinned and in sync at',bv);\"",
     "check:esm": "grep -E '\"(uuid|node-fetch|chalk|ora|execa|got|globby)\":' backend/package.json && echo '⚠️  ESM-only packages found!' || echo '✅ No ESM-only packages'",
+    "eval": "npx tsx scripts/playground-eval.ts",
     "perf:benchmark": "node scripts/perf-benchmark.js",
     "postinstall": "npm run build --workspace=@jawab24/shared",
     "prepare": "husky"

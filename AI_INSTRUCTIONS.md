@@ -532,6 +532,17 @@ cd frontend
 npm run build:mobile
 npx cap sync android
 cd android && ./gradlew assembleDebug
+
+# AI Reply Quality Eval (98 test cases)
+# Prerequisites: backend (port 3000) + ai-worker (port 3002) running, demo mode enabled
+# 1. Start services:
+DATABASE_URL="postgres://postgres:postgres@localhost:5433/autoreply" npx tsx backend/src/index.ts
+PORT=3002 OPENAI_API_KEY="<key>" npx tsx ai-worker/src/index.ts
+# 2. Get admin token:
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:3000/auth/demo | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+# 3. Run eval:
+ADMIN_TOKEN="$ADMIN_TOKEN" npm run eval
+# Options: VERBOSE=1 (detailed output), CATEGORY=3 (run single category), CONCURRENCY=5
 ```
 
 ---
