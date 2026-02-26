@@ -11,6 +11,7 @@ import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService } from '../kb/gap-detector';
 import { detectLanguageCode } from '../../utils/language';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, VALID_AI_INTENTS } from '@jawab24/shared';
+import { isOffensiveContent } from '../offensive-filter';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive', 'low_confidence'] as const;
@@ -110,7 +111,13 @@ export class ReplyGenerator {
         const templateResult = await this.tryTemplateMatch(workspaceId, text);
         if (templateResult) return templateResult;
 
-        // 2. If no template, use AI if enabled
+        // 2. Pre-AI offensive filter — catches profanity GPT might misclassify
+        if (isOffensiveContent(text)) {
+            this.logger.debug('[Generator] Offensive content detected by pre-AI filter');
+            return { replyText: null, replyMethod: 'ai', needsAttention: true, flagReason: 'offensive_or_abusive', aiIntent: 'OFFENSIVE' };
+        }
+
+        // 3. If no template, use AI if enabled
         if (aiEnabled) {
             const limitCheck = await subscriptionsService.canUseAiReplies(userId);
 
@@ -170,7 +177,13 @@ export class ReplyGenerator {
             return templateResult;
         }
 
-        // 2. If no template, use AI with conversation context
+        // 2. Pre-AI offensive filter — catches profanity GPT might misclassify
+        if (isOffensiveContent(text)) {
+            this.logger.debug('[Generator] Offensive content detected by pre-AI filter');
+            return { replyText: null, replyMethod: 'ai', needsAttention: true, flagReason: 'offensive_or_abusive', aiIntent: 'OFFENSIVE' };
+        }
+
+        // 3. If no template, use AI with conversation context
         if (aiEnabled) {
             const limitCheck = await subscriptionsService.canUseAiReplies(userId);
 
@@ -334,6 +347,8 @@ export class ReplyGenerator {
         // Catches hallucinations where GPT invents answers for topics not covered by the KB.
         // low_confidence triggers shouldSkipReply() so the hallucinated reply is NOT sent.
         // Intents that don't need KB (greetings, compliments, spam) are excluded.
+        // Note: only "high" triggers — "medium" is left to the prompt's safety rules
+        // because static-KB pages always have retrievedChunkCount=0 even when KB is present.
         const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
         if (
             retrievedChunkCount === 0 &&

@@ -14,6 +14,7 @@ import { gapDetectorService } from '../services/kb/gap-detector';
 import { settingsService } from '../services/settings';
 import { getIngestionService } from '../services/pages';
 import { shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../services/reply/generator';
+import { isOffensiveContent } from '../services/offensive-filter';
 import { normalizeAiIntent } from '@jawab24/shared';
 import { RetrievedChunkContext } from '../types';
 
@@ -817,6 +818,33 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             confidence: null,
                             flags: [],
                             needsAttention: false,
+                            cached: false,
+                            detectedLanguage: null,
+                            latencyMs: Date.now() - startTime,
+                            tokensUsed: 0,
+                            model: null,
+                            gapRecorded: false,
+                            commentReplyMode: channel === 'comment' ? commentReplyMode : null,
+                            nudgeText: channel === 'comment' ? nudgeText : null,
+                        },
+                    });
+                }
+
+                // 2b. Pre-AI offensive filter
+                if (isOffensiveContent(question)) {
+                    return reply.send({
+                        success: true,
+                        data: {
+                            reply: null,
+                            replyMethod: 'skipped',
+                            templateName: null,
+                            ragMode: config.ragMode || 'off',
+                            chunksRetrieved: 0,
+                            chunks: [],
+                            intent: 'OFFENSIVE',
+                            confidence: 'high',
+                            flags: ['offensive_or_abusive'],
+                            needsAttention: true,
                             cached: false,
                             detectedLanguage: null,
                             latencyMs: Date.now() - startTime,
