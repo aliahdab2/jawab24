@@ -395,6 +395,33 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.flagReason).toContain('info_not_in_kb');
         });
 
+        it('should NOT trigger hallucination guard when confidence is medium (only high triggers)', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'I will check with the team.',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'medium',
+                flags: [],
+            });
+
+            const result = await generator.generateForComment({
+                ...baseContext,
+                kbActiveVersion: null,
+            }, true);
+
+            // medium confidence + 0 chunks should NOT add info_not_in_kb
+            expect(result.flagReason).toBeUndefined();
+            expect(result.needsAttention).toBe(false);
+        });
+
         it('should NOT add info_not_in_kb flag when GPT already includes it', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
