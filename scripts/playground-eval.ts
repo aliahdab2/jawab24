@@ -88,11 +88,40 @@ const CONCURRENCY = parseInt(process.env.CONCURRENCY || '3', 10);
 const CATEGORY_FILTER = process.env.CATEGORY ? parseInt(process.env.CATEGORY, 10) : null;
 const VERBOSE = process.env.VERBOSE === '1';
 
-const PAGE_MAP: Record<string, string> = {
-    training: 'demo_page_institute',
-    school: 'demo_page_school',
-    electronics: 'demo_page_electronics',
+// Page name patterns to match demo pages to aliases
+const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
+    training: /النور|تدريب|institute/i,
+    school: /الأمل|مدارس|school/i,
+    electronics: /إلكترونيات|متجر|electronics/i,
 };
+
+// This gets populated at runtime with actual UUIDs
+let PAGE_MAP: Record<string, string> = {};
+
+async function resolvePageIds(): Promise<void> {
+    const res = await fetch(`${BASE_URL}/admin/pages`, {
+        headers: { 'Authorization': `Bearer ${ADMIN_TOKEN}` },
+    });
+    if (!res.ok) {
+        throw new Error(`Failed to fetch pages: HTTP ${res.status}`);
+    }
+    const data = await res.json() as { success: boolean; data: { id: string; name: string }[] };
+    if (!data.success || !data.data) {
+        throw new Error(`Failed to fetch pages: ${JSON.stringify(data)}`);
+    }
+
+    for (const [alias, pattern] of Object.entries(PAGE_NAME_PATTERNS)) {
+        const match = data.data.find(p => pattern.test(p.name));
+        if (match) {
+            PAGE_MAP[alias] = match.id;
+            console.log(`  ${alias} → ${match.name} (${match.id.slice(0, 8)}...)`);
+        } else {
+            console.error(`Warning: No page matching "${alias}" pattern. Available: ${data.data.map(p => p.name).join(', ')}`);
+        }
+    }
+
+    console.log(`Resolved ${Object.keys(PAGE_MAP).length} demo pages`);
+}
 
 // ---------------------------------------------------------------------------
 // Test cases — all 98 from docs/playground-edge-cases.md
@@ -378,6 +407,13 @@ async function main() {
     if (!ADMIN_TOKEN) {
         console.error('Error: ADMIN_TOKEN env var is required.');
         console.error('Usage: ADMIN_TOKEN=<jwt> npx tsx scripts/playground-eval.ts');
+        process.exit(1);
+    }
+
+    // Resolve demo page UUIDs from the admin API
+    await resolvePageIds();
+    if (Object.keys(PAGE_MAP).length === 0) {
+        console.error('Error: No demo pages found. Is demo mode enabled?');
         process.exit(1);
     }
 
