@@ -1462,8 +1462,8 @@ describe('shouldSkipReply', () => {
         expect(shouldSkipReply('offensive')).toBe(true);
     });
 
-    it('should return true for low_confidence flag', () => {
-        expect(shouldSkipReply('low_confidence')).toBe(true);
+    it('should return false for low_confidence flag (send reply, just flag for review)', () => {
+        expect(shouldSkipReply('low_confidence')).toBe(false);
     });
 
     it('should return true for OFFENSIVE intent', () => {
@@ -1480,8 +1480,8 @@ describe('shouldSkipReply', () => {
         expect(shouldSkipReply(undefined, undefined)).toBe(false);
     });
 
-    it('should return true when low_confidence is among multiple flags', () => {
-        expect(shouldSkipReply('price_not_in_kb,low_confidence')).toBe(true);
+    it('should return false when low_confidence is among non-skip flags', () => {
+        expect(shouldSkipReply('price_not_in_kb,low_confidence')).toBe(false);
     });
 
     it('should return true for SPAM_OR_IRRELEVANT intent', () => {

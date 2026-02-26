@@ -13,8 +13,10 @@ import { detectLanguageCode } from '../../utils/language';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, VALID_AI_INTENTS } from '@jawab24/shared';
 import { isOffensiveContent } from '../offensive-filter';
 
-/** Flags/intents that should cause the pipeline to skip auto-replying */
-export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive', 'low_confidence'] as const;
+/** Flags/intents that should cause the pipeline to skip auto-replying.
+ *  NOTE: low_confidence is intentionally NOT here — a low-confidence reply
+ *  is still better than no reply at all. It gets flagged for review instead. */
+export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
 export const SAFE_FALLBACK_FLAGS = ['price_not_in_kb'] as const;
 export const SKIP_REPLY_INTENTS = ['OFFENSIVE', 'SPAM_OR_IRRELEVANT'] as const;
 

@@ -1366,8 +1366,8 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(systemPrompt).toContain('"offensive_or_abusive"');
     });
 
-    it('should use PROMPT_VERSION v11', () => {
-        expect(PROMPT_VERSION).toBe('v11');
+    it('should use PROMPT_VERSION v12', () => {
+        expect(PROMPT_VERSION).toBe('v12');
     });
 
     it('should use json_schema response format with strict schema', async () => {
@@ -1501,6 +1501,25 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
 
         expect(result.confidence).toBe('low');
         expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should NOT downgrade when reply contains standalone أرجعلك without hedge context', async () => {
+        setupMock(JSON.stringify({
+            reply: 'العنوان هو البرامكة سانا، أرجعلك التفاصيل الكاملة هنا 😊',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'ممكن العنوان؟',
+            context: { knowledgeBase: 'العنوان: البرامكة سانا فوق مكتبة الحافظ' },
+        });
+
+        expect(result.confidence).toBe('high');
+        expect(result.flags).not.toContain('info_not_in_kb');
     });
 
     it('should NOT touch low confidence replies', async () => {
