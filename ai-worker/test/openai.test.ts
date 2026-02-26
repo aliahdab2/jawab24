@@ -518,7 +518,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         expect(parsed.event).toBe('ai_call_token_usage');
         expect(parsed.estimated_tokens_in).toBeDefined();
         expect(parsed.max_input_tokens).toBe(4000);
-        expect(parsed.prompt_version).toBe('v5');
+        expect(parsed.prompt_version).toBe('v6');
 
         logSpy.mockRestore();
     });
@@ -1052,6 +1052,62 @@ describe('OpenAI Service - Prompt Injection Sanitization', () => {
         const systemPrompt = capture.messages[0].content;
         expect(systemPrompt).not.toMatch(/\n{4,}/);
         expect(systemPrompt).toContain('Real info');
+    });
+
+    it('should include sarcasm detection guidance in system prompt', async () => {
+        let capturedMessages: any[] = [];
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'OK', intent: 'COMPLAINT', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 50 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Great service 🙄' });
+
+        const systemPrompt = capturedMessages[0].content;
+        expect(systemPrompt).toContain('SARCASM');
+        expect(systemPrompt).toContain('🙄');
+    });
+
+    it('should instruct no reply for SPAM_OR_IRRELEVANT intent', async () => {
+        let capturedMessages: any[] = [];
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: '', intent: 'SPAM_OR_IRRELEVANT', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 50 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'follow me @spam' });
+
+        const systemPrompt = capturedMessages[0].content;
+        expect(systemPrompt).toContain('SPAM_OR_IRRELEVANT');
+        expect(systemPrompt).toContain('Do NOT reply');
     });
 });
 

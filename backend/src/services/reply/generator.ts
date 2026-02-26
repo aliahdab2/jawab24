@@ -15,7 +15,7 @@ import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 /** Flags/intents that should cause the pipeline to skip auto-replying */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive', 'low_confidence'] as const;
 export const SAFE_FALLBACK_FLAGS = ['price_not_in_kb'] as const;
-export const SKIP_REPLY_INTENTS = ['OFFENSIVE'] as const;
+export const SKIP_REPLY_INTENTS = ['OFFENSIVE', 'SPAM_OR_IRRELEVANT'] as const;
 
 export function shouldSkipReply(flagReason?: string, aiIntent?: string): boolean {
     if (!flagReason && !aiIntent) return false;
@@ -144,7 +144,7 @@ export class ReplyGenerator {
                 context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
             });
 
-            return this.processAiResponse(aiResponse, userId, pageId);
+            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0);
         }
 
         // 3. Fallback
@@ -192,7 +192,7 @@ export class ReplyGenerator {
                     context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
                 });
 
-                return this.processAiResponse(aiResponse, userId, pageId);
+                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0);
             }
         }
 
@@ -317,11 +317,24 @@ export class ReplyGenerator {
     private async processAiResponse(
         aiResponse: AiGenerateResponse,
         userId: string,
-        pageId?: string
+        pageId?: string,
+        retrievedChunkCount?: number,
     ): Promise<GenerateReplyResult> {
         const flags = [...(aiResponse.flags || [])];
         if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
             flags.push('low_confidence');
+        }
+
+        // Post-validation: if KB retrieval found 0 chunks and GPT claims high confidence
+        // on a QUESTION, force info_not_in_kb flag. Catches hallucinations where GPT
+        // invents answers for topics not covered by the KB.
+        if (
+            retrievedChunkCount === 0 &&
+            aiResponse.confidence === 'high' &&
+            aiResponse.intent === 'QUESTION' &&
+            !flags.includes('info_not_in_kb')
+        ) {
+            flags.push('info_not_in_kb');
         }
         const needsAttention = flags.length > 0 ||
             aiResponse.intent === 'COMPLAINT' ||

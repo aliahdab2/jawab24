@@ -367,6 +367,60 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.needsAttention).toBe(true);
             expect(result.flagReason).toBe('angry_customer');
         });
+
+        it('should add info_not_in_kb flag when 0 chunks retrieved and GPT claims high confidence on QUESTION', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Yes we can provide a tax invoice!',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            // kbActiveVersion: null forces RAG off → 0 retrieved chunks
+            const result = await generator.generateForComment({
+                ...baseContext,
+                kbActiveVersion: null,
+            }, true);
+
+            expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toContain('info_not_in_kb');
+        });
+
+        it('should NOT add info_not_in_kb flag when GPT already includes it', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Let me check with the team.',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: ['info_not_in_kb'],
+            });
+
+            const result = await generator.generateForComment({
+                ...baseContext,
+                kbActiveVersion: null,
+            }, true);
+
+            // Should have info_not_in_kb exactly once, not duplicated
+            const flagCount = (result.flagReason || '').split(',').filter(f => f.trim() === 'info_not_in_kb').length;
+            expect(flagCount).toBe(1);
+        });
     });
 
     describe('generateForMessage', () => {
@@ -1114,5 +1168,13 @@ describe('shouldSkipReply', () => {
 
     it('should return true when low_confidence is among multiple flags', () => {
         expect(shouldSkipReply('price_not_in_kb,low_confidence')).toBe(true);
+    });
+
+    it('should return true for SPAM_OR_IRRELEVANT intent', () => {
+        expect(shouldSkipReply(undefined, 'SPAM_OR_IRRELEVANT')).toBe(true);
+    });
+
+    it('should return true for spam_or_irrelevant intent (case-insensitive)', () => {
+        expect(shouldSkipReply(undefined, 'spam_or_irrelevant')).toBe(true);
     });
 });

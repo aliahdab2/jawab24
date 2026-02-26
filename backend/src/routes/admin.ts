@@ -890,6 +890,16 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
                     flags.push('low_confidence');
                 }
+
+                // Post-validation: hallucination guard (mirrors generator.ts)
+                if (
+                    retrievedChunks.length === 0 &&
+                    aiResponse.confidence === 'high' &&
+                    aiResponse.intent === 'QUESTION' &&
+                    !flags.includes('info_not_in_kb')
+                ) {
+                    flags.push('info_not_in_kb');
+                }
                 const needsAttention = flags.length > 0 ||
                     aiResponse.intent === 'COMPLAINT' ||
                     aiResponse.intent === 'OFFENSIVE';

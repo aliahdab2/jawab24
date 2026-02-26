@@ -528,6 +528,28 @@ describe('CommentProcessor', () => {
         );
     });
 
+    it('should skip reply for SPAM_OR_IRRELEVANT intent', async () => {
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: undefined,
+            aiIntent: 'SPAM_OR_IRRELEVANT',
+        });
+        const adapter = createMockAdapter();
+
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', '🔥🔥 follow me @spam', 'from-1', 'Spammer',
+        );
+
+        expect(result.success).toBe(true);
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(adapter.markAsReplied).not.toHaveBeenCalled();
+        expect(adapter.flagComment).toHaveBeenCalledWith(
+            'comment-uuid', undefined, 'SPAM_OR_IRRELEVANT',
+        );
+    });
+
     // --- Price fallback tests ---
 
     it('should replace AI text with safe fallback for price_not_in_kb flag', async () => {
