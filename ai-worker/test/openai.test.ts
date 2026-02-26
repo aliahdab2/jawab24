@@ -248,7 +248,13 @@ describe('OpenAI Service - Structured JSON Response', () => {
 
         expect(mockCreate).toHaveBeenCalledWith(
             expect.objectContaining({
-                response_format: { type: 'json_object' },
+                response_format: expect.objectContaining({
+                    type: 'json_schema',
+                    json_schema: expect.objectContaining({
+                        name: 'ai_reply',
+                        strict: true,
+                    }),
+                }),
             }),
             expect.objectContaining({
                 signal: expect.any(AbortSignal),
@@ -1148,6 +1154,260 @@ describe('OpenAI Service - Prompt Injection Sanitization', () => {
         const systemPrompt = capturedMessages[0].content;
         expect(systemPrompt).toContain('SPAM_OR_IRRELEVANT');
         expect(systemPrompt).toContain('Do NOT reply');
+    });
+});
+
+describe('OpenAI Service - Post-Reply Validation', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    function setupMock(jsonResponse: string) {
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: jsonResponse } }],
+                            usage: { total_tokens: 50 },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.4, timeoutMs: 30000 },
+            },
+        }));
+    }
+
+    it('should add info_not_in_kb flag when reply contains numbers not in KB', async () => {
+        setupMock(JSON.stringify({
+            reply: 'السعر 250 ريال',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'كم السعر؟',
+            context: { knowledgeBase: 'الباقة 150 ريال' },
+        });
+
+        expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should NOT add info_not_in_kb when reply numbers match KB', async () => {
+        setupMock(JSON.stringify({
+            reply: 'السعر 150 ريال',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'كم السعر؟',
+            context: { knowledgeBase: 'الباقة 150 ريال' },
+        });
+
+        expect(result.flags).not.toContain('info_not_in_kb');
+    });
+
+    it('should NOT check numbers for non-QUESTION intents', async () => {
+        setupMock(JSON.stringify({
+            reply: 'شكرا! نخدم 500 عميل',
+            intent: 'COMPLIMENT',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'ممتازين والله',
+            context: { knowledgeBase: 'لا يوجد رقم 500' },
+        });
+
+        expect(result.flags).not.toContain('info_not_in_kb');
+    });
+
+    it('should add comment_too_long flag when comment reply exceeds 50 words', async () => {
+        const longReply = 'word '.repeat(55).trim();
+        setupMock(JSON.stringify({
+            reply: longReply,
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'Tell me about your services',
+            context: { channel: 'comment' },
+        });
+
+        expect(result.flags).toContain('comment_too_long');
+    });
+
+    it('should NOT flag long replies for DM channel', async () => {
+        const longReply = 'word '.repeat(55).trim();
+        setupMock(JSON.stringify({
+            reply: longReply,
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'Tell me about your services',
+            context: { channel: 'dm' },
+        });
+
+        expect(result.flags).not.toContain('comment_too_long');
+    });
+
+    it('should add language_mismatch flag when reply language differs from input', async () => {
+        setupMock(JSON.stringify({
+            reply: 'Thank you for asking! Send us a message.',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'كم السعر؟',
+        });
+
+        expect(result.flags).toContain('language_mismatch');
+    });
+
+    it('should NOT flag language_mismatch when reply matches input language', async () => {
+        setupMock(JSON.stringify({
+            reply: 'شكرا لسؤالك! راسلنا على الخاص',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'كم السعر؟',
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
+    it('should NOT check language mismatch for empty replies (OFFENSIVE/SPAM)', async () => {
+        setupMock(JSON.stringify({
+            reply: '',
+            intent: 'OFFENSIVE',
+            confidence: 'high',
+            flags: ['offensive_or_abusive'],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'يا حمير',
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+        expect(result.flags).toContain('offensive_or_abusive');
+    });
+});
+
+describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('should include few-shot examples in system prompt', async () => {
+        let capturedMessages: any[] = [];
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Hi!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 50 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.4, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Hello' });
+
+        const systemPrompt = capturedMessages[0].content;
+        expect(systemPrompt).toContain('EXAMPLES');
+        expect(systemPrompt).toContain('"intent":"QUESTION"');
+        expect(systemPrompt).toContain('"info_not_in_kb"');
+        expect(systemPrompt).toContain('"offensive_or_abusive"');
+    });
+
+    it('should use PROMPT_VERSION v9', () => {
+        expect(PROMPT_VERSION).toBe('v9');
+    });
+
+    it('should use json_schema response format with strict schema', async () => {
+        let capturedOpts: any = {};
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedOpts = opts;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'Hi!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 50 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.4, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const svc = new FreshService();
+        await svc.generateReply({ comment: 'Hello' });
+
+        const rf = capturedOpts.response_format;
+        expect(rf.type).toBe('json_schema');
+        expect(rf.json_schema.name).toBe('ai_reply');
+        expect(rf.json_schema.strict).toBe(true);
+        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags']);
+        expect(rf.json_schema.schema.properties.intent.enum).toEqual([
+            'QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
+            'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT',
+        ]);
+        expect(rf.json_schema.schema.properties.confidence.enum).toEqual(['high', 'medium', 'low']);
+        expect(rf.json_schema.schema.additionalProperties).toBe(false);
     });
 });
 

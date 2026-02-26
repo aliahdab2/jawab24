@@ -124,7 +124,34 @@ export class OpenAIService {
                         messages,
                         max_tokens: config.openai.maxTokens,
                         temperature: config.openai.temperature,
-                        response_format: { type: 'json_object' },
+                        response_format: {
+                            type: 'json_schema',
+                            json_schema: {
+                                name: 'ai_reply',
+                                strict: true,
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        reply: { type: 'string' },
+                                        intent: {
+                                            type: 'string',
+                                            enum: ['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
+                                                   'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT'],
+                                        },
+                                        confidence: {
+                                            type: 'string',
+                                            enum: ['high', 'medium', 'low'],
+                                        },
+                                        flags: {
+                                            type: 'array',
+                                            items: { type: 'string' },
+                                        },
+                                    },
+                                    required: ['reply', 'intent', 'confidence', 'flags'] as const,
+                                    additionalProperties: false,
+                                },
+                            },
+                        },
                     }, { signal: controller.signal }),
                 );
             } finally {
@@ -148,15 +175,18 @@ export class OpenAIService {
                 };
             }
 
+            // Post-reply validation: catch issues the prompt alone can't prevent
+            const validated = this.validateReply(parsed, request);
+
             return {
-                reply: parsed.reply || this.getFallbackReply(request).reply,
+                reply: validated.reply || this.getFallbackReply(request).reply,
                 language: request.language || detectedLanguage,
                 tokensUsed: completion.usage?.total_tokens,
                 tokensIn: completion.usage?.prompt_tokens,
                 tokensOut: completion.usage?.completion_tokens,
-                intent: parsed.intent,
-                confidence: parsed.confidence,
-                flags: parsed.flags,
+                intent: validated.intent,
+                confidence: validated.confidence,
+                flags: validated.flags,
             };
         } catch (error) {
             Sentry.captureException(error instanceof Error ? error : new Error('OpenAI API error'), { tags: { service: 'openai' } });
@@ -374,7 +404,21 @@ IMPORTANT: Output a JSON object with these fields:
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
   - "low_confidence" if you are uncertain about your reply
   - "redirect_to_human" if you advised the customer to contact a human
-Output ONLY the JSON object, nothing else.`;
+Output ONLY the JSON object, nothing else.
+
+EXAMPLES (follow this exact format):
+
+Example 1 — Answer found in KB:
+Customer: "كم سعر الباقة؟" | KB has: "باقة الورد - 150 ريال"
+{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","flags":[]}
+
+Example 2 — Answer NOT in KB:
+Customer: "Do you deliver to Jeddah?" | KB has no delivery info
+{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+
+Example 3 — Offensive message:
+Customer: "يا حمير"
+{"reply":"","intent":"OFFENSIVE","confidence":"high","flags":["offensive_or_abusive"]}`;
 
         return prompt;
     }
@@ -410,6 +454,66 @@ Output ONLY the JSON object, nothing else.`;
         }
         // Default to English
         return 'en';
+    }
+
+    /**
+     * Extract the effective KB text from the request context.
+     * Returns combined chunk content if RAG, otherwise static KB, or null.
+     */
+    private getKBText(request: GenerateRequest): string | null {
+        const chunks = request.context?.retrievedChunks;
+        if (chunks && chunks.length > 0) {
+            return chunks.map(c => `${c.title || ''} ${c.content}`).join(' ');
+        }
+        return request.context?.knowledgeBase || null;
+    }
+
+    /**
+     * Post-reply validation — lightweight checks AFTER GPT responds,
+     * BEFORE returning the result. Catches issues the prompt alone
+     * can't reliably prevent. No additional API calls (zero extra cost).
+     */
+    private validateReply(
+        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] },
+        request: GenerateRequest,
+    ): { reply: string; intent?: string; confidence?: string; flags?: string[] } {
+        const flags = [...(parsed.flags || [])];
+        const reply = parsed.reply || '';
+
+        // Check 1: Hallucinated numbers — reply contains numbers not in KB
+        if (reply && parsed.intent === 'QUESTION') {
+            const kbText = this.getKBText(request);
+            if (kbText) {
+                const replyNumbers = reply.match(/\d+(?:[,.\u066B]\d+)*/g) || [];
+                const kbNumbers = new Set(kbText.match(/\d+(?:[,.\u066B]\d+)*/g) || []);
+                const hasHallucinatedNumber = replyNumbers.length > 0 &&
+                    replyNumbers.some(n => !kbNumbers.has(n));
+                if (hasHallucinatedNumber && !flags.includes('info_not_in_kb')) {
+                    flags.push('info_not_in_kb');
+                }
+            }
+        }
+
+        // Check 2: Comment too long — public comments should be brief
+        const channel = request.context?.channel
+            || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');
+        if (channel === 'comment' && reply) {
+            const wordCount = reply.split(/\s+/).filter(Boolean).length;
+            if (wordCount > 50 && !flags.includes('comment_too_long')) {
+                flags.push('comment_too_long');
+            }
+        }
+
+        // Check 3: Language mismatch — reply language differs from input
+        if (reply) {
+            const inputLang = this.detectLanguage(request.comment);
+            const replyLang = this.detectLanguage(reply);
+            if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
+                flags.push('language_mismatch');
+            }
+        }
+
+        return { ...parsed, flags };
     }
 
     /**
