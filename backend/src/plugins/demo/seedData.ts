@@ -1,5 +1,5 @@
 import { db } from '../../db';
-import { pages, posts, comments, templates, settings, notifications, messages, ecommerceStores, ecommerceProducts } from '../../db/schema';
+import { pages, posts, comments, templates, rules, settings, notifications, messages, ecommerceStores, ecommerceProducts } from '../../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
@@ -554,6 +554,27 @@ const DEMO_TEMPLATES = [
     },
 ];
 
+/** Maps template names → keyword arrays for rule-based matching.
+ *  Keywords are matched via normalizeArabic + substring (Arabic) or word-boundary (English). */
+const DEMO_RULES: { templateName: string; keywords: string[] }[] = [
+    {
+        templateName: 'التسجيل',
+        keywords: ['تسجيل', 'سجل', 'اسجل', 'register', 'registration', 'كيف اسجل', 'ابي اسجل', 'ابغى اسجل', 'بدي اسجل'],
+    },
+    {
+        templateName: 'الرسوم والأسعار',
+        keywords: ['سعر', 'اسعار', 'رسوم', 'price', 'prices', 'بكم', 'cost', 'fees'],
+    },
+    {
+        templateName: 'أوقات الدوام',
+        keywords: ['دوام', 'ساعات', 'hours', 'اوقات', 'working hours', 'مواعيد'],
+    },
+    {
+        templateName: 'شكراً',
+        keywords: ['شكرا', 'شكرا كتير', 'thank', 'thanks', 'مشكور', 'يعطيك العافية'],
+    },
+];
+
 const DEMO_NOTIFICATIONS = [
     {
         type: 'stale_comment',
@@ -822,6 +843,26 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
         }
         logger.debug('[DemoData] Refreshed demo comments', { count: DEMO_COMMENTS.length });
 
+        // Refresh rules: delete existing rules for workspace, then re-create from current templates
+        await db.delete(rules).where(eq(rules.workspaceId, workspaceId));
+        const currentTemplates = await db.select({ id: templates.id, name: templates.name })
+            .from(templates)
+            .where(eq(templates.workspaceId, workspaceId));
+        for (const ruleData of DEMO_RULES) {
+            const tmpl = currentTemplates.find(t => t.name === ruleData.templateName);
+            if (!tmpl) continue;
+            await db.insert(rules).values({
+                userId,
+                workspaceId,
+                name: ruleData.templateName,
+                keywords: ruleData.keywords,
+                templateId: tmpl.id,
+                active: true,
+                priority: 0,
+            });
+        }
+        logger.debug('[DemoData] Refreshed demo rules', { count: DEMO_RULES.length });
+
         await refreshDemoNotifications(userId, logger);
 
         const electronicsRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_electronics');
@@ -945,18 +986,37 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
 
     logger.debug('[DemoData] Created demo messages', { count: DEMO_MESSAGES.length });
 
-    // Create demo templates
+    // Create demo templates (capture IDs for rule creation)
+    const createdTemplates: { id: string; name: string }[] = [];
     for (const templateData of DEMO_TEMPLATES) {
-        await db.insert(templates).values({
+        const [created] = await db.insert(templates).values({
             userId,
             workspaceId,
             name: templateData.name,
             message: templateData.message,
             active: templateData.active,
+        }).returning({ id: templates.id, name: templates.name });
+        createdTemplates.push(created);
+    }
+
+    logger.debug('[DemoData] Created demo templates', { count: createdTemplates.length });
+
+    // Create demo rules linking keywords → templates
+    for (const ruleData of DEMO_RULES) {
+        const tmpl = createdTemplates.find(t => t.name === ruleData.templateName);
+        if (!tmpl) continue;
+        await db.insert(rules).values({
+            userId,
+            workspaceId,
+            name: ruleData.templateName,
+            keywords: ruleData.keywords,
+            templateId: tmpl.id,
+            active: true,
+            priority: 0,
         });
     }
 
-    logger.debug('[DemoData] Created demo templates', { count: DEMO_TEMPLATES.length });
+    logger.debug('[DemoData] Created demo rules', { count: DEMO_RULES.length });
 
     // Seed Shopify demo store linked to the electronics page
     const electronicsPage = createdPages.find(p => p.facebookPageId === 'demo_page_electronics');

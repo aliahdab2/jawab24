@@ -428,7 +428,40 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.flagReason).toBeUndefined();
         });
 
-        it('should NOT trigger hallucination guard when confidence is medium (only high triggers)', async () => {
+        it('should trigger hallucination guard when confidence is medium and RAG attempted with 0 chunks', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'I think the delivery takes about 3 days.',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'medium',
+                flags: [],
+            });
+
+            // RAG attempted + 0 chunks + medium confidence → guard fires (catches hallucinations)
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: true,
+            });
+
+            const result = await generator.generateForComment(baseContext, true);
+
+            // medium confidence + RAG attempted + 0 chunks → info_not_in_kb + low_confidence
+            expect(result.needsAttention).toBe(true);
+            expect(result.flagReason).toContain('info_not_in_kb');
+            expect(result.flagReason).toContain('low_confidence');
+        });
+
+        it('should NOT trigger hallucination guard when confidence is low (already flagged)', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
@@ -441,18 +474,25 @@ describe('ReplyGenerator - Flagging System', () => {
                 language: 'en',
                 cached: false,
                 intent: 'QUESTION',
-                confidence: 'medium',
+                confidence: 'low',
                 flags: [],
             });
 
-            const result = await generator.generateForComment({
-                ...baseContext,
-                kbActiveVersion: null,
-            }, true);
+            // RAG attempted + 0 chunks but confidence=low → guard should NOT fire
+            // (low confidence already gets low_confidence flag via the earlier check)
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: true,
+            });
 
-            // medium confidence + 0 chunks should NOT add info_not_in_kb
-            expect(result.flagReason).toBeUndefined();
-            expect(result.needsAttention).toBe(false);
+            const result = await generator.generateForComment(baseContext, true);
+
+            // low_confidence is added by the earlier low-confidence check, NOT by hallucination guard
+            expect(result.flagReason).toBe('low_confidence');
+            // info_not_in_kb should NOT be added — guard skips low confidence
+            expect(result.flagReason).not.toContain('info_not_in_kb');
         });
 
         it('should NOT add info_not_in_kb flag when GPT already includes it', async () => {

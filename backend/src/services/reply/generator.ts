@@ -353,7 +353,7 @@ export class ReplyGenerator {
         if (
             ragAttempted &&
             retrievedChunkCount === 0 &&
-            aiResponse.confidence === 'high' &&
+            aiResponse.confidence !== 'low' &&
             !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
             !flags.includes('info_not_in_kb')
         ) {

@@ -930,7 +930,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 if (
                     ragAttempted &&
                     retrievedChunks.length === 0 &&
-                    aiResponse.confidence === 'high' &&
+                    aiResponse.confidence !== 'low' &&
                     !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
                     !flags.includes('info_not_in_kb')
                 ) {
