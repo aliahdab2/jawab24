@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIService } from '../src/services/openai';
+import { PROMPT_VERSION } from '@jawab24/shared';
 
 // Mock Sentry — pass-through so spans don't require an active trace
 vi.mock('@sentry/node', () => ({
@@ -518,7 +519,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         expect(parsed.event).toBe('ai_call_token_usage');
         expect(parsed.estimated_tokens_in).toBeDefined();
         expect(parsed.max_input_tokens).toBe(4000);
-        expect(parsed.prompt_version).toBe('v8');
+        expect(parsed.prompt_version).toBe(PROMPT_VERSION);
 
         logSpy.mockRestore();
     });
