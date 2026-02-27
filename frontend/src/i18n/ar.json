@@ -212,6 +212,10 @@
   "dashboard.smartBanner.allCaughtUp": "لا شيء معلق!",
   "dashboard.smartBanner.allCaughtUpDesc": "لا توجد عناصر تحتاج انتباهك الآن",
   "dashboard.smartBanner.reviewNow": "مراجعة الآن",
+  "dashboard.smartBanner.reasonNoReply": "بدون رد",
+  "dashboard.smartBanner.viewAllComments": "عرض {count} تعليقات",
+  "dashboard.smartBanner.viewAllMessages": "عرض {count} رسائل",
+  "dashboard.smartBanner.viewAllItems": "عرض جميع العناصر ({count})",
   "pages.title": "إدارة الصفحات",
   "pages.description": "اربط وأدر صفحاتك على فيسبوك وإنستغرام",
   "pages.addPage": "إضافة صفحة",
@@ -1371,5 +1375,13 @@
   "contact.hoursTitle": "ساعات العمل",
   "contact.hoursText": "نرد عادةً على الرسائل والبريد الإلكتروني خلال 24 ساعة. الدعم متاح من الأحد إلى الجمعة.",
   "contact.socialTitle": "وسائل التواصل الاجتماعي",
-  "contact.socialText": "تابعنا على فيسبوك على facebook.com/jawab24app أو تواصل معنا عبر واتساب للدعم السريع."
+  "contact.socialText": "تابعنا على فيسبوك على facebook.com/jawab24app أو تواصل معنا عبر واتساب للدعم السريع.",
+  "sidebar.integrations": "الربط",
+  "nav.integrations": "الربط",
+  "integrations.title": "الربط",
+  "integrations.subtitle": "اربط متجرك الإلكتروني لتفعيل الردود الذكية على أسئلة المنتجات تلقائياً",
+  "integrations.connect": "ربط",
+  "integrations.addAnother": "إضافة ربط آخر",
+  "integrations.shopifyDesc": "زامن كتالوج منتجات Shopify لتفعيل الردود الذكية على أسئلة المنتجات",
+  "integrations.sallaDesc": "زامن كتالوج منتجات سلة لتفعيل الردود الذكية على أسئلة المنتجات"
 }

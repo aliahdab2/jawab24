@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
-import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner } from '@/components/dashboard';
+import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
@@ -105,12 +105,14 @@ const DashboardPage: NextPageWithLayout = () => {
   
   const [pages, setPages] = useState<Page[]>([]);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
+  const [needsAttentionItems, setNeedsAttentionItems] = useState<NeedsAttentionItem[]>([]);
   const [statsData, setStatsData] = useState({
     // Comment stats
     totalComments: 0,
     repliedToday: 0,
     pendingReplies: 0,
     needsAttention: 0,
+    commentsNeedsAction: 0,
     activePages: 0,
     aiReplies: 0,
     templateReplies: 0,
@@ -119,6 +121,7 @@ const DashboardPage: NextPageWithLayout = () => {
     totalMessages: 0,
     messagesPending: 0,
     messagesNeedsAttention: 0,
+    messagesNeedsAction: 0,
     messagesAiReplies: 0,
     messagesTemplateReplies: 0,
     messagesManualReplies: 0
@@ -151,7 +154,7 @@ const DashboardPage: NextPageWithLayout = () => {
       };
 
       // Use API instances that handle auth via cookies (web) or Bearer token (mobile)
-      const [statsRes, messagesStatsRes, commentsListRes, pagesRes, usageRes, settingsRes, analyticsRes] = await Promise.all([
+      const [statsRes, messagesStatsRes, commentsListRes, pagesRes, usageRes, settingsRes, analyticsRes, needsActionCommentsRes, needsActionMessagesRes] = await Promise.all([
         commentsApi.getStats().catch(() => { errors.comments = true; return null; }),
         messagesApi.getStats().catch(() => { errors.messages = true; return null; }),
         commentsApi.getAll({ limit: 5 }).catch(() => { errors.recentComments = true; return null; }),
@@ -159,6 +162,9 @@ const DashboardPage: NextPageWithLayout = () => {
         subscriptionApi.getUsage().catch(() => { errors.usage = true; return null; }),
         settingsApi.get().catch(() => { errors.settings = true; return null; }),
         analyticsApi.getOverview(30).catch(() => { errors.analytics = true; return null; }),
+        // Fetch items for the needs-attention banner (unreplied + unresolved)
+        commentsApi.getAll({ replied: false, resolved: false, limit: 5 }).catch(() => null),
+        messagesApi.getAll({ replied: false, resolved: false, limit: 5 }).catch(() => null),
       ]);
 
       // Set usage data if available (handle both nested and flat response shapes)
@@ -225,11 +231,18 @@ const DashboardPage: NextPageWithLayout = () => {
       // Calculate active pages
       const activePages = fetchedPages.filter(p => p.autoReplyEnabled).length;
 
+      // "Needs Action" counts — match the Comments/Messages page filter tabs exactly
+      // Comments page uses stats.unreplied (replied=false, resolved=false)
+      // Messages page uses statsData.pending (replied=false, resolved=false)
+      const commentsNeedsAction = stats.unreplied ?? 0;
+      const messagesNeedsAction = msgStats.pending ?? 0;
+
       setStatsData({
         totalComments: stats.total,
         repliedToday: stats.repliedToday,
         pendingReplies: stats.unreplied,
         needsAttention: stats.needsAttention,
+        commentsNeedsAction,
         activePages,
         aiReplies: stats.byMethod.ai,
         templateReplies: stats.byMethod.template,
@@ -238,10 +251,58 @@ const DashboardPage: NextPageWithLayout = () => {
         totalMessages: msgStats.total,
         messagesPending: msgStats.pending,
         messagesNeedsAttention: msgStats.needsAttention ?? 0,
+        messagesNeedsAction,
         messagesAiReplies: msgStats.byMethod?.ai ?? 0,
         messagesTemplateReplies: msgStats.byMethod?.template ?? 0,
         messagesManualReplies: msgStats.byMethod?.manual ?? 0,
       });
+
+      // Build needs-attention items for the expandable banner
+      const bannerItems: NeedsAttentionItem[] = [];
+
+      // Add unreplied comments
+      if (needsActionCommentsRes?.data) {
+        const commentsList = Array.isArray(needsActionCommentsRes.data)
+          ? needsActionCommentsRes.data
+          : (needsActionCommentsRes.data?.data ?? []);
+        for (const c of commentsList) {
+          bannerItems.push({
+            id: c.id,
+            type: 'comment',
+            senderName: c.fromName ?? null,
+            text: c.message || '',
+            createdAt: c.createdTime || c.createdAt || null,
+            flagReason: c.flagReason ?? null,
+            href: `/comments?id=${c.id}`,
+          });
+        }
+      }
+
+      // Add unreplied messages
+      if (needsActionMessagesRes?.data) {
+        const messagesList = Array.isArray(needsActionMessagesRes.data)
+          ? needsActionMessagesRes.data
+          : (needsActionMessagesRes.data?.data ?? []);
+        for (const m of messagesList) {
+          bannerItems.push({
+            id: m.id,
+            type: 'message',
+            senderName: m.senderName ?? null,
+            text: m.message || '',
+            createdAt: m.createdTime || m.createdAt || null,
+            flagReason: m.flagReason ?? null,
+            href: `/messages?sender=${m.senderId}&page=${m.pageId}`,
+          });
+        }
+      }
+
+      // Sort by newest first, take max 5
+      bannerItems.sort((a, b) => {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return db - da;
+      });
+      setNeedsAttentionItems(bannerItems.slice(0, 5));
 
       // Update section error state
       setSectionErrors(errors);
@@ -352,10 +413,9 @@ const DashboardPage: NextPageWithLayout = () => {
 
       {/* Smart Status Banner — needs attention or all caught up */}
       <SmartStatusBanner
-        needsAttention={statsData.needsAttention + statsData.messagesNeedsAttention}
-        commentNeedsAttention={statsData.needsAttention}
-        messageNeedsAttention={statsData.messagesNeedsAttention}
-        totalItems={statsData.totalComments + statsData.totalMessages}
+        commentNeedsAction={statsData.commentsNeedsAction}
+        messageNeedsAction={statsData.messagesNeedsAction}
+        items={needsAttentionItems}
       />
 
       {/* Command Center — consolidated metrics */}

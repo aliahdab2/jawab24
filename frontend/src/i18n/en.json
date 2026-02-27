@@ -212,6 +212,10 @@
   "dashboard.smartBanner.allCaughtUp": "All caught up!",
   "dashboard.smartBanner.allCaughtUpDesc": "No items need attention right now",
   "dashboard.smartBanner.reviewNow": "Review Now",
+  "dashboard.smartBanner.reasonNoReply": "No reply",
+  "dashboard.smartBanner.viewAllComments": "View {count} comments",
+  "dashboard.smartBanner.viewAllMessages": "View {count} messages",
+  "dashboard.smartBanner.viewAllItems": "View all {count} items",
   "pages.title": "My Pages",
   "pages.description": "Your Facebook & Instagram pages",
   "pages.addPage": "Add Page",
@@ -1371,5 +1375,13 @@
   "contact.hoursTitle": "Business Hours",
   "contact.hoursText": "We typically respond to emails and messages within 24 hours. Our support is available Sunday through Friday.",
   "contact.socialTitle": "Social Media",
-  "contact.socialText": "Follow us on Facebook at facebook.com/jawab24app or reach out via WhatsApp for quick support."
+  "contact.socialText": "Follow us on Facebook at facebook.com/jawab24app or reach out via WhatsApp for quick support.",
+  "sidebar.integrations": "Integrations",
+  "nav.integrations": "Connections",
+  "integrations.title": "Integrations",
+  "integrations.subtitle": "Connect your e-commerce store so AI can answer product questions automatically",
+  "integrations.connect": "Connect",
+  "integrations.addAnother": "Add another integration",
+  "integrations.shopifyDesc": "Sync your Shopify product catalog to enable AI-powered product replies",
+  "integrations.sallaDesc": "Sync your Salla product catalog to enable AI-powered product replies"
 }

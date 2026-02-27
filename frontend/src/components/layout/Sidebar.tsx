@@ -13,7 +13,8 @@ import {
   CreditCard,
   Shield,
   BookTemplate,
-  Zap
+  Zap,
+  Plug
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -128,6 +129,12 @@ const navigationGroups = [
     items: [
       { key: 'nav.templates', href: '/templates', icon: BookTemplate },
       { key: 'nav.rules', href: '/rules', icon: Zap },
+    ],
+  },
+  {
+    labelKey: 'sidebar.integrations',
+    items: [
+      { key: 'nav.integrations', href: '/integrations', icon: Plug },
     ],
   },
   {
