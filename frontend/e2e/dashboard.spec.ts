@@ -52,6 +52,25 @@ const MOCK_PAGES = [
     name: 'Test Business Page',
     autoReplyEnabled: true,
     commentsCount: 42,
+    repliesCount: 30,
+    replyRate: 71,
+    instagramUsername: 'testbiz',
+    instagramAutoReplyEnabled: false,
+    createdAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+  },
+];
+
+const MOCK_TWO_PAGES = [
+  ...MOCK_PAGES,
+  {
+    id: 'page_2',
+    facebookPageId: 'fb_456',
+    name: 'Second Page',
+    autoReplyEnabled: false,
+    commentsCount: 10,
+    repliesCount: 5,
+    replyRate: 50,
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
   },
 ];
 
@@ -336,16 +355,69 @@ test.describe('Dashboard Page', () => {
     ).toBeVisible({ timeout: 15000 });
   });
 
-  test('should link each "Your Pages" widget item to the specific page card', async ({ page }) => {
+  test('should auto-expand single page accordion on load', async ({ page }) => {
     await page.goto('/en/dashboard');
 
-    // Wait for the page item to appear in the widget
-    const pageLink = page.getByRole('link', { name: /Test Business Page/i });
-    await expect(pageLink).toBeVisible({ timeout: 15000 });
+    // Wait for dashboard to load
+    await expect(
+      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+    ).toBeVisible({ timeout: 15000 });
 
-    // The href must deep-link to the individual page card via hash, not just /pages
-    const href = await pageLink.getAttribute('href');
+    // With only 1 page, the accordion should auto-expand
+    const pageButton = page.getByRole('button', { name: /Test Business Page/i });
+    await expect(pageButton).toBeVisible({ timeout: 15000 });
+    await expect(pageButton).toHaveAttribute('aria-expanded', 'true');
+
+    // The expanded panel should show the "Manage Page" CTA link
+    const manageLink = page.getByRole('link', { name: new RegExp(en['dashboard.pageAccordion.managePage'], 'i') });
+    await expect(manageLink).toBeVisible();
+
+    // The href must deep-link to the individual page card via hash
+    const href = await manageLink.getAttribute('href');
     expect(href).toContain('/pages#page-page_1');
+  });
+
+  test('should toggle accordion and show page stats', async ({ page }) => {
+    // Use two pages so nothing auto-expands
+    await page.route('**/api/pages**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: MOCK_TWO_PAGES }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+
+    await expect(
+      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Both page buttons should be visible and collapsed
+    const firstButton = page.getByRole('button', { name: /Test Business Page/i });
+    const secondButton = page.getByRole('button', { name: /Second Page/i });
+    await expect(firstButton).toBeVisible({ timeout: 15000 });
+    await expect(secondButton).toBeVisible({ timeout: 15000 });
+    await expect(firstButton).toHaveAttribute('aria-expanded', 'false');
+    await expect(secondButton).toHaveAttribute('aria-expanded', 'false');
+
+    // Click first page to expand it
+    await firstButton.click();
+    await expect(firstButton).toHaveAttribute('aria-expanded', 'true');
+
+    // Stats should be visible in the expanded panel
+    const panel = page.locator('#page-panel-page_1');
+    await expect(panel.getByText('42')).toBeVisible();
+    await expect(panel.getByText('71%')).toBeVisible();
+
+    // Click second page — first should collapse, second should expand
+    await secondButton.click();
+    await expect(firstButton).toHaveAttribute('aria-expanded', 'false');
+    await expect(secondButton).toHaveAttribute('aria-expanded', 'true');
+
+    // Click second page again to collapse it
+    await secondButton.click();
+    await expect(secondButton).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('should show empty state gracefully when APIs fail', async ({ page }) => {

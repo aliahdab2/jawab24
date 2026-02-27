@@ -21,6 +21,7 @@ import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseModal';
 import { captureError } from '@/lib/sentryHelpers';
+import { formatConnectedDate } from '@/utils/formatConnectedDate';
 import type { NextPageWithLayout } from './_app';
 
 const PagesPage: NextPageWithLayout = () => {
@@ -208,14 +209,7 @@ const PagesPage: NextPageWithLayout = () => {
     return t('time.daysAgo' as TranslationKey).replace('{count}', String(days));
   };
 
-  const formatConnectedDate = (dateStr: string | null) => {
-    if (!dateStr) return t('common.noData');
-    const diffMs = Date.now() - new Date(dateStr).getTime();
-    const days = Math.floor(diffMs / 86400000);
-    if (days < 1) return t('pages.connectedToday' as TranslationKey);
-    if (days === 1) return t('pages.connectedDayAgo' as TranslationKey);
-    return t('pages.connectedAgo' as TranslationKey).replace('{count}', String(days));
-  };
+  const formatDate = (dateStr: string | null) => formatConnectedDate(dateStr, t);
 
   const openKnowledgeBase = (page: Page) => {
     setEditingPage(page);
@@ -434,7 +428,7 @@ const PagesPage: NextPageWithLayout = () => {
                     className="text-xs font-bold uppercase tracking-tighter"
                     title={page.lastActivity ? t('pages.lastActivity' as TranslationKey) : ''}
                   >
-                    {page.lastActivity ? formatTime(page.lastActivity) : formatConnectedDate(page.createdAt as unknown as string)}
+                    {page.lastActivity ? formatTime(page.lastActivity) : formatDate(page.createdAt as unknown as string)}
                   </span>
                 </div>
               </div>

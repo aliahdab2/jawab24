@@ -301,7 +301,15 @@ const IntegrationsPage: NextPageWithLayout = () => {
   }
 
   const connectedPlatforms = PLATFORMS.filter((p) => stores[p.id]);
-  const unconnectedPlatforms = PLATFORMS.filter((p) => !stores[p.id]);
+  const connectedIds = new Set(connectedPlatforms.map((p) => p.id));
+
+  // Hide competing e-commerce platforms: Shopify and Salla are mutually exclusive
+  const availablePlatforms = PLATFORMS.filter((p) => {
+    if (stores[p.id]) return false; // already connected
+    if (p.id === 'salla' && connectedIds.has('shopify')) return false;
+    if (p.id === 'shopify' && connectedIds.has('salla')) return false;
+    return true;
+  });
 
   return (
     <>
@@ -325,7 +333,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
         ))}
 
         {/* Divider between connected and unconnected */}
-        {connectedPlatforms.length > 0 && unconnectedPlatforms.length > 0 && (
+        {connectedPlatforms.length > 0 && availablePlatforms.length > 0 && (
           <div className="flex items-center gap-3">
             <div className="flex-1 border-t border-surface-200" />
             <span className="text-xs text-surface-400 font-medium">
@@ -336,9 +344,9 @@ const IntegrationsPage: NextPageWithLayout = () => {
         )}
 
         {/* Unconnected integrations grid */}
-        {unconnectedPlatforms.length > 0 && (
+        {availablePlatforms.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 landscape:gap-3">
-            {unconnectedPlatforms.map((platform) => (
+            {availablePlatforms.map((platform) => (
               <ConnectCard key={platform.id} platform={platform} />
             ))}
           </div>

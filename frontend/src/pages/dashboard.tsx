@@ -15,14 +15,11 @@ import {
   Sparkles,
   Crown,
   AlertTriangle,
-  ChevronRight,
   ArrowRight,
-  Bot,
-  Minus,
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
-import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, type NeedsAttentionItem } from '@/components/dashboard';
+import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
@@ -105,6 +102,7 @@ const DashboardPage: NextPageWithLayout = () => {
   
   const [pages, setPages] = useState<Page[]>([]);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
+  const [expandedPageId, setExpandedPageId] = useState<string | null>(null);
   const [needsAttentionItems, setNeedsAttentionItems] = useState<NeedsAttentionItem[]>([]);
   const [statsData, setStatsData] = useState({
     // Comment stats
@@ -381,7 +379,18 @@ const DashboardPage: NextPageWithLayout = () => {
     setShowOnboarding(false);
     setOnboardingVisible(false);
   };
-  
+
+  // Auto-expand accordion when only 1 page is connected
+  useEffect(() => {
+    if (pages.length === 1) {
+      setExpandedPageId(pages[0].id);
+    }
+  }, [pages]);
+
+  const handlePageAccordionToggle = useCallback((pageId: string) => {
+    setExpandedPageId(prev => prev === pageId ? null : pageId);
+  }, []);
+
   // Dashboard Skeleton Loading State
   if (loading) {
     return <PageSkeleton type="dashboard" />;
@@ -601,68 +610,32 @@ const DashboardPage: NextPageWithLayout = () => {
               <h2 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.topPages')}</h2>
               <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.topPagesDesc')}</p>
             </div>
-            <div className="divide-y divide-surface-100">
+            <div className={clsx(
+              'divide-y divide-surface-100',
+              pages.length >= 3 && 'max-h-[400px] overflow-y-auto'
+            )}>
               {sectionErrors.pages ? (
                 <SectionError onRetry={fetchDashboardData} />
-              ) : pages.length > 0 ? pages.slice(0, 3).map((page, i) => {
-                // Calculate per-page stats from recentComments (approximation)
+              ) : pages.length > 0 ? pages.map((page, i) => {
                 const pageComments = recentComments.filter(c => c.pageId === page.id || c.pageId === page.facebookPageId);
                 const pendingCount = pageComments.filter(c => !c.replied).length;
 
                 return (
-                  <Link
-                    href={`/pages#page-${page.id}`}
+                  <PageAccordionItem
                     key={page.id}
-                    className="flex items-center gap-4 p-4 sm:p-5 group hover:bg-brand-50/30 transition-all cursor-pointer animate-slide-up"
-                    style={{ animationDelay: `${(i + 5) * 0.1}s` } as React.CSSProperties}
-                  >
-                    <div className="relative flex-shrink-0">
-                      <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-brand-600 flex items-center justify-center transition-all group-hover:scale-105 shadow-sm">
-                        {!imgError[page.id] ? (
-                          <img
-                            src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
-                            alt={page.name}
-                            className="w-full h-full object-cover"
-                            onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
-                          />
-                        ) : (
-                          <FileText className="w-6 h-6 text-white" />
-                        )}
-                      </div>
-                      {/* Auto-reply status indicator */}
-                      <div className={clsx(
-                        "absolute -bottom-1 -end-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center",
-                        page.autoReplyEnabled ? 'bg-emerald-500' : 'bg-surface-300'
-                      )}>
-                        {page.autoReplyEnabled ? (
-                          <Bot className="w-3 h-3 text-white" />
-                        ) : (
-                          <Minus className="w-3 h-3 text-white" />
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0 text-start">
-                      <p className="font-bold text-surface-900 line-clamp-2 group-hover:text-brand-600 transition-colors" title={page.name}>
-                        {page.name}
-                      </p>
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <span className="text-xs text-surface-500">
-                          {page.commentsCount || 0} {t('dashboard.comments')}
-                        </span>
-                        {pendingCount > 0 && (
-                          <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                            {pendingCount} {t('dashboard.pending')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-surface-300 group-hover:text-brand-500 transition-all ltr:group-hover:translate-x-1 rtl:rotate-180 rtl:group-hover:-translate-x-1" />
-                  </Link>
+                    page={page}
+                    isExpanded={expandedPageId === page.id}
+                    onToggle={() => handlePageAccordionToggle(page.id)}
+                    imgError={!!imgError[page.id]}
+                    onImgError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
+                    pendingCount={pendingCount}
+                    animationDelay={(i + 5) * 0.1}
+                  />
                 );
               }) : (
                 <div className="py-10 text-center">
                   <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
-                    <FileText className="w-6 h-6 text-surface-300" />
+                    <FileText className="w-6 h-6 text-surface-300" aria-hidden="true" />
                   </div>
                   <p className="text-sm text-surface-500 mb-3">{t('pages.noPagesDesc')}</p>
                   <Link href="/pages">

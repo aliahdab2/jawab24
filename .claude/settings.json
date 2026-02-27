@@ -8,7 +8,8 @@
       "WebFetch(domain:www.geckoboard.com)",
       "Bash(DATABASE_URL=\"postgres://postgres:postgres@localhost:5433/autoreply\" npx drizzle-kit push:pg)",
       "Bash(psql postgres://aliahdab@localhost:5432/postgres -c \"UPDATE users SET is_admin = true WHERE id = ''7e36c2c8-22ea-4f83-bfa9-5706a27f641f'';\")",
-      "Bash(ADMIN_TOKEN=\"eyJ1c2VySWQiOiI3ZTM2YzJjOC0yMmVhLTRmODMtYmZhOS01NzA2YTI3ZjY0MWYiLCJmYWNlYm9va0lkIjoiZGVtb191c2VyX2phd2FiMjQiLCJpc0FkbWluIjp0cnVlLCJleHAiOjE3NzIyMzIyODAyNTB9.wxVqYvuALd9aUVmGkG1SWhV4rBqUTWzsDgkI3bTIL7s\" npm run eval)"
+      "Bash(ADMIN_TOKEN=\"eyJ1c2VySWQiOiI3ZTM2YzJjOC0yMmVhLTRmODMtYmZhOS01NzA2YTI3ZjY0MWYiLCJmYWNlYm9va0lkIjoiZGVtb191c2VyX2phd2FiMjQiLCJpc0FkbWluIjp0cnVlLCJleHAiOjE3NzIyMzIyODAyNTB9.wxVqYvuALd9aUVmGkG1SWhV4rBqUTWzsDgkI3bTIL7s\" npm run eval)",
+      "Bash(npm run)"
     ],
     "additionalDirectories": [
       "/tmp"
