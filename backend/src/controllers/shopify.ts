@@ -166,7 +166,7 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
                 shopDomain: shop,
                 accessToken,
                 scopes: config.shopify.scopes,
-                nonce: state,
+                nonce: state || crypto.randomBytes(16).toString('hex'),
             });
 
             // Set pending install cookie (sameSite: lax, 30min TTL)
