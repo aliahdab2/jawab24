@@ -17,6 +17,12 @@ vi.mock('next/link', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
+// Mock next/router (SystemStatusBanner uses useRouter for whole-card navigation)
+const mockPush = vi.fn();
+vi.mock('next/router', () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
 describe('AutoReplyStatusCard', () => {
   beforeEach(() => {
     sessionStorage.clear();
@@ -81,7 +87,7 @@ describe('AutoReplyStatusCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render AMBER warning card: Expandable ONLY', () => {
+  it('should render AMBER warning card: navigates to settings on click', () => {
     render(
       <AutoReplyStatusCard
         activePages={5}
@@ -91,25 +97,13 @@ describe('AutoReplyStatusCard', () => {
     );
 
     expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled')).toBeInTheDocument();
-    
+
     // Rule #5: Warning is NOT dismissible (No X)
     expect(screen.queryByLabelText('Dismiss')).not.toBeInTheDocument();
 
-    // Initial state (mobile view logic)
-    // There are 2 descriptions (desktop static, mobile expandable). We want the mobile one.
-    const notes = screen.getAllByText('dashboard.autoReplyConfiguredNote');
-    const mobileNote = notes.find(n => !n.className.includes('hidden sm:block'));
-    
-    // Check parent wrapper for collapsed state classes
-    expect(mobileNote?.parentElement).toHaveClass('max-h-0');
-    expect(mobileNote?.parentElement).toHaveClass('opacity-0');
-
-    // Rule #6: Expand on tap
+    // Clicking the card navigates to settings (whole-card click)
     fireEvent.click(screen.getByText('dashboard.autoReplyConfiguredButDisabled'));
-    
-    // Switch to expanded
-    expect(mobileNote?.parentElement).toHaveClass('max-h-40');
-    expect(mobileNote?.parentElement).toHaveClass('opacity-100');
+    expect(mockPush).toHaveBeenCalledWith('/settings');
 
     // CTAs should be present
     const ctas = screen.getAllByText('dashboard.goToSettings');
