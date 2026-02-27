@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, PageHeader, PageSkeleton } from '@/components/ui';
+import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
 import { ecommerceApi, sallaApi, pagesApi } from '@/lib/api';
 import { toast } from 'sonner';
 import {
@@ -129,6 +129,8 @@ function ConnectedStoreCard({
 }) {
   const { t } = useTranslation();
   const [syncing, setSyncing] = useState(false);
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -143,14 +145,17 @@ function ConnectedStoreCard({
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!confirm(t(platform.disconnectConfirmKey))) return;
+  const handleConfirmDisconnect = async () => {
+    setDisconnecting(true);
     try {
       await platform.disconnectStore();
       toast.success(t(platform.disconnectedKey));
+      setShowDisconnectModal(false);
       onDisconnect();
     } catch {
       toast.error(t(platform.disconnectErrorKey));
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -190,7 +195,7 @@ function ConnectedStoreCard({
               <RefreshCw className={clsx('w-4 h-4 me-1', syncing && 'animate-spin')} />
               {syncing ? t(platform.syncingKey) : t(platform.syncNowKey)}
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleDisconnect}>
+            <Button variant="secondary" size="sm" onClick={() => setShowDisconnectModal(true)}>
               <Unlink className="w-4 h-4 me-1" />
               {t(platform.disconnectKey)}
             </Button>
@@ -221,6 +226,17 @@ function ConnectedStoreCard({
           </div>
         )}
       </div>
+
+      <ConfirmationModal
+        isOpen={showDisconnectModal}
+        onClose={() => setShowDisconnectModal(false)}
+        onConfirm={handleConfirmDisconnect}
+        title={t(platform.nameKey)}
+        message={t(platform.disconnectConfirmKey)}
+        confirmText={t(platform.disconnectKey)}
+        variant="warning"
+        loading={disconnecting}
+      />
     </Card>
   );
 }
