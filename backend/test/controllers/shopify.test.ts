@@ -1,4 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import crypto from 'crypto';
+
+// Helper: generate a valid HMAC for Shopify callback query params
+function generateTestHmac(params: Record<string, string>): string {
+    const message = Object.keys(params)
+        .sort()
+        .map(key => `${key}=${params[key]}`)
+        .join('&');
+    return crypto.createHmac('sha256', 'test_shopify_api_secret').update(message).digest('hex');
+}
 
 // --- Mocked shopify service functions ---
 const mockBuildAuthUrl = vi.fn().mockReturnValue('https://test-store.myshopify.com/admin/oauth/authorize?...');
@@ -52,6 +62,7 @@ vi.mock('../../src/config', () => ({
         frontendUrl: 'https://jawab24.com',
         shopify: {
             scopes: 'read_products,read_content',
+            apiSecret: 'test_shopify_api_secret',
         },
     },
 }));
@@ -434,6 +445,150 @@ describe('Shopify Controller', () => {
             await new Promise(r => setTimeout(r, 10));
 
             expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1');
+        });
+    });
+
+    // --- authCallback: Shopify-initiated flow (HMAC, no state/nonce) ---
+
+    describe('authCallback - Shopify-initiated (HMAC flow)', () => {
+        it('should reject missing shop param', async () => {
+            const req = mockRequest({ query: { code: 'code123' } });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(400);
+            expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: missing shop or code' });
+        });
+
+        it('should reject missing code param', async () => {
+            const req = mockRequest({ query: { shop: 'test.myshopify.com' } });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(400);
+            expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: missing shop or code' });
+        });
+
+        it('should reject invalid HMAC when no state/nonce', async () => {
+            const req = mockRequest({
+                query: {
+                    shop: 'test.myshopify.com',
+                    code: 'code123',
+                    hmac: 'invalid_hmac_signature',
+                    timestamp: '1234567890',
+                },
+                cookies: {},
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(400);
+            expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: HMAC verification failed' });
+        });
+
+        it('should reject when no state, no nonce cookie, and no hmac', async () => {
+            const req = mockRequest({
+                query: { shop: 'test.myshopify.com', code: 'code123' },
+                cookies: {},
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(400);
+            expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: HMAC verification failed' });
+        });
+
+        it('should accept valid HMAC and create store for logged-in user', async () => {
+            const params = {
+                code: 'code123',
+                shop: 'test.myshopify.com',
+                timestamp: '1234567890',
+            };
+            const hmac = generateTestHmac(params);
+
+            mockVerifyToken.mockReturnValue({ userId: 'user-123' });
+
+            const req = mockRequest({
+                query: { ...params, hmac },
+                cookies: { token: 'signed_jwt' },
+                headers: {},
+                unsignCookie: vi.fn().mockImplementation((cookie: string) => {
+                    if (cookie === 'signed_jwt') return { valid: true, value: 'jwt_token' };
+                    return { valid: false, value: null };
+                }),
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(mockExchangeCodeForToken).toHaveBeenCalledWith('test.myshopify.com', 'code123');
+            expect(mockCreateStore).toHaveBeenCalledWith('user-123', 'test.myshopify.com', 'shpat_test_token', undefined, 'test_workspace_id');
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/shopify/onboarding');
+        });
+
+        it('should accept valid HMAC and create pending install with generated nonce when not logged in', async () => {
+            const params = {
+                code: 'code123',
+                shop: 'test.myshopify.com',
+                timestamp: '1234567890',
+            };
+            const hmac = generateTestHmac(params);
+
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockCreatePendingInstall.mockResolvedValue('pending-hmac-uuid');
+
+            const req = mockRequest({
+                query: { ...params, hmac },
+                cookies: {},
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(mockExchangeCodeForToken).toHaveBeenCalledWith('test.myshopify.com', 'code123');
+            expect(mockCreatePendingInstall).toHaveBeenCalledWith({
+                shopDomain: 'test.myshopify.com',
+                accessToken: 'shpat_test_token',
+                scopes: 'read_products,read_content',
+                nonce: expect.stringMatching(/^[0-9a-f]{32}$/),
+            });
+            expect(rep.setCookie).toHaveBeenCalledWith(
+                'pendingShopifyId',
+                'pending-hmac-uuid',
+                expect.objectContaining({ signed: true }),
+            );
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?shopify_pending=true');
+        });
+
+        it('should generate a random nonce (not undefined) for pending install in HMAC flow', async () => {
+            const params = {
+                code: 'code123',
+                shop: 'test.myshopify.com',
+                timestamp: '1234567890',
+            };
+            const hmac = generateTestHmac(params);
+
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockCreatePendingInstall.mockResolvedValue('pending-id');
+
+            const req = mockRequest({
+                query: { ...params, hmac },
+                cookies: {},
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            const call = mockCreatePendingInstall.mock.calls[0][0];
+            expect(call.nonce).toBeDefined();
+            expect(call.nonce).not.toBe('');
+            expect(call.nonce).not.toBe('undefined');
+            expect(typeof call.nonce).toBe('string');
+            expect(call.nonce.length).toBe(32); // 16 bytes hex = 32 chars
         });
     });
 
