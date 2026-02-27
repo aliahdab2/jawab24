@@ -19,7 +19,7 @@ export interface NeedsAttentionItem {
   text: string;
   createdAt: string | Date | null;
   flagReason: string | null;
-  /** Deep link path, e.g. "/comments?id=abc" or "/messages?sender=xyz&page=123" */
+  /** Link path, e.g. "/comments?filter=needs_action" */
   href: string;
 }
 
@@ -145,13 +145,14 @@ export function SmartStatusBanner({
         onClick={toggle}
         className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-5 text-start cursor-pointer select-none"
         aria-expanded={expanded}
+        aria-label={t('dashboard.smartBanner.needsAttention' as TranslationKey, { count: totalCount })}
       >
         {/* Warning icon */}
         <div className={clsx(
           'w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0',
           'bg-amber-100 text-amber-600 animate-pulse-attention'
         )}>
-          <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
+          <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
         </div>
 
         {/* Title + breakdown */}
@@ -243,7 +244,7 @@ export function SmartStatusBanner({
                     href={link.href}
                     className="text-xs sm:text-sm font-bold text-amber-700 hover:text-amber-900 transition-colors"
                   >
-                    {link.label} →
+                    {link.label} <span aria-hidden="true" className="rtl:inline-block rtl:rotate-180">→</span>
                   </Link>
                 ))}
               </div>

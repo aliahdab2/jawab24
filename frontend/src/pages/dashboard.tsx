@@ -273,7 +273,7 @@ const DashboardPage: NextPageWithLayout = () => {
             text: c.message || '',
             createdAt: c.createdTime || c.createdAt || null,
             flagReason: c.flagReason ?? null,
-            href: `/comments?id=${c.id}`,
+            href: '/comments?filter=needs_action',
           });
         }
       }
@@ -291,7 +291,7 @@ const DashboardPage: NextPageWithLayout = () => {
             text: m.message || '',
             createdAt: m.createdTime || m.createdAt || null,
             flagReason: m.flagReason ?? null,
-            href: `/messages?sender=${m.senderId}&page=${m.pageId}`,
+            href: '/messages?filter=needs_action',
           });
         }
       }

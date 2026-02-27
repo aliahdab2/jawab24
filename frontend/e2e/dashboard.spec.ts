@@ -224,7 +224,7 @@ test.describe('Dashboard Page', () => {
     expect(hasNav).toBeGreaterThan(0);
   });
 
-  test('should show needs-attention banner when items are flagged', async ({ page }) => {
+  test('should show needs-attention banner with correct counts', async ({ page }) => {
     await page.goto('/en/dashboard');
 
     // Wait for dashboard to load
@@ -232,28 +232,34 @@ test.describe('Dashboard Page', () => {
       page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // SmartStatusBanner should show needs attention count: 3 (comments) + 1 (messages) = 4
-    // The banner text contains the count interpolated
-    await expect(page.getByText(/4.*items need your attention/i)).toBeVisible({ timeout: 15000 });
+    // SmartStatusBanner uses unreplied (12) + pending (5) = 17
+    await expect(page.getByText(/17.*items need your attention/i)).toBeVisible({ timeout: 15000 });
 
-    // Review Now CTA should be visible
-    await expect(page.getByText(en['dashboard.smartBanner.reviewNow']).first()).toBeVisible();
+    // Breakdown should show comment and message counts (in the header button)
+    const commentsLabel = en['comments.title'].toLowerCase();
+    const messagesLabel = en['messages.title'].toLowerCase();
+    const breakdown = `12 ${commentsLabel} · 5 ${messagesLabel}`;
+    await expect(page.getByText(breakdown)).toBeVisible();
+
+    // Banner should be expandable (has a chevron toggle)
+    const expandButton = page.getByRole('button', { name: /items need your attention/i });
+    await expect(expandButton).toHaveAttribute('aria-expanded', 'false');
   });
 
-  test('should show all-caught-up banner when no attention needed', async ({ page }) => {
-    // Override both stats to have needsAttention = 0
+  test('should hide banner when no items need action', async ({ page }) => {
+    // Override stats to have unreplied = 0 and pending = 0
     await page.route('**/api/comments/stats**', async (route) => {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ...MOCK_COMMENT_STATS, needsAttention: 0 }),
+        body: JSON.stringify({ ...MOCK_COMMENT_STATS, unreplied: 0 }),
       });
     });
     await page.route('**/api/messages/stats**', async (route) => {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ...MOCK_MESSAGE_STATS, needsAttention: 0 }),
+        body: JSON.stringify({ ...MOCK_MESSAGE_STATS, pending: 0 }),
       });
     });
 
@@ -263,8 +269,8 @@ test.describe('Dashboard Page', () => {
       page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // All caught up banner should appear
-    await expect(page.getByText(en['dashboard.smartBanner.allCaughtUp'])).toBeVisible({ timeout: 15000 });
+    // Banner should NOT be visible when count is 0
+    await expect(page.getByText(/items need your attention/i)).not.toBeVisible({ timeout: 5000 });
   });
 
   test('should not show only an image or icon as page content', async ({ page }) => {
