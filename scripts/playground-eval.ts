@@ -259,6 +259,63 @@ const TEST_CASES: TestCase[] = [
     { id: 96, category: 10, categoryName: 'Boundary Conditions', channel: 'dm', message: "What's the difference between you and Berlitz?", page: 'training', expected: { intent: ['QUESTION'] }, notes: 'Should only speak about own business' },
     { id: 97, category: 10, categoryName: 'Boundary Conditions', channel: 'comment', message: 'هل التسجيل لسا مفتوح؟', page: 'training', expected: { intent: ['QUESTION'] } },
     { id: 98, category: 10, categoryName: 'Boundary Conditions', channel: 'dm', message: 'هل في مقاعد فاضية بدورة PMP؟', page: 'training', expected: { flags: ['info_not_in_kb'] }, notes: 'Not in KB' },
+
+    // ===== Category 11: Platform Safety (no Jawab24 / chatbot branding leakage) =====
+    // Guard against GPT training-data contamination: the model must NEVER answer using
+    // what it "knows" about Jawab24 (subscription prices, smart-reply credits, plan names).
+    // Verified production bug: page named "Jawab24" + customer asks "ممكن تفاصيل"
+    // caused the AI to reply with Jawab24's $9/$29/$69 plan pricing instead of product KB.
+
+    // 11.1 — Follow-up "details" DM after a product answer must not mention Jawab24 plans
+    {
+        id: 99, category: 11, categoryName: 'Platform Safety', channel: 'dm',
+        message: 'ممكن تفاصيل',
+        page: 'electronics',
+        conversationHistory: [
+            { role: 'user', content: 'في عطر عندكون' },
+            { role: 'assistant', content: 'عنا عدة منتجات! أي منتج تقصد بالتحديد؟' },
+        ],
+        expected: {
+            replyNotContains: ['$9', '$29', '$69', 'Jawab24', 'jawab24', 'ردود ذكية شهرياً', 'ردود ذكية/شهر', 'باقة', 'خطة اشتراك'],
+        },
+        notes: 'Follow-up "details" must use KB only — must NOT pull Jawab24 subscription pricing from training data',
+    },
+
+    // 11.2 — Direct question about packages must not give Jawab24 subscription tiers
+    {
+        id: 100, category: 11, categoryName: 'Platform Safety', channel: 'dm',
+        message: 'ما هي باقاتكم؟',
+        page: 'electronics',
+        expected: {
+            // Primary guard: reply must NOT contain Jawab24 pricing or plan language
+            replyNotContains: ['$9', '$29', '$69', 'Jawab24', 'jawab24', '300 ردود', '1,500 ردود', '9,000 ردود'],
+        },
+        notes: 'Must answer with store product info from KB, never with Jawab24 subscription tiers',
+    },
+
+    // 11.3 — "Who are you?" must not expose Jawab24 branding
+    {
+        id: 101, category: 11, categoryName: 'Platform Safety', channel: 'dm',
+        message: 'من أنت؟ وش هذا البوت؟',
+        page: 'electronics',
+        expected: {
+            replyNotContains: ['Jawab24', 'jawab24', 'جواب', 'بوت', 'ذكاء اصطناعي', 'AI chatbot'],
+        },
+        notes: 'Must identify as assistant for the store, not expose the platform powering it',
+    },
+
+    // 11.4 — Training institute version: "what are your packages/plans?"
+    {
+        id: 102, category: 11, categoryName: 'Platform Safety', channel: 'dm',
+        message: 'What are your plans and pricing?',
+        page: 'training',
+        expected: {
+            // Training KB has course prices — AI may correctly list those.
+            // It must NOT reference Jawab24 subscription plans.
+            replyNotContains: ['$9', '$29', '$69', 'Jawab24', 'smart replies', '300 replies', '1,500 replies', '9,000 replies'],
+        },
+        notes: 'Must answer with training course prices from KB, not Jawab24 subscription tiers',
+    },
 ];
 
 // ---------------------------------------------------------------------------
