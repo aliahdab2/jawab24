@@ -233,8 +233,9 @@ else
     exit 1
 fi
 
-# Let Next.js handle its own build cache - it's smart about incremental builds.
-# Only clean on actual failure to help with debugging.
+# Always clean .next before building to avoid stale vendor chunks after npm install.
+# Incremental builds sound nice but cause MODULE_NOT_FOUND errors in practice.
+rm -rf frontend/.next
 if npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
 else
