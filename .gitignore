@@ -12,6 +12,7 @@ data/redis/*
 !data/.gitkeep
 nginx/ssl/*
 !nginx/ssl/.gitkeep
+nginx/upstream.conf
 
 # Environment files with secrets (keep only .example files)
 env/*.env

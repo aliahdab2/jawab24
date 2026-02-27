@@ -38,8 +38,22 @@ pull_code() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "📥 STEP 1: Pulling latest code"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Preserve upstream.conf — it tracks the active blue/green environment
+    # and must survive git reset --hard
+    local saved_upstream=""
+    if [ -f ./nginx/upstream.conf ]; then
+        saved_upstream=$(cat ./nginx/upstream.conf)
+    fi
+
     git fetch origin main
     git reset --hard origin/main
+
+    # Restore upstream.conf (git reset overwrites it with the repo version)
+    if [ -n "$saved_upstream" ]; then
+        echo "$saved_upstream" > ./nginx/upstream.conf
+    fi
+
     git rev-parse HEAD > VERSION
     date -u '+%Y-%m-%dT%H:%M:%SZ' > .deploy-time
     echo "✅ Code updated to: $(git rev-parse --short HEAD)"
