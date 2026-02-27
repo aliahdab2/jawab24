@@ -190,21 +190,21 @@ test.describe('Integrations Page', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('should show divider between connected and unconnected platforms', async ({ page }) => {
+  test('should hide competing platform when one is connected (Shopify connected hides Salla)', async ({ page }) => {
     await setupAuth(page);
     await mockAPIs(page, { shopifyStore: MOCK_SHOPIFY_STORE, pages: MOCK_PAGES });
 
     await page.goto('/en/integrations');
 
-    // Divider text "Add another integration" should appear
-    await expect(
-      page.getByText(en['integrations.addAnother']).first()
-    ).toBeVisible({ timeout: 15000 });
+    // Shopify store card should be visible
+    await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
 
-    // Salla should appear as unconnected with Connect button
-    await expect(
-      page.getByRole('button', { name: en['integrations.connect'], exact: true }).first()
-    ).toBeVisible({ timeout: 10000 });
+    // Divider should NOT appear (competing platform is hidden)
+    await expect(page.getByText(en['integrations.addAnother'])).not.toBeVisible();
+
+    // No Connect buttons (Salla is hidden, not just unconnected)
+    const connectButtons = page.getByRole('button', { name: en['integrations.connect'], exact: true });
+    await expect(connectButtons).toHaveCount(0, { timeout: 10000 });
   });
 
   test('should show page linking chips when pages exist', async ({ page }) => {

@@ -115,7 +115,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Find and click "Show Advanced Settings" button
-    const advancedBtn = page.locator('button').filter({ hasText: en['settings.advancedMode'] }).first();
+    const advancedBtn = page.locator('button').filter({ hasText: en['settings.showAdvanced'] }).first();
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 
@@ -126,7 +126,8 @@ test.describe('Settings Page', () => {
   });
 
   test('should show business hours time inputs when toggled on', async ({ page }) => {
-    // Override mock with businessHoursOnly: true
+    // Remove beforeEach handler, then register fresh mock with businessHoursOnly: true
+    await page.unroute('**/api/**');
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
       if (url.includes('/settings')) {
@@ -148,7 +149,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Open advanced settings
-    const advancedBtn = page.locator('button').filter({ hasText: en['settings.advancedMode'] }).first();
+    const advancedBtn = page.locator('button').filter({ hasText: en['settings.showAdvanced'] }).first();
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 
@@ -225,7 +226,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Open advanced settings
-    const advancedBtn = page.locator('button').filter({ hasText: en['settings.advancedMode'] }).first();
+    const advancedBtn = page.locator('button').filter({ hasText: en['settings.showAdvanced'] }).first();
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 
@@ -276,7 +277,7 @@ test.describe('Settings Page', () => {
     await page.goto('/en/settings');
 
     // Open advanced settings
-    const advancedBtn = page.locator('button').filter({ hasText: en['settings.advancedMode'] }).first();
+    const advancedBtn = page.locator('button').filter({ hasText: en['settings.showAdvanced'] }).first();
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 

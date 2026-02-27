@@ -129,11 +129,6 @@ const navigationGroups = [
     items: [
       { key: 'nav.templates', href: '/templates', icon: BookTemplate },
       { key: 'nav.rules', href: '/rules', icon: Zap },
-    ],
-  },
-  {
-    labelKey: 'sidebar.integrations',
-    items: [
       { key: 'nav.integrations', href: '/integrations', icon: Plug },
     ],
   },
@@ -196,7 +191,7 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <aside
       className={clsx(
-        'fixed top-0 h-full bg-surface-900 text-white transition-all duration-500 z-40 shadow-2xl group/sidebar',
+        'fixed top-0 h-screen flex flex-col overflow-hidden bg-surface-900 text-white transition-all duration-500 z-40 shadow-2xl group/sidebar',
         sidebarOpen ? 'w-64' : 'w-20'
       )}
       style={{
@@ -334,7 +329,7 @@ export const Sidebar = memo(function Sidebar() {
       </nav>
 
       {/* User & Logout */}
-      <div className="p-4 border-t border-white/5 bg-black/20">
+      <div className="flex-shrink-0 p-4 border-t border-white/5 bg-black/20">
         {user && (
           <div className={clsx(
             "px-3 py-3 mb-4 rounded-2xl bg-white/5 border border-white/5 flex items-center gap-3",
@@ -353,7 +348,7 @@ export const Sidebar = memo(function Sidebar() {
         <button
           onClick={handleLogout}
           className={clsx(
-            "w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-surface-400 hover:bg-red-500 hover:text-white transition-all duration-300 group",
+            "w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-surface-200 hover:bg-red-500 hover:text-white transition-all duration-300 group",
             !sidebarOpen && "justify-center"
           )}
         >
