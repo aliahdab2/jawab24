@@ -413,38 +413,28 @@ smoke_test_content() {
     fi
 }
 
-# Post-deploy: verify traffic is routed correctly through nginx
+# Post-deploy: verify the live public URL returns valid content
 post_deploy_check() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "🌐 STEP 8: Post-Deploy Traffic Verification"
+    echo "🌐 STEP 8: Post-Deploy Live URL Check"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+    local LIVE_URL="https://jawab24.com/en/dashboard"
     local MAX_RETRIES=3
     local RETRY_DELAY=5
 
     for attempt in $(seq 1 $MAX_RETRIES); do
-        echo "   Attempt $attempt/$MAX_RETRIES: checking via nginx ..."
+        echo "   Attempt $attempt/$MAX_RETRIES: checking $LIVE_URL ..."
+        LIVE_HTML=$(curl -sL --max-time 15 "$LIVE_URL" 2>/dev/null || echo "CURL_FAILED")
 
-        # Check through nginx (localhost:80) which mirrors the public path
-        LIVE_HTML=$(docker exec jawab24-nginx wget -qO- http://127.0.0.1:80/en/dashboard 2>/dev/null || echo "FETCH_FAILED")
-
-        if echo "$LIVE_HTML" | grep -q "FETCH_FAILED"; then
-            echo "   ⚠️  Could not reach frontend through nginx"
+        if echo "$LIVE_HTML" | grep -q "CURL_FAILED"; then
+            echo "   ⚠️  curl failed to reach $LIVE_URL"
         elif ! echo "$LIVE_HTML" | grep -qi "</html>"; then
             echo "   ⚠️  Response is not valid HTML"
         elif ! echo "$LIVE_HTML" | grep -q "__next"; then
             echo "   ⚠️  Response is missing Next.js __next container"
         else
-            echo "   ✅ Nginx routes traffic correctly to $DEPLOY_ENV (valid HTML with Next.js content)"
-
-            # Also verify backend is reachable through nginx
-            HEALTH=$(docker exec jawab24-nginx wget -qO- http://127.0.0.1:80/api/health 2>/dev/null || echo "FETCH_FAILED")
-            if echo "$HEALTH" | grep -qi "ok\|healthy\|status"; then
-                echo "   ✅ Backend API reachable through nginx"
-            else
-                echo "   ⚠️  Backend API not reachable through nginx (non-fatal)"
-            fi
-
+            echo "   ✅ Live site returns valid HTML with Next.js content"
             return 0
         fi
 
@@ -454,7 +444,7 @@ post_deploy_check() {
         fi
     done
 
-    echo "   ❌ Post-deploy traffic verification FAILED after $MAX_RETRIES attempts!"
+    echo "   ❌ Live URL check FAILED after $MAX_RETRIES attempts!"
     return 1
 }
 
