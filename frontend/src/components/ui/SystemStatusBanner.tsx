@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button } from './';
 import { Zap, AlertTriangle, X, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import clsx from 'clsx';
 
 export type BannerType = 'success' | 'warning' | 'error';
@@ -39,6 +40,7 @@ export function SystemStatusBanner({
   className
 }: SystemStatusBannerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const router = useRouter();
 
   const isSuccess = type === 'success';
   const isWarning = type === 'warning';
@@ -61,6 +63,15 @@ export function SystemStatusBanner({
   const toggleExpand = () => {
     if (canExpand) setIsExpanded(!isExpanded);
   };
+
+  // Whole-card click: navigate when CTA has href, otherwise expand/collapse
+  const handleCardClick = cta?.href
+    ? () => router.push(cta.href!)
+    : cta?.onClick
+    ? () => cta.onClick!()
+    : canExpand
+    ? toggleExpand
+    : undefined;
 
   // Rule #6: Auto-collapse on scroll
   useEffect(() => {
@@ -107,11 +118,12 @@ export function SystemStatusBanner({
   };
 
   return (
-    <Card 
-      onClick={toggleExpand}
+    <Card
+      onClick={handleCardClick}
       className={clsx(
         "mb-8 relative group overflow-hidden transition-all duration-300",
-        canExpand && "cursor-pointer select-none",
+        handleCardClick && "cursor-pointer select-none",
+        cta?.href && "hover:shadow-md",
         bgClass,
         // Rule #2: Flexible mobile height control to prevent text cutting
         isExpanded ? "min-h-[96px] h-auto p-4" : "min-h-[56px] h-auto p-3 sm:p-5",
