@@ -32,12 +32,17 @@ export default function LoginPage() {
   // isProcessing: true after Facebook returns, while we authenticate with backend
   // This shows a blank screen instead of the login page to avoid flashing
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Read query params from URL directly — router.query is empty on first render
+  // for statically exported pages (autoExport: true)
+  const [urlParams, setUrlParams] = useState<URLSearchParams | null>(null);
   
   // Pre-loaded Facebook SDK reference to avoid delay on button tap
   const fbSdkRef = useRef<any>(null);
 
   useEffect(() => {
     setMounted(true);
+    setUrlParams(new URLSearchParams(window.location.search));
     
     // Pre-initialize Facebook SDK on native platforms and clear any stuck sessions
     // This eliminates the delay when user taps the login button AND prevents
@@ -351,7 +356,7 @@ export default function LoginPage() {
 
               <div className="space-y-5">
                 {/* Shopify-first install banner */}
-                {router.query.shopify_pending === 'true' && (
+                {urlParams?.get('shopify_pending') === 'true' && (
                   <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
                     <div className="flex gap-3 items-start">
                       <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
@@ -369,7 +374,7 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {router.query.shopify_error === 'already_connected' && (
+                {urlParams?.get('shopify_error') === 'already_connected' && (
                   <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
                     <p className="font-bold text-red-900 text-sm">
                       {t('shopify.errorAlreadyConnected')}
@@ -377,7 +382,7 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {router.query.shopify_error === 'auth_failed' && (
+                {urlParams?.get('shopify_error') === 'auth_failed' && (
                   <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
                     <p className="font-bold text-red-900 text-sm">
                       {t('shopify.errorAuthFailed')}
@@ -386,7 +391,7 @@ export default function LoginPage() {
                 )}
 
                 {/* Salla-first install banner */}
-                {router.query.salla_pending === 'true' && (
+                {urlParams?.get('salla_pending') === 'true' && (
                   <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200">
                     <div className="flex gap-3 items-start">
                       <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center flex-shrink-0">
@@ -404,7 +409,7 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {router.query.salla_error === 'already_connected' && (
+                {urlParams?.get('salla_error') === 'already_connected' && (
                   <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
                     <p className="font-bold text-red-900 text-sm">
                       {t('salla.errorAlreadyConnected')}
@@ -412,7 +417,7 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {router.query.salla_error === 'auth_failed' && (
+                {urlParams?.get('salla_error') === 'auth_failed' && (
                   <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
                     <p className="font-bold text-red-900 text-sm">
                       {t('salla.errorAuthFailed')}
