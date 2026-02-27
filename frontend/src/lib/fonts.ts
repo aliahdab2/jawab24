@@ -1,4 +1,4 @@
-import { DM_Sans, Cairo, Tajawal } from 'next/font/google';
+import { DM_Sans, Cairo, Tajawal, Outfit, JetBrains_Mono } from 'next/font/google';
 
 // English font
 export const dmSans = DM_Sans({
@@ -21,4 +21,20 @@ export const tajawal = Tajawal({
     weight: ['300', '400', '500', '700'],
     display: 'swap',
     variable: '--font-tajawal',
+});
+
+// Display font (headings)
+export const outfit = Outfit({
+    subsets: ['latin'],
+    weight: ['400', '500', '600', '700', '800', '900'],
+    display: 'swap',
+    variable: '--font-outfit',
+});
+
+// Monospace font (code blocks, IDs)
+export const jetbrainsMono = JetBrains_Mono({
+    subsets: ['latin'],
+    weight: ['400', '500', '600'],
+    display: 'swap',
+    variable: '--font-jetbrains-mono',
 });

@@ -10,7 +10,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { AppShell } from '@/components/layout/AppShell';
 import { useUIStore, useAuthStore } from '@/lib/store';
 import type { Language } from '@/i18n';
-import { dmSans, cairo, tajawal } from '@/lib/fonts';
+import { dmSans, cairo, tajawal, outfit, jetbrainsMono } from '@/lib/fonts';
 import { Toaster } from 'sonner';
 import { AppSkeleton } from '@/components/ui';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -111,6 +111,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
       // Note: is-native class is already added in the earlier useEffect
 
+      // StatusBar overlay/style already configured in the early useEffect above
       const [{ StatusBar, Style }, { Keyboard }, { App }, { SplashScreen }, { Network }] = await Promise.all([
         import("@capacitor/status-bar"),
         import("@capacitor/keyboard"),
@@ -118,15 +119,6 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         import("@capacitor/splash-screen"),
         import("@capacitor/network")
       ]);
-
-      // Configure native UI (non-critical - wrap in try/catch)
-      try {
-        await StatusBar.setOverlaysWebView({ overlay: true });
-        await StatusBar.setStyle({ style: Style.Default });
-        // Safe areas handled by CSS env() with hardcoded fallbacks (24px/20px)
-      } catch (err) {
-        addErrorBreadcrumb('capacitor', 'StatusBar setup failed', { error: String(err) });
-      }
 
       try {
         await Keyboard.setResizeMode({ mode: 'body' } as any);
@@ -362,7 +354,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </Head>
-      <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable}`}>
+      <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
         <ErrorBoundary name="root" resetKeys={router.asPath}>
           {getLayout(<Component {...pageProps} />)}
           <Toaster richColors position="top-center" closeButton duration={4000} />

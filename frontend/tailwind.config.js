@@ -49,10 +49,10 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['Cairo', 'Tajawal', 'DM Sans', 'system-ui', 'sans-serif'],
-        display: ['Cairo', 'Outfit', 'system-ui', 'sans-serif'],
-        arabic: ['Cairo', 'Tajawal', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['var(--font-cairo)', 'var(--font-tajawal)', 'var(--font-dm-sans)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-cairo)', 'var(--font-outfit)', 'system-ui', 'sans-serif'],
+        arabic: ['var(--font-cairo)', 'var(--font-tajawal)', 'sans-serif'],
+        mono: ['var(--font-jetbrains-mono)', 'monospace'],
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',

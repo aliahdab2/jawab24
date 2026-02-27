@@ -66,9 +66,25 @@ const getSecureStorage = async (): Promise<StateStorage> => {
  * Returns the appropriate storage based on platform.
  * Web: localStorage (sync)
  * Native: SecureStorage (async)
+ *
+ * Caches the resolved storage so subsequent calls avoid repeated async resolution.
  */
-export const getPersistStorage = async (): Promise<StateStorage> => {
-  if (typeof window === "undefined") return webStorage;
-  if (!isNativePlatform()) return webStorage;
-  return await getSecureStorage();
+let cachedStorage: StateStorage | null = null;
+let storagePromise: Promise<StateStorage> | null = null;
+
+export const getPersistStorage = (): Promise<StateStorage> => {
+  if (cachedStorage) return Promise.resolve(cachedStorage);
+  if (storagePromise) return storagePromise;
+
+  if (typeof window === "undefined" || !isNativePlatform()) {
+    cachedStorage = webStorage;
+    return Promise.resolve(webStorage);
+  }
+
+  storagePromise = getSecureStorage().then((storage) => {
+    cachedStorage = storage;
+    storagePromise = null;
+    return storage;
+  });
+  return storagePromise;
 };

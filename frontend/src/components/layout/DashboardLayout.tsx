@@ -28,7 +28,6 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const isRTL = language === 'ar';
   const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
   const { sidebarOpen, isOnboardingVisible } = useUIStore();
-  const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
 
@@ -42,10 +41,6 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   };
 
   const pageTitle = title || t('dashboard.title');
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     // Session Verification for Web (Cookie-based)
@@ -79,15 +74,14 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 
   // Update document direction based on language
   useEffect(() => {
-    if (mounted) {
-      document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
-      document.documentElement.lang = isRTL ? 'ar' : 'en';
-    }
-  }, [isRTL, mounted]);
+    document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+    document.documentElement.lang = isRTL ? 'ar' : 'en';
+  }, [isRTL]);
 
   // Don't render anything until hydration is complete
-  if (!mounted || !_hasHydrated) {
-    return null; // Don't show full page spinner here, rely on _app.tsx or just blank slate to avoid double-spin
+  // (_app.tsx already guards with AppSkeleton, so this is a safety net)
+  if (!_hasHydrated) {
+    return null;
   }
 
   // If not public and not authenticated, we're redirecting, so show nothing
