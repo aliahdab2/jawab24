@@ -317,6 +317,40 @@ describe('Shopify Service', () => {
             const result = buildVariantSummary(variants);
             expect(result).toBe('Size: S, M, L');
         });
+
+        it('should truncate variant summary longer than 200 chars', () => {
+            // Create many variants that produce a long summary
+            const variants = Array.from({ length: 50 }, (_, i) => ({
+                title: `Variant-${i}`,
+                selectedOptions: [
+                    { name: 'Color', value: `VeryLongColorName-${i}` },
+                ],
+            }));
+
+            const result = buildVariantSummary(variants);
+            expect(result.length).toBeLessThanOrEqual(200);
+            expect(result).toMatch(/\.\.\.$/);
+        });
+
+        it('should not truncate variant summary under 200 chars', () => {
+            const variants = [
+                { title: 'S', selectedOptions: [{ name: 'Size', value: 'S' }] },
+                { title: 'M', selectedOptions: [{ name: 'Size', value: 'M' }] },
+            ];
+
+            const result = buildVariantSummary(variants);
+            expect(result).not.toMatch(/\.\.\.$/);
+        });
+
+        it('should handle variants with missing selectedOptions', () => {
+            const variants = [
+                { title: 'S', selectedOptions: [{ name: 'Size', value: 'S' }] },
+                { title: 'Missing', selectedOptions: undefined as any },
+            ];
+
+            const result = buildVariantSummary(variants);
+            expect(result).toBe('Size: S');
+        });
     });
 
     // --- linkStoreToPage ---

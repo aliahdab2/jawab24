@@ -341,23 +341,47 @@ async function fetchAllProducts(shop: string, accessToken: string): Promise<Shop
 }
 
 /**
- * Sync all active products from Shopify store
+ * Resolve store + decrypted access token for a given storeId.
+ * Throws a descriptive error if the store is missing or token data is corrupted.
  */
-export async function syncProducts(storeId: string) {
-    const store = await getStoreById(storeId);
+function resolveStoreToken(store: Awaited<ReturnType<typeof getStoreById>>): string {
     if (!store) throw new Error('Store not found');
+    if (!store.accessToken || !store.accessTokenIv) {
+        throw new Error(`Store ${store.id} has missing token data — re-connect the store`);
+    }
+    return decrypt(store.accessToken, store.accessTokenIv);
+}
 
-    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
-    const products = await fetchAllProducts(store.storeDomain, accessToken);
+/**
+ * Sync all active products from Shopify store.
+ * Accepts optional pre-resolved credentials to avoid redundant DB/decrypt calls
+ * when called from fullSync.
+ */
+export async function syncProducts(storeId: string, opts?: { storeDomain: string; accessToken: string }) {
+    let storeDomain: string;
+    let accessToken: string;
+
+    if (opts) {
+        storeDomain = opts.storeDomain;
+        accessToken = opts.accessToken;
+    } else {
+        const store = await getStoreById(storeId);
+        accessToken = resolveStoreToken(store);
+        storeDomain = store!.storeDomain;
+    }
+
+    const products = await fetchAllProducts(storeDomain, accessToken);
 
     const mapped = products.map(p => {
-        const minPrice = parseFloat(p.priceRangeV2.minVariantPrice.amount);
-        const maxPrice = parseFloat(p.priceRangeV2.maxVariantPrice.amount);
-        const currency = p.priceRangeV2.minVariantPrice.currencyCode;
+        const minPrice = parseFloat(p.priceRangeV2?.minVariantPrice?.amount ?? '0');
+        const maxPrice = parseFloat(p.priceRangeV2?.maxVariantPrice?.amount ?? '0');
+        const currency = p.priceRangeV2?.minVariantPrice?.currencyCode ?? '';
         const priceRange = minPrice === maxPrice
             ? `${minPrice} ${currency}`
             : `${minPrice} - ${maxPrice} ${currency}`;
-        const variantSummary = buildVariantSummary(p.variants.edges.map(e => e.node));
+        const variantSummary = buildVariantSummary(
+            (p.variants?.edges ?? []).map(e => e.node)
+        );
 
         return {
             platformProductId: p.id.replace('gid://shopify/Product/', ''),
@@ -370,17 +394,20 @@ export async function syncProducts(storeId: string) {
             totalInventory: p.totalInventory,
             hasVariants: !p.hasOnlyDefaultVariant,
             variantSummary: variantSummary || null,
-            tags: p.tags.join(', ') || null,
+            tags: Array.isArray(p.tags) ? (p.tags.join(', ') || null) : null,
         };
     });
 
     return replaceProductsAndRebuildSummary(storeId, mapped);
 }
 
+const MAX_VARIANT_SUMMARY_LENGTH = 200;
+
 export function buildVariantSummary(variants: Array<{ title: string; selectedOptions: Array<{ name: string; value: string }> }>): string {
     const optionGroups: Record<string, Set<string>> = {};
 
     for (const v of variants) {
+        if (!v.selectedOptions) continue;
         for (const opt of v.selectedOptions) {
             if (opt.name === 'Title' && opt.value === 'Default Title') continue;
             if (!optionGroups[opt.name]) optionGroups[opt.name] = new Set();
@@ -392,20 +419,49 @@ export function buildVariantSummary(variants: Array<{ title: string; selectedOpt
         ([name, values]) => `${name}: ${[...values].join(', ')}`
     );
 
-    return parts.join(' | ');
+    const summary = parts.join(' | ');
+    if (summary.length > MAX_VARIANT_SUMMARY_LENGTH) {
+        return summary.slice(0, MAX_VARIANT_SUMMARY_LENGTH - 3) + '...';
+    }
+    return summary;
+}
+
+/**
+ * Strip HTML tags and decode common HTML entities.
+ */
+function stripHtml(html: string): string {
+    return html
+        .replace(/<[^>]*>/g, '')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 /**
  * Sync store policies (shipping, returns, etc.)
+ * Accepts optional pre-resolved credentials to avoid redundant DB/decrypt calls.
  */
-export async function syncPolicies(storeId: string) {
-    const store = await getStoreById(storeId);
-    if (!store) throw new Error('Store not found');
+export async function syncPolicies(storeId: string, opts?: { storeDomain: string; accessToken: string }) {
+    let storeDomain: string;
+    let accessToken: string;
 
-    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
+    if (opts) {
+        storeDomain = opts.storeDomain;
+        accessToken = opts.accessToken;
+    } else {
+        const store = await getStoreById(storeId);
+        accessToken = resolveStoreToken(store);
+        storeDomain = store!.storeDomain;
+    }
+
     const data = await shopifyGraphQL<{
         data: { shop: { shippingPolicy: { body: string } | null; refundPolicy: { body: string } | null } }
-    }>(store.storeDomain, accessToken, `{
+    }>(storeDomain, accessToken, `{
         shop {
             shippingPolicy { body }
             refundPolicy { body }
@@ -414,11 +470,11 @@ export async function syncPolicies(storeId: string) {
 
     const policies: string[] = [];
     if (data.data.shop.shippingPolicy?.body) {
-        const text = data.data.shop.shippingPolicy.body.replace(/<[^>]*>/g, '').trim();
+        const text = stripHtml(data.data.shop.shippingPolicy.body);
         policies.push(`Shipping: ${text.slice(0, 100)}`);
     }
     if (data.data.shop.refundPolicy?.body) {
-        const text = data.data.shop.refundPolicy.body.replace(/<[^>]*>/g, '').trim();
+        const text = stripHtml(data.data.shop.refundPolicy.body);
         policies.push(`Returns: ${text.slice(0, 100)}`);
     }
 
@@ -435,23 +491,24 @@ export async function syncPolicies(storeId: string) {
 }
 
 /**
- * Full sync: products + policies + shop info
+ * Full sync: products + policies + shop info.
+ * Fetches store + decrypts token ONCE and passes credentials down.
  */
 export async function fullSync(storeId: string) {
     const store = await getStoreById(storeId);
-    if (!store) throw new Error('Store not found');
+    const accessToken = resolveStoreToken(store);
+    const storeDomain = store!.storeDomain;
 
-    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
-
-    const shopInfo = await fetchShopInfo(store.storeDomain, accessToken);
+    const shopInfo = await fetchShopInfo(storeDomain, accessToken);
     await db.update(ecommerceStores).set({
         ...shopInfo,
         updatedAt: new Date(),
     }).where(eq(ecommerceStores.id, storeId));
 
+    const creds = { storeDomain, accessToken };
     const [productResult, policyResult] = await Promise.all([
-        syncProducts(storeId),
-        syncPolicies(storeId),
+        syncProducts(storeId, creds),
+        syncPolicies(storeId, creds),
     ]);
 
     return { ...productResult, ...policyResult };

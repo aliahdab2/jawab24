@@ -38,6 +38,11 @@ export function SmartStatusBanner({
     }
     const description = parts.join(', ');
 
+    // Navigate to where the items actually are
+    const reviewHref = commentNeedsAttention === 0 && messageNeedsAttention > 0
+      ? '/messages'
+      : '/comments';
+
     return (
       <SystemStatusBanner
         type="warning"
@@ -45,7 +50,7 @@ export function SmartStatusBanner({
         description={description || undefined}
         cta={{
           label: t('dashboard.smartBanner.reviewNow' as TranslationKey),
-          href: '/comments',
+          href: reviewHref,
         }}
       />
     );

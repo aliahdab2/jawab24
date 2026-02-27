@@ -377,6 +377,14 @@ export default function LoginPage() {
                   </div>
                 )}
 
+                {router.query.shopify_error === 'auth_failed' && (
+                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
+                    <p className="font-bold text-red-900 text-sm">
+                      {t('shopify.errorAuthFailed')}
+                    </p>
+                  </div>
+                )}
+
                 {/* Salla-first install banner */}
                 {router.query.salla_pending === 'true' && (
                   <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200">
@@ -400,6 +408,14 @@ export default function LoginPage() {
                   <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
                     <p className="font-bold text-red-900 text-sm">
                       {t('salla.errorAlreadyConnected')}
+                    </p>
+                  </div>
+                )}
+
+                {router.query.salla_error === 'auth_failed' && (
+                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
+                    <p className="font-bold text-red-900 text-sm">
+                      {t('salla.errorAuthFailed')}
                     </p>
                   </div>
                 )}
