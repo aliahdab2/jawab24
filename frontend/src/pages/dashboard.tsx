@@ -91,7 +91,7 @@ const PLAN_NAME_KEYS: Record<string, TranslationKey> = {
 };
 
 const DashboardPage: NextPageWithLayout = () => {
-  const { t } = useTranslation();
+  const { t, intlLocale } = useTranslation();
   const { isAuthenticated, fbToken } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
@@ -338,7 +338,7 @@ const DashboardPage: NextPageWithLayout = () => {
       {/* Header */}
       <PageHeader
         title={t('dashboard.title')}
-        description={t('dashboard.overview')}
+        description={`${t('dashboard.overview')} · ${new Date().toLocaleDateString(intlLocale, { weekday: 'long', month: 'long', day: 'numeric' })}`}
       />
 
       {/* Smart status message */}
@@ -435,88 +435,100 @@ const DashboardPage: NextPageWithLayout = () => {
 
         {/* Top Pages & Usage Column */}
         <div className="space-y-8">
-          {/* Usage Card (Same as before) */}
+          {/* Usage Card — Split into Plan Info + Quota sections */}
           {usage && usage.subscription && (
-            <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-white relative group" padding="lg">
-              <div className="absolute top-0 end-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-brand-500/10"></div>
-
+            <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-white relative group" padding="none">
               {(() => {
                 const isTrialing = usage.subscription.status === 'trialing';
                 const isPaidPlan = usage.subscription.status === 'active' && !isTrialing;
 
                 return (
                   <>
-                    <div className="flex items-center gap-3 sm:gap-5 mb-6 sm:mb-8 relative z-10">
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20 transform transition-transform group-hover:rotate-6">
-                        <Crown className="w-6 h-6 sm:w-8 sm:h-8" />
-                      </div>
-                      <div className="min-w-0 flex-1 text-start">
-                        <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                        <h3 className="text-base sm:text-lg lg:text-xl font-display font-bold text-surface-900 tracking-tight flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span>{PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}</span>
-                          {isTrialing && (
-                            <span className="inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
-                              {t('subscription.trialBadge' as TranslationKey)}
-                            </span>
-                          )}
-                        </h3>
-                      </div>
-                    </div>
+                    {/* Section A: Plan Info + Billing */}
+                    <div className="p-6 sm:p-8 relative">
+                      <div className="absolute top-0 end-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-brand-500/10"></div>
 
-                    <div className="space-y-8 relative z-10">
-                      <UsageProgress
-                        label={t('subscription.aiRepliesUsed')}
-                        used={usage.aiReplies.used}
-                        limit={usage.aiReplies.limit}
-                        percent={usage.aiReplies.percentUsed}
-                      />
-                      {(() => {
-                        const effectivePagesUsed = Math.max(usage.pages.used, pages.length);
-                        const effectivePagesLimit = isDemoUser
-                          ? Math.max(usage.pages.limit ?? 0, pages.length)
-                          : usage.pages.limit;
-                        return (
-                          <UsageProgress
-                            label={t('subscription.pagesUsed')}
-                            used={effectivePagesUsed}
-                            limit={effectivePagesLimit}
-                            percent={effectivePagesLimit ? (effectivePagesUsed / effectivePagesLimit) * 100 : 0}
-                          />
-                        );
-                      })()}
-                    </div>
-
-                    {isTrialing && usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
-                      <div className="mt-8 p-4 rounded-2xl bg-amber-50 border border-amber-100 flex items-center gap-3 text-amber-700">
-                        <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
-                          <Zap className="w-4 h-4" />
+                      <div className="flex items-center gap-3 sm:gap-5 relative z-10">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white shadow-xl shadow-brand-500/20 transform transition-transform group-hover:rotate-6">
+                          <Crown className="w-6 h-6 sm:w-7 sm:h-7" />
                         </div>
-                        <span className="text-xs font-bold leading-relaxed">
-                          {t('subscription.trialEndsIn')} {usage.subscription.trialDaysRemaining} {t('subscription.days')}
-                        </span>
+                        <div className="min-w-0 flex-1 text-start">
+                          <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
+                          <h3 className="text-base sm:text-lg lg:text-xl font-display font-bold text-surface-900 tracking-tight flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span>{PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}</span>
+                            {isTrialing && (
+                              <span className="inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
+                                {t('subscription.trialBadge' as TranslationKey)}
+                              </span>
+                            )}
+                          </h3>
+                        </div>
                       </div>
-                    )}
 
-                    {isPaidPlan ? (
-                      <Link href="/pricing" className="block mt-8">
-                        <Button
-                          variant="secondary"
-                          className="w-full py-4 text-sm"
-                        >
-                          {t('subscription.managePlan')}
-                        </Button>
-                      </Link>
-                    ) : (
-                      <Link href="/pricing" className="block mt-8">
-                        <Button
-                          variant="primary"
-                          className="w-full py-5 text-base shadow-[0_12px_32px_rgba(20,184,166,0.24)]"
-                          icon={<Sparkles className="w-5 h-5" />}
-                        >
-                          {t('subscription.upgradePlan')}
-                        </Button>
-                      </Link>
-                    )}
+                      {isTrialing && usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
+                        <div className="mt-5 p-3 rounded-xl bg-amber-50 border border-amber-100 flex items-center gap-3 text-amber-700">
+                          <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                            <Zap className="w-4 h-4" />
+                          </div>
+                          <span className="text-xs font-bold leading-relaxed">
+                            {t('subscription.trialEndsIn')} {usage.subscription.trialDaysRemaining} {t('subscription.days')}
+                          </span>
+                        </div>
+                      )}
+
+                      {isPaidPlan ? (
+                        <Link href="/pricing" className="block mt-5">
+                          <Button
+                            variant="secondary"
+                            className="w-full py-3.5 text-sm"
+                          >
+                            {t('subscription.managePlan')}
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Link href="/pricing" className="block mt-5">
+                          <Button
+                            variant="primary"
+                            className="w-full py-4 text-base shadow-[0_12px_32px_rgba(20,184,166,0.24)]"
+                            icon={<Sparkles className="w-5 h-5" />}
+                          >
+                            {t('subscription.upgradePlan')}
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-surface-100" />
+
+                    {/* Section B: Quota Usage */}
+                    <div className="p-6 sm:p-8">
+                      <p className="text-[10px] font-bold text-surface-500 uppercase tracking-[0.2em] mb-5">
+                        {t('subscription.usage')}
+                      </p>
+                      <div className="space-y-6">
+                        <UsageProgress
+                          label={t('subscription.aiRepliesUsed')}
+                          used={usage.aiReplies.used}
+                          limit={usage.aiReplies.limit}
+                          percent={usage.aiReplies.percentUsed}
+                        />
+                        {(() => {
+                          const effectivePagesUsed = Math.max(usage.pages.used, pages.length);
+                          const effectivePagesLimit = isDemoUser
+                            ? Math.max(usage.pages.limit ?? 0, pages.length)
+                            : usage.pages.limit;
+                          return (
+                            <UsageProgress
+                              label={t('subscription.pagesUsed')}
+                              used={effectivePagesUsed}
+                              limit={effectivePagesLimit}
+                              percent={effectivePagesLimit ? (effectivePagesUsed / effectivePagesLimit) * 100 : 0}
+                            />
+                          );
+                        })()}
+                      </div>
+                    </div>
                   </>
                 );
               })()}

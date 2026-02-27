@@ -63,6 +63,7 @@ module.exports = {
         'float': 'float 3s ease-in-out infinite',
         'float-delayed': 'float 2.5s ease-in-out infinite 0.5s',
         'float-slow': 'float 3.5s ease-in-out infinite 1s',
+        'pulse-attention': 'pulseAttention 2s ease-in-out infinite',
       },
       keyframes: {
         float: {
@@ -87,6 +88,10 @@ module.exports = {
         pulseSoft: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.7' },
+        },
+        pulseAttention: {
+          '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+          '50%': { transform: 'scale(1.1)', opacity: '0.85' },
         },
       },
     },

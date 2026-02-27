@@ -60,6 +60,10 @@ export function SystemStatusBanner({
                         isWarning ? 'bg-amber-100 text-amber-600' :
                         'bg-red-100 text-red-600';
 
+  const borderAccent = isSuccess ? 'border-s-4 border-s-emerald-500'
+    : isWarning ? 'border-s-4 border-s-amber-500'
+    : 'border-s-4 border-s-red-500';
+
   const toggleExpand = () => {
     if (canExpand) setIsExpanded(!isExpanded);
   };
@@ -125,6 +129,7 @@ export function SystemStatusBanner({
         handleCardClick && "cursor-pointer select-none",
         cta?.href && "hover:shadow-md",
         bgClass,
+        borderAccent,
         // Rule #2: Flexible mobile height control to prevent text cutting
         isExpanded ? "min-h-[96px] h-auto p-4" : "min-h-[56px] h-auto p-3 sm:p-5",
         className
@@ -134,7 +139,8 @@ export function SystemStatusBanner({
       <div className="flex items-center gap-3 sm:gap-4 h-full">
         <div className={clsx(
           "w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 self-center",
-          iconBgClass
+          iconBgClass,
+          isWarning && "animate-pulse-attention"
         )}>
           <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
         </div>

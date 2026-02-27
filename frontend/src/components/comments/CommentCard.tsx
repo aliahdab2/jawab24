@@ -179,7 +179,7 @@ export function CommentCard({
                    </span>
                    {showPlatformIcon && getPlatformIcon()}
                    {pageName && (
-                     <span className="text-[10px] text-surface-400 px-1.5 py-0.5 bg-surface-100 rounded">
+                     <span className="text-xs font-medium text-surface-600 px-1.5 py-0.5 bg-surface-200/60 rounded">
                        {pageName}
                      </span>
                    )}

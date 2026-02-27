@@ -105,6 +105,13 @@ export function CommandCenter({
       role="region"
       aria-label={t('dashboard.overview')}
     >
+      {/* Period Label */}
+      <div className="px-4 py-2.5 sm:px-5 border-b border-surface-100">
+        <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-surface-400">
+          {t('dashboard.last30Days' as TranslationKey)}
+        </span>
+      </div>
+
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4">
         {metrics.map((metric, i) => {
