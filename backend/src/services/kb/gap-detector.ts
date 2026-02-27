@@ -193,12 +193,15 @@ class GapDetectorService {
 
     /**
      * Mark a gap as resolved (e.g., when the merchant updates their KB).
+     * Scoped to pageId to prevent cross-page gap manipulation.
      */
-    async resolveGap(gapId: string): Promise<void> {
+    async resolveGap(gapId: string, pageId?: string): Promise<void> {
+        const conditions = [eq(kbGaps.id, gapId)];
+        if (pageId) conditions.push(eq(kbGaps.pageId, pageId));
         await db
             .update(kbGaps)
             .set({ resolved: true })
-            .where(eq(kbGaps.id, gapId));
+            .where(and(...conditions));
     }
 
     /**

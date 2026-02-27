@@ -74,5 +74,13 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, pagesController.getKbGaps);
+
+        protectedRoutes.post('/pages/:id/kb-gaps/:gapId/dismiss', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Dismiss a KB gap (mark as resolved)',
+                security: auth,
+            },
+        }, pagesController.dismissGap);
     });
 }

@@ -16,6 +16,12 @@ export function isPresetSection(id: SectionId): id is PresetSectionId {
 export const CUSTOM_SECTION_MARKER = '✦';
 export const MAX_CUSTOM_SECTIONS = 5;
 
+export interface KbGap {
+  id: string;
+  queryText: string;
+  occurrenceCount: number;
+}
+
 export interface KnowledgeSection {
   id: SectionId;
   content: string;

@@ -1,21 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { pagesApi } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
-import type { KnowledgeSection, SectionId, CustomSectionId } from './types';
+import type { KnowledgeSection, SectionId, CustomSectionId, KbGap } from './types';
 import { isCustomSection, MAX_CUSTOM_SECTIONS } from './types';
 import { parseKnowledgeBase, serializeSections } from './knowledgeBaseParser';
 import { KnowledgeBaseSections } from './KnowledgeBaseSections';
 import { KnowledgeBaseRawEditor } from './KnowledgeBaseRawEditor';
-
-interface KbGap {
-  id: string;
-  queryText: string;
-  occurrenceCount: number;
-}
+import { GapCard } from './GapCard';
 
 const MAX_LENGTH = 10000;
 
@@ -36,6 +32,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   const [rawText, setRawText] = useState('');
   const [showFacebookBanner, setShowFacebookBanner] = useState(false);
   const [gaps, setGaps] = useState<KbGap[]>([]);
+  const [expandedGapId, setExpandedGapId] = useState<string | null>(null);
 
   // Initialize from page data
   useEffect(() => {
@@ -124,6 +121,33 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     onSave(text);
   }, [rawMode, rawText, sections, onSave]);
 
+  // Gap approved: append Q&A to "notes" section
+  const handleGapApproved = useCallback((gapId: string, answer: string) => {
+    const gap = gaps.find(g => g.id === gapId);
+    if (!gap) return;
+
+    setSections(prev => prev.map(s => {
+      if (s.id !== 'notes') return s;
+      const entry = `Q: ${gap.queryText}\nA: ${answer}`;
+      const newContent = s.content.trim()
+        ? `${s.content.trim()}\n\n${entry}`
+        : entry;
+      return { ...s, content: newContent };
+    }));
+
+    setGaps(prev => prev.filter(g => g.id !== gapId));
+    setExpandedGapId(null);
+    pagesApi.dismissGap(page.id, gapId).catch(() => {});
+    toast.success(t('kb.gaps.addedHint' as TranslationKey));
+  }, [gaps, page.id, t]);
+
+  // Gap skipped: resolve without adding content
+  const handleGapSkipped = useCallback((gapId: string) => {
+    setGaps(prev => prev.filter(g => g.id !== gapId));
+    setExpandedGapId(null);
+    pagesApi.dismissGap(page.id, gapId).catch(() => {});
+  }, [page.id]);
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
       <div
@@ -173,26 +197,26 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
             </div>
           )}
 
-          {/* Unanswered questions banner */}
+          {/* Unanswered questions — interactive gap cards */}
           {gaps.length > 0 && (
-            <div className="mb-3 rounded-xl bg-amber-50 border border-amber-200 p-3">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="mb-3 space-y-2">
+              <div className="flex items-center gap-2 px-1">
                 <MessageCircleQuestion className="w-4 h-4 text-amber-600 flex-shrink-0" aria-hidden="true" />
                 <span className="text-xs font-semibold text-amber-800">
                   {t('kb.gaps.title' as TranslationKey)} ({gaps.length})
                 </span>
               </div>
-              <p className="text-xs text-amber-700 mb-2">{t('kb.gaps.hint' as TranslationKey)}</p>
-              <ul className="space-y-1">
-                {gaps.map((gap) => (
-                  <li key={gap.id} className="flex items-start justify-between gap-2 text-xs text-amber-900">
-                    <span className="leading-relaxed">{gap.queryText}</span>
-                    <span className="flex-shrink-0 font-medium text-amber-600">
-                      {t('kb.gaps.times' as TranslationKey, { count: String(gap.occurrenceCount) })}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <p className="text-xs text-amber-700 px-1">{t('kb.gaps.hint' as TranslationKey)}</p>
+              {gaps.map((gap) => (
+                <GapCard
+                  key={gap.id}
+                  gap={gap}
+                  isExpanded={expandedGapId === gap.id}
+                  onToggle={() => setExpandedGapId(prev => prev === gap.id ? null : gap.id)}
+                  onApprove={(answer) => handleGapApproved(gap.id, answer)}
+                  onSkip={() => handleGapSkipped(gap.id)}
+                />
+              ))}
             </div>
           )}
 

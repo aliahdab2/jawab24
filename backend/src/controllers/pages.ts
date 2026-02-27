@@ -263,6 +263,31 @@ export class PagesController {
             return reply.status(500).send({ error: 'Failed to fetch KB gaps' });
         }
     }
+
+    /**
+     * Dismiss (resolve) a KB gap
+     * POST /pages/:id/kb-gaps/:gapId/dismiss
+     */
+    async dismissGap(request: FastifyRequest<{ Params: { id: string; gapId: string } }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id, gapId } = request.params;
+
+        try {
+            const page = await pagesService.getPage(req.workspaceId, id);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+
+            await gapDetectorService.resolveGap(gapId, id);
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to dismiss KB gap' });
+        }
+    }
 }
 
 export const pagesController = new PagesController();

@@ -27,6 +27,7 @@ vi.mock('@/lib/api', () => ({
   },
   pagesApi: {
     getAll: vi.fn(),
+    dismissGap: vi.fn(),
   },
   settingsApi: {
     get: vi.fn(),
