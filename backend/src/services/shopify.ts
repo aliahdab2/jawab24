@@ -506,10 +506,17 @@ export async function fullSync(storeId: string) {
     }).where(eq(ecommerceStores.id, storeId));
 
     const creds = { storeDomain, accessToken };
-    const [productResult, policyResult] = await Promise.all([
+    const [productResult, policyResult] = await Promise.allSettled([
         syncProducts(storeId, creds),
         syncPolicies(storeId, creds),
     ]);
 
-    return { ...productResult, ...policyResult };
+    const result: Record<string, unknown> = {};
+    if (productResult.status === 'fulfilled') Object.assign(result, productResult.value);
+    if (policyResult.status === 'fulfilled') Object.assign(result, policyResult.value);
+
+    // If product sync failed, propagate that error (it's the critical one)
+    if (productResult.status === 'rejected') throw productResult.reason;
+
+    return result;
 }
