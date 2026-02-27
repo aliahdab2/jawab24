@@ -446,4 +446,326 @@ describe('NotificationBell', () => {
             expect(notifDiv?.className).not.toContain('transition-all');
         });
     });
+
+    describe('Lucide icons', () => {
+        it('should render icons with aria-hidden for accessibility', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [{ ...sampleNotification, type: 'new_comment' }],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('Payment Failed')).toBeDefined();
+            });
+
+            // Icon wrapper should have aria-hidden svg inside
+            const iconWrappers = document.querySelectorAll('svg[aria-hidden="true"]');
+            expect(iconWrappers.length).toBeGreaterThan(0);
+        });
+    });
+
+    describe('Notification grouping', () => {
+        const now = new Date();
+        const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000);
+        const twentyMinAgo = new Date(now.getTime() - 20 * 60 * 1000);
+
+        const groupableNotifications = [
+            {
+                id: 'stale-1',
+                type: 'stale_comment',
+                title: 'Stale Comments',
+                body: '3 comments waiting.',
+                read: false,
+                createdAt: now.toISOString(),
+                data: null,
+            },
+            {
+                id: 'stale-2',
+                type: 'stale_comment',
+                title: 'Stale Comments',
+                body: '2 comments waiting.',
+                read: false,
+                createdAt: twentyMinAgo.toISOString(),
+                data: null,
+            },
+            {
+                id: 'stale-3',
+                type: 'stale_comment',
+                title: 'Stale Comments',
+                body: '1 comment waiting.',
+                read: true,
+                createdAt: thirtyMinAgo.toISOString(),
+                data: null,
+            },
+        ];
+
+        it('should group consecutive notifications of the same type', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: groupableNotifications,
+                unreadCount: 2,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                // Should show group summary instead of individual items
+                expect(screen.getByText(/notifications\.groupSummary/)).toBeInTheDocument();
+            });
+
+            // Individual notification titles should NOT be visible (group is collapsed)
+            expect(screen.queryByText('3 comments waiting.')).not.toBeInTheDocument();
+        });
+
+        it('should expand group to show individual notifications on click', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: groupableNotifications,
+                unreadCount: 2,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText(/notifications\.groupSummary/)).toBeInTheDocument();
+            });
+
+            // Click the group header to expand
+            const expandButton = screen.getByRole('button', { expanded: false });
+            await act(async () => {
+                fireEvent.click(expandButton);
+            });
+
+            // Now individual items should be visible
+            await waitFor(() => {
+                expect(screen.getByText('3 comments waiting.')).toBeInTheDocument();
+                expect(screen.getByText('2 comments waiting.')).toBeInTheDocument();
+                expect(screen.getByText('1 comment waiting.')).toBeInTheDocument();
+            });
+        });
+
+        it('should not group notifications of different types', async () => {
+            const mixedNotifications = [
+                {
+                    id: 'n1',
+                    type: 'new_comment',
+                    title: 'New Comment',
+                    body: 'Comment body.',
+                    read: false,
+                    createdAt: now.toISOString(),
+                    data: null,
+                },
+                {
+                    id: 'n2',
+                    type: 'payment_failed',
+                    title: 'Payment Failed',
+                    body: 'Payment body.',
+                    read: false,
+                    createdAt: twentyMinAgo.toISOString(),
+                    data: null,
+                },
+            ];
+
+            mockGetNotifications.mockResolvedValue({
+                notifications: mixedNotifications,
+                unreadCount: 2,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                // Both should appear as individual items
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+                expect(screen.getByText('Payment Failed')).toBeInTheDocument();
+            });
+
+            // No group summary should appear
+            expect(screen.queryByText(/notifications\.groupSummary/)).not.toBeInTheDocument();
+        });
+    });
+
+    describe('Filter pills', () => {
+        const mixedNotifications = [
+            {
+                id: 'c1',
+                type: 'new_comment',
+                title: 'New Comment',
+                body: 'Comment body.',
+                read: false,
+                createdAt: new Date().toISOString(),
+                data: null,
+            },
+            {
+                id: 'b1',
+                type: 'payment_failed',
+                title: 'Payment Failed',
+                body: 'Payment body.',
+                read: false,
+                createdAt: new Date().toISOString(),
+                data: null,
+            },
+            {
+                id: 's1',
+                type: 'page_disconnected',
+                title: 'Page Disconnected',
+                body: 'System body.',
+                read: true,
+                createdAt: new Date().toISOString(),
+                data: null,
+            },
+        ];
+
+        it('should render filter pills when notifications exist', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: mixedNotifications,
+                unreadCount: 2,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByRole('tablist')).toBeInTheDocument();
+            });
+
+            // Should have 4 filter tabs
+            const tabs = screen.getAllByRole('tab');
+            expect(tabs).toHaveLength(4);
+        });
+
+        it('should filter notifications when clicking a category', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: mixedNotifications,
+                unreadCount: 2,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+                expect(screen.getByText('Payment Failed')).toBeInTheDocument();
+                expect(screen.getByText('Page Disconnected')).toBeInTheDocument();
+            });
+
+            // Click "Comments" filter
+            const commentsTab = screen.getByText('notifications.filter.comments');
+            await act(async () => {
+                fireEvent.click(commentsTab);
+            });
+
+            // Only comment-type notifications visible
+            expect(screen.getByText('New Comment')).toBeInTheDocument();
+            expect(screen.queryByText('Payment Failed')).not.toBeInTheDocument();
+            expect(screen.queryByText('Page Disconnected')).not.toBeInTheDocument();
+        });
+
+        it('should show filtered empty state when category has no notifications', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [mixedNotifications[0]], // Only a comment
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('New Comment')).toBeInTheDocument();
+            });
+
+            // Click "System" filter (no system notifications)
+            const systemTab = screen.getByText('notifications.filter.system');
+            await act(async () => {
+                fireEvent.click(systemTab);
+            });
+
+            expect(screen.getByText(/notifications\.emptyFiltered/)).toBeInTheDocument();
+        });
+    });
+
+    describe('Reply Now button', () => {
+        it('should show Reply Now button for actionable notification types', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [{
+                    id: 'c1',
+                    type: 'new_comment',
+                    title: 'New Comment',
+                    body: 'Comment body.',
+                    read: false,
+                    createdAt: new Date().toISOString(),
+                    data: null,
+                }],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('notifications.replyNow')).toBeInTheDocument();
+            });
+        });
+
+        it('should NOT show Reply Now button for non-actionable types', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [{
+                    ...sampleNotification,
+                    type: 'payment_failed',
+                }],
+                unreadCount: 1,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('Payment Failed')).toBeInTheDocument();
+            });
+
+            expect(screen.queryByText('notifications.replyNow')).not.toBeInTheDocument();
+        });
+    });
+
+    describe('Header layout', () => {
+        it('should separate Mark all read from close button', async () => {
+            mockGetUnreadCount.mockResolvedValue(2);
+            mockGetNotifications.mockResolvedValue({
+                notifications: [{ ...sampleNotification, read: false }],
+                unreadCount: 2,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('notifications.markAllRead')).toBeInTheDocument();
+            });
+
+            // Mark all read and close should be in different containers
+            const markAllBtn = screen.getByText('notifications.markAllRead').closest('div[class*="px-5"]');
+            const closeBtn = screen.getByLabelText('notifications.close').closest('div[class*="px-5"]');
+            expect(markAllBtn).not.toBe(closeBtn);
+        });
+    });
+
+    describe('Enhanced empty state', () => {
+        it('should show enhanced empty state with description', async () => {
+            mockGetNotifications.mockResolvedValue({
+                notifications: [],
+                unreadCount: 0,
+            });
+
+            render(<NotificationBell />);
+            fireEvent.click(screen.getByRole('button'));
+
+            await waitFor(() => {
+                expect(screen.getByText('notifications.empty')).toBeInTheDocument();
+                expect(screen.getByText('notifications.emptyDescription')).toBeInTheDocument();
+            });
+        });
+    });
 });

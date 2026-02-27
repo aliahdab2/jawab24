@@ -1,13 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
-import { Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, Clock } from 'lucide-react';
+import clsx from 'clsx';
+import {
+    Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, Clock,
+    MessageCircle, AlertTriangle, CreditCard, CheckCircle, Unplug, BookOpen,
+    type LucideIcon,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount } from '@/lib/notifications';
 import { SwipeableNotificationItem } from './SwipeableNotificationItem';
+import { NotificationFilterPills, FILTER_TYPE_MAP, type NotificationFilter } from '../notifications/NotificationFilterPills';
+import { NotificationGroupHeader } from '../notifications/NotificationGroup';
+import { NotificationEmptyState } from '../notifications/NotificationEmptyState';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Notification {
     id: string;
@@ -19,7 +29,48 @@ interface Notification {
     createdAt: string;
 }
 
-/** Get the route a notification should navigate to when clicked */
+interface GroupedNotifications {
+    id: string;
+    type: string;
+    notifications: Notification[];
+    latestTimestamp: string;
+    unreadCount: number;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+interface NotificationStyle {
+    icon: LucideIcon;
+    iconColor: string;
+    bgColor: string;
+    ringColor: string;
+}
+
+const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
+    stale_comment:         { icon: Bell,          iconColor: 'text-amber-600',   bgColor: 'bg-amber-50',   ringColor: 'ring-amber-200/60' },
+    new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600',    bgColor: 'bg-blue-50',    ringColor: 'ring-blue-200/60' },
+    flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600',     bgColor: 'bg-red-50',     ringColor: 'ring-red-200/60' },
+    payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600',     bgColor: 'bg-red-50',     ringColor: 'ring-red-200/60' },
+    subscription_expiring: { icon: Clock,         iconColor: 'text-orange-600',  bgColor: 'bg-orange-50',  ringColor: 'ring-orange-200/60' },
+    trial_ending:          { icon: Clock,         iconColor: 'text-orange-600',  bgColor: 'bg-orange-50',  ringColor: 'ring-orange-200/60' },
+    subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600', bgColor: 'bg-emerald-50', ringColor: 'ring-emerald-200/60' },
+    page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600',   bgColor: 'bg-slate-100',  ringColor: 'ring-slate-200/60' },
+    kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600',   bgColor: 'bg-amber-50',   ringColor: 'ring-amber-200/60' },
+};
+
+const DEFAULT_STYLE: NotificationStyle = {
+    icon: Bell, iconColor: 'text-brand-600', bgColor: 'bg-brand-50', ringColor: 'ring-brand-200/60',
+};
+
+const ACTIONABLE_TYPES = new Set(['stale_comment', 'new_comment', 'flagged_reply']);
+const GROUP_TIME_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getNotificationStyle(type: string): NotificationStyle {
+    return NOTIFICATION_STYLES[type] ?? DEFAULT_STYLE;
+}
+
 function getNotificationRoute(notification: Notification): string | null {
     const data = notification.data as Record<string, string> | undefined;
     if (data?.deepLink) return data.deepLink;
@@ -42,30 +93,64 @@ function getNotificationRoute(notification: Notification): string | null {
     }
 }
 
-/** Returns [emoji, bgColor, ringColor] for each notification type */
-function getNotificationStyle(type: string): [string, string, string] {
-    switch (type) {
-        case 'stale_comment':
-            return ['\u{1F514}', 'bg-amber-50', 'ring-amber-200/60'];
-        case 'new_comment':
-            return ['\u{1F4AC}', 'bg-blue-50', 'ring-blue-200/60'];
-        case 'flagged_reply':
-            return ['\u26A0\uFE0F', 'bg-red-50', 'ring-red-200/60'];
-        case 'payment_failed':
-            return ['\u{1F4B3}', 'bg-red-50', 'ring-red-200/60'];
-        case 'subscription_expiring':
-        case 'trial_ending':
-            return ['\u23F0', 'bg-orange-50', 'ring-orange-200/60'];
-        case 'subscription_renewed':
-            return ['\u2705', 'bg-emerald-50', 'ring-emerald-200/60'];
-        case 'page_disconnected':
-            return ['\u{1F50C}', 'bg-slate-100', 'ring-slate-200/60'];
-        case 'kb_gap':
-            return ['\u{1F4DA}', 'bg-amber-50', 'ring-amber-200/60'];
-        default:
-            return ['\u{1F514}', 'bg-brand-50', 'ring-brand-200/60'];
+function groupNotifications(
+    notifications: Notification[],
+): (Notification | GroupedNotifications)[] {
+    if (notifications.length === 0) return [];
+
+    const result: (Notification | GroupedNotifications)[] = [];
+    let currentGroup: Notification[] = [notifications[0]];
+
+    for (let i = 1; i < notifications.length; i++) {
+        const prev = notifications[i - 1];
+        const curr = notifications[i];
+        const timeDiff = Math.abs(
+            new Date(prev.createdAt).getTime() - new Date(curr.createdAt).getTime(),
+        );
+
+        if (curr.type === prev.type && timeDiff <= GROUP_TIME_WINDOW_MS) {
+            currentGroup.push(curr);
+        } else {
+            flushGroup(currentGroup, result);
+            currentGroup = [curr];
+        }
+    }
+    flushGroup(currentGroup, result);
+    return result;
+}
+
+function flushGroup(
+    group: Notification[],
+    result: (Notification | GroupedNotifications)[],
+) {
+    if (group.length === 1) {
+        result.push(group[0]);
+    } else {
+        result.push({
+            id: group[0].id,
+            type: group[0].type,
+            notifications: group,
+            latestTimestamp: group[0].createdAt,
+            unreadCount: group.filter(n => !n.read).length,
+        });
     }
 }
+
+function isGroup(item: Notification | GroupedNotifications): item is GroupedNotifications {
+    return 'notifications' in item;
+}
+
+function computeFilterCounts(notifications: Notification[]): Record<NotificationFilter, number> {
+    const counts: Record<NotificationFilter, number> = { all: notifications.length, comments: 0, billing: 0, system: 0 };
+    for (const n of notifications) {
+        if (FILTER_TYPE_MAP.comments?.includes(n.type)) counts.comments++;
+        else if (FILTER_TYPE_MAP.billing?.includes(n.type)) counts.billing++;
+        else if (FILTER_TYPE_MAP.system?.includes(n.type)) counts.system++;
+    }
+    return counts;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 interface NotificationBellProps {
     /** 'light' for sidebar (dark text), 'dark' for mobile header (white text on dark bg) */
@@ -81,10 +166,11 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
+    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     const dropdownRef = useRef<HTMLDivElement>(null);
     const bellRef = useRef<HTMLButtonElement>(null);
 
-    // Lock background scroll when dropdown is open
     useBodyScrollLock(isOpen);
 
     // Fetch unread count on mount and periodically
@@ -97,8 +183,6 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         };
 
         fetchUnreadCount();
-
-        // Poll every 60 seconds
         const interval = setInterval(fetchUnreadCount, 60000);
         return () => clearInterval(interval);
     }, [isAuthenticated]);
@@ -118,7 +202,15 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         fetchNotifications();
     }, [isOpen, isAuthenticated]);
 
-    // Close dropdown when clicking outside (dropdown is portaled, so check both refs)
+    // Reset filter and expanded groups when dropdown closes
+    useEffect(() => {
+        if (!isOpen) {
+            setActiveFilter('all');
+            setExpandedGroups(new Set());
+        }
+    }, [isOpen]);
+
+    // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Node;
@@ -136,10 +228,35 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [isOpen]);
 
+    // Derived data
+    const filterCounts = useMemo(() => computeFilterCounts(notifications), [notifications]);
+
+    const filteredAndGrouped = useMemo(() => {
+        const types = FILTER_TYPE_MAP[activeFilter];
+        const filtered = types ? notifications.filter(n => types.includes(n.type)) : notifications;
+        return groupNotifications(filtered);
+    }, [notifications, activeFilter]);
+
+    // ── Handlers ──
+
+    const getRelativeTime = (dateString: string) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffMins < 1) return t('notifications.justNow');
+        if (diffMins < 60) return t('notifications.minutesAgo', { count: diffMins });
+        if (diffHours < 24) return t('notifications.hoursAgo', { count: diffHours });
+        return t('notifications.daysAgo', { count: diffDays });
+    };
+
     const handleMarkAsRead = async (notificationId: string) => {
         await markNotificationAsRead(notificationId);
         setNotifications(prev =>
-            prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+            prev.map(n => n.id === notificationId ? { ...n, read: true } : n),
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
     };
@@ -154,6 +271,14 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
             setIsOpen(false);
             router.push(route);
         }
+    };
+
+    const handleReplyNow = (notification: Notification) => {
+        if (!notification.read) {
+            handleMarkAsRead(notification.id);
+        }
+        setIsOpen(false);
+        router.push('/comments');
     };
 
     const handleMarkAllAsRead = async () => {
@@ -201,19 +326,181 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         });
     };
 
-    const getRelativeTime = (dateString: string) => {
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
+    const handleDismissGroup = (group: GroupedNotifications) => {
+        const ids = group.notifications.map(n => n.id);
+        const unreadInGroup = group.unreadCount;
 
-        if (diffMins < 1) return t('notifications.justNow');
-        if (diffMins < 60) return t('notifications.minutesAgo', { count: diffMins });
-        if (diffHours < 24) return t('notifications.hoursAgo', { count: diffHours });
-        return t('notifications.daysAgo', { count: diffDays });
+        setNotifications(prev => prev.filter(n => !ids.includes(n.id)));
+        if (unreadInGroup > 0) {
+            setUnreadCount(prev => Math.max(0, prev - unreadInGroup));
+        }
+
+        for (const n of group.notifications) {
+            if (!n.read) markNotificationAsRead(n.id);
+        }
+
+        toast(t('notifications.dismissed'), { duration: 4000 });
     };
+
+    const toggleGroup = (groupId: string) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+        });
+    };
+
+    // ── Render helpers ──
+
+    const renderNotificationItem = (notification: Notification, indented = false) => {
+        const style = getNotificationStyle(notification.type);
+        const IconComponent = style.icon;
+        const isUnread = !notification.read;
+        const isActionable = ACTIONABLE_TYPES.has(notification.type);
+
+        return (
+            <SwipeableNotificationItem
+                key={notification.id}
+                onDismiss={() => handleDismissNotification(notification.id, isUnread)}
+                enabled={isUnread}
+            >
+                <div
+                    className={clsx(
+                        'group relative px-5 py-3.5 transition-colors duration-200 cursor-pointer',
+                        indented && 'ps-14',
+                        isUnread
+                            ? 'bg-brand-50/40 hover:bg-brand-50/70'
+                            : 'hover:bg-surface-50',
+                    )}
+                    onClick={() => handleNotificationClick(notification)}
+                >
+                    {/* Unread accent bar */}
+                    {isUnread && (
+                        <div className="absolute inset-y-0 start-0 w-[3px] bg-brand-500 rounded-e-full" />
+                    )}
+
+                    <div className="flex items-start gap-3.5">
+                        {/* Icon */}
+                        <div className={clsx(
+                            'w-10 h-10 rounded-xl ring-1 flex items-center justify-center flex-shrink-0',
+                            style.bgColor, style.ringColor,
+                            !isUnread && 'opacity-50',
+                        )}>
+                            <IconComponent className={clsx('w-5 h-5', style.iconColor)} aria-hidden="true" />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                            {/* Title */}
+                            <div className="flex items-center gap-2">
+                                <p className={clsx(
+                                    'text-[13px] leading-snug truncate',
+                                    isUnread
+                                        ? 'font-semibold text-surface-900'
+                                        : 'font-normal text-surface-500',
+                                )}>
+                                    {notification.title}
+                                </p>
+                                {isUnread && (
+                                    <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
+                                )}
+                            </div>
+
+                            {/* Body */}
+                            <p className={clsx(
+                                'text-xs leading-relaxed mt-0.5 line-clamp-2',
+                                isUnread ? 'text-surface-600' : 'text-surface-400',
+                            )}>
+                                {notification.body}
+                            </p>
+
+                            {/* Timestamp */}
+                            <div className="flex items-center gap-1 mt-1.5">
+                                <Clock className="w-3 h-3 text-surface-300" aria-hidden="true" />
+                                <p className="text-[11px] text-surface-400">
+                                    {getRelativeTime(notification.createdAt)}
+                                </p>
+                            </div>
+
+                            {/* Reply Now CTA */}
+                            {isActionable && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleReplyNow(notification);
+                                    }}
+                                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors"
+                                    aria-label={t('notifications.replyNow')}
+                                >
+                                    <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                                    {t('notifications.replyNow')}
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Action area */}
+                        <div className="flex items-center self-center flex-shrink-0">
+                            {getNotificationRoute(notification) ? (
+                                <>
+                                    <ChevronRight className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors ltr:block rtl:hidden" />
+                                    <ChevronLeft className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors rtl:block ltr:hidden" />
+                                </>
+                            ) : isUnread ? (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMarkAsRead(notification.id);
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-brand-100 text-surface-400 hover:text-brand-600 transition-colors"
+                                    title={t('notifications.markAsRead')}
+                                >
+                                    <Check className="w-4 h-4" />
+                                </button>
+                            ) : null}
+                        </div>
+                    </div>
+                </div>
+            </SwipeableNotificationItem>
+        );
+    };
+
+    const renderGroupedItem = (group: GroupedNotifications) => {
+        const style = getNotificationStyle(group.type);
+        const isExpanded = expandedGroups.has(group.id);
+        const typeLabelKey = `notifications.typeLabel.${group.type}` as TranslationKey;
+
+        return (
+            <div key={group.id} className="border-b border-surface-100">
+                <SwipeableNotificationItem
+                    onDismiss={() => handleDismissGroup(group)}
+                    enabled={group.unreadCount > 0}
+                >
+                    <NotificationGroupHeader
+                        icon={style.icon}
+                        iconColor={style.iconColor}
+                        bgColor={style.bgColor}
+                        ringColor={style.ringColor}
+                        count={group.notifications.length}
+                        unreadCount={group.unreadCount}
+                        typeLabel={t(typeLabelKey)}
+                        latestTimestamp={group.latestTimestamp}
+                        isExpanded={isExpanded}
+                        onToggle={() => toggleGroup(group.id)}
+                        getRelativeTime={getRelativeTime}
+                    />
+                </SwipeableNotificationItem>
+
+                {/* Expanded individual items */}
+                {isExpanded && (
+                    <div className="bg-surface-50/50">
+                        {group.notifications.map(n => renderNotificationItem(n, true))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // ── Main render ──
 
     return (
         <div className="relative">
@@ -221,26 +508,30 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
             <button
                 ref={bellRef}
                 onClick={() => setIsOpen(!isOpen)}
-                className={`relative p-2 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center ${
+                className={clsx(
+                    'relative p-2 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center',
                     isDark
                         ? isOpen
                             ? 'bg-white/20 text-white'
                             : 'hover:bg-white/10 text-white/90'
                         : isOpen
                             ? 'bg-brand-100 text-brand-700'
-                            : 'hover:bg-surface-100 text-surface-600'
-                }`}
+                            : 'hover:bg-surface-100 text-surface-600',
+                )}
                 aria-label={t('notifications.title')}
             >
-                <Bell className={`w-5 h-5 ${unreadCount > 0 ? 'animate-pulse-soft' : ''}`} />
+                <Bell className={clsx('w-5 h-5', unreadCount > 0 && 'animate-pulse-soft')} />
                 {unreadCount > 0 && (
-                    <span className={`absolute -top-1 -end-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[11px] font-bold text-white bg-red-500 rounded-full shadow-sm shadow-red-200 ring-2 ${isDark ? 'ring-black/30' : 'ring-white'}`}>
+                    <span className={clsx(
+                        'absolute -top-1 -end-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[11px] font-bold text-white bg-red-500 rounded-full shadow-sm shadow-red-200 ring-2',
+                        isDark ? 'ring-black/30' : 'ring-white',
+                    )}>
                         {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                 )}
             </button>
 
-            {/* Backdrop + Dropdown — portaled to body to escape sidebar stacking context */}
+            {/* Backdrop + Dropdown — portaled to body */}
             {isOpen && typeof document !== 'undefined' && createPortal(
                 <>
                 <div
@@ -249,16 +540,17 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                 />
                 <div
                     ref={dropdownRef}
-                    className={`fixed start-4 end-4 bg-white rounded-2xl shadow-2xl shadow-surface-900/10 border border-surface-100 overflow-hidden z-[100] animate-fade-in ${
+                    className={clsx(
+                        'fixed start-4 end-4 bg-white rounded-2xl shadow-2xl shadow-surface-900/10 border border-surface-100 overflow-hidden z-[100] animate-fade-in',
                         isDark
                             ? 'max-h-[60vh]'
-                            : 'top-20 sm:end-auto sm:start-[272px] sm:w-[420px] max-h-[70vh]'
-                    }`}
+                            : 'top-20 sm:end-auto sm:start-[272px] sm:w-[420px] max-h-[70vh]',
+                    )}
                     style={isDark ? { top: 'calc(env(safe-area-inset-top, 0px) + 4.5rem)' } : undefined}
                     dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
-                    {/* Header */}
-                    <div className="flex items-center justify-between px-5 py-3.5 border-b border-surface-100 bg-gradient-to-b from-surface-50 to-white">
+                    {/* Header Row 1: Title + Close */}
+                    <div className="flex items-center justify-between px-5 pt-3.5 pb-2 bg-gradient-to-b from-surface-50 to-white">
                         <div className="flex items-center gap-2.5">
                             <h3 className="font-bold text-surface-900">
                                 {t('notifications.title')}
@@ -269,24 +561,39 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-1.5">
-                            {unreadCount > 0 && (
-                                <button
-                                    onClick={handleMarkAllAsRead}
-                                    className="text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
-                                >
-                                    <CheckCheck className="w-3.5 h-3.5" />
-                                    {t('notifications.markAllRead')}
-                                </button>
-                            )}
+                        <button
+                            onClick={() => setIsOpen(false)}
+                            className="p-1.5 rounded-lg hover:bg-surface-100 text-surface-400 hover:text-surface-600 transition-colors"
+                            aria-label={t('notifications.close')}
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* Header Row 2: Mark all read (separated from close) */}
+                    {unreadCount > 0 && (
+                        <div className="px-5 pb-2">
                             <button
-                                onClick={() => setIsOpen(false)}
-                                className="p-1.5 rounded-lg hover:bg-surface-100 text-surface-400 hover:text-surface-600 transition-colors"
+                                onClick={handleMarkAllAsRead}
+                                className="text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
                             >
-                                <X className="w-4 h-4" />
+                                <CheckCheck className="w-3.5 h-3.5" />
+                                {t('notifications.markAllRead')}
                             </button>
                         </div>
-                    </div>
+                    )}
+
+                    {/* Header Row 3: Filter pills */}
+                    {!loading && notifications.length > 0 && (
+                        <>
+                            <NotificationFilterPills
+                                activeFilter={activeFilter}
+                                onChange={setActiveFilter}
+                                counts={filterCounts}
+                            />
+                            <div className="border-b border-surface-100" />
+                        </>
+                    )}
 
                     {/* Notifications List */}
                     <div className="max-h-[400px] overflow-y-auto">
@@ -296,107 +603,23 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 <p className="text-sm text-surface-400">{t('notifications.loading')}</p>
                             </div>
                         ) : notifications.length === 0 ? (
-                            <div className="p-10 text-center">
-                                <div className="w-14 h-14 rounded-full bg-surface-100 flex items-center justify-center mx-auto mb-4">
-                                    <Bell className="w-7 h-7 text-surface-300" />
-                                </div>
-                                <p className="text-sm font-medium text-surface-400">
-                                    {t('notifications.empty')}
-                                </p>
-                            </div>
+                            <NotificationEmptyState variant="global" />
+                        ) : filteredAndGrouped.length === 0 ? (
+                            <NotificationEmptyState
+                                variant="filtered"
+                                filterName={t(`notifications.filter.${activeFilter}`)}
+                            />
                         ) : (
-                            notifications.map((notification) => {
-                                const [icon, iconBg, iconRing] = getNotificationStyle(notification.type);
-                                const isUnread = !notification.read;
-
-                                return (
-                                    <SwipeableNotificationItem
-                                        key={notification.id}
-                                        onDismiss={() => handleDismissNotification(notification.id, isUnread)}
-                                        enabled={isUnread}
-                                    >
-                                        <div
-                                            className={`group relative px-5 py-3.5 transition-colors duration-200 cursor-pointer ${
-                                                isUnread
-                                                    ? 'bg-brand-50/40 hover:bg-brand-50/70'
-                                                    : 'hover:bg-surface-50'
-                                            }`}
-                                            onClick={() => handleNotificationClick(notification)}
-                                        >
-                                        {/* Unread accent bar */}
-                                        {isUnread && (
-                                            <div className="absolute inset-y-0 start-0 w-[3px] bg-brand-500 rounded-e-full" />
-                                        )}
-
-                                        <div className="flex items-start gap-3.5">
-                                            {/* Icon in colored circle */}
-                                            <div className={`w-10 h-10 rounded-xl ${iconBg} ring-1 ${iconRing} flex items-center justify-center flex-shrink-0 text-lg ${
-                                                isUnread ? '' : 'opacity-50'
-                                            }`}>
-                                                {icon}
-                                            </div>
-
-                                            <div className="flex-1 min-w-0">
-                                                {/* Title row */}
-                                                <div className="flex items-center gap-2">
-                                                    <p className={`text-[13px] leading-snug truncate ${
-                                                        isUnread
-                                                            ? 'font-semibold text-surface-900'
-                                                            : 'font-normal text-surface-500'
-                                                    }`}>
-                                                        {notification.title}
-                                                    </p>
-                                                    {isUnread && (
-                                                        <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
-                                                    )}
-                                                </div>
-
-                                                {/* Body */}
-                                                <p className={`text-xs leading-relaxed mt-0.5 line-clamp-2 ${
-                                                    isUnread ? 'text-surface-600' : 'text-surface-400'
-                                                }`}>
-                                                    {notification.body}
-                                                </p>
-
-                                                {/* Timestamp */}
-                                                <div className="flex items-center gap-1 mt-1.5">
-                                                    <Clock className="w-3 h-3 text-surface-300" />
-                                                    <p className="text-[11px] text-surface-400">
-                                                        {getRelativeTime(notification.createdAt)}
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            {/* Action area */}
-                                            <div className="flex items-center self-center flex-shrink-0">
-                                                {getNotificationRoute(notification) ? (
-                                                    <>
-                                                        <ChevronRight className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors ltr:block rtl:hidden" />
-                                                        <ChevronLeft className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors rtl:block ltr:hidden" />
-                                                    </>
-                                                ) : isUnread ? (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleMarkAsRead(notification.id);
-                                                        }}
-                                                        className="p-1.5 rounded-lg hover:bg-brand-100 text-surface-400 hover:text-brand-600 transition-colors"
-                                                        title={t('notifications.markAsRead')}
-                                                    >
-                                                        <Check className="w-4 h-4" />
-                                                    </button>
-                                                ) : null}
-                                            </div>
-                                        </div>
-                                        </div>
-                                    </SwipeableNotificationItem>
-                                );
-                            })
+                            filteredAndGrouped.map((item) =>
+                                isGroup(item)
+                                    ? renderGroupedItem(item)
+                                    : renderNotificationItem(item),
+                            )
                         )}
                     </div>
                 </div>
                 </>,
-                document.body
+                document.body,
             )}
         </div>
     );
