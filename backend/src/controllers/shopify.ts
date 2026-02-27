@@ -65,12 +65,44 @@ export async function authRedirect(request: FastifyRequest, reply: FastifyReply)
     return reply.redirect(authUrl);
 }
 
-export async function authCallback(request: FastifyRequest, reply: FastifyReply) {
-    const { shop, code, state } = request.query as {
-        shop?: string; code?: string; state?: string;
-    };
+/**
+ * Verify Shopify OAuth callback query-string HMAC.
+ * Shopify signs all query params (except `hmac` itself) with the app secret.
+ * Used when Shopify initiates the install (no state/nonce available).
+ */
+function verifyCallbackHmac(query: Record<string, string>): boolean {
+    const { hmac, ...params } = query;
+    if (!hmac) return false;
 
-    // Validate nonce from signed cookie matches state param
+    // Sort params alphabetically and build query string
+    const message = Object.keys(params)
+        .sort()
+        .map(key => `${key}=${params[key]}`)
+        .join('&');
+
+    const digest = crypto
+        .createHmac('sha256', config.shopify.apiSecret)
+        .update(message)
+        .digest('hex');
+
+    // Timing-safe comparison
+    const digestBuf = Buffer.from(digest);
+    const hmacBuf = Buffer.from(hmac);
+    if (digestBuf.length !== hmacBuf.length) return false;
+    return crypto.timingSafeEqual(digestBuf, hmacBuf);
+}
+
+export async function authCallback(request: FastifyRequest, reply: FastifyReply) {
+    const query = request.query as Record<string, string>;
+    const { shop, code, state } = query;
+
+    if (!shop || !code) {
+        return reply.status(400).send({ error: 'Invalid OAuth callback: missing shop or code' });
+    }
+
+    // Two validation paths:
+    // 1. User-initiated (from Jawab24 settings): validate state/nonce cookie
+    // 2. Shopify-initiated (from Partners/App Store): validate HMAC query signature
     const nonceCookie = request.cookies.shopifyNonce;
     let storedNonce: string | null = null;
     if (nonceCookie) {
@@ -80,8 +112,16 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
         }
     }
 
-    if (!shop || !code || !state || state !== storedNonce) {
-        return reply.status(400).send({ error: 'Invalid OAuth callback: state mismatch' });
+    if (state && storedNonce) {
+        // User-initiated flow: validate nonce
+        if (state !== storedNonce) {
+            return reply.status(400).send({ error: 'Invalid OAuth callback: state mismatch' });
+        }
+    } else {
+        // Shopify-initiated flow: validate HMAC signature
+        if (!verifyCallbackHmac(query)) {
+            return reply.status(400).send({ error: 'Invalid OAuth callback: HMAC verification failed' });
+        }
     }
 
     // Clear the nonce cookie
