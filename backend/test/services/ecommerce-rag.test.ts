@@ -43,11 +43,12 @@ vi.mock('../../src/services/pages', () => ({
 import { db } from '../../src/db';
 
 /**
- * Mock the 4 db.select() calls made by invalidateCachesForStore:
+ * Mock the 5 db.select() calls made by invalidateCachesForStore:
  *   1. Linked pages
- *   2. Store policies (.limit(1))
- *   3. All active products
- *   4. Page details per page (.limit(1))
+ *   2. Per-page kbActiveVersion (one per page)
+ *   3. Store policies (.limit(1))
+ *   4. All active products
+ *   5. Per-page knowledgeBase (.limit(1))
  */
 function mockSelectChain(opts: {
     pages: { id: string }[];
@@ -59,6 +60,7 @@ function mockSelectChain(opts: {
     vi.mocked(db.select).mockImplementation((() => {
         callCount++;
         if (callCount === 1) {
+            // 1. Linked pages
             return {
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue(opts.pages),
@@ -66,6 +68,19 @@ function mockSelectChain(opts: {
             };
         }
         if (callCount === 2) {
+            // 2. Per-page kbActiveVersion
+            return {
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{
+                            kbActiveVersion: opts.pageDetails?.kbActiveVersion ?? 1,
+                        }]),
+                    }),
+                }),
+            };
+        }
+        if (callCount === 3) {
+            // 3. Store policies
             return {
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
@@ -74,19 +89,20 @@ function mockSelectChain(opts: {
                 }),
             };
         }
-        if (callCount === 3) {
+        if (callCount === 4) {
+            // 4. All active products
             return {
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue(opts.products ?? []),
                 }),
             };
         }
+        // 5. Per-page knowledgeBase
         return {
             from: vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
-                    limit: vi.fn().mockResolvedValue([opts.pageDetails ?? {
-                        knowledgeBase: 'KB text',
-                        kbActiveVersion: 1,
+                    limit: vi.fn().mockResolvedValue([{
+                        knowledgeBase: opts.pageDetails?.knowledgeBase ?? 'KB text',
                     }]),
                 }),
             }),
@@ -122,7 +138,6 @@ describe('invalidateCachesForStore — product RAG', () => {
         });
 
         await invalidateCachesForStore('store-1');
-        await new Promise(r => setTimeout(r, 10));
 
         expect(mockIngestFullPage).toHaveBeenCalledWith(
             'page-1',
@@ -130,7 +145,7 @@ describe('invalidateCachesForStore — product RAG', () => {
             expect.arrayContaining([
                 expect.objectContaining({ platformProductId: 'shopify-1', title: 'iPhone 15' }),
             ]),
-            3,
+            4, // nextVersion = current (3) + 1
         );
     });
 
@@ -144,7 +159,6 @@ describe('invalidateCachesForStore — product RAG', () => {
         });
 
         await invalidateCachesForStore('store-1');
-        await new Promise(r => setTimeout(r, 10));
 
         if (mockIngestFullPage.mock.calls.length > 0) {
             expect(mockIngestFullPage.mock.calls[0][1]).toBe('Raw KB only');

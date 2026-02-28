@@ -247,9 +247,10 @@ export async function buildProductSummary(storeId: string): Promise<string> {
 /**
  * Invalidate AI reply caches for all pages linked to an e-commerce store.
  *
- *   1. Bumps `kbActiveVersion` on every linked page
+ *   1. Computes next kbVersion per page (does NOT activate it yet)
  *   2. Flushes Redis exact-match AI cache keys
  *   3. Deletes semantic_cache rows for affected pages
+ *   4. Re-ingests KB + products into RAG (ingestFullPage atomically activates the version after chunks are stored)
  */
 export async function invalidateCachesForStore(storeId: string): Promise<number> {
     try {
@@ -261,12 +262,14 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
 
         const pageIds = linkedPages.map(p => p.id);
 
-        // 1. Bump kbActiveVersion on linked pages
+        // 1. Compute next kbVersion for each page (DON'T activate yet — wait for ingestion)
+        //    kbActiveVersion is only set by ingestFullPage after ALL chunks are stored,
+        //    so retrieval continues using the previous (complete) version until the new one is ready.
+        const nextVersionByPage: Record<string, number> = {};
         for (const pageId of pageIds) {
-            await db.update(pages).set({
-                kbActiveVersion: sql`COALESCE(${pages.kbActiveVersion}, 1) + 1`,
-                updatedAt: new Date(),
-            }).where(eq(pages.id, pageId));
+            const [row] = await db.select({ kbActiveVersion: pages.kbActiveVersion })
+                .from(pages).where(eq(pages.id, pageId)).limit(1);
+            nextVersionByPage[pageId] = (row?.kbActiveVersion ?? 0) + 1;
         }
 
         // 2. Flush Redis exact AI cache entries
@@ -327,28 +330,27 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
 
         for (const pageId of pageIds) {
             try {
+                const nextVersion = nextVersionByPage[pageId];
+                if (!nextVersion) continue;
+
                 const [page] = await db
-                    .select({ knowledgeBase: pages.knowledgeBase, kbActiveVersion: pages.kbActiveVersion })
+                    .select({ knowledgeBase: pages.knowledgeBase })
                     .from(pages)
                     .where(eq(pages.id, pageId))
                     .limit(1);
 
-                if (page?.kbActiveVersion !== null && page?.kbActiveVersion !== undefined) {
-                    const { getIngestionService } = await import('./pages');
-                    const ingestion = getIngestionService();
-                    if (ingestion) {
-                        // Combine page KB + store policies so both are RAG-indexed
-                        const kbWithPolicies = [page.knowledgeBase, policiesText]
-                            .filter(Boolean).join('\n\n') || undefined;
-                        ingestion.ingestFullPage(
-                            pageId,
-                            kbWithPolicies,
-                            productData,
-                            page.kbActiveVersion,
-                        ).catch(() => {
-                            // Non-critical — RAG ingestion failure doesn't break the sync
-                        });
-                    }
+                const { getIngestionService } = await import('./pages');
+                const ingestion = getIngestionService();
+                if (ingestion) {
+                    // Combine page KB + store policies so both are RAG-indexed
+                    const kbWithPolicies = [page?.knowledgeBase, policiesText]
+                        .filter(Boolean).join('\n\n') || undefined;
+                    await ingestion.ingestFullPage(
+                        pageId,
+                        kbWithPolicies,
+                        productData,
+                        nextVersion,
+                    );
                 }
             } catch {
                 // Non-critical — continue with other pages

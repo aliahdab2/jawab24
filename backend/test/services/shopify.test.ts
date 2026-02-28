@@ -553,11 +553,13 @@ describe('Shopify Service', () => {
          * Helper: mock the full db.select() chain used by invalidateCachesForStore.
          * The function calls db.select() multiple times:
          *   1. Linked pages (from pages WHERE ecommerceStoreId)
-         *   2. Store policies (from ecommerceStores WHERE id) — .limit(1)
-         *   3. All active products (from ecommerceProducts WHERE storeId + active)
-         *   4. Page details per page (from pages WHERE id) — .limit(1) per page
+         *   2..N+1. Per-page kbActiveVersion (.limit(1) per page)
+         *   N+2. Store policies (from ecommerceStores WHERE id) — .limit(1)
+         *   N+3. All active products (from ecommerceProducts WHERE storeId + active)
+         *   N+4..2N+3. Per-page knowledgeBase (.limit(1) per page)
          */
         function mockLinkedPages(pageIds: string[]) {
+            const n = pageIds.length;
             let callCount = 0;
             mockSelect.mockImplementation(() => {
                 callCount++;
@@ -569,8 +571,18 @@ describe('Shopify Service', () => {
                         }),
                     };
                 }
-                if (callCount === 2) {
-                    // 2. Store policies
+                if (callCount <= 1 + n) {
+                    // 2..N+1. Per-page kbActiveVersion
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue([{ kbActiveVersion: 1 }]),
+                            }),
+                        }),
+                    };
+                }
+                if (callCount === 2 + n) {
+                    // N+2. Store policies
                     return {
                         from: vi.fn().mockReturnValue({
                             where: vi.fn().mockReturnValue({
@@ -579,21 +591,20 @@ describe('Shopify Service', () => {
                         }),
                     };
                 }
-                if (callCount === 3) {
-                    // 3. All active products
+                if (callCount === 3 + n) {
+                    // N+3. All active products
                     return {
                         from: vi.fn().mockReturnValue({
                             where: vi.fn().mockResolvedValue([]),
                         }),
                     };
                 }
-                // 4+ Page details (one per page)
+                // N+4+. Per-page knowledgeBase
                 return {
                     from: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
                             limit: vi.fn().mockResolvedValue([{
                                 knowledgeBase: 'KB text',
-                                kbActiveVersion: 1,
                             }]),
                         }),
                     }),
@@ -611,28 +622,17 @@ describe('Shopify Service', () => {
             expect(mockRedisScan).not.toHaveBeenCalled();
         });
 
-        it('should bump kbActiveVersion on all linked pages', async () => {
+        it('should compute next kbVersion without bumping kbActiveVersion', async () => {
             mockLinkedPages(['page-1', 'page-2']);
-
-            const mockSet = vi.fn().mockReturnValue({
-                where: vi.fn().mockResolvedValue(undefined),
-            });
-            mockUpdate.mockReturnValue({ set: mockSet });
 
             await invalidateCachesForStore('store-1');
 
-            // Should have called update for each page
-            expect(mockUpdate).toHaveBeenCalledTimes(2);
+            // Should NOT have called db.update — version activation is handled by ingestFullPage
+            expect(mockUpdate).not.toHaveBeenCalled();
         });
 
         it('should scan and delete Redis ai_reply cache keys', async () => {
             mockLinkedPages(['page-1']);
-
-            mockUpdate.mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(undefined),
-                }),
-            });
 
             // Simulate Redis scan returning some cache keys
             mockRedisScan
@@ -650,12 +650,6 @@ describe('Shopify Service', () => {
         it('should delete semantic_cache rows for affected pages', async () => {
             mockLinkedPages(['page-1', 'page-2']);
 
-            mockUpdate.mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(undefined),
-                }),
-            });
-
             await invalidateCachesForStore('store-1');
 
             // Should have called db.execute for each page (semantic_cache delete)
@@ -665,24 +659,12 @@ describe('Shopify Service', () => {
         it('should return the count of invalidated pages', async () => {
             mockLinkedPages(['page-1', 'page-2', 'page-3']);
 
-            mockUpdate.mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(undefined),
-                }),
-            });
-
             const result = await invalidateCachesForStore('store-1');
             expect(result).toBe(3);
         });
 
         it('should not throw when Redis is unavailable', async () => {
             mockLinkedPages(['page-1']);
-
-            mockUpdate.mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(undefined),
-                }),
-            });
 
             // Simulate Redis failure
             mockRedisScan.mockRejectedValueOnce(new Error('Connection refused'));

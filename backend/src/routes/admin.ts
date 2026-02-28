@@ -867,7 +867,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 const ragMode = config.ragMode || 'off';
 
                 const activeVersion = page.kbActiveVersion;
-                request.log.info({ ragMode, hasApiKey: !!config.openai?.apiKey, activeVersion }, 'RAG check');
+                request.log.debug({ ragMode, hasApiKey: !!config.openai?.apiKey, activeVersion }, 'RAG check');
                 if (ragMode !== 'off' && config.openai?.apiKey && activeVersion !== null) {
                     ragAttempted = true;
                     try {
@@ -876,7 +876,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         retrievalService.setLogger(request.log);
                         const result = await retrievalService.retrieve(pageId, question, activeVersion);
                         queryEmbedding = result.queryEmbedding;
-                        request.log.info({ chunksFound: result.chunks.length, topScore: result.chunks[0]?.finalScore }, 'RAG retrieval result');
+                        request.log.debug({ chunksFound: result.chunks.length, topScore: result.chunks[0]?.finalScore }, 'RAG retrieval result');
 
                         if (result.chunks.length > 0) {
                             retrievedChunks = result.chunks.map(c => ({
