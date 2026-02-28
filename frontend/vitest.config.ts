@@ -25,10 +25,11 @@ export default defineConfig({
         // They pass today and fail if coverage regresses significantly.
         // Frontend coverage is lower because many pages/components are
         // covered by E2E + visual regression tests rather than unit tests.
-        statements: 44,
+        // Recalibrated for @vitest/coverage-v8 3.x (V8 coverage engine change).
+        statements: 36,
         branches: 70,
         functions: 37,
-        lines: 44,
+        lines: 36,
 
         // Per-folder gates for critical code paths.
         // These prevent backsliding on well-tested areas.

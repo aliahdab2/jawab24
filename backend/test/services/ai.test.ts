@@ -846,8 +846,8 @@ describe('AI Service - Semantic Cache Integration', () => {
         expect(saveArgs.pageId).toBe('page-1');
         expect(saveArgs.replyText).toBe('Price is $50');
         expect(saveArgs.kbActiveVersion).toBe(2);
-        // Intent should be pre-GPT (PRICE), not GPT (QUESTION)
-        expect(saveArgs.intent).toBe('PRICE');
+        // Intent should be pre-GPT classified (PRICE normalized to QUESTION via classifyFallbackIntent)
+        expect(saveArgs.intent).toBe('QUESTION');
     });
 
     it('should gracefully continue to AI when semantic cache check throws', async () => {

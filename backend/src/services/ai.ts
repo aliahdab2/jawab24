@@ -13,7 +13,7 @@ import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { estimateCostUsd } from '../config/aiPricing';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
-import { classifyFallback } from './reply/fallbackClassifier';
+import { classifyFallback, classifyFallbackIntent } from './reply/fallbackClassifier';
 
 /** Context used to scope exact-cache lookups and writes. */
 interface CacheContext {
@@ -250,7 +250,9 @@ export class AiService {
 
         if (pageId && kbActiveVersion !== null && kbActiveVersion !== undefined) {
             try {
-                detectedPreGptIntent = detectIntent(request.comment);
+                // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)
+                // instead of basic detectIntent() which only handles GREETING/PRICE/HOURS/etc.
+                detectedPreGptIntent = classifyFallbackIntent(request.comment) || detectIntent(request.comment);
 
                 // Reuse pre-computed embedding from retrieval if available, else compute
                 if (!queryEmbedding) {
@@ -345,7 +347,7 @@ export class AiService {
                     intent: detectedPreGptIntent,
                     replyText: aiReply,
                     kbActiveVersion,
-                    metadata: { confidence: response.data.confidence, flags: response.data.flags },
+                    metadata: { confidence: response.data.confidence, flags: response.data.flags, intent: response.data.intent },
                 }).catch(err => {
                     this.logger.error('Semantic cache save failed', {
                         error: err instanceof Error ? err.message : String(err),

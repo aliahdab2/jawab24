@@ -21,7 +21,7 @@ export interface SemanticCacheSaveParams {
     intent: string;
     replyText: string;
     kbActiveVersion: number;
-    metadata?: { confidence?: string; flags?: string[] };
+    metadata?: { confidence?: string; flags?: string[]; intent?: string };
 }
 
 /**
@@ -81,7 +81,7 @@ export class SemanticCacheService {
 
             const row = rows[0];
             const similarity = Number(row.similarity);
-            const meta = (row.metadata || {}) as { confidence?: string; flags?: string[] };
+            const meta = (row.metadata || {}) as { confidence?: string; flags?: string[]; intent?: string };
 
             this.logger.info('[SemanticCache] hit', {
                 pageId, intent, similarity: similarity.toFixed(4),
@@ -96,7 +96,8 @@ export class SemanticCacheService {
 
             return {
                 reply: row.reply_text as string,
-                intent: row.intent as string,
+                // Prefer AI-classified intent (stored in metadata) over pre-GPT keyword intent
+                intent: meta.intent || (row.intent as string),
                 confidence: meta.confidence,
                 flags: meta.flags,
             };
