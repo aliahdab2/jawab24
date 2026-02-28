@@ -332,6 +332,9 @@ Intent classification examples:
 - "اسوأ خدمة بحياتي" → COMPLAINT (worst service ever)
 - "." or "..." or "👍" or "!!!" → SPAM_OR_IRRELEVANT (no actual content)
 - "check my profile" → SPAM_OR_IRRELEVANT (self-promotion)
+- "🔥🔥 follow @influencer" → SPAM_OR_IRRELEVANT (self-promotion with @-mention — NOT a business inquiry even though it mentions "influencer")
+- "اسوأ خدمة بحياتي! ابي ارجع فلوسي" → COMPLAINT + flags: ["angry_customer"] (angry + refund demand)
+- "I want a refund NOW! This is unacceptable!" → COMPLAINT + flags: ["angry_customer"]
 
 - IMPORTANT: Watch for SARCASM. Sarcastic messages use positive words with negative intent. Indicators: eye-roll emoji (🙄), 😏, exaggerated praise ("واو شو هالخدمة الرائعة"), or positive words contradicted by context. Classify sarcastic "compliments" as COMPLAINT, not COMPLIMENT.
 - IMPORTANT: Messages consisting ONLY of punctuation (., ?, !), ONLY emojis, a single character, or very long unrelated text (not about the business) → classify as SPAM_OR_IRRELEVANT, NOT GREETING. A GREETING must contain an actual greeting word (hello, hi, مرحبا, السلام عليكم, etc.).
@@ -349,7 +352,7 @@ STEP 2 - RESPOND BASED ON INTENT:
 RESPONSE GUIDELINES:
 - Be ${styleDirective}, helpful, and attentive to the customer
 ${isDM
-    ? '- You may provide full detailed answers including prices, availability, and specifics from <business_knowledge>.\n- When a customer asks about pricing, plans, packages, or what you offer: list ALL available options from <business_knowledge>, not just one. Customers expect to see their full range of choices.\n- Keep responses concise but thorough (up to 4 sentences).\n- CONTEXT CONTINUITY: When a customer\'s message is a vague follow-up or uses pronouns referring to a previously discussed topic (e.g., "give me details", "tell me more", "عطيني تفاصيل", "اخبرني أكثر", "ممكن تفاصيل", "شو مميزاتها؟", "كم سعرها؟", "هل هي متوفرة؟") without explicitly naming a new topic, look at the MOST RECENT assistant reply in the conversation to identify the SPECIFIC product/topic just discussed. Then answer about EXACTLY THAT product/topic. Example: if the last reply mentioned "AirPods Pro", and the customer asks "شو مميزاتها؟", answer about AirPods Pro specifically — even if details are limited. NEVER switch to a different product or topic. NEVER ask "which product do you mean?" when the conversation already makes it clear.'
+    ? '- You may provide full detailed answers including prices, availability, and specifics from <business_knowledge>.\n- When a customer asks about pricing, plans, packages, or what you offer: list ALL available options from <business_knowledge>, not just one. Customers expect to see their full range of choices.\n- Keep responses concise but thorough (up to 4 sentences).\n- CONTEXT CONTINUITY: When a customer\'s message is a vague follow-up or uses pronouns referring to a previously discussed topic (e.g., "give me details", "tell me more", "عطيني تفاصيل", "اخبرني أكثر", "ممكن تفاصيل", "شو مميزاتها؟", "كم سعرها؟", "هل هي متوفرة؟") without explicitly naming a new topic, look at the MOST RECENT assistant reply in the conversation to identify the SPECIFIC product/topic just discussed. Then answer about EXACTLY THAT product/topic. Example: if the last reply mentioned "AirPods Pro", and the customer asks "شو مميزاتها؟", answer about AirPods Pro specifically — even if details are limited. NEVER switch to a different product or topic. NEVER ask "which product do you mean?" when the conversation already makes it clear.\n- CRITICAL: When conversation history is present and the customer\'s message is a vague follow-up, you MUST search <business_knowledge> for the SPECIFIC topic from the last exchange. If KB has relevant info about that topic, use it and set confidence to "high" or "medium". Do NOT default to low confidence just because the customer\'s message alone is vague — the conversation context resolves the ambiguity.'
     : '- CRITICAL: Public comment replies MUST be 1 sentence (max 2 if absolutely necessary). Maximum 40 words.\n- NEVER include prices, detailed specs, order info, or lengthy explanations in a public comment.\n- For QUESTION and PURCHASE_INTENT: give a brief acknowledgment, then say "Send us a message for details!" (or Arabic equivalent).\n- For COMPLIMENT and GREETING: a short warm reply is enough — no DM redirect needed.'}
 - CRITICAL: Reply in the SAME language the customer wrote in. If they write in English, reply in English. If in Arabic, reply in Arabic. For unrecognized languages, default to English (NOT Arabic). Detected language: ${language}
 - Never be defensive or argumentative
@@ -400,6 +403,8 @@ Common confidence mistakes to avoid:
 - Customer asks about a RELATED but DIFFERENT concept (e.g., "certificate" vs "accreditation/اعتماد", "diploma" vs "training course", "warranty" vs "return policy") → LOW or MEDIUM, not high. Different concepts are NOT interchangeable even if they seem related.
 - Customer asks about a SPECIFIC course (e.g., "programming/برمجة", "design/تصميم") but KB only lists OTHER courses (e.g., Office applications, English) → LOW + info_not_in_kb. A related field is NOT the same course. Do NOT confirm the course exists unless its exact name appears in KB.
 - Customer asks "do you have X?" and X is NOT in KB → LOW + info_not_in_kb, even if you list other offerings from KB. Saying "we don't have X" is an INFERENCE from absence, not a KB fact. Only KB can confirm what is NOT offered — if KB is silent on X, say "I'll check with the team" rather than confirming absence.
+- Customer asks for contact info (phone, email, address) and KB has it → HIGH, not low. Sharing verbatim KB data is the highest-confidence scenario.
+- Customer asks a vague follow-up ("give me details", "tell me more") and conversation history + KB cover the topic → HIGH or MEDIUM, not low. The conversation context + KB provides the answer.
 - Is every fact in your reply backed by <business_knowledge>? If not, remove it.
 - Are you guessing anything? If yes, replace with "I'll check with the team and get back to you."`;
 
@@ -461,7 +466,7 @@ IMPORTANT: Output a JSON object with these fields:
 - "flags": an array of flag strings if applicable (empty array [] if none):
   - "info_not_in_kb" if the customer asked a specific question and the answer is NOT in <business_knowledge>, or if you responded with general info instead of answering their actual question
   - "price_not_in_kb" if your reply mentions any price, cost, or fee NOT found in <business_knowledge>
-  - "angry_customer" if the customer seems angry, frustrated, or threatening
+  - "angry_customer" if the customer seems angry, frustrated, or threatening. Add this whenever: exclamation-heavy messages, words like "worst/اسوأ/unacceptable", refund demands "ارجع فلوسي"/"I want my money back", or escalation threats. A COMPLAINT can exist without angry_customer (mild dissatisfaction), but strong emotion MUST trigger the flag.
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
   - "low_confidence" if you are uncertain about your reply
   - "redirect_to_human" if you advised the customer to contact a human
@@ -667,6 +672,18 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
                     parsed = { ...parsed, confidence: 'medium' };
                 }
             }
+        }
+
+        // Check 6: Low confidence without info_not_in_kb flag
+        // Per prompt rules: confidence=low means KB didn't answer the question → flag is mandatory.
+        // Only for question-type intents — complaints, greetings, etc. can be low for other reasons.
+        const QUESTION_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
+        if (
+            parsed.confidence === 'low' &&
+            QUESTION_INTENTS.has(parsed.intent || '') &&
+            !flags.includes('info_not_in_kb')
+        ) {
+            flags.push('info_not_in_kb');
         }
 
         return { ...parsed, flags };

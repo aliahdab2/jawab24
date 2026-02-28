@@ -18,9 +18,13 @@ DATABASE_URL="postgres://postgres:postgres@localhost:5433/autoreply" npx tsx bac
 PORT=3002 OPENAI_API_KEY="$OPENAI_API_KEY" npx tsx ai-worker/src/index.ts
 ```
 
-Then get the admin token and run the eval:
+Then get the admin token, clear the AI cache, and run the eval:
 ```bash
 ADMIN_TOKEN=$(curl -s -X POST http://localhost:3000/auth/demo | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+
+# Clear AI cache so eval tests fresh responses (not cached ones)
+curl -s -X DELETE http://localhost:3000/api/ai/cache -H "Authorization: Bearer $ADMIN_TOKEN"
+
 ADMIN_TOKEN="$ADMIN_TOKEN" npm run eval
 ```
 

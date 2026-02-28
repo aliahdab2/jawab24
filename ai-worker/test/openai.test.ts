@@ -221,10 +221,11 @@ describe('OpenAI Service - Structured JSON Response', () => {
         const result = await service.generateReply({ comment: 'How much does the premium package cost?' });
 
         expect(result.confidence).toBe('low');
-        expect(result.flags).toHaveLength(3);
+        expect(result.flags).toHaveLength(4);
         expect(result.flags).toContain('price_not_in_kb');
         expect(result.flags).toContain('low_confidence');
         expect(result.flags).toContain('redirect_to_human');
+        expect(result.flags).toContain('info_not_in_kb'); // Check 6: low + QUESTION → auto-add
     });
 
     it('should pass response_format json_object to enforce structured output', async () => {
@@ -1566,6 +1567,120 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
 
         expect(result.confidence).toBe('low');
         expect(result.flags).toContain('info_not_in_kb');
+    });
+});
+
+describe('OpenAI Service - Low Confidence Flag Guard (Check 6)', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    function setupMock(responseJson: string) {
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: responseJson } }],
+                            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+                        }),
+                    },
+                },
+            })),
+        }));
+    }
+
+    it('should auto-add info_not_in_kb when confidence=low and intent=QUESTION', async () => {
+        setupMock(JSON.stringify({
+            reply: 'خليني أتحقق من الفريق وأرجعلك',
+            intent: 'QUESTION',
+            confidence: 'low',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'عندكم دورة برمجة؟' });
+
+        expect(result.confidence).toBe('low');
+        expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should auto-add info_not_in_kb when confidence=low and intent=BUSINESS_INQUIRY', async () => {
+        setupMock(JSON.stringify({
+            reply: 'Let me check with the team',
+            intent: 'BUSINESS_INQUIRY',
+            confidence: 'low',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'Do you do wholesale?' });
+
+        expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should auto-add info_not_in_kb when confidence=low and intent=PURCHASE_INTENT', async () => {
+        setupMock(JSON.stringify({
+            reply: 'سأتحقق من التوفر',
+            intent: 'PURCHASE_INTENT',
+            confidence: 'low',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'ابي اشتري هالمنتج' });
+
+        expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should NOT add info_not_in_kb for low confidence COMPLAINT', async () => {
+        setupMock(JSON.stringify({
+            reply: 'نعتذر عن الإزعاج، سنتواصل معك لحل المشكلة',
+            intent: 'COMPLAINT',
+            confidence: 'low',
+            flags: ['angry_customer'],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'اسوأ خدمة بحياتي' });
+
+        expect(result.flags).not.toContain('info_not_in_kb');
+        expect(result.flags).toContain('angry_customer');
+    });
+
+    it('should NOT add info_not_in_kb for low confidence GREETING', async () => {
+        setupMock(JSON.stringify({
+            reply: 'أهلاً وسهلاً! كيف أقدر أساعدك؟',
+            intent: 'GREETING',
+            confidence: 'low',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'مرحبا' });
+
+        expect(result.flags).not.toContain('info_not_in_kb');
+    });
+
+    it('should NOT duplicate info_not_in_kb if already present', async () => {
+        setupMock(JSON.stringify({
+            reply: 'خليني أتحقق',
+            intent: 'QUESTION',
+            confidence: 'low',
+            flags: ['info_not_in_kb'],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'شو سياسة الاسترجاع؟' });
+
+        const count = result.flags?.filter(f => f === 'info_not_in_kb').length;
+        expect(count).toBe(1);
     });
 });
 
