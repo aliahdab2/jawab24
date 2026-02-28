@@ -19,6 +19,7 @@ const mockVerifyWebhookHmac = vi.fn();
 const mockDeactivateStore = vi.fn().mockResolvedValue(undefined);
 const mockGetStoreByDomain = vi.fn();
 const mockGetStoreByWorkspace = vi.fn();
+const mockGetStoreByWorkspaceAny = vi.fn();
 const mockDisconnectStore = vi.fn().mockResolvedValue(undefined);
 const mockFullSync = vi.fn().mockResolvedValue({ synced: 10 });
 const mockGetProducts = vi.fn().mockResolvedValue([]);
@@ -35,6 +36,7 @@ vi.mock('../../src/services/shopify', () => ({
     deactivateStore: (...args: any[]) => mockDeactivateStore(...args),
     getStoreByDomain: (...args: any[]) => mockGetStoreByDomain(...args),
     getStoreByWorkspace: (...args: any[]) => mockGetStoreByWorkspace(...args),
+    getStoreByWorkspaceAny: (...args: any[]) => mockGetStoreByWorkspaceAny(...args),
     disconnectStore: (...args: any[]) => mockDisconnectStore(...args),
     fullSync: (...args: any[]) => mockFullSync(...args),
     getProducts: (...args: any[]) => mockGetProducts(...args),
@@ -765,7 +767,7 @@ describe('Shopify Controller', () => {
 
     describe('getStore', () => {
         it('should return 404 when no store found', async () => {
-            mockGetStoreByWorkspace.mockResolvedValue(null);
+            mockGetStoreByWorkspaceAny.mockResolvedValue(null);
             const req = mockRequest();
             const rep = mockReply();
 
@@ -775,7 +777,7 @@ describe('Shopify Controller', () => {
         });
 
         it('should return store data', async () => {
-            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1', shopDomain: 'test.myshopify.com' });
+            mockGetStoreByWorkspaceAny.mockResolvedValue({ id: 'store-1', shopDomain: 'test.myshopify.com' });
             const req = mockRequest();
             const rep = mockReply();
 

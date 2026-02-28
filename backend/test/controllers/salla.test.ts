@@ -610,18 +610,18 @@ describe('Salla Controller', () => {
         });
 
         it('should return 404 when no store found', async () => {
-            mockGetStoreByWorkspace.mockResolvedValue(null);
+            mockGetStoreByWorkspaceAny.mockResolvedValue(null);
             const req = mockRequest();
             const rep = mockReply();
 
             await getStore(req, rep);
 
-            expect(mockGetStoreByWorkspace).toHaveBeenCalledWith('salla', 'test_workspace_id');
+            expect(mockGetStoreByWorkspaceAny).toHaveBeenCalledWith('salla', 'test_workspace_id');
             expect(rep.status).toHaveBeenCalledWith(404);
         });
 
         it('should return store data', async () => {
-            mockGetStoreByWorkspace.mockResolvedValue({ id: 'store-1', storeDomain: 'my-salla-store.salla.sa' });
+            mockGetStoreByWorkspaceAny.mockResolvedValue({ id: 'store-1', storeDomain: 'my-salla-store.salla.sa' });
             const req = mockRequest();
             const rep = mockReply();
 
