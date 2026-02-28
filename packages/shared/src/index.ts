@@ -412,6 +412,7 @@ export interface EcommerceProduct {
   id: string;
   ecommerceStoreId: string;
   platformProductId: string;
+  handle: string | null;
   title: string;
   description: string | null;
   productType: string | null;
@@ -423,6 +424,7 @@ export interface EcommerceProduct {
   hasVariants: boolean;
   variantSummary: string | null;
   tags: string | null;
+  imageUrl: string | null;
 }
 
 export interface EcommerceSyncJobData {

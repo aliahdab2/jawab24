@@ -686,6 +686,8 @@ export const ecommerceProducts = pgTable('ecommerce_products', {
 
     // Metadata
     tags: text('tags'),
+    handle: varchar('handle', { length: 500 }),  // URL slug: Shopify 'handle', Salla 'slug'
+    imageUrl: text('image_url'),                  // Main product image URL (future use)
 
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

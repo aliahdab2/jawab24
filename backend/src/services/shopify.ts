@@ -261,6 +261,7 @@ async function fetchShopInfo(shop: string, accessToken: string) {
 
 interface ShopifyGQLProduct {
     id: string;
+    handle: string;
     title: string;
     description: string;
     productType: string;
@@ -269,6 +270,7 @@ interface ShopifyGQLProduct {
     tags: string[];
     totalInventory: number;
     hasOnlyDefaultVariant: boolean;
+    featuredImage?: { url: string } | null;
     priceRangeV2: {
         minVariantPrice: { amount: string; currencyCode: string };
         maxVariantPrice: { amount: string; currencyCode: string };
@@ -309,6 +311,7 @@ async function fetchAllProducts(shop: string, accessToken: string): Promise<Shop
                 edges {
                     node {
                         id
+                        handle
                         title
                         description
                         productType
@@ -317,6 +320,7 @@ async function fetchAllProducts(shop: string, accessToken: string): Promise<Shop
                         tags
                         totalInventory
                         hasOnlyDefaultVariant
+                        featuredImage { url }
                         priceRangeV2 {
                             minVariantPrice { amount currencyCode }
                             maxVariantPrice { amount currencyCode }
@@ -396,6 +400,7 @@ export async function syncProducts(storeId: string, opts?: { storeDomain: string
 
         return {
             platformProductId: p.id.replace('gid://shopify/Product/', ''),
+            handle: p.handle,
             title: p.title,
             description: p.description || null,
             productType: p.productType || null,
@@ -407,6 +412,7 @@ export async function syncProducts(storeId: string, opts?: { storeDomain: string
             hasVariants: !p.hasOnlyDefaultVariant,
             variantSummary: variantSummary || null,
             tags: Array.isArray(p.tags) ? (p.tags.join(', ') || null) : null,
+            imageUrl: p.featuredImage?.url || null,
         };
     });
 

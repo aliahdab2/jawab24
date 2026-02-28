@@ -296,12 +296,14 @@ export async function fetchStoreInfo(accessToken: string) {
 
 interface SallaProduct {
     id: number;
+    slug?: string;
     name: string;
     description?: string; // HTML — stripped to plain text before storage
     type: string;
     status: string; // 'sale', 'out', 'hidden', 'deleted'
     price: { amount: number; currency: string };
     quantity: number | null;
+    thumbnail?: string;   // Main product image URL
     options: Array<{
         name: string;
         values: Array<{ name: string }>;
@@ -386,6 +388,7 @@ export async function syncProducts(storeId: string) {
 
             return {
                 platformProductId: String(p.id),
+                handle: p.slug || null,
                 title: p.name,
                 description: p.description ? stripHtml(p.description) : null,
                 productType: category,
@@ -397,6 +400,7 @@ export async function syncProducts(storeId: string) {
                 hasVariants: (p.options?.length ?? 0) > 0,
                 variantSummary: variantSummary || null,
                 tags: null as string | null,
+                imageUrl: p.thumbnail || null,
             };
         });
 

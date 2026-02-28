@@ -208,17 +208,36 @@ export async function linkStoreToPage(storeId: string, pageId: string, workspace
 
 // --- Product Summary ---
 
+/** Build the public product URL from platform + domain + handle/slug */
+function buildProductUrl(platform: string | undefined, storeDomain: string, handle: string): string {
+    return platform === 'salla'
+        ? `https://${storeDomain}/p/${handle}`
+        : `https://${storeDomain}/products/${handle}`;
+}
+
 /**
- * Build a structured product summary for AI consumption (~800 chars max)
+ * Build a structured product summary for AI consumption (~1200 chars max).
+ * Includes store URL and per-product links when handles are available.
  */
 export async function buildProductSummary(storeId: string): Promise<string> {
+    const [store] = await db.select({
+        storeDomain: ecommerceStores.storeDomain,
+        platform: ecommerceStores.platform,
+    }).from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
+
     const products = await db.select().from(ecommerceProducts)
         .where(and(eq(ecommerceProducts.ecommerceStoreId, storeId), eq(ecommerceProducts.status, 'active')))
         .limit(15);
 
     if (products.length === 0) return '';
 
-    const lines: string[] = ['Top Products:'];
+    const lines: string[] = [];
+
+    if (store?.storeDomain) {
+        lines.push(`Store: https://${store.storeDomain}`);
+    }
+
+    lines.push('Top Products:');
 
     for (const p of products) {
         const parts = [p.title];
@@ -229,14 +248,18 @@ export async function buildProductSummary(storeId: string): Promise<string> {
         else if (p.totalInventory !== null && p.totalInventory <= 5) parts.push('low stock');
         else parts.push('in stock');
 
+        if (p.handle && store?.storeDomain) {
+            parts.push(buildProductUrl(store.platform, store.storeDomain, p.handle));
+        }
+
         lines.push(parts.join(' — '));
     }
 
     let summary = lines.join('\n');
-    if (summary.length > 800) {
-        const truncated = summary.slice(0, 800);
+    if (summary.length > 1200) {
+        const truncated = summary.slice(0, 1200);
         const lastNewline = truncated.lastIndexOf('\n');
-        summary = lastNewline > 0 ? truncated.slice(0, lastNewline) + '\n...' : truncated.slice(0, 797) + '...';
+        summary = lastNewline > 0 ? truncated.slice(0, lastNewline) + '\n...' : truncated.slice(0, 1197) + '...';
     }
 
     return summary;
@@ -303,9 +326,12 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
         // 4. Re-ingest linked pages into RAG with KB text + policies + ALL product chunks.
         //    Policies are appended to KB text so they become searchable RAG chunks
         //    (otherwise they're lost when RAG overrides the static KB blob).
-        const [storeForPolicies] = await db.select({ policiesSummary: ecommerceStores.policiesSummary })
-            .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
-        const policiesText = storeForPolicies?.policiesSummary ?? '';
+        const [storeInfo] = await db.select({
+            policiesSummary: ecommerceStores.policiesSummary,
+            storeDomain: ecommerceStores.storeDomain,
+            platform: ecommerceStores.platform,
+        }).from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
+        const policiesText = storeInfo?.policiesSummary ?? '';
 
         const allProducts = await db.select().from(ecommerceProducts)
             .where(and(
@@ -315,6 +341,10 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
 
         const productData = allProducts.map(p => ({
             platformProductId: p.platformProductId,
+            handle: p.handle,
+            productUrl: (p.handle && storeInfo?.storeDomain)
+                ? buildProductUrl(storeInfo.platform, storeInfo.storeDomain, p.handle)
+                : null,
             title: p.title,
             description: p.description,
             productType: p.productType,
@@ -417,6 +447,7 @@ export async function getProducts(storeId: string): Promise<EcommerceProduct[]> 
         id: r.id,
         ecommerceStoreId: r.ecommerceStoreId,
         platformProductId: r.platformProductId,
+        handle: r.handle,
         title: r.title,
         description: r.description,
         productType: r.productType,
@@ -428,6 +459,7 @@ export async function getProducts(storeId: string): Promise<EcommerceProduct[]> 
         hasVariants: r.hasVariants || false,
         variantSummary: r.variantSummary,
         tags: r.tags,
+        imageUrl: r.imageUrl,
     }));
 }
 
@@ -584,6 +616,7 @@ export async function replaceProductsAndRebuildSummary(
     storeId: string,
     products: Array<{
         platformProductId: string;
+        handle?: string | null;
         title: string;
         description?: string | null;
         productType?: string | null;
@@ -595,6 +628,7 @@ export async function replaceProductsAndRebuildSummary(
         hasVariants: boolean;
         variantSummary?: string | null;
         tags?: string | null;
+        imageUrl?: string | null;
     }>,
 ): Promise<{ synced: number }> {
     // Atomic replacement: delete old + insert new
@@ -604,6 +638,7 @@ export async function replaceProductsAndRebuildSummary(
         const rows = products.map(p => ({
             ecommerceStoreId: storeId,
             platformProductId: p.platformProductId,
+            handle: p.handle || null,
             title: p.title,
             description: p.description || null,
             productType: p.productType || null,
@@ -615,6 +650,7 @@ export async function replaceProductsAndRebuildSummary(
             hasVariants: p.hasVariants,
             variantSummary: p.variantSummary || null,
             tags: p.tags || null,
+            imageUrl: p.imageUrl || null,
         }));
 
         await db.insert(ecommerceProducts).values(rows);

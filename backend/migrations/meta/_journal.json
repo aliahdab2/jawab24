@@ -295,6 +295,13 @@
       "when": 1772309962907,
       "tag": "0041_loose_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1772313471124,
+      "tag": "0042_wakeful_prima",
+      "breakpoints": true
     }
   ]
 }

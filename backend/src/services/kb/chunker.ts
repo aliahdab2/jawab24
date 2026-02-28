@@ -13,6 +13,8 @@ export interface KbChunk {
 
 export interface ProductData {
     platformProductId: string;
+    handle?: string | null;
+    productUrl?: string | null;
     title: string;
     description?: string | null;
     productType?: string | null;
@@ -279,6 +281,7 @@ export function chunkProducts(products: ProductData[]): KbChunk[] {
         else if (p.totalInventory <= 5) lines.push('Availability: low stock');
         else lines.push('Availability: in stock');
         if (p.tags) lines.push(`Tags: ${p.tags}`);
+        if (p.productUrl) lines.push(`URL: ${p.productUrl}`);
 
         const content = lines.join('\n');
         const textParts = splitLongText(content, MAX_CHUNK_TOKENS);

@@ -659,13 +659,14 @@ const DEMO_SHOPIFY_STORE = {
     storeTimezone: 'Asia/Riyadh',
     platformData: { planName: 'basic' },
     productCount: 5,
-    productSummary: `📱 منتجات متجر الإلكترونيات:\n\n1. iPhone 15 Pro - 3,800 ريال\n2. Samsung Galaxy S24 - 2,900 ريال\n3. MacBook Air M3 - 5,200 ريال\n4. AirPods Pro - 850 ريال\n5. كفر حماية iPhone 15 - 120 ريال\n\n🚚 توصيل مجاني فوق 500 ريال | ✅ ضمان سنة`,
+    productSummary: `Store: https://demo-electronics.myshopify.com\nTop Products:\niPhone 15 Pro — 3,800 - 4,500 SAR — 128GB، 256GB، 512GB — أسود، أبيض، تيتانيوم — in stock — https://demo-electronics.myshopify.com/products/iphone-15-pro\nSamsung Galaxy S24 — 2,900 - 3,400 SAR — 256GB، 512GB — أسود، فضي — in stock — https://demo-electronics.myshopify.com/products/samsung-galaxy-s24\nMacBook Air M3 — 5,200 - 6,500 SAR — 13 بوصة، 15 بوصة — فضي، رمادي — low stock — https://demo-electronics.myshopify.com/products/macbook-air-m3\nAirPods Pro (الجيل الثاني) — 850 SAR — in stock — https://demo-electronics.myshopify.com/products/airpods-pro-2\nكفر حماية iPhone 15 — 120 - 180 SAR — أسود، أبيض، أزرق، أحمر، شفاف — in stock — https://demo-electronics.myshopify.com/products/iphone-15-case`,
     policiesSummary: `ضمان: سنة كاملة على جميع المنتجات\nإرجاع: 14 يوم\nتوصيل: 2-3 أيام عمل داخل الرياض، مجاني للطلبات فوق 500 ريال\nدفع: بطاقة، تحويل، الدفع عند الاستلام`,
 };
 
 const DEMO_SHOPIFY_PRODUCTS = [
     {
         platformProductId: 'demo_prod_1',
+        handle: 'iphone-15-pro',
         title: 'iPhone 15 Pro',
         description: 'شريحة A17 Pro مع أداء فائق، كاميرا رئيسية 48 ميجابكسل مع زوم بصري 5x، إطار من التيتانيوم خفيف ومتين، شاشة Super Retina XDR مقاس 6.1 بوصة مع ProMotion، منفذ USB-C، عمر بطارية يدوم طوال اليوم، مقاوم للماء IP68',
         productType: 'Smartphones',
@@ -679,6 +680,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     },
     {
         platformProductId: 'demo_prod_2',
+        handle: 'samsung-galaxy-s24',
         title: 'Samsung Galaxy S24',
         description: 'معالج Snapdragon 8 Gen 3، كاميرا 200 ميجابكسل مع ذكاء اصطناعي، شاشة Dynamic AMOLED 2X مقاس 6.2 بوصة بسطوع 2600 nit، بطارية 4000mAh مع شحن سريع 25W، مقاوم للماء IP68، يدعم Galaxy AI للترجمة الفورية وتحرير الصور',
         productType: 'Smartphones',
@@ -692,6 +694,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     },
     {
         platformProductId: 'demo_prod_3',
+        handle: 'macbook-air-m3',
         title: 'MacBook Air M3',
         description: 'شريحة Apple M3 مع وحدة معالجة رسومات 10 أنوية، ذاكرة موحدة 8GB أو 16GB، شاشة Liquid Retina بسطوع 500 nit، بطارية تدوم حتى 18 ساعة، كاميرا FaceTime HD بدقة 1080p، نظام صوت بأربع سماعات مع Spatial Audio، وزن خفيف 1.24 كجم فقط',
         productType: 'Laptops',
@@ -705,6 +708,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     },
     {
         platformProductId: 'demo_prod_4',
+        handle: 'airpods-pro-2',
         title: 'AirPods Pro (الجيل الثاني)',
         description: 'سماعات لاسلكية بتقنية إلغاء الضوضاء النشط (ANC) مع وضع الشفافية، صوت مكاني مخصص مع تتبع حركة الرأس، مقاومة للماء والعرق IPX4، بطارية تدوم حتى 6 ساعات للسماعات و30 ساعة مع العلبة، شريحة H2 من Apple، يدعم الشحن عبر USB-C وMagSafe',
         productType: 'Accessories',
@@ -718,6 +722,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     },
     {
         platformProductId: 'demo_prod_5',
+        handle: 'iphone-15-case',
         title: 'كفر حماية iPhone 15',
         description: 'كفر حماية متين مصنوع من السيليكون الناعم مع إطار صلب مقاوم للصدمات، يحمي من السقوط حتى 2 متر، تصميم رفيع لا يضيف حجم كبير، فتحات دقيقة للأزرار والكاميرا، يدعم الشحن اللاسلكي MagSafe',
         productType: 'Accessories',
