@@ -36,6 +36,8 @@ export interface SemanticCacheSaveParams {
     intent: string;
     replyText: string;
     kbActiveVersion: number;
+    channel?: string;
+    replyStyle?: string;
     metadata?: { confidence?: string; flags?: string[]; intent?: string };
 }
 
@@ -48,6 +50,7 @@ export interface SemanticCacheSaveParams {
  * - intent (PRICE queries don't match HOURS queries even if words overlap)
  * - kbActiveVersion (stale entries auto-invalidate when KB is re-ingested)
  * - promptVersion (stale entries auto-invalidate when prompt is updated)
+ * - channel + replyStyle (stored in metadata JSONB, filtered application-side)
  * - 7-day TTL (eventual expiration)
  */
 export class SemanticCacheService {
@@ -66,11 +69,14 @@ export class SemanticCacheService {
         queryEmbedding: number[],
         intent: string,
         kbActiveVersion: number,
+        channel?: string,
+        replyStyle?: string,
     ): Promise<SemanticCacheHit | null> {
         try {
             const vectorStr = `[${queryEmbedding.join(',')}]`;
             const threshold = INTENT_THRESHOLDS[intent] ?? DEFAULT_SIMILARITY_THRESHOLD;
 
+            // Fetch top 5 candidates — application-level filtering by channel/replyStyle below
             const results = await db.execute(sql`
                 SELECT
                     id,
@@ -86,7 +92,7 @@ export class SemanticCacheService {
                   AND created_at > NOW() - INTERVAL '7 days'
                   AND 1 - (query_embedding <=> ${vectorStr}::vector) >= ${threshold}
                 ORDER BY 1 - (query_embedding <=> ${vectorStr}::vector) DESC
-                LIMIT 1
+                LIMIT 5
             `);
 
             const rows = results as unknown as Array<Record<string, unknown>>;
@@ -95,7 +101,20 @@ export class SemanticCacheService {
                 return null;
             }
 
-            const row = rows[0];
+            // Application-level filter: match channel and replyStyle from metadata
+            const matched = rows.find(row => {
+                const meta = (row.metadata || {}) as Record<string, unknown>;
+                if (channel && meta.channel && meta.channel !== channel) return false;
+                if (replyStyle && meta.replyStyle && meta.replyStyle !== replyStyle) return false;
+                return true;
+            });
+
+            if (!matched) {
+                this.logger.debug('[SemanticCache] miss (channel/style mismatch)', { pageId, intent, channel, replyStyle });
+                return null;
+            }
+
+            const row = matched;
             const similarity = Number(row.similarity);
             const meta = (row.metadata || {}) as { confidence?: string; flags?: string[]; intent?: string };
 
@@ -131,6 +150,11 @@ export class SemanticCacheService {
     async save(params: SemanticCacheSaveParams): Promise<void> {
         try {
             const vectorStr = `[${params.queryEmbedding.join(',')}]`;
+            const metadata = {
+                ...(params.metadata || {}),
+                ...(params.channel ? { channel: params.channel } : {}),
+                ...(params.replyStyle ? { replyStyle: params.replyStyle } : {}),
+            };
 
             await db.execute(sql`
                 INSERT INTO semantic_cache (
@@ -142,7 +166,7 @@ export class SemanticCacheService {
                     ${vectorStr}::vector,
                     ${params.intent},
                     ${params.replyText},
-                    ${JSON.stringify(params.metadata || {})}::jsonb,
+                    ${JSON.stringify(metadata)}::jsonb,
                     ${params.kbActiveVersion},
                     ${PROMPT_VERSION}
                 )

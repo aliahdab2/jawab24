@@ -23,12 +23,14 @@ import { getStoreContextForAI } from '../ecommerce';
  *  2. Check platform auto-reply
  *  3. Fetch sender name (best-effort)
  *  4. Store incoming message
- *  5. Debounce check
+ *  5. Debounce check (fast-path: skipped when replyDelay > 0)
  *  6. Handoff pause check
  *  7. Rate limit check
  *  8. User settings check + away message
  *  9. Skip if already replied/flagged
- * 10. Reply delay
+ *  9b. Greeting gate (first conversation only — early return)
+ * 10. Reply delay (doubles as consolidation window)
+ * 10b. Post-delay debounce re-check
  * 11. Consolidate unreplied messages
  * 12. Generate reply
  * 12b. Replace with safe fallback for price_not_in_kb
@@ -107,18 +109,27 @@ export class MessageProcessor {
             );
             lap('4-storeMessage');
 
-            // 5. Debounce: skip if a newer unreplied message exists from the same sender
+            // Load settings early — needed for debounce gating and downstream checks
+            const userSettings = await workspaceSettingsService.getSettings(workspaceId);
+
+            // 5. Debounce: skip if a newer unreplied message exists from the same sender.
+            //    When replyDelay > 0, skip this early check — the delay acts as a
+            //    consolidation window, and we re-check after the delay (step 10b).
             const internalMessageId = adapter.getInternalMessageId(platformMessageId);
-            const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, internalMessageId);
-            lap('5-debounce');
-            if (hasNewer) {
-                pipelineMetrics.record(pipeline, 'debounce_skipped');
-                this.logger.info(`[${platform}] Skipping — newer message pending`, { messageId: platformMessageId, senderId });
-                return { success: false, messageId: platformMessageId, error: 'Skipped: newer message pending' };
+            const replyDelay = await workspaceSettingsService.getReplyDelay(workspaceId);
+            if (replyDelay === 0) {
+                const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, internalMessageId);
+                lap('5-debounce');
+                if (hasNewer) {
+                    pipelineMetrics.record(pipeline, 'debounce_skipped');
+                    this.logger.info(`[${platform}] Skipping — newer message pending`, { messageId: platformMessageId, senderId });
+                    return { success: false, messageId: platformMessageId, error: 'Skipped: newer message pending' };
+                }
+            } else {
+                lap('5-debounce(skipped,delay>0)');
             }
 
             // 6. Handoff pause check
-            const userSettings = await workspaceSettingsService.getSettings(workspaceId);
             const pauseMinutes = userSettings.handoffPauseDurationMinutes;
             const isPaused = await messagesService.isPaused(page.id, senderId, pauseMinutes);
             lap('6-isPaused');
@@ -165,30 +176,42 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Message already replied' };
             }
 
-            // 9b. Send Greeting Message (if new conversation)
-            if (isNew) {
+            // 9b. Send Greeting Message (first message in conversation only)
+            if (isNew && await messagesService.isFirstIncomingMessage(page.id, senderId)) {
                 const detectedLang = detectLanguageCode(messageText);
                 const greeting = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
                 if (greeting) {
                     try {
                         await adapter.sendReply(page, senderId, greeting);
-                        // We store this as an outgoing message but don't mark the incoming message as replied
-                        // because we want the AI to still process the user's actual question/intent.
                         await messagesService.storeOutgoingMessage(page.id, senderId, greeting, 'template');
+                        await messagesService.markAsReplied(storedMessage.id, greeting, 'template');
                         this.logger.info(`[${platform}] Sent greeting message`, { senderId });
+                        pipelineMetrics.record(pipeline, 'greeting_sent');
+                        return { success: true, messageId: platformMessageId, replyText: greeting, replyMethod: 'template' as const };
                     } catch (error) {
-                        this.logger.error(`[${platform}] Failed to send greeting message`, { error: String(error) });
-                        // Continue to AI reply even if greeting fails
+                        this.logger.error(`[${platform}] Failed to send greeting message — falling back to AI`, { error: String(error) });
+                        // Continue to AI reply as fallback
                     }
                 }
             }
 
-            // 10. Reply delay
-            const replyDelay = await workspaceSettingsService.getReplyDelay(workspaceId);
+            // 10. Reply delay (doubles as consolidation window when > 0)
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }
             lap('10-replyDelay');
+
+            // 10b. Post-delay debounce re-check: after waiting, a newer message
+            //      may have arrived. Let the newer job handle the consolidated reply.
+            if (replyDelay > 0) {
+                const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, internalMessageId);
+                lap('10b-postDelayDebounce');
+                if (hasNewer) {
+                    pipelineMetrics.record(pipeline, 'debounce_skipped');
+                    this.logger.info(`[${platform}] Skipping after delay — newer message pending`, { messageId: platformMessageId, senderId });
+                    return { success: false, messageId: platformMessageId, error: 'Skipped: newer message pending (post-delay)' };
+                }
+            }
 
             // 11. Consolidate all unreplied messages from this sender
             const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
@@ -346,6 +369,24 @@ export class MessageProcessor {
 
             pipelineMetrics.record(pipeline, 'success');
             lap('DONE');
+
+            // 18. Structured per-reply log — single line with all reply metadata
+            this.logger.info(`[${platform}] reply_sent`, {
+                event: 'reply_sent',
+                pipeline,
+                platform,
+                pageId: page.id,
+                senderId,
+                replyMethod,
+                aiIntent,
+                confidence,
+                flagReason: flagReason || null,
+                needsAttention,
+                replyLength: replyText.length,
+                consolidatedCount: unrepliedMessages.length,
+                durationMs: Date.now() - t0,
+            });
+
             return { success: true, messageId: platformMessageId, replyText, replyMethod };
 
         } catch (error) {

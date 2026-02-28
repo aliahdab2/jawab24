@@ -202,6 +202,23 @@ export class MessagesService {
     }
 
     /**
+     * Check if this is the first incoming message from a sender to a page.
+     * Used to gate greeting messages so they only fire on the first conversation,
+     * not on every new message.
+     */
+    async isFirstIncomingMessage(pageId: string, senderId: string): Promise<boolean> {
+        const count = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(messages)
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+            ));
+        return Number(count[0]?.count || 0) <= 1;
+    }
+
+    /**
      * Mark message as replied
      */
     async markAsReplied(

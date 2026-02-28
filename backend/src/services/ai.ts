@@ -279,7 +279,10 @@ export class AiService {
                     semanticCacheService.setLogger(this.logger);
                     const semanticHit = await Sentry.startSpan(
                         { name: 'ai.cache.semantic', op: 'cache.get' },
-                        () => semanticCacheService.check(pageId, queryEmbedding as number[], detectedPreGptIntent ?? '', kbActiveVersion),
+                        () => semanticCacheService.check(
+                            pageId, queryEmbedding as number[], detectedPreGptIntent ?? '', kbActiveVersion,
+                            request.context?.channel, request.context?.replyStyle,
+                        ),
                     );
 
                     if (semanticHit) {
@@ -356,6 +359,8 @@ export class AiService {
                     intent: detectedPreGptIntent,
                     replyText: aiReply,
                     kbActiveVersion,
+                    channel: request.context?.channel,
+                    replyStyle: request.context?.replyStyle,
                     metadata: { confidence: response.data.confidence, flags: response.data.flags, intent: response.data.intent },
                 }).catch(err => {
                     this.logger.error('Semantic cache save failed', {

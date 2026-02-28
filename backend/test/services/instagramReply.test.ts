@@ -95,6 +95,7 @@ vi.mock('../../src/services/messages', () => ({
         isPaused: vi.fn(),
         getRemainingPauseMs: vi.fn().mockResolvedValue(60000),
         hasNewerUnrepliedMessage: vi.fn(),
+        isFirstIncomingMessage: vi.fn(),
         storeOutgoingMessage: vi.fn(),
         getUnrepliedFromSender: vi.fn(),
         markOlderMessagesAsReplied: vi.fn(),
@@ -251,6 +252,7 @@ describe('InstagramReplyService', () => {
         vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue(null);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([{ id: 'msg-uuid', message: 'hello' }]);
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);

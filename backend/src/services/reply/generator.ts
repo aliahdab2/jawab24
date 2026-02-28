@@ -252,9 +252,10 @@ export class ReplyGenerator {
                 // Only enrich if current query is short/vague (likely a follow-up)
                 const isVague = query.trim().split(/\s+/).length <= 6;
                 if (isVague) {
-                    // Take first 100 chars of last assistant reply as context
+                    // Take first 100 chars of last assistant reply as context.
+                    // Cap total length to 300 to keep embedding cost + quality sane.
                     const context = lastAssistant.content.slice(0, 100);
-                    enrichedQuery = `${context} ${query}`;
+                    enrichedQuery = `${context} ${query}`.slice(0, 300);
                     this.logger.debug('[Generator] Enriched RAG query with conversation context', {
                         original: query, enriched: enrichedQuery.slice(0, 120),
                     });

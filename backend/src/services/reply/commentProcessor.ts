@@ -307,6 +307,22 @@ export class CommentProcessor {
             }
 
             pipelineMetrics.record(pipeline, 'success');
+
+            // Structured per-reply log — single line with all reply metadata
+            this.logger.info(`[${platform}] reply_sent`, {
+                event: 'reply_sent',
+                pipeline,
+                platform,
+                pageId: page.id,
+                commentId: comment.id,
+                replyMethod,
+                aiIntent,
+                confidence,
+                flagReason: flagReason || null,
+                needsAttention,
+                replyLength: replyText.length,
+            });
+
             return { success: true, commentId: comment.id, replyText, replyMethod };
 
         } catch (error) {

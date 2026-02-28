@@ -129,26 +129,29 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║  │  ✓ Rate limit OK? (10 msgs/min)        │                            ║
 ║  │  ✓ Handoff pause active? (human agent) │                            ║
 ║  │  ✓ Already replied?                     │                            ║
-║  │  ✓ Debounce (newer msg pending?)       │                            ║
+║  │  ✓ Debounce (fast-path only, skipped   │                            ║
+║  │    when replyDelay > 0)                │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
 ║          ┌────────┴─────────┐                                           ║
-║          │  NEW CONVERSATION?│                                          ║
+║          │ FIRST CONVERSATION│                                          ║
 ║          └────────┬─────────┘                                           ║
 ║             YES   │                                                     ║
 ║                   ▼                                                     ║
 ║  ┌─────────────────────────────────────────┐                            ║
-║  │  STEP 4: GREETING MESSAGE (if set)      │                            ║
+║  │  STEP 4: GREETING GATE (if set)         │                            ║
+║  │  • Only on first DM from sender (ever) │                            ║
 ║  │  • Detect customer language             │                            ║
-║  │  • Send language-matched greeting       │                            ║
-║  │  • DON'T mark as replied (AI still runs)│                            ║
+║  │  • Send greeting, mark replied, RETURN │                            ║
+║  │  • On failure: fall through to AI      │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
 ║                   ▼                                                     ║
 ║  ┌─────────────────────────────────────────┐                            ║
-║  │  STEP 5: REPLY DELAY (if configured)    │                            ║
+║  │  STEP 5: REPLY DELAY (consolidation)   │                            ║
 ║  │  • Wait X seconds (e.g., 2s)            │                            ║
-║  │  • Lets rapid-fire messages consolidate  │                            ║
+║  │  • Post-delay debounce re-check         │                            ║
+║  │  • Acts as message consolidation window │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
 ║                   ▼                                                     ║
@@ -185,6 +188,9 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║  │  • Mark message as replied (DB)         │                            ║
 ║  │  • Store outgoing message               │                            ║
 ║  │  • Notify merchant if flagged           │                            ║
+║  │  • Structured log: reply_sent event     │                            ║
+║  │    (method, intent, confidence, flags,  │                            ║
+║  │     duration, consolidated count)        │                            ║
 ║  └─────────────────────────────────────────┘                            ║
 ║                                                                         ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
@@ -363,13 +369,18 @@ CUSTOMER SENDS MESSAGE/COMMENT
 ├── Already replied to this message?
 │   └── YES → ❌ Skip → STOP
 │
-├── [DM only] Is there a newer unreplied message? (debounce)
+├── [DM only, fast-path] Is there a newer unreplied message? (debounce)
+│   └── Skipped when replyDelay > 0 (delay acts as consolidation window)
 │   └── YES → ❌ Skip (newer job will handle) → STOP
 │
-├── [DM only] Is this a NEW conversation?
-│   └── YES → Send GREETING MESSAGE (don't mark as replied)
+├── [DM only] Is this the FIRST message ever from sender?
+│   └── YES → Send GREETING MESSAGE, mark as replied, RETURN early
+│   └── Greeting send failure → fall through to AI as fallback
 │
-├── [If configured] Wait reply delay (e.g., 2 seconds)
+├── [If configured] Wait reply delay (consolidation window)
+│
+├── [DM only, post-delay] Re-check debounce after delay
+│   └── YES → ❌ Skip (newer job arrived during delay) → STOP
 │
 ├── [DM only] Consolidate unreplied messages from same sender
 │
@@ -630,7 +641,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 
 | Check | What It Does | Action |
 |-------|-------------|--------|
-| **Hallucinated Numbers** | Extracts all numbers from reply, checks if they exist in KB | Adds `info_not_in_kb` flag |
+| **Hallucinated Prices** | Matches numbers adjacent to currency tokens (SAR, SR, ريال, $, etc.) and checks if they exist in KB. Ignores dates, phone numbers, delivery times. | Adds `price_not_in_kb` flag |
 | **Comment Too Long** | Word count > 50 for public comments | Adds `comment_too_long` flag |
 | **Language Mismatch** | Reply language differs from input language | Adds `language_mismatch` flag |
 | **Hedge Words** | Detects "let me check", "سأتحقق", etc. with high/medium confidence | **Downgrades to LOW** + adds `info_not_in_kb` |
@@ -1091,6 +1102,10 @@ Customer question arrives
 │    • intent category                 │
 │    • kbActiveVersion                 │
 │    • promptVersion                   │
+│    • channel (comment/dm) *          │
+│    • replyStyle *                    │
+│    (* stored in metadata JSONB,      │
+│       filtered application-side)     │
 │                                      │
 │  Thresholds (per intent):            │
 │    GREETING: 0.88 (low bar)          │
@@ -1233,10 +1248,10 @@ Failing → OPEN (all requests get fallback)
 
 ## English
 
-### Scenario 1: Rapid-Fire Messages (Debouncing)
+### Scenario 1: Rapid-Fire Messages (Debounce + Consolidation)
 
 ```
-Customer sends 3 messages quickly:
+Customer sends 3 messages quickly (replyDelay=0, fast-path debounce):
   t=0ms:   "hi"
   t=200ms: "How much for blue shirt?"
   t=400ms: "Do you have XL?"
@@ -1245,6 +1260,16 @@ RESULT:
   "hi"         → Processed → Reply: "Hi! 👋"
   "blue shirt?" → DEBOUNCED (newer msg exists) → SKIPPED
   "Do you have XL?" → Processed → Reply: "Yes, XL available!"
+
+With replyDelay=3s (consolidation window):
+  t=0ms:   "hi"           → Stored, skip debounce, wait 3s...
+  t=200ms: "blue shirt?"  → Stored, skip debounce, wait 3s...
+  t=400ms: "Do you have XL?" → Stored, skip debounce, wait 3s...
+
+  t=3400ms: "Do you have XL?" job wakes → post-delay debounce: no newer →
+            consolidates all 3 → AI reply: "Hi! XL blue shirt is $50, yes available!"
+  t=3200ms: "blue shirt?" job wakes → post-delay debounce: newer exists → SKIPPED
+  t=3000ms: "hi" job wakes → post-delay debounce: newer exists → SKIPPED
 ```
 
 ### Scenario 2: Human Agent Takes Over
@@ -1286,6 +1311,7 @@ RAG QUERY ENRICHMENT (v14):
   Original query: "عطيني تفاصيل أكثر" (≤6 words = vague)
   Last assistant reply: "لدينا iPhone 15 Pro بـ 3,800 ريال..."
   Enriched query: "لدينا iPhone 15 Pro بـ 3,800 ريال... عطيني تفاصيل أكثر"
+  (capped at 300 chars for embedding cost/quality)
   → RAG finds iPhone 15 Pro chunk (not random product!)
 
 AI MUST: Talk about iPhone (from previous exchange)
@@ -1322,10 +1348,11 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 ## عربي
 
-### السيناريو 1: رسائل متتالية سريعة
+### السيناريو 1: رسائل متتالية سريعة (إزالة الازدواجية + التجميع)
 - العميل يرسل 3 رسائل بسرعة
-- الرسالة الثانية تُتخطى (إزالة الازدواجية)
-- فقط الرسائل 1 و 3 تحصل على ردود
+- **بدون تأخير رد** (replyDelay=0): مسار سريع — الرسالة الثانية تُتخطى، فقط 1 و 3 تحصل على ردود
+- **مع تأخير رد** (replyDelay=3s): نافذة تجميع — جميع الرسائل تنتظر، ثم تُجمع في رد واحد شامل
+- إعادة فحص الازدواجية بعد التأخير تمنع الردود المكررة
 
 ### السيناريو 2: الوكيل البشري يتولى
 - عند الرد اليدوي → توقف تلقائي 15 دقيقة
@@ -1340,6 +1367,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 - "عطيني تفاصيل" بعد الحديث عن منتج → AI يتحدث عن نفس المنتج
 - لا يسأل "أي منتج تقصد؟"
 - **آلية إثراء الاستعلام**: إذا كان سؤال العميل غامضاً (≤6 كلمات)، يُضاف أول 100 حرف من آخر رد AI إلى استعلام RAG
+- **حد أقصى**: 300 حرف للاستعلام المُثرى (للحفاظ على جودة وتكلفة التضمين)
 - مثال: "شو مميزاتها؟" → يُصبح "لدينا iPhone 15 Pro بـ 3,800 ريال... شو مميزاتها؟"
 - هذا يضمن أن RAG يجد الأجزاء المتعلقة بالمنتج الصحيح بدلاً من منتج عشوائي
 

@@ -821,7 +821,7 @@ describe('AI Service - Semantic Cache Integration', () => {
         // But should still check semantic cache
         expect(mockSemCache.check).toHaveBeenCalledTimes(1);
         // The embedding passed to check should be the pre-computed one
-        expect(mockSemCache.check).toHaveBeenCalledWith('page-1', preComputed, expect.any(String), 1);
+        expect(mockSemCache.check).toHaveBeenCalledWith('page-1', preComputed, expect.any(String), 1, undefined, undefined);
     });
 
     it('should save to semantic cache with pre-GPT intent after AI call', async () => {

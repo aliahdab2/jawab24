@@ -621,16 +621,25 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
         const flags = [...(parsed.flags || [])];
         const reply = parsed.reply || '';
 
-        // Check 1: Hallucinated numbers — reply contains numbers not in KB
+        // Check 1: Hallucinated prices — reply contains price-like numbers
+        //   (adjacent to currency tokens) not found in KB.
+        //   Only flags price hallucinations; ignores dates, phone numbers, quantities.
         if (reply && parsed.intent === 'QUESTION') {
             const kbText = this.getKBText(request);
             if (kbText) {
-                const replyNumbers = reply.match(/\d+(?:[,.\u066B]\d+)*/g) || [];
-                const kbNumbers = new Set(kbText.match(/\d+(?:[,.\u066B]\d+)*/g) || []);
-                const hasHallucinatedNumber = replyNumbers.length > 0 &&
-                    replyNumbers.some(n => !kbNumbers.has(n));
-                if (hasHallucinatedNumber && !flags.includes('info_not_in_kb')) {
-                    flags.push('info_not_in_kb');
+                // Match numbers next to currency symbols/words (SAR, SR, ريال, ر.س, $, AED, etc.)
+                const pricePattern = /(?:SAR|SR|ريال|ر\.س|رس|\$|AED|USD|EUR|KWD|BHD|OMR|QAR|JOD)\s*\d+(?:[,.\u066B]\d+)*|\d+(?:[,.\u066B]\d+)*\s*(?:SAR|SR|ريال|ر\.س|رس|\$|AED|USD|EUR|KWD|BHD|OMR|QAR|JOD)/gi;
+                const replyPrices = reply.match(pricePattern) || [];
+                if (replyPrices.length > 0) {
+                    // Extract just the numeric parts from matched prices
+                    const replyNums = replyPrices.map(p => p.replace(/[^\d,.\u066B]/g, '').replace(/^[,.]|[,.]$/g, ''));
+                    const kbNums = new Set(
+                        (kbText.match(/\d+(?:[,.\u066B]\d+)*/g) || [])
+                    );
+                    const hasHallucinatedPrice = replyNums.some(n => n && !kbNums.has(n));
+                    if (hasHallucinatedPrice && !flags.includes('price_not_in_kb')) {
+                        flags.push('price_not_in_kb');
+                    }
                 }
             }
         }
