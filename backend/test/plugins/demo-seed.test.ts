@@ -73,8 +73,9 @@ describe('seedDemoData', () => {
 
         await seedDemoData('user-123');
 
-        // 3 page name refreshes + 1 Shopify page link update + 4 template upserts + 3 kbActiveVersion bumps from ingestFullPage
-        expect(db.update).toHaveBeenCalledTimes(11);
+        // 3 page name refreshes + 1 Shopify page link update + 4 template upserts
+        // (kbActiveVersion activation is now handled inside ingestFullPage, not by invalidateCachesForStore)
+        expect(db.update).toHaveBeenCalledTimes(8);
     });
 
     it('should create pages when no demo data exists', async () => {
