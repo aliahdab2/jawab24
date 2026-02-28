@@ -34,6 +34,7 @@ export interface CommentReplyContext {
     postMessage?: string;
     pageId: string;
     accessToken?: string;
+    storePolicies?: string;
 }
 
 export interface SendCommentResult {
