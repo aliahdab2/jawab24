@@ -1,3 +1,17 @@
+/**
+ * Global Zustand stores for authentication and UI state.
+ *
+ * - **useAuthStore** — user session, tokens, workspace selection.
+ *   Persisted via Capacitor Preferences (native) or localStorage (web).
+ *   On web, tokens are NOT persisted (session relies on HttpOnly cookies).
+ * - **useUIStore** — sidebar toggle, language preference, onboarding visibility.
+ *   Only the `language` field is persisted across sessions.
+ *
+ * Both stores expose a `_hasHydrated` flag that flips to `true` once
+ * async rehydration finishes — the app renders a skeleton until then.
+ *
+ * @module store
+ */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import * as Sentry from '@sentry/nextjs';

@@ -1,3 +1,17 @@
+/**
+ * Hook that fetches and exposes the application version.
+ *
+ * Priority: `NEXT_PUBLIC_APP_VERSION` env var (semantic version set at build)
+ * → backend `/version` endpoint (git commit hash) → `"unknown"` fallback.
+ *
+ * @returns `{ displayVersion, environment, versionInfo, loading }`
+ *
+ * @example
+ * ```tsx
+ * const { displayVersion } = useVersion();
+ * <span>v{displayVersion}</span>
+ * ```
+ */
 import { useState, useEffect } from 'react';
 
 export interface VersionInfo {

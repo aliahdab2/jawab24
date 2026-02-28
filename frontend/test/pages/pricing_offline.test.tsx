@@ -1,5 +1,5 @@
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import PricingPage from '@/pages/pricing';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
@@ -47,11 +47,14 @@ describe('PricingPage Offline Mode', () => {
         vi.clearAllMocks();
     });
 
-    it('should render fallback plans passed via getStaticProps', () => {
+    it('should render fallback plans passed via getStaticProps', async () => {
         // With ISR, getStaticProps passes fallback plans when API is unreachable.
         // The component renders whatever plans it receives as props.
         render(<PricingPage plans={FALLBACK_PLANS} />);
 
-        expect(screen.getAllByText(/Starter/i).length).toBeGreaterThan(0);
+        // Wait for async effects (geo check, usage fetch) to settle
+        await waitFor(() => {
+            expect(screen.getAllByText(/Starter/i).length).toBeGreaterThan(0);
+        });
     });
 });

@@ -1,3 +1,15 @@
+/**
+ * Google Font definitions loaded via `next/font/google`.
+ *
+ * Each export exposes a CSS `variable` for use in Tailwind (`font-sans`, `font-display`, etc.):
+ * - `dmSans`        — Body text (English), `--font-dm-sans`
+ * - `cairo`         — Body text (Arabic), `--font-cairo`
+ * - `tajawal`       — Alternate Arabic, `--font-tajawal`
+ * - `outfit`        — Headings / display, `--font-outfit`
+ * - `jetbrainsMono` — Code / monospace, `--font-jetbrains-mono`
+ *
+ * All fonts use `display: 'swap'` for fast rendering without FOIT.
+ */
 import { DM_Sans, Cairo, Tajawal, Outfit, JetBrains_Mono } from 'next/font/google';
 
 // English font
