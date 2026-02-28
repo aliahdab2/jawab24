@@ -374,6 +374,19 @@ export async function getStorePolicies(ecommerceStoreId: string): Promise<string
     return store.policiesSummary || undefined;
 }
 
+/** Fetch store policies + product catalog summary in a single DB call for AI context. */
+export async function getStoreContextForAI(ecommerceStoreId: string): Promise<{
+    storePolicies?: string;
+    productCatalog?: string;
+}> {
+    const store = await getStoreById(ecommerceStoreId);
+    if (!store || !store.isActive) return {};
+    return {
+        storePolicies: store.policiesSummary || undefined,
+        productCatalog: store.productSummary || undefined,
+    };
+}
+
 // --- KB Enrichment ---
 
 /**

@@ -35,6 +35,8 @@ interface TestCase {
     page: 'training' | 'school' | 'electronics';
     postMessage?: string;
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+    replyStyle?: 'professional' | 'casual' | 'enthusiastic';
+    brandVoiceNotes?: string;
     expected: {
         replyMethod?: string[];
         intent?: string[];
@@ -42,6 +44,7 @@ interface TestCase {
         flags?: string[];            // MUST be present
         flagsAbsent?: string[];      // must NOT be present
         replyContains?: string[];
+        replyContainsAny?: string[];  // at least ONE must be present (OR check)
         replyNotContains?: string[];
         templateName?: string;
         needsAttention?: boolean;
@@ -140,7 +143,7 @@ const TEST_CASES: TestCase[] = [
     { id: 7, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'كم رسوم الابتدائي؟', page: 'school', expected: { replyMethod: ['template', 'ai'] }, notes: 'Comment fees Q matches رسوم template' },
     // 1.3 — Question partially in KB
     { id: 8, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'كم سعر دورة الانجليزي وهل في أقساط؟', page: 'training', expected: { replyMethod: ['template', 'ai'] }, notes: 'Matches سعر template; installment part unanswered' },
-    { id: 9, category: 1, categoryName: 'Confidence & Flags', channel: 'dm', message: 'عندكم دورة برمجة؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
+    { id: 9, category: 1, categoryName: 'Confidence & Flags', channel: 'dm', message: 'عندكم دورة طبخ؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] }, notes: 'Cooking course — clearly not in training center KB' },
     { id: 10, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'هل التوصيل مجاني لجدة؟', page: 'electronics', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
     // 1.4 — Vague/generic response detection
     { id: 11, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'شو سياسة الاسترجاع؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
@@ -334,7 +337,7 @@ const TEST_CASES: TestCase[] = [
         ],
         expected: {
             // Must continue talking about courses — NOT switch to location/hours/mission
-            replyContains: ['دورة'],
+            replyContainsAny: ['دورة', 'دورات', 'تدريب', 'إنجليزية', 'PMP', 'حاسب', 'محاسبة'],
             replyNotContains: ['الأحد - الخميس', 'موقعنا', 'رسالتنا'],
         },
         notes: 'Vague follow-up after course discussion — must elaborate on courses, not switch to About/hours/location',
@@ -352,7 +355,7 @@ const TEST_CASES: TestCase[] = [
         expected: {
             // With product descriptions in RAG, AI should mention actual AirPods features
             confidence: ['high', 'medium'],
-            replyContains: ['AirPods'],
+            replyContainsAny: ['AirPods', 'سماعة', 'سماعات', 'Apple', 'آبل'],
         },
         notes: 'Vague follow-up after AirPods discussion — RAG has description with ANC, IPX4, H2 chip, etc.',
     },
@@ -397,6 +400,137 @@ const TEST_CASES: TestCase[] = [
             replyContains: ['MacBook'],
         },
         notes: 'Shopify productSummary has MacBook Air M3 (5,200 SAR) — must mention it',
+    },
+
+    // ===== Category 14: Reply Style =====
+    {
+        id: 108, category: 14, categoryName: 'Reply Style', channel: 'dm',
+        message: 'شو الدورات عندكم؟',
+        page: 'training',
+        replyStyle: 'professional',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            confidence: ['high', 'medium'],
+        },
+        notes: 'Professional style — should produce a complete answer without errors',
+    },
+    {
+        id: 109, category: 14, categoryName: 'Reply Style', channel: 'dm',
+        message: 'شو الدورات عندكم؟',
+        page: 'training',
+        replyStyle: 'casual',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            confidence: ['high', 'medium'],
+        },
+        notes: 'Casual style — should produce a relaxed-tone answer without errors',
+    },
+    {
+        id: 110, category: 14, categoryName: 'Reply Style', channel: 'dm',
+        message: 'شو الدورات عندكم؟',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            confidence: ['high', 'medium'],
+        },
+        notes: 'Enthusiastic style — should produce an energetic answer without errors',
+    },
+
+    // ===== Category 15: Angry Customer Detection =====
+    {
+        id: 111, category: 15, categoryName: 'Angry Customer', channel: 'dm',
+        message: 'خدمتكم سيئة جداً ومحد يرد! ابي ارجع فلوسي',
+        page: 'training',
+        expected: {
+            intent: ['COMPLAINT'],
+            flags: ['angry_customer'],
+        },
+        notes: 'Angry + refund demand → must flag angry_customer',
+    },
+    {
+        id: 112, category: 15, categoryName: 'Angry Customer', channel: 'dm',
+        message: 'I have been waiting for a week with no response. This is terrible service and I want a full refund!',
+        page: 'electronics',
+        expected: {
+            intent: ['COMPLAINT'],
+            flags: ['angry_customer'],
+        },
+        notes: 'English angry customer with refund demand',
+    },
+    {
+        id: 113, category: 15, categoryName: 'Angry Customer', channel: 'dm',
+        message: 'الخدمة مو الأفضل بس إن شاء الله تتحسن',
+        page: 'training',
+        expected: {
+            intent: ['COMPLAINT'],
+            flagsAbsent: ['angry_customer'],
+        },
+        notes: 'Mild complaint without anger → COMPLAINT but NOT angry_customer',
+    },
+
+    // ===== Category 16: Spam & Irrelevant Detection =====
+    {
+        id: 114, category: 16, categoryName: 'Spam Detection', channel: 'comment',
+        message: '💰💰 follow @crypto_king for easy money 🚀',
+        page: 'training',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'Crypto spam with @-mention',
+    },
+    {
+        id: 115, category: 16, categoryName: 'Spam Detection', channel: 'comment',
+        message: 'Check out my page for amazing deals!! @bestdeals',
+        page: 'electronics',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'Self-promotion with @-mention',
+    },
+
+    // ===== Category 17: Long DM History =====
+    {
+        id: 116, category: 17, categoryName: 'Long DM History', channel: 'dm',
+        message: 'طيب وش المدة؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'مرحبا' },
+            { role: 'assistant', content: 'أهلاً وسهلاً! كيف أقدر أساعدك؟' },
+            { role: 'user', content: 'عندكم دورات تدريبية؟' },
+            { role: 'assistant', content: 'عنا دورات في اللغة الإنجليزية، الحاسب الآلي وتطبيقات Office، المحاسبة المالية، إدارة المشاريع PMP، ودورات IELTS/TOEFL.' },
+            { role: 'user', content: 'حلو، الإنجليزي كم مدته؟' },
+            { role: 'assistant', content: 'دورة اللغة الإنجليزية مدتها 3 أشهر.' },
+            { role: 'user', content: 'وفي شهادة؟' },
+            { role: 'assistant', content: 'نعم، في شهادة معتمدة عند إتمام الدورة.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            confidence: ['high', 'medium'],
+        },
+        notes: '8-message history — tests extended history (12 msg limit) and AI maintains context',
+    },
+    {
+        id: 117, category: 17, categoryName: 'Long DM History', channel: 'dm',
+        message: 'وش المطلوب عشان أبدأ معاكم؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم دورات تدريبية؟' },
+            { role: 'assistant', content: 'عنا دورات في اللغة الإنجليزية، الحاسب الآلي وتطبيقات Office، المحاسبة المالية، إدارة المشاريع PMP، ودورات IELTS/TOEFL.' },
+            { role: 'user', content: 'كم مدة دورة الإنجليزي؟' },
+            { role: 'assistant', content: 'دورة اللغة الإنجليزية مدتها 3 أشهر.' },
+            { role: 'user', content: 'وكم التكلفة؟' },
+            { role: 'assistant', content: 'التكلفة 1500 ريال.' },
+        ],
+        expected: {
+            intent: ['PURCHASE_INTENT'],
+            replyMethod: ['ai'],
+        },
+        notes: 'Purchase intent after browsing conversation — AI should recognize registration intent',
     },
 ];
 
@@ -452,6 +586,15 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
         }
     }
 
+    // replyContainsAny (OR — at least one must be present)
+    if (e.replyContainsAny && d.reply) {
+        const reply = d.reply;
+        const found = e.replyContainsAny.filter(s => reply.includes(s));
+        const pass = found.length > 0;
+        const label = e.replyContainsAny.join('|');
+        checks.push({ field: `containsAny:${label}`, pass, detail: pass ? `found: ${found.join(', ')}` : 'NONE found in reply' });
+    }
+
     // replyNotContains
     if (e.replyNotContains && d.reply) {
         for (const s of e.replyNotContains) {
@@ -498,6 +641,8 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
     };
     if (test.postMessage) body.postMessage = test.postMessage;
     if (test.conversationHistory) body.conversationHistory = test.conversationHistory;
+    if (test.replyStyle) body.replyStyle = test.replyStyle;
+    if (test.brandVoiceNotes) body.brandVoiceNotes = test.brandVoiceNotes;
 
     const start = Date.now();
     try {

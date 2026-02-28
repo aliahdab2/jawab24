@@ -78,6 +78,7 @@ export interface AiGenerateRequest {
         knowledgeBase?: string;
         retrievedChunks?: RetrievedChunkContext[];
         storePolicies?: string;
+        productCatalog?: string;
         channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
         kbActiveVersion?: number | null;

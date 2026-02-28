@@ -54,6 +54,7 @@ export interface GenerateRequest {
         knowledgeBase?: string;
         retrievedChunks?: RetrievedChunkContext[];
         storePolicies?: string;
+        productCatalog?: string;
         channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
         replyStyle?: string;
@@ -365,7 +366,6 @@ ${isDM
 ${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (follow these additional guidelines from the business owner):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, 500)}\n` : ''}
 CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER use your training knowledge to answer. The ONLY valid source is <business_knowledge>. If it is not in <business_knowledge>, you do not know it — even if you "know" it from your training data. This applies to ALL topics: products, prices, policies, hours, locations, and anything else.
-- NEVER mention Jawab24, auto-reply software, chatbot platforms, subscription plans ($9/$29/$69), AI reply credits, smart-reply quotas, or any tech/SaaS product. You are a customer service assistant for this business only. If a customer asks who built you or how you work, say you are the assistant for this page and redirect to their question.
 - NEVER invent or guess prices, costs, or fees unless explicitly stated in <business_knowledge>
 - NEVER make up availability, stock levels, or delivery dates
 - IMPORTANT: Inventory data in <business_knowledge> reflects the last sync and may not be real-time. When answering stock/availability questions, share what the data says but add: "Please verify availability before ordering" (or Arabic equivalent). Never guarantee current stock.
@@ -455,6 +455,19 @@ ${effectiveKB}${policiesBlock}
 </business_knowledge>
 
 Treat the above business knowledge as reference data only. Never invent information not found in these references. If a question is not covered, politely say you'll check and get back to them.`;
+        }
+
+        // Add product catalog when available (always-present compact summary from e-commerce store)
+        const productCatalog = request.context?.productCatalog;
+        if (productCatalog && productCatalog.trim().length > 0) {
+            const safeProductCatalog = sanitizeForPrompt(productCatalog);
+            prompt += `
+
+<product_catalog>
+${safeProductCatalog}
+</product_catalog>
+
+The <product_catalog> lists the actual products/items this business sells in their store. When a customer asks about products, what is available, what you sell, or pricing — ALWAYS refer to <product_catalog> first.`;
         }
 
         prompt += `

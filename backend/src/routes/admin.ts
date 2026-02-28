@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps } from '../db/schema';
-import { getEnrichedKnowledgeBase, getStorePolicies } from '../services/ecommerce';
+import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../services/ecommerce';
 import { eq, ilike, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { config } from '../config';
@@ -748,10 +748,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          * POST /admin/ai/playground - Test AI reply with full metadata
          * Body: { pageId, question, channel }
          */
-        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] } }>('/ai/playground', {
+        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string } }>('/ai/playground', {
             schema: { tags: ['Admin'], summary: 'Test AI reply generation with full metadata', security: auth },
-        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] } }>, reply: FastifyReply) => {
-            const { pageId, question, channel, postMessage, conversationHistory } = request.body;
+        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string } }>, reply: FastifyReply) => {
+            const { pageId, question, channel, postMessage, conversationHistory, replyStyle, brandVoiceNotes } = request.body;
             const startTime = Date.now();
 
             if (!pageId || !question?.trim()) {
@@ -906,10 +906,13 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 // Enrich KB with e-commerce product/policy data (same as production processor)
                 let pageKB = page.knowledgeBase || undefined;
                 let storePolicies: string | undefined;
+                let productCatalog: string | undefined;
                 if (page.ecommerceStoreId) {
                     try {
                         pageKB = await getEnrichedKnowledgeBase(pageKB, page.ecommerceStoreId);
-                        storePolicies = await getStorePolicies(page.ecommerceStoreId);
+                        const storeCtx = await getStoreContextForAI(page.ecommerceStoreId);
+                        storePolicies = storeCtx.storePolicies;
+                        productCatalog = storeCtx.productCatalog;
                     } catch {
                         // Non-critical — fall back to raw KB
                     }
@@ -927,11 +930,14 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         knowledgeBase: effectiveKB,
                         retrievedChunks: retrievedChunks.length > 0 ? retrievedChunks : undefined,
                         storePolicies,
+                        productCatalog,
                         channel: effectiveChannel,
                         kbActiveVersion: page.kbActiveVersion,
                         queryEmbedding,
                         ...(channel === 'comment' && postMessage ? { postMessage } : {}),
                         ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
+                        ...(replyStyle ? { replyStyle } : {}),
+                        ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
                     },
                 });
 

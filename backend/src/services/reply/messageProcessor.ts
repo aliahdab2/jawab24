@@ -10,7 +10,7 @@ import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
-import { getStorePolicies } from '../ecommerce';
+import { getStoreContextForAI } from '../ecommerce';
 
 /**
  * Unified Message Processor
@@ -206,15 +206,20 @@ export class MessageProcessor {
             // 12. Generate reply (enrich KB with e-commerce data if linked)
             let knowledgeBase = page.knowledgeBase || undefined;
             let storePolicies: string | undefined;
+            let productCatalog: string | undefined;
             for (const integration of integrationRegistry.getEnabled()) {
                 const enriched = await integration.enrichKnowledgeBase(knowledgeBase, page as unknown as Record<string, unknown>);
                 if (enriched !== null) { knowledgeBase = enriched; break; }
             }
 
-            // Fetch store policies separately so they survive RAG mode (RAG drops static KB)
+            // Fetch store policies + product catalog so they survive RAG mode (RAG drops static KB)
             const ecommerceStoreId = (page as unknown as Record<string, unknown>).ecommerceStoreId;
             if (ecommerceStoreId && typeof ecommerceStoreId === 'string') {
-                try { storePolicies = await getStorePolicies(ecommerceStoreId); } catch { /* non-critical */ }
+                try {
+                    const storeCtx = await getStoreContextForAI(ecommerceStoreId);
+                    storePolicies = storeCtx.storePolicies;
+                    productCatalog = storeCtx.productCatalog;
+                } catch { /* non-critical */ }
             }
 
             // Append business profile (hours, location, phone) to KB context
@@ -234,6 +239,7 @@ export class MessageProcessor {
                         pageName: page.name || undefined,
                         knowledgeBase,
                         storePolicies,
+                        productCatalog,
                         kbActiveVersion: page.kbActiveVersion,
                         pageId: page.id,
                         senderId,

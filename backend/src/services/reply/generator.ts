@@ -50,6 +50,7 @@ export interface GenerateReplyContext {
     knowledgeBase?: string;
     kbActiveVersion?: number | null;
     storePolicies?: string;
+    productCatalog?: string;
     // For comments
     postId?: string;
     postMessage?: string;
@@ -154,7 +155,7 @@ export class ReplyGenerator {
 
             const aiResponse = await aiService.generateReply({
                 comment: text,
-                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
+                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
@@ -208,7 +209,7 @@ export class ReplyGenerator {
 
                 const aiResponse = await aiService.generateReply({
                     comment: text,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
                 });
 
                 return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);

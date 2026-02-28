@@ -35,6 +35,7 @@ export interface CommentReplyContext {
     pageId: string;
     accessToken?: string;
     storePolicies?: string;
+    productCatalog?: string;
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
     brandVoiceNotes?: string;
 }
