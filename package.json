@@ -12,7 +12,8 @@
   ],
   "overrides": {
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "serialize-javascript": "^7.0.3"
   },
   "scripts": {
     "build": "npm run build --workspaces",
