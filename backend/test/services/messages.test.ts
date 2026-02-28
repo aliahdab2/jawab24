@@ -859,4 +859,45 @@ describe('MessagesService', () => {
             expect(result.reason).toBeNull();
         });
     });
+
+    // ───────────────────────────────────────────
+    // isFirstIncomingMessage
+    // ───────────────────────────────────────────
+    describe('isFirstIncomingMessage', () => {
+        function mockSelectChain(rows: Record<string, unknown>[]) {
+            const chain = {
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue(rows),
+                    }),
+                }),
+            };
+            vi.mocked(db.select).mockReturnValueOnce(chain as any);
+        }
+
+        it('should return true when no prior incoming messages exist', async () => {
+            mockSelectChain([]);
+            const result = await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
+            expect(result).toBe(true);
+        });
+
+        it('should return true when only 1 incoming message exists (current)', async () => {
+            mockSelectChain([{ id: 'msg-1' }]);
+            const result = await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
+            expect(result).toBe(true);
+        });
+
+        it('should return false when 2+ incoming messages exist', async () => {
+            mockSelectChain([{ id: 'msg-1' }, { id: 'msg-2' }]);
+            const result = await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
+            expect(result).toBe(false);
+        });
+
+        it('should return true when only outgoing messages exist (no incoming)', async () => {
+            // The query filters direction='incoming', so outgoing-only returns empty
+            mockSelectChain([]);
+            const result = await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
+            expect(result).toBe(true);
+        });
+    });
 });

@@ -6,6 +6,7 @@ import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } fr
 import { detectLanguageCode } from '../../utils/language';
 import { integrationRegistry } from '../../integrations';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
+import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
@@ -23,6 +24,7 @@ import { getStoreContextForAI } from '../ecommerce';
  *  2. Check platform auto-reply
  *  3. Fetch sender name (best-effort)
  *  4. Store incoming message
+ *  4b. Acquire distributed lock (Redis SET NX EX 60) — prevents double-replies
  *  5. Debounce check (fast-path: skipped when replyDelay > 0)
  *  6. Handoff pause check
  *  7. Rate limit check
@@ -109,6 +111,17 @@ export class MessageProcessor {
             );
             lap('4-storeMessage');
 
+            // 4b. Acquire distributed lock — prevents two workers from replying to
+            //     the same sender simultaneously (covers greeting race + reply race).
+            const lockToken = await acquireReplyLock(page.id, senderId);
+            if (!lockToken) {
+                pipelineMetrics.record(pipeline, 'lock_contention');
+                this.logger.info(`[${platform}] Lock held — another worker handling`, { senderId, pageId: page.id });
+                return { success: false, messageId: platformMessageId, error: 'Lock held by another worker' };
+            }
+            lap('4b-acquireLock');
+
+            try {
             // Load settings early — needed for debounce gating and downstream checks
             const userSettings = await workspaceSettingsService.getSettings(workspaceId);
 
@@ -388,6 +401,10 @@ export class MessageProcessor {
             });
 
             return { success: true, messageId: platformMessageId, replyText, replyMethod };
+
+            } finally {
+                await releaseReplyLock(page.id, senderId, lockToken).catch(() => { /* TTL will auto-expire */ });
+            }
 
         } catch (error) {
             pipelineMetrics.record(pipeline, 'error');

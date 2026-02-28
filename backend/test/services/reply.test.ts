@@ -44,6 +44,10 @@ vi.mock('../../src/lib/redis', () => ({
     },
 }));
 
+vi.mock('../../src/lib/replyLock', () => ({
+    acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
+    releaseReplyLock: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('axios');
 
 // In-memory pipelineMetrics mock (Redis-backed in production; use counters map in tests)

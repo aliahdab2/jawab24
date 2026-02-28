@@ -621,24 +621,49 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
         const flags = [...(parsed.flags || [])];
         const reply = parsed.reply || '';
 
-        // Check 1: Hallucinated prices — reply contains price-like numbers
-        //   (adjacent to currency tokens) not found in KB.
-        //   Only flags price hallucinations; ignores dates, phone numbers, quantities.
+        // Check 1: Hallucinated prices — two-tier detection.
+        //   Tier A: numbers adjacent to currency tokens (SAR, SR, ريال, $, etc.)
+        //   Tier B: price-cue phrases + nearby number (within 30 chars)
+        //   Both tiers flag price_not_in_kb when the number isn't found in KB.
         if (reply && parsed.intent === 'QUESTION') {
             const kbText = this.getKBText(request);
             if (kbText) {
-                // Match numbers next to currency symbols/words (SAR, SR, ريال, ر.س, $, AED, etc.)
+                const kbNums = new Set((kbText.match(/\d+(?:[,.\u066B]\d+)*/g) || []));
+
+                // Tier A: currency-adjacent numbers
                 const pricePattern = /(?:SAR|SR|ريال|ر\.س|رس|\$|AED|USD|EUR|KWD|BHD|OMR|QAR|JOD)\s*\d+(?:[,.\u066B]\d+)*|\d+(?:[,.\u066B]\d+)*\s*(?:SAR|SR|ريال|ر\.س|رس|\$|AED|USD|EUR|KWD|BHD|OMR|QAR|JOD)/gi;
                 const replyPrices = reply.match(pricePattern) || [];
                 if (replyPrices.length > 0) {
-                    // Extract just the numeric parts from matched prices
                     const replyNums = replyPrices.map(p => p.replace(/[^\d,.\u066B]/g, '').replace(/^[,.]|[,.]$/g, ''));
-                    const kbNums = new Set(
-                        (kbText.match(/\d+(?:[,.\u066B]\d+)*/g) || [])
-                    );
                     const hasHallucinatedPrice = replyNums.some(n => n && !kbNums.has(n));
                     if (hasHallucinatedPrice && !flags.includes('price_not_in_kb')) {
                         flags.push('price_not_in_kb');
+                    }
+                }
+
+                // Tier B: price-cue phrases + nearby number (no currency token required)
+                //   Strip whitelisted patterns first (phones, times, dates, order IDs, %).
+                if (!flags.includes('price_not_in_kb')) {
+                    const sanitized = reply
+                        .replace(/0[5-9]\d{8}/g, '')                                      // SA phone numbers
+                        .replace(/\+?\d{1,3}[-.\s]?\d{3}[-.\s]?\d{3,4}/g, '')             // intl phone
+                        .replace(/\d{1,2}[:/]\d{2}/g, '')                                  // times (9:00, 5:30)
+                        .replace(/\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?/g, '')               // dates
+                        .replace(/#\d+|ORD-?\d+/gi, '')                                    // order IDs
+                        .replace(/\d+%/g, '');                                              // percentages
+
+                    const priceCues = /(?:price|cost|costs|only|starts?\s*at|starting|for just|valued at|سعر|السعر|بسعر|قيمت[هة]|تكلفة|فقط|يبدأ من)/gi;
+                    let cueMatch: RegExpExecArray | null;
+                    while ((cueMatch = priceCues.exec(sanitized)) !== null) {
+                        const window = sanitized.slice(cueMatch.index, cueMatch.index + cueMatch[0].length + 30);
+                        const numberInWindow = window.match(/\d+(?:[,.\u066B]\d+)*/);
+                        if (numberInWindow) {
+                            const num = numberInWindow[0];
+                            if (num && !kbNums.has(num)) {
+                                flags.push('price_not_in_kb');
+                                break;
+                            }
+                        }
                     }
                 }
             }

@@ -22,6 +22,10 @@ const INTENT_THRESHOLDS: Record<string, number> = {
 };
 const DEFAULT_SIMILARITY_THRESHOLD = 0.93;
 
+/** Intents where exact answers matter — skip semantic cache entirely.
+ * Exact cache (hash-based) still applies; only vector similarity is bypassed. */
+const SKIP_SEMANTIC_CACHE_INTENTS = new Set(['PRICE', 'PURCHASE_INTENT']);
+
 export interface SemanticCacheHit {
     reply: string;
     intent: string;
@@ -72,6 +76,11 @@ export class SemanticCacheService {
         channel?: string,
         replyStyle?: string,
     ): Promise<SemanticCacheHit | null> {
+        // Skip semantic cache for price-sensitive intents — exact answers required
+        if (SKIP_SEMANTIC_CACHE_INTENTS.has(intent)) {
+            return null;
+        }
+
         try {
             const vectorStr = `[${queryEmbedding.join(',')}]`;
             const threshold = INTENT_THRESHOLDS[intent] ?? DEFAULT_SIMILARITY_THRESHOLD;

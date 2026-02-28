@@ -288,6 +288,13 @@
       "when": 1772294464009,
       "tag": "0040_flowery_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1772309962907,
+      "tag": "0041_loose_electro",
+      "breakpoints": true
     }
   ]
 }

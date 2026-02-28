@@ -36,6 +36,10 @@ vi.mock('../../src/utils/language', () => ({
 vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn(), set: vi.fn(), quit: vi.fn(), incr: vi.fn(), expire: vi.fn() },
 }));
+vi.mock('../../src/lib/replyLock', () => ({
+    acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
+    releaseReplyLock: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canUseAiReplies: vi.fn().mockResolvedValue({ allowed: true }),

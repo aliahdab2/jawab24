@@ -207,15 +207,18 @@ export class MessagesService {
      * not on every new message.
      */
     async isFirstIncomingMessage(pageId: string, senderId: string): Promise<boolean> {
-        const count = await db
-            .select({ count: sql<number>`count(*)` })
+        // Fetch at most 2 rows — if fewer than 2 exist, this is the first conversation.
+        // Uses the composite idx_messages_sender_inbox index and short-circuits early.
+        const rows = await db
+            .select({ id: messages.id })
             .from(messages)
             .where(and(
                 eq(messages.pageId, pageId),
                 eq(messages.senderId, senderId),
                 eq(messages.direction, 'incoming'),
-            ));
-        return Number(count[0]?.count || 0) <= 1;
+            ))
+            .limit(2);
+        return rows.length <= 1;
     }
 
     /**

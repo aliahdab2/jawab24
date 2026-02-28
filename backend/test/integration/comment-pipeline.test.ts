@@ -106,6 +106,12 @@ vi.mock('../../src/services/notifications', () => ({
     },
 }));
 
+// Reply lock (Redis-backed) — always grant lock
+vi.mock('../../src/lib/replyLock', () => ({
+    acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
+    releaseReplyLock: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

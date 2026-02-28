@@ -35,6 +35,7 @@ export type Outcome =
     | 'skipped_risky'
     | 'held_low_confidence'
     | 'greeting_sent'
+    | 'lock_contention'
     | 'error';
 
 const PREFIX = 'metrics:pipeline:';

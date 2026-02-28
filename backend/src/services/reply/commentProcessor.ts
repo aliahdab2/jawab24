@@ -6,6 +6,7 @@ import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } fr
 import { detectLanguageCode } from '../../utils/language';
 import { integrationRegistry } from '../../integrations';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
+import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
 import type { CommentPlatformAdapter } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
@@ -23,6 +24,7 @@ import { getStoreContextForAI } from '../ecommerce';
  *  2. Check user settings (comments auto-reply)
  *  3. Find or create content (post/media)
  *  4. Store comment + check already replied/flagged
+ *  4b. Acquire distributed lock (per-comment, prevents duplicate webhook replies)
  *  5. Handoff pause check
  *  6. Rate limit check
  *  7. Reply delay
@@ -106,6 +108,15 @@ export class CommentProcessor {
                 return { success: false, commentId: comment.id, error: 'Comment already replied' };
             }
 
+            // 4b. Acquire per-comment lock — prevents duplicate webhook replies
+            const lockToken = await acquireReplyLock(`comment:${page.id}`, platformCommentId);
+            if (!lockToken) {
+                pipelineMetrics.record(pipeline, 'lock_contention');
+                this.logger.info(`[${platform}] Comment lock held — another worker handling`, { platformCommentId });
+                return { success: false, commentId: comment.id, error: 'Lock held by another worker' };
+            }
+
+            try {
             // 5. Handoff pause check
             const userSettings = await workspaceSettingsService.getSettings(workspaceId);
             if (fromId) {
@@ -324,6 +335,10 @@ export class CommentProcessor {
             });
 
             return { success: true, commentId: comment.id, replyText, replyMethod };
+
+            } finally {
+                await releaseReplyLock(`comment:${page.id}`, platformCommentId, lockToken).catch(() => { /* TTL will auto-expire */ });
+            }
 
         } catch (error) {
             pipelineMetrics.record(pipeline, 'error');

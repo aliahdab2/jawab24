@@ -133,6 +133,16 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║  │    when replyDelay > 0)                │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
+║                   ▼                                                     ║
+║  ┌─────────────────────────────────────────┐                            ║
+║  │  STEP 3b: DISTRIBUTED LOCK (Redis)     │                            ║
+║  │  • SET reply_lock:{pageId}:{senderId}  │                            ║
+║  │    EX 60 NX (one-shot acquire)         │                            ║
+║  │  • If held → skip (another worker has  │                            ║
+║  │    it); prevents double-replies         │                            ║
+║  │  • Released in finally (Lua CAS)       │                            ║
+║  └────────────────┬────────────────────────┘                            ║
+║                   │                                                     ║
 ║          ┌────────┴─────────┐                                           ║
 ║          │ FIRST CONVERSATION│                                          ║
 ║          └────────┬─────────┘                                           ║
@@ -176,7 +186,10 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║  ┌─────────────────────────────────────────┐                            ║
 ║  │  STEP 8: SAFETY FILTERS                │                            ║
 ║  │  • Offensive? → Skip reply, flag        │                            ║
-║  │  • Price hallucination? → Safe fallback │                            ║
+║  │  • Price hallucination (2-tier)?        │                            ║
+║  │    Tier A: currency-adjacent number     │                            ║
+║  │    Tier B: price-cue phrase + number    │                            ║
+║  │    → Replace with safe fallback         │                            ║
 ║  │  • Low confidence? → Hold for review    │                            ║
 ║  │  • Comment too long? → Truncate         │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
@@ -256,6 +269,7 @@ Customer message: "كم سعر القميص الأزرق؟"
 │     └─ HIT? → Return cached {reply, intent, confidence, flags} │
 │                                                                 │
 │  4. CHECK SEMANTIC CACHE (Vector similarity)                    │
+│     └─ Skipped for PRICE/PURCHASE_INTENT (exact answers only)  │
 │     └─ Similar question asked before? → Return cached reply     │
 │                                                                 │
 │  5. CALL AI WORKER (HTTP POST /generate)                        │
@@ -300,6 +314,11 @@ Customer message: "كم سعر القميص الأزرق؟"
 - هل تم الرد مسبقاً؟
 - إزالة الازدواجية (هل هناك رسالة أحدث قادمة؟)
 
+**الخطوة 3ب: القفل الموزع (Redis)**
+- اكتساب قفل لكل محادثة (SET NX EX 60)
+- إذا كان محجوزاً → تخطي (عامل آخر يعالج)
+- يُحرر في كتلة finally عبر سكريبت Lua CAS
+
 **الخطوة 4: رسالة الترحيب** (إذا كانت مُعدّة)
 - كشف لغة العميل تلقائياً
 - إرسال ترحيب بنفس اللغة
@@ -329,7 +348,10 @@ Customer message: "كم سعر القميص الأزرق؟"
 
 **الخطوة 8: فلاتر الأمان**
 - محتوى مسيء؟ → تخطي الرد وتعليم للمراجعة
-- هلوسة أسعار؟ → رد آمن بديل
+- هلوسة أسعار (طبقتين)؟
+  - الطبقة أ: رقم مجاور لعملة (SAR/$/ريال)
+  - الطبقة ب: عبارة سعرية + رقم قريب (مثل "سعره 120"، "only 50")
+  - → رد آمن بديل
 - ثقة منخفضة؟ → احتجاز للمراجعة البشرية
 - تعليق طويل جداً؟ → اقتطاع
 
@@ -373,6 +395,10 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   └── Skipped when replyDelay > 0 (delay acts as consolidation window)
 │   └── YES → ❌ Skip (newer job will handle) → STOP
 │
+├── ACQUIRE DISTRIBUTED LOCK (Redis SET NX EX 60)
+│   └── ALREADY HELD → ❌ Skip (another worker handling) → STOP
+│   └── ACQUIRED → Continue (released in finally block via Lua CAS)
+│
 ├── [DM only] Is this the FIRST message ever from sender?
 │   └── YES → Send GREETING MESSAGE, mark as replied, RETURN early
 │   └── Greeting send failure → fall through to AI as fallback
@@ -403,7 +429,7 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   └── Channel type (comment vs DM)
 │
 ├── Check EXACT CACHE → HIT? → Go to Safety Filters
-├── Check SEMANTIC CACHE → HIT? → Go to Safety Filters
+├── Check SEMANTIC CACHE (skipped for PRICE/PURCHASE_INTENT) → HIT? → Go to Safety Filters
 │
 ├── CALL AI WORKER → OpenAI gpt-4.1-mini
 │   └── TIMEOUT/ERROR → Return FALLBACK reply
@@ -413,6 +439,8 @@ CUSTOMER SENDS MESSAGE/COMMENT
 ├── SAFETY FILTERS:
 │   ├── Intent = OFFENSIVE or SPAM? → Flag → ❌ DON'T reply → STOP
 │   ├── Flag = price_not_in_kb? → Replace with SAFE FALLBACK
+│   │   (Tier A: currency-adjacent number not in KB)
+│   │   (Tier B: price-cue phrase + nearby number not in KB)
 │   ├── Confidence = low AND holdLowConfidence? → ❌ DON'T send → STOP
 │   ├── [Comment] Reply > 280 chars? → Truncate
 │   └── [Comment + QUESTION/PURCHASE] → Auto-append "DM us!"
@@ -455,6 +483,10 @@ CUSTOMER SENDS MESSAGE/COMMENT
 ├── [رسائل مباشرة] هل هناك رسالة أحدث غير مُرد عليها؟
 │   └── نعم → ❌ تخطي (المهمة الأحدث ستتولى)
 │
+├── اكتساب قفل موزع (Redis SET NX EX 60)
+│   └── القفل محجوز → ❌ تخطي (عامل آخر يعالج) → توقف
+│   └── تم الاكتساب → متابعة (يُحرر في كتلة finally عبر Lua CAS)
+│
 ├── [رسائل مباشرة] هل هذه محادثة جديدة؟
 │   └── نعم → إرسال رسالة ترحيب
 │
@@ -472,7 +504,7 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   ├── تاريخ المحادثة (للرسائل المباشرة)
 │   └── أسلوب الرد + ملاحظات العلامة التجارية
 │
-├── فحص الكاش → استدعاء AI Worker إذا لم يوجد
+├── فحص الكاش (الدلالي يُتخطى لنوايا PRICE/PURCHASE_INTENT) → استدعاء AI Worker إذا لم يوجد
 │
 ├── فلاتر الأمان:
 │   ├── مسيء/سبام؟ → تعليم للمراجعة → لا رد
@@ -1112,6 +1144,11 @@ Customer question arrives
 │    COMPLAINT: 0.95 (high bar)        │
 │    Default: 0.93                     │
 │                                      │
+│  Skipped entirely for:               │
+│    • PRICE intent                    │
+│    • PURCHASE_INTENT intent          │
+│    (exact answers required — only    │
+│     exact hash cache remains active) │
 │  Skipped for OTHER intent            │
 ├────────────┬─────────────────────────┘
 │  MISS      │ HIT → Return cached reply
@@ -1152,6 +1189,7 @@ Customer question arrives
 **الطبقة 2: الكاش الدلالي (pgvector)**
 - تضمين السؤال مقابل التضمينات المخزنة
 - عتبات حسب النية: تحية=0.88، شكوى=0.95، افتراضي=0.93
+- **يُتخطى بالكامل** لنوايا PRICE و PURCHASE_INTENT (تحتاج إجابات دقيقة)
 
 **الطبقة 3: استدعاء AI كامل**
 - HTTP POST إلى AI Worker
@@ -1202,7 +1240,8 @@ Customer question arrives
 |----------|-----------|--------|-------------------|
 | Offensive comment | intent = OFFENSIVE | Empty reply, flag for review | Yes |
 | Spam/irrelevant | intent = SPAM_OR_IRRELEVANT | Empty reply, don't send | No |
-| Price hallucination | `price_not_in_kb` flag | Replace with safe fallback | Yes |
+| Price hallucination (Tier A) | `price_not_in_kb` flag — currency-adjacent number not in KB (SAR/$/ريال etc.) | Replace with safe fallback | Yes |
+| Price hallucination (Tier B) | `price_not_in_kb` flag — price-cue phrase + nearby number not in KB (e.g. "سعره 120", "only 50", "starts at 200") | Replace with safe fallback | Yes |
 | Low confidence + hold | confidence=low + setting on | Don't send, flag for review | Yes |
 | Angry customer | `angry_customer` flag | Send reply + notify merchant | Yes |
 | AI worker down | Circuit breaker open | Lightweight fallback reply | No |
@@ -1236,7 +1275,8 @@ Failing → OPEN (all requests get fallback)
 |-----------|-------|---------|--------------|
 | تعليق مسيء | نية = OFFENSIVE | رد فارغ، تعليم للمراجعة | نعم |
 | سبام | نية = SPAM | رد فارغ، لا إرسال | لا |
-| هلوسة أسعار | علم `price_not_in_kb` | استبدال بالرد الآمن | نعم |
+| هلوسة أسعار (الطبقة أ) | علم `price_not_in_kb` — رقم مجاور لعملة غير موجود في KB | استبدال بالرد الآمن | نعم |
+| هلوسة أسعار (الطبقة ب) | علم `price_not_in_kb` — عبارة سعرية + رقم قريب غير موجود في KB (مثل "سعره 120"، "only 50") | استبدال بالرد الآمن | نعم |
 | ثقة منخفضة + احتجاز | confidence=low + مفعّل | لا إرسال، مراجعة | نعم |
 | عميل غاضب | علم `angry_customer` | إرسال + إشعار التاجر | نعم |
 | AI Worker معطل | قاطع الدائرة مفتوح | رد احتياطي خفيف | لا |
@@ -1406,11 +1446,12 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Failure Point | What Happens | User Impact |
 |---------------|-------------|-------------|
 | AI Worker down | Circuit breaker → fallback | Generic replies |
-| Redis down | Fail-open → bypass cache | Higher cost |
+| Redis down | Fail-open → bypass cache + lock | Higher cost, possible double-reply (rare) |
 | PostgreSQL down | Fatal → service down | No replies |
 | OpenAI API down | Timeout → fallback | Generic replies |
 | Facebook API down | Webhook retries | Delayed replies |
 | Salla token expires | Auto-refresh | Transparent |
+| Reply lock stuck | TTL auto-expires after 60s | At most 60s delay for that sender |
 
 ### Key Numbers
 
@@ -1429,6 +1470,11 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Prompt Version | v14 |
 | Queue Retries | 3 (exponential backoff) |
 | Handoff Pause | 15 minutes default |
+| Reply Lock TTL | 60 seconds (Redis SET NX EX) |
+| Reply Lock Key (DMs) | `reply_lock:{pageId}:{senderId}` |
+| Reply Lock Key (comments) | `reply_lock:comment:{pageId}:{commentId}` |
+| DB Index | Composite: `(page_id, sender_id, direction, replied, created_at)` |
+| Price Detection | Two-tier: Tier A (currency-adjacent) + Tier B (price-cue phrases) |
 
 ## عربي
 
@@ -1448,9 +1494,10 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | نقطة الفشل | ماذا يحدث | التأثير |
 |------------|-----------|---------|
 | AI Worker معطل | قاطع الدائرة → ردود احتياطية | ردود عامة |
-| Redis معطل | تجاوز الكاش → تكلفة أعلى | بطء |
+| Redis معطل | تجاوز الكاش + القفل | تكلفة أعلى، رد مزدوج ممكن (نادر) |
 | PostgreSQL معطل | الخدمة تتوقف | لا ردود |
 | OpenAI معطل | مهلة → رد احتياطي | ردود عامة |
+| القفل معلق | ينتهي تلقائياً بعد 60 ثانية | تأخير 60 ثانية كحد أقصى لذلك المرسل |
 
 ---
 
@@ -1468,9 +1515,14 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 ║  4. Full AI call (gpt-4.1-mini) → COST, ~2-5 seconds           ║
 ║  5. Fallback (circuit breaker open) → FREE, instant             ║
 ║                                                                  ║
+║  CONCURRENCY: Redis distributed lock (SET NX EX 60)              ║
+║  DM key: reply_lock:{pageId}:{senderId}                          ║
+║  Comment key: reply_lock:comment:{pageId}:{commentId}            ║
+║  Release: Lua CAS script in finally block                        ║
+║                                                                  ║
 ║  SAFETY CHAIN:                                                   ║
 ║  Input sanitization → AI generation → 6 post-checks →           ║
-║  Offensive filter → Price hallucination filter →                 ║
+║  Offensive filter → Price hallucination (2-tier) →               ║
 ║  Low confidence filter → Send or hold                            ║
 ║                                                                  ║
 ║  INTENTS: QUESTION | COMPLIMENT | COMPLAINT | PURCHASE_INTENT   ║

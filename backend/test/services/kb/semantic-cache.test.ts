@@ -25,7 +25,7 @@ describe('SemanticCacheService', () => {
             const result = await service.check(
                 'page-1',
                 [0.1, 0.2, 0.3],
-                'PRICE',
+                'GREETING',
                 1,
             );
 
@@ -37,8 +37,8 @@ describe('SemanticCacheService', () => {
             (db.execute as ReturnType<typeof vi.fn>).mockResolvedValue([
                 {
                     id: 'cache-1',
-                    reply_text: 'The roses cost $50',
-                    intent: 'PRICE',
+                    reply_text: 'We are open 9-6',
+                    intent: 'HOURS',
                     metadata: { confidence: 'high', flags: [] },
                     similarity: 0.95,
                 },
@@ -47,15 +47,64 @@ describe('SemanticCacheService', () => {
             const result = await service.check(
                 'page-1',
                 [0.1, 0.2, 0.3],
-                'PRICE',
+                'HOURS',
                 1,
             );
 
             expect(result).not.toBeNull();
-            expect(result!.reply).toBe('The roses cost $50');
-            expect(result!.intent).toBe('PRICE');
+            expect(result!.reply).toBe('We are open 9-6');
+            expect(result!.intent).toBe('HOURS');
             expect(result!.confidence).toBe('high');
             expect(result!.flags).toEqual([]);
+        });
+
+        it('skips semantic cache for PRICE intent', async () => {
+            const result = await service.check(
+                'page-1',
+                [0.1, 0.2, 0.3],
+                'PRICE',
+                1,
+            );
+
+            expect(result).toBeNull();
+            // DB should NOT be queried — intent-based skip
+            expect(db.execute).not.toHaveBeenCalled();
+        });
+
+        it('skips semantic cache for PURCHASE_INTENT', async () => {
+            const result = await service.check(
+                'page-1',
+                [0.1, 0.2, 0.3],
+                'PURCHASE_INTENT',
+                1,
+            );
+
+            expect(result).toBeNull();
+            expect(db.execute).not.toHaveBeenCalled();
+        });
+
+        it('does NOT skip semantic cache for GREETING intent', async () => {
+            (db.execute as ReturnType<typeof vi.fn>).mockResolvedValue([
+                {
+                    id: 'cache-g',
+                    reply_text: 'Hello!',
+                    intent: 'GREETING',
+                    metadata: { confidence: 'high', flags: [] },
+                    similarity: 0.95,
+                },
+            ]);
+
+            const result = await service.check('page-1', [0.1, 0.2], 'GREETING', 1);
+            expect(result).not.toBeNull();
+            // DB was queried (SELECT + fire-and-forget hit count UPDATE)
+            expect(db.execute).toHaveBeenCalled();
+        });
+
+        it('does NOT skip semantic cache for QUESTION intent', async () => {
+            (db.execute as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+            await service.check('page-1', [0.1, 0.2], 'QUESTION', 1);
+            expect(db.execute).toHaveBeenCalledTimes(1);
         });
 
         it('returns null on database error', async () => {

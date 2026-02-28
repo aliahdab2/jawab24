@@ -125,6 +125,10 @@ vi.mock('../../src/lib/pipelineMetrics', () => ({
     },
     PipelineMetrics: class {},
 }));
+vi.mock('../../src/lib/replyLock', () => ({
+    acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
+    releaseReplyLock: vi.fn().mockResolvedValue(undefined),
+}));
 
 
 

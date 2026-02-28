@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "idx_messages_sender_inbox" ON "messages" ("page_id","sender_id","direction","replied","created_at");

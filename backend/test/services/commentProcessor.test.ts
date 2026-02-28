@@ -37,6 +37,10 @@ vi.mock('../../src/utils/language', () => ({
 vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn(), set: vi.fn(), quit: vi.fn(), incr: vi.fn(), expire: vi.fn() },
 }));
+vi.mock('../../src/lib/replyLock', () => ({
+    acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
+    releaseReplyLock: vi.fn().mockResolvedValue(undefined),
+}));
 
 // In-memory pipelineMetrics mock (Redis-backed in production; use counters map in tests)
 const pipelineCounters = vi.hoisted<Record<string, number>>(() => ({}));

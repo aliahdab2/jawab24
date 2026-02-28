@@ -1267,6 +1267,152 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         expect(result.flags).not.toContain('info_not_in_kb');
     });
 
+    // ── Tier B: price-cue phrases + nearby number (no currency token) ──
+
+    it('should flag Tier B: Arabic price cue "سعره" + number not in KB', async () => {
+        setupMock(JSON.stringify({
+            reply: 'سعره 120',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'كم سعر المنتج؟',
+            context: { knowledgeBase: 'نقدم خدمات متنوعة' },
+        });
+
+        expect(result.flags).toContain('price_not_in_kb');
+    });
+
+    it('should flag Tier B: English "only" + number not in KB', async () => {
+        setupMock(JSON.stringify({
+            reply: "It's only 50",
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'How much?',
+            context: { knowledgeBase: 'We sell various items' },
+        });
+
+        expect(result.flags).toContain('price_not_in_kb');
+    });
+
+    it('should flag Tier B: "starts at" + number not in KB', async () => {
+        setupMock(JSON.stringify({
+            reply: 'Price starts at 200',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'What are the prices?',
+            context: { knowledgeBase: 'Contact us for pricing' },
+        });
+
+        expect(result.flags).toContain('price_not_in_kb');
+    });
+
+    it('should NOT flag Tier B when number is in KB', async () => {
+        setupMock(JSON.stringify({
+            reply: 'بسعر 300',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'كم السعر؟',
+            context: { knowledgeBase: 'الباقة بسعر 300 ريال' },
+        });
+
+        expect(result.flags).not.toContain('price_not_in_kb');
+    });
+
+    it('should NOT flag phone numbers (whitelist)', async () => {
+        setupMock(JSON.stringify({
+            reply: 'Call 0555123456 for details',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'How to reach you?',
+            context: { knowledgeBase: 'Contact us anytime' },
+        });
+
+        expect(result.flags).not.toContain('price_not_in_kb');
+    });
+
+    it('should NOT flag times (whitelist)', async () => {
+        setupMock(JSON.stringify({
+            reply: 'Open 9:00 to 5:00 daily',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'What are your hours?',
+            context: { knowledgeBase: 'Working hours 9 to 5' },
+        });
+
+        expect(result.flags).not.toContain('price_not_in_kb');
+    });
+
+    it('should NOT flag percentages (whitelist)', async () => {
+        setupMock(JSON.stringify({
+            reply: '15% discount available',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'Any discounts?',
+            context: { knowledgeBase: 'We have seasonal offers' },
+        });
+
+        expect(result.flags).not.toContain('price_not_in_kb');
+    });
+
+    it('should NOT flag numbers without price cues', async () => {
+        setupMock(JSON.stringify({
+            reply: 'We have 5 branches across the city',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'How many locations?',
+            context: { knowledgeBase: 'Multiple locations' },
+        });
+
+        expect(result.flags).not.toContain('price_not_in_kb');
+    });
+
     it('should add comment_too_long flag when comment reply exceeds 50 words', async () => {
         const longReply = 'word '.repeat(55).trim();
         setupMock(JSON.stringify({
@@ -1758,5 +1904,58 @@ describe('OpenAI Service - v10 Prompt Improvements', () => {
         expect(systemPrompt).toContain('"angry_customer"');
         expect(systemPrompt).toContain('certificate');
     });
+});
+
+// ── Golden fixture: price detection regression tests ──
+describe('Price Detection — Golden Fixture', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fixtures = require('./fixtures/price-detection.json') as Array<{
+        id: number; reply: string; kbText: string; intent: string; expectFlag: boolean; note: string;
+    }>;
+
+    function setupMock(jsonResponse: string) {
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: jsonResponse } }],
+                            usage: { total_tokens: 50 },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.4, timeoutMs: 30000 },
+            },
+        }));
+    }
+
+    for (const tc of fixtures) {
+        it(`#${tc.id}: ${tc.note}`, async () => {
+            vi.resetModules();
+            setupMock(JSON.stringify({
+                reply: tc.reply,
+                intent: tc.intent,
+                confidence: 'high',
+                flags: [],
+            }));
+
+            const { OpenAIService: FreshService } = await import('../src/services/openai');
+            const service = new FreshService();
+            const result = await service.generateReply({
+                comment: 'test question',
+                context: { knowledgeBase: tc.kbText },
+            });
+
+            if (tc.expectFlag) {
+                expect(result.flags).toContain('price_not_in_kb');
+            } else {
+                expect(result.flags).not.toContain('price_not_in_kb');
+            }
+        });
+    }
 });
 
