@@ -185,7 +185,9 @@ describe('OpenAI Service - Structured JSON Response', () => {
         const result = await service.generateReply({ comment: 'This is terrible!' });
 
         expect(result.intent).toBe('COMPLAINT');
-        expect(result.flags).toEqual(['angry_customer']);
+        // validateReply detects "contact us" deflection → adds info_not_in_kb + downgrades confidence
+        expect(result.flags).toEqual(expect.arrayContaining(['angry_customer']));
+        expect(result.confidence).toBe('low');
     });
 
     it('should parse JSON with multiple flags', async () => {

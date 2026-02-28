@@ -268,21 +268,27 @@ export class AiService {
                     throw new Error('No embedding provider available');
                 }
 
-                semanticCacheService.setLogger(this.logger);
-                const semanticHit = await Sentry.startSpan(
-                    { name: 'ai.cache.semantic', op: 'cache.get' },
-                    () => semanticCacheService.check(pageId, queryEmbedding as number[], detectedPreGptIntent ?? '', kbActiveVersion),
-                );
+                // Skip semantic cache for OTHER intent — too heterogeneous to cluster safely.
+                // These queries still benefit from exact cache; only skip vector similarity.
+                if (detectedPreGptIntent === 'OTHER') {
+                    this.logger.debug('Skipping semantic cache for OTHER intent', { pageId });
+                } else {
+                    semanticCacheService.setLogger(this.logger);
+                    const semanticHit = await Sentry.startSpan(
+                        { name: 'ai.cache.semantic', op: 'cache.get' },
+                        () => semanticCacheService.check(pageId, queryEmbedding as number[], detectedPreGptIntent ?? '', kbActiveVersion),
+                    );
 
-                if (semanticHit) {
-                    return {
-                        reply: semanticHit.reply,
-                        language: request.language || 'auto',
-                        cached: true,
-                        intent: semanticHit.intent,
-                        confidence: semanticHit.confidence,
-                        flags: semanticHit.flags,
-                    };
+                    if (semanticHit) {
+                        return {
+                            reply: semanticHit.reply,
+                            language: request.language || 'auto',
+                            cached: true,
+                            intent: semanticHit.intent,
+                            confidence: semanticHit.confidence,
+                            flags: semanticHit.flags,
+                        };
+                    }
                 }
             } catch (error) {
                 this.logger.error('Semantic cache check failed, continuing to AI', {
@@ -338,8 +344,8 @@ export class AiService {
                 this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
             }
 
-            // Save to semantic cache (fire-and-forget, non-blocking)
-            if (pageId && queryEmbedding && detectedPreGptIntent && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+            // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent
+            if (pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,

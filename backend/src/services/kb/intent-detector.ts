@@ -32,7 +32,7 @@ const INTENT_PATTERNS: PatternRule[] = [
     },
     {
         intent: 'PRICE',
-        pattern: /(price|prices|pricing|cost|costs|how\s+much|بكم|كم\s?(سعر|ثمن|تكلف)|سعر|ثمن|تكلفة|قديش|بكام|اسعار|السعر)/i,
+        pattern: /(price|prices|pricing|cost|costs|how\s+much|affordable|cheap|budget|بكم|كم\s?(سعر|ثمن|تكلف)|سعر|ثمن|تكلفة|قديش|بكام|اسعار|السعر|أرخص|ارخص|اوفر)/i,
     },
     {
         intent: 'HOURS',
@@ -52,11 +52,11 @@ const INTENT_PATTERNS: PatternRule[] = [
     },
     {
         intent: 'COMPLAINT',
-        pattern: /(complaint|terrible|worst|disgusted|scam|fraud|شكوى|نصب|احتيال|سيئ|اسوأ|زبالة|خرب)/i,
+        pattern: /(complaint|terrible|worst|disgusted|scam|fraud|waiting\s+for|no\s+response|been\s+waiting|شكوى|نصب|احتيال|سيئ|اسوأ|زبالة|خرب|ما\s?رديتوا|وين\s?الرد|ليش\s?ما\s?ترد|محد\s?يرد)/i,
     },
     {
         intent: 'OFFERING_INFO',
-        pattern: /(available|stock|do\s+you\s+have|do\s+you\s+sell|what\s+do\s+you|menu|catalog|موجود|متوفر|عندكم|بتبيع|منيو|قائمة|المنتجات)/i,
+        pattern: /(available|stock|do\s+you\s+have|do\s+you\s+sell|what\s+do\s+you|menu|catalog|which\s+is\s+better|recommend|comparison|difference\s+between|موجود|متوفر|عندكم|بتبيع|منيو|قائمة|المنتجات|أيهم\s?أفضل|وش\s?تنصحوني|شو\s?تنصحوني|مقارنة|الفرق\s?بين)/i,
     },
 ];
 

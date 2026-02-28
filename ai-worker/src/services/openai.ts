@@ -432,6 +432,7 @@ IMPORTANT: Output a JSON object with these fields:
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
   - "low_confidence" if you are uncertain about your reply
   - "redirect_to_human" if you advised the customer to contact a human
+CRITICAL: If your reply redirects the customer to DMs, another channel, or says "I'll check" / "let me get back to you" — you MUST include "info_not_in_kb" in flags. Redirecting means you don't have the answer in the provided knowledge base.
 Output ONLY the JSON object, nothing else.
 
 EXAMPLES (follow this exact format):
@@ -565,18 +566,35 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
             }
         }
 
-        // Check 4: Hedge-word inconsistency — reply uses "I'll check" language but confidence is high/medium
+        // Check 4: Hedge-word inconsistency — reply uses "I'll check" / "contact us" language but confidence is high/medium
         // Uses PHRASE matching (not substring) to avoid false positives on words like "أرجعلك" in valid replies
         if (reply && (parsed.confidence === 'high' || parsed.confidence === 'medium')) {
             const hedgePatterns = [
                 /خليني أتحقق|خلني أتحقق|سأتحقق|سأتأكد|راح أتحقق|راح أتأكد|نتأكد ونرجعلك|أتحقق.*وأرجعلك|أرجعلك.*بعد/,  // Arabic hedge phrases
+                /تواصل معنا|تواصلوا معنا|راسلنا|أرسلنا رسالة|اتصل بنا|اتصلوا بنا|خلنا نتواصل على الخاص/,  // Arabic deflection phrases
                 /let me check|i'?ll check|get back to you|confirm with the team/i, // English hedge phrases
+                /reach out|contact us|send us a message|message us directly|we'?ll get back|will follow up/i, // English deflection phrases
+                /i don'?t have.*information|i'?m not sure about/i, // Explicit uncertainty
             ];
             const hasHedge = hedgePatterns.some(p => p.test(reply));
             if (hasHedge) {
                 parsed = { ...parsed, confidence: 'low' };
                 if (!flags.includes('info_not_in_kb')) {
                     flags.push('info_not_in_kb');
+                }
+            }
+        }
+
+        // Check 5: DM deflection — saying "contact us" / "message us" IN a DM means the AI doesn't have the answer
+        if (channel === 'dm' && reply) {
+            const dmDeflectionPatterns = [
+                /تواصل معنا|راسلنا|اتصل بنا/,
+                /contact us|reach out to us|send us a message|message us/i,
+            ];
+            if (dmDeflectionPatterns.some(p => p.test(reply)) && !flags.includes('info_not_in_kb')) {
+                flags.push('info_not_in_kb');
+                if (parsed.confidence === 'high') {
+                    parsed = { ...parsed, confidence: 'medium' };
                 }
             }
         }

@@ -12,8 +12,9 @@ import { detectIntent } from '../kb/intent-detector';
 const EMOJI_ONLY = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u;
 const MENTION_PATTERN = /@\w+/;
 // English spam uses \b word boundaries; Arabic spam uses a separate pattern (no \b for Arabic)
-const SPAM_KEYWORDS_EN = /\b(follow\s+me|check\s+(my|out)\s+(profile|page|bio)|check\s+this\s+out|subscribe|giveaway)\b/i;
-const SPAM_KEYWORDS_AR = /(منشن|تاق|فولو)/i;
+const SPAM_KEYWORDS_EN = /\b(follow\s+me|check\s+(my|out)\s+(profile|page|bio)|check\s+this\s+out|subscribe|giveaway|link\s+in\s+bio)\b/i;
+const SPAM_KEYWORDS_AR = /(منشن|تاق|فولو|فولومي)/i;
+const SPAM_FRANCO = /\b(folo|folomi|ta2ni|ta3ni)\b/i;
 const PUNCTUATION_ONLY = /^[.…?!؟\s]+$/;
 
 // ── Compliment patterns ─────────────────────────────────────────────────────
@@ -67,10 +68,10 @@ export function classifyFallbackIntent(text: string): string | undefined {
     if (EMOJI_ONLY.test(lower)) return 'SPAM_OR_IRRELEVANT';
 
     // @mention + any spam signal
-    if (MENTION_PATTERN.test(lower) && (SPAM_KEYWORDS_EN.test(lower) || SPAM_KEYWORDS_AR.test(normalized))) return 'SPAM_OR_IRRELEVANT';
+    if (MENTION_PATTERN.test(lower) && (SPAM_KEYWORDS_EN.test(lower) || SPAM_KEYWORDS_AR.test(normalized) || SPAM_FRANCO.test(lower))) return 'SPAM_OR_IRRELEVANT';
 
     // Standalone spam keywords
-    if (SPAM_KEYWORDS_EN.test(lower) || SPAM_KEYWORDS_AR.test(normalized)) return 'SPAM_OR_IRRELEVANT';
+    if (SPAM_KEYWORDS_EN.test(lower) || SPAM_KEYWORDS_AR.test(normalized) || SPAM_FRANCO.test(lower)) return 'SPAM_OR_IRRELEVANT';
 
     // Compliment text
     if (COMPLIMENT_ARABIC.test(normalized) || COMPLIMENT_ENGLISH.test(lower)) return 'COMPLIMENT';
@@ -80,6 +81,9 @@ export function classifyFallbackIntent(text: string): string | undefined {
 
     // Business inquiry
     if (BUSINESS_ARABIC.test(normalized) || BUSINESS_ENGLISH.test(lower)) return 'BUSINESS_INQUIRY';
+
+    // Angry customer → COMPLAINT (reuses anger patterns that are broader than intent-detector's COMPLAINT)
+    if (ANGRY_ARABIC.test(normalized) || ANGRY_ENGLISH.test(lower)) return 'COMPLAINT';
 
     // Fall back to existing detectIntent() for standard categories
     // (GREETING, PRICE, HOURS, LOCATION, BOOKING, POLICY, COMPLAINT, OFFERING_INFO)

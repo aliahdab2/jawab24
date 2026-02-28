@@ -14,7 +14,8 @@
       "Bash(git -C /Users/aliahdab/Documents/AutoReply stash)",
       "Bash(git -C /Users/aliahdab/Documents/AutoReply stash pop)",
       "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"ALTER TABLE ecommerce_products ADD COLUMN IF NOT EXISTS description text;\")",
-      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \":*)"
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \":*)",
+      "WebFetch(domain:orm.drizzle.team)"
     ],
     "additionalDirectories": [
       "/tmp",
