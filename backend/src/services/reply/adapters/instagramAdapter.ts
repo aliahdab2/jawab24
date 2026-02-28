@@ -116,8 +116,9 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,
+        aiOriginalReply?: string,
     ): Promise<void> {
-        await messagesService.markAsReplied(messageId, replyText, replyMethod, needsAttention, flagReason, aiIntent);
+        await messagesService.markAsReplied(messageId, replyText, replyMethod, needsAttention, flagReason, aiIntent, undefined, aiOriginalReply);
     }
 }
 

@@ -94,10 +94,12 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,
+        aiOriginalReply?: string,
     ): Promise<void> {
         await commentsService.markAsReplied(
             commentId, replyText, replyMethod, templateId,
             detectedLanguage, needsAttention, flagReason, aiIntent,
+            aiOriginalReply,
         );
     }
 

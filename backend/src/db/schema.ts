@@ -195,6 +195,7 @@ export const comments = pgTable('comments', {
     fromName: varchar('from_name', { length: 255 }),
     replied: boolean('replied').default(false),
     replyText: text('reply_text'),
+    aiOriginalReply: text('ai_original_reply'),
     replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
     templateId: uuid('template_id').references(() => templates.id, { onDelete: 'set null' }),
     detectedLanguage: varchar('detected_language', { length: 10 }),
@@ -230,6 +231,7 @@ export const instagramComments = pgTable('instagram_comments', {
     fromUsername: varchar('from_username', { length: 255 }),
     replied: boolean('replied').default(false),
     replyText: text('reply_text'),
+    aiOriginalReply: text('ai_original_reply'),
     replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
     detectedLanguage: varchar('detected_language', { length: 10 }),
     replyLanguage: varchar('reply_language', { length: 10 }),
@@ -329,6 +331,7 @@ export const messages = pgTable('messages', {
     direction: varchar('direction', { length: 10 }).default('incoming'), // 'incoming' or 'outgoing'
     replied: boolean('replied').default(false),
     replyText: text('reply_text'),
+    aiOriginalReply: text('ai_original_reply'),
     replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
     needsAttention: boolean('needs_attention').default(false),
     flagReason: varchar('flag_reason', { length: 255 }),

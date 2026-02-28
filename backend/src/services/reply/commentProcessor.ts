@@ -165,6 +165,9 @@ export class CommentProcessor {
             let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent } =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false, commentReplyMode);
 
+            // Capture the original AI-generated reply before any modifications (fallback, truncation, CTA)
+            const aiOriginalReply = replyMethod === 'ai' ? (generatedText ?? undefined) : undefined;
+
             // 8b. Replace with safe fallback if AI hallucinated a price
             if (shouldUseFallback(flagReason)) {
                 const detectedLang = detectLanguageCode(commentMessage);
@@ -262,6 +265,7 @@ export class CommentProcessor {
                 needsAttention,
                 flagReason,
                 aiIntent,
+                aiOriginalReply,
             );
 
             // 12. Notify if flagged

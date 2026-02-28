@@ -24,6 +24,7 @@ export interface Message {
   needsAttention?: boolean;
   flagReason?: string | null;
   aiIntent?: string | null;
+  aiOriginalReply?: string | null;
   resolved?: boolean;
 }
 
@@ -45,6 +46,7 @@ export interface Comment {
   needsAttention?: boolean;
   flagReason?: string | null;
   aiIntent?: string | null;
+  aiOriginalReply?: string | null;
   resolved?: boolean | null;
   postMessage?: string | null;
   source?: 'facebook' | 'instagram';

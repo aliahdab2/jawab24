@@ -81,6 +81,7 @@ export interface CommentPlatformAdapter {
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,
+        aiOriginalReply?: string,
     ): Promise<void>;
 
     /**

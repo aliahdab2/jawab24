@@ -4,8 +4,23 @@ import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
 import { PROMPT_VERSION } from '@jawab24/shared';
 
-/** Minimum cosine similarity to consider a semantic cache hit */
-const SIMILARITY_THRESHOLD = 0.93;
+/** Intent-aware cosine similarity thresholds for semantic cache hits.
+ * Lower thresholds for formulaic intents (greetings), higher for nuanced ones (complaints). */
+const INTENT_THRESHOLDS: Record<string, number> = {
+    GREETING: 0.88,
+    COMPLIMENT: 0.90,
+    PRICE: 0.91,
+    HOURS: 0.91,
+    LOCATION: 0.91,
+    BOOKING: 0.92,
+    OFFERING_INFO: 0.92,
+    PURCHASE_INTENT: 0.92,
+    POLICY: 0.93,
+    QUESTION: 0.93,
+    BUSINESS_INQUIRY: 0.94,
+    COMPLAINT: 0.95,
+};
+const DEFAULT_SIMILARITY_THRESHOLD = 0.93;
 
 export interface SemanticCacheHit {
     reply: string;
@@ -54,6 +69,7 @@ export class SemanticCacheService {
     ): Promise<SemanticCacheHit | null> {
         try {
             const vectorStr = `[${queryEmbedding.join(',')}]`;
+            const threshold = INTENT_THRESHOLDS[intent] ?? DEFAULT_SIMILARITY_THRESHOLD;
 
             const results = await db.execute(sql`
                 SELECT
@@ -68,7 +84,7 @@ export class SemanticCacheService {
                   AND kb_active_version_at_creation = ${kbActiveVersion}
                   AND prompt_version = ${PROMPT_VERSION}
                   AND created_at > NOW() - INTERVAL '7 days'
-                  AND 1 - (query_embedding <=> ${vectorStr}::vector) >= ${SIMILARITY_THRESHOLD}
+                  AND 1 - (query_embedding <=> ${vectorStr}::vector) >= ${threshold}
                 ORDER BY 1 - (query_embedding <=> ${vectorStr}::vector) DESC
                 LIMIT 1
             `);

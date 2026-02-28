@@ -211,7 +211,8 @@ export class MessagesService {
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,
-        conn: DbConn = db
+        conn: DbConn = db,
+        aiOriginalReply?: string,
     ): Promise<void> {
         await conn.update(messages)
             .set({
@@ -221,6 +222,7 @@ export class MessagesService {
                 needsAttention: needsAttention ?? false,
                 flagReason: flagReason ?? null,
                 aiIntent: aiIntent ?? null,
+                aiOriginalReply: aiOriginalReply ?? null,
                 repliedAt: new Date(),
                 updatedAt: new Date(),
             })

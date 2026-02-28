@@ -242,6 +242,9 @@ export class MessageProcessor {
                 );
             lap('12-generateReply');
 
+            // Capture the original AI-generated reply before any modifications (fallback substitution)
+            const aiOriginalReply = replyMethod === 'ai' ? (replyText ?? undefined) : undefined;
+
             // 12b. Replace with safe fallback if AI hallucinated a price
             if (shouldUseFallback(flagReason)) {
                 const detectedLang = detectLanguageCode(messageText);
@@ -287,7 +290,7 @@ export class MessageProcessor {
             let markedOlder = 0;
             await db.transaction(async (tx) => {
                 // 14. Mark as replied
-                await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent, tx);
+                await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent, tx, aiOriginalReply);
 
                 // 15. Store outgoing message
                 await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod, tx);

@@ -426,7 +426,8 @@ describe('Reply Service', () => {
                 expect.any(String), // language
                 true, // needsAttention
                 'angry_customer', // flagReason
-                'COMPLAINT' // aiIntent
+                'COMPLAINT', // aiIntent
+                'We apologize for the inconvenience.' // aiOriginalReply (captured for AI replies)
             );
         });
 
@@ -542,7 +543,8 @@ describe('Reply Service', () => {
                 expect.any(String),
                 false, // needsAttention
                 undefined, // flagReason
-                undefined // aiIntent
+                undefined, // aiIntent
+                undefined // aiOriginalReply
             );
         });
 

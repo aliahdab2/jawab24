@@ -360,7 +360,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
 
     it('should truncate knowledge base beyond KB_MAX_CHARS', async () => {
         let capturedMessages: any[] = [];
-        const longKB = 'A'.repeat(9000);
+        const longKB = 'A'.repeat(18000);
 
         vi.doMock('openai', () => ({
             default: vi.fn().mockImplementation(() => ({
@@ -386,10 +386,10 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         await service.generateReply({ comment: 'What is this?', context: { knowledgeBase: longKB } });
 
         const systemPrompt = capturedMessages[0].content;
-        // Should contain truncated KB (8000 chars) plus the [...] marker
+        // Should contain truncated KB (16000 chars) plus the [...] marker
         expect(systemPrompt).toContain('[...]');
-        // Should NOT contain the full 9000-char KB
-        expect(systemPrompt.length).toBeLessThan(systemPrompt.replace(longKB, '').length + 9000);
+        // Should NOT contain the full 18000-char KB
+        expect(systemPrompt.length).toBeLessThan(systemPrompt.replace(longKB, '').length + 18000);
     });
 
     it('should not truncate knowledge base under KB_MAX_CHARS', async () => {
@@ -426,8 +426,8 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
 
     it('should trim oldest conversation history when over token budget', async () => {
         let capturedMessages: any[] = [];
-        // Create long history that exceeds 12000 token budget (system prompt ~5200 tokens)
-        const longHistory = Array.from({ length: 40 }, (_, i) => ({
+        // Create long history that exceeds 24000 token budget (system prompt ~5200 tokens)
+        const longHistory = Array.from({ length: 80 }, (_, i) => ({
             role: 'user' as const,
             content: 'This is a very long message that contains lots of tokens. '.repeat(20) + ` Message #${i}`,
         }));
@@ -458,8 +458,8 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
             context: { conversationHistory: longHistory },
         });
 
-        // Should have fewer messages than the 40 we provided + system + user
-        expect(capturedMessages.length).toBeLessThan(42);
+        // Should have fewer messages than the 80 we provided + system + user
+        expect(capturedMessages.length).toBeLessThan(82);
         // Should still have at least system + user message
         expect(capturedMessages.length).toBeGreaterThanOrEqual(2);
     });
@@ -526,7 +526,7 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         const parsed = JSON.parse(logCall![0]);
         expect(parsed.event).toBe('ai_call_token_usage');
         expect(parsed.estimated_tokens_in).toBeDefined();
-        expect(parsed.max_input_tokens).toBe(12000);
+        expect(parsed.max_input_tokens).toBe(24000);
         expect(parsed.prompt_version).toBe(PROMPT_VERSION);
 
         logSpy.mockRestore();

@@ -138,6 +138,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,
+        aiOriginalReply?: string,
     ): Promise<void> {
         await db
             .update(instagramComments)
@@ -148,6 +149,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
                 needsAttention: needsAttention ?? false,
                 flagReason: flagReason ?? null,
                 aiIntent: aiIntent ?? null,
+                aiOriginalReply: aiOriginalReply ?? null,
                 detectedLanguage,
                 repliedAt: new Date(),
                 updatedAt: new Date(),

@@ -299,7 +299,7 @@ describe('FacebookCommentAdapter', () => {
             );
 
             expect(mockMarkAsReplied).toHaveBeenCalledWith(
-                'comment_uuid_1', 'Thank you!', 'ai', undefined, 'en', false, undefined, 'positive',
+                'comment_uuid_1', 'Thank you!', 'ai', undefined, 'en', false, undefined, 'positive', undefined,
             );
         });
 
@@ -311,7 +311,7 @@ describe('FacebookCommentAdapter', () => {
             );
 
             expect(mockMarkAsReplied).toHaveBeenCalledWith(
-                'comment_uuid_1', 'Thanks!', 'template', 'tpl_123', 'ar', undefined, undefined, undefined,
+                'comment_uuid_1', 'Thanks!', 'template', 'tpl_123', 'ar', undefined, undefined, undefined, undefined,
             );
         });
     });

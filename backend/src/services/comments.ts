@@ -291,7 +291,8 @@ export class CommentsService {
         replyLanguage?: string,
         needsAttention?: boolean,
         flagReason?: string,
-        aiIntent?: string
+        aiIntent?: string,
+        aiOriginalReply?: string,
     ) {
         const [updatedComment] = await db
             .update(comments)
@@ -304,6 +305,7 @@ export class CommentsService {
                 needsAttention: needsAttention ?? false,
                 flagReason: flagReason ?? null,
                 aiIntent: aiIntent ?? null,
+                aiOriginalReply: aiOriginalReply ?? null,
                 repliedAt: new Date(),
                 updatedAt: new Date(),
             })

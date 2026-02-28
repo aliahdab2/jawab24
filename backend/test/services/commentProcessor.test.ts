@@ -141,7 +141,7 @@ describe('CommentProcessor', () => {
         expect(adapter.storeComment).toHaveBeenCalledWith('content-uuid', 'comment-1', 'Hello!', 'user-1', 'Alice');
         expect(adapter.sendReply).toHaveBeenCalled();
         expect(adapter.markAsReplied).toHaveBeenCalledWith(
-            'comment-uuid', 'Thank you!', 'template', 'en', 'tpl-1', false, undefined, undefined,
+            'comment-uuid', 'Thank you!', 'template', 'en', 'tpl-1', false, undefined, undefined, undefined,
         );
         expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.success']).toBe(1);
     });
