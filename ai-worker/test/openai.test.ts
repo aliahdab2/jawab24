@@ -1228,10 +1228,10 @@ describe('OpenAI Service - Post-Reply Validation', () => {
             context: { knowledgeBase: 'الباقة 150 ريال' },
         });
 
-        expect(result.flags).toContain('info_not_in_kb');
+        expect(result.flags).toContain('price_not_in_kb');
     });
 
-    it('should NOT add info_not_in_kb when reply numbers match KB', async () => {
+    it('should NOT add price_not_in_kb when reply numbers match KB', async () => {
         setupMock(JSON.stringify({
             reply: 'السعر 150 ريال',
             intent: 'QUESTION',
@@ -1246,7 +1246,7 @@ describe('OpenAI Service - Post-Reply Validation', () => {
             context: { knowledgeBase: 'الباقة 150 ريال' },
         });
 
-        expect(result.flags).not.toContain('info_not_in_kb');
+        expect(result.flags).not.toContain('price_not_in_kb');
     });
 
     it('should NOT check numbers for non-QUESTION intents', async () => {
