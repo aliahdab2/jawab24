@@ -4,6 +4,7 @@ import * as sallaService from '../services/salla';
 import {
     getStoreByDomain,
     getStoreByWorkspace,
+    getStoreByWorkspaceAny,
     createStore,
     disconnectStore,
     linkStoreToPage,
@@ -203,7 +204,8 @@ export async function webhookUninstall(request: FastifyRequest, reply: FastifyRe
 export async function getStore(request: FastifyRequest, reply: FastifyReply) {
     const req = request as WorkspaceRequest;
     if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await getStoreByWorkspace('salla', req.workspaceId);
+    // Return inactive stores too so the frontend can show a Reconnect card
+    const store = await getStoreByWorkspaceAny('salla', req.workspaceId);
     if (!store) {
         return reply.status(404).send({ error: 'No Salla store connected' });
     }

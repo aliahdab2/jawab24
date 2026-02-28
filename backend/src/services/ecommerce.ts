@@ -41,6 +41,17 @@ export async function getStoreByWorkspace(platform: EcommercePlatform, workspace
 }
 
 /**
+ * Like getStoreByWorkspace but also returns inactive (disconnected) stores.
+ * Used by the integrations page to show a Reconnect card after disconnect.
+ */
+export async function getStoreByWorkspaceAny(platform: EcommercePlatform, workspaceId: string) {
+    const result = await db.select().from(ecommerceStores).where(
+        and(eq(ecommerceStores.workspaceId, workspaceId), eq(ecommerceStores.platform, platform))
+    ).limit(1);
+    return result[0] || null;
+}
+
+/**
  * Get all active stores, optionally filtered by platform.
  * Used by the scheduled sync to refresh inventory across all connected stores.
  */

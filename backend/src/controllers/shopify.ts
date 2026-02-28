@@ -274,7 +274,8 @@ export async function gdprShopRedact(request: FastifyRequest, reply: FastifyRepl
 export async function getStore(request: FastifyRequest, reply: FastifyReply) {
     const req = request as WorkspaceRequest;
     if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await shopifyService.getStoreByWorkspace(req.workspaceId);
+    // Return inactive stores too so the frontend can show a Reconnect card
+    const store = await shopifyService.getStoreByWorkspaceAny(req.workspaceId);
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
     }

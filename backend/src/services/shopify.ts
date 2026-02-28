@@ -44,6 +44,7 @@ import {
     cleanupExpiredInstalls as _cleanupExpiredInstalls,
     replaceProductsAndRebuildSummary,
     invalidateCachesForStore,
+    getStoreByWorkspaceAny as _getStoreByWorkspaceAny,
 } from './ecommerce';
 
 const SHOPIFY_API_VERSION = '2025-01';
@@ -129,6 +130,11 @@ export function getStoreByDomain(storeDomain: string) {
 
 export function getStoreByWorkspace(workspaceId: string) {
     return _getStoreByWorkspace('shopify', workspaceId);
+}
+
+/** Returns the store for this workspace regardless of isActive — used by integrations page to show Reconnect card */
+export function getStoreByWorkspaceAny(workspaceId: string) {
+    return _getStoreByWorkspaceAny('shopify', workspaceId);
 }
 
 /** @deprecated Use getStoreByWorkspace */

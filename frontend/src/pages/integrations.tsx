@@ -10,6 +10,7 @@ import {
   Unlink,
   CheckCircle2,
   Store,
+  PlugZap,
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
@@ -28,6 +29,11 @@ interface PlatformConfig {
   accentBg: string;
   accentText: string;
   accentLight: string;
+  /**
+   * Returns the backend path to initiate reconnect OAuth.
+   * Shopify needs ?shop=domain; Salla needs no param.
+   */
+  getReconnectPath: (storeDomain: string) => string;
   getStore: () => Promise<EcommerceStore>;
   syncProducts: () => Promise<unknown>;
   disconnectStore: () => Promise<unknown>;
@@ -58,6 +64,7 @@ const PLATFORMS: PlatformConfig[] = [
     accentBg: 'bg-emerald-100',
     accentText: 'text-emerald-600',
     accentLight: 'bg-emerald-50',
+    getReconnectPath: (domain) => `/shopify/auth?shop=${encodeURIComponent(domain)}`,
     getStore: ecommerceApi.getStore,
     syncProducts: ecommerceApi.syncProducts,
     disconnectStore: ecommerceApi.disconnectStore,
@@ -86,6 +93,7 @@ const PLATFORMS: PlatformConfig[] = [
     accentBg: 'bg-teal-100',
     accentText: 'text-teal-600',
     accentLight: 'bg-teal-50',
+    getReconnectPath: () => '/salla/auth',
     getStore: sallaApi.getStore,
     syncProducts: sallaApi.syncProducts,
     disconnectStore: sallaApi.disconnectStore,
@@ -242,26 +250,36 @@ function ConnectedStoreCard({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Empty connect card (not connected)                                 */
+/*  Disconnected store card — shown after disconnect, allows reconnect */
 /* ------------------------------------------------------------------ */
 
-function ConnectCard({ platform, blocked }: { platform: PlatformConfig; blocked?: boolean }) {
+function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store: EcommerceStore }) {
   const { t } = useTranslation();
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+  const handleReconnect = () => {
+    window.location.href = apiBase + platform.getReconnectPath(store.storeDomain);
+  };
 
   return (
-    <Card className={clsx('border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4 flex flex-col items-center text-center', blocked && 'opacity-60')}>
-      <div className={clsx('w-16 h-16 rounded-2xl flex items-center justify-center mb-4 landscape:w-12 landscape:h-12', platform.accentBg, platform.accentText)}>
-        {platform.icon}
+    <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4">
+      <div className="flex items-center gap-3 mb-4">
+        <div className={clsx('w-12 h-12 rounded-2xl flex items-center justify-center landscape:w-10 landscape:h-10 opacity-50', platform.accentBg, platform.accentText)}>
+          {platform.icon}
+        </div>
+        <div className="text-start">
+          <h3 className="font-bold text-lg landscape:text-base text-surface-500">{t(platform.nameKey)}</h3>
+          <p className="text-sm text-surface-400 landscape:text-xs">{store.storeName || store.storeDomain}</p>
+        </div>
       </div>
-      <h3 className="font-bold text-lg landscape:text-base mb-1">{t(platform.nameKey)}</h3>
-      <p className="text-sm text-surface-500 mb-4 landscape:text-xs landscape:mb-3">{t(platform.descKey)}</p>
-      {blocked ? (
-        <p className="text-xs text-surface-400 italic">{t('integrations.blockedByOther' as TranslationKey)}</p>
-      ) : (
-        <Button variant="primary" size="md">
-          {t('integrations.connect' as TranslationKey)}
+
+      <div className="flex items-center justify-between p-3 rounded-xl bg-surface-50 border border-surface-200">
+        <p className="text-sm text-surface-500">{t('integrations.disconnectedState' as TranslationKey)}</p>
+        <Button variant="primary" size="sm" onClick={handleReconnect}>
+          <PlugZap className="w-4 h-4 me-1" aria-hidden="true" />
+          {t('integrations.reconnect' as TranslationKey)}
         </Button>
-      )}
+      </div>
     </Card>
   );
 }
@@ -312,24 +330,21 @@ const IntegrationsPage: NextPageWithLayout = () => {
     }
   }, [isAuthenticated, fetchData]);
 
+  // After disconnect, flip isActive locally — no extra API call needed
   const handleStoreDisconnect = (platformId: string) => {
-    setStores((prev) => ({ ...prev, [platformId]: null }));
+    setStores((prev) => {
+      const existing = prev[platformId];
+      if (!existing) return prev;
+      return { ...prev, [platformId]: { ...existing, isActive: false } };
+    });
   };
 
   if (loading) {
     return <PageSkeleton />;
   }
 
-  const connectedPlatforms = PLATFORMS.filter((p) => stores[p.id]);
-  const connectedIds = new Set(connectedPlatforms.map((p) => p.id));
-
-  // Show unconnected platforms — mark competing ones as blocked instead of hiding them
-  const COMPETING = new Set(['shopify', 'salla', 'zid']);
-  const availablePlatforms = PLATFORMS.filter((p) => !stores[p.id]).map((p) => ({
-    ...p,
-    blocked: COMPETING.has(p.id) && connectedIds.size > 0 && !connectedIds.has(p.id) &&
-      [...connectedIds].some((id) => COMPETING.has(id)),
-  }));
+  // Only render platforms where the API returned a store record (active or inactive)
+  const visiblePlatforms = PLATFORMS.filter((p) => stores[p.id] !== null);
 
   return (
     <>
@@ -339,38 +354,22 @@ const IntegrationsPage: NextPageWithLayout = () => {
       />
 
       <div className="space-y-6 landscape:space-y-4">
-        {/* Connected integrations */}
-        {connectedPlatforms.map((platform) => (
-          <ConnectedStoreCard
-            key={platform.id}
-            platform={platform}
-            store={stores[platform.id]!}
-            pages={pages}
-            onSync={fetchData}
-            onDisconnect={() => handleStoreDisconnect(platform.id)}
-            onLinkPage={() => fetchData()}
-          />
-        ))}
-
-        {/* Divider between connected and unconnected */}
-        {connectedPlatforms.length > 0 && availablePlatforms.length > 0 && (
-          <div className="flex items-center gap-3">
-            <div className="flex-1 border-t border-surface-200" />
-            <span className="text-xs text-surface-400 font-medium">
-              {t('integrations.addAnother' as TranslationKey)}
-            </span>
-            <div className="flex-1 border-t border-surface-200" />
-          </div>
-        )}
-
-        {/* Unconnected integrations grid */}
-        {availablePlatforms.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 landscape:gap-3">
-            {availablePlatforms.map((platform) => (
-              <ConnectCard key={platform.id} platform={platform} blocked={platform.blocked} />
-            ))}
-          </div>
-        )}
+        {visiblePlatforms.map((platform) => {
+          const store = stores[platform.id]!;
+          return store.isActive ? (
+            <ConnectedStoreCard
+              key={platform.id}
+              platform={platform}
+              store={store}
+              pages={pages}
+              onSync={fetchData}
+              onDisconnect={() => handleStoreDisconnect(platform.id)}
+              onLinkPage={() => fetchData()}
+            />
+          ) : (
+            <DisconnectedCard key={platform.id} platform={platform} store={store} />
+          );
+        })}
       </div>
     </>
   );

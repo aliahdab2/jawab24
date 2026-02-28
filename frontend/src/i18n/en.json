@@ -1380,9 +1380,8 @@
   "nav.integrations": "Stores",
   "integrations.title": "Integrations",
   "integrations.subtitle": "Connect your e-commerce store so AI can answer product questions automatically",
-  "integrations.connect": "Connect",
-  "integrations.addAnother": "Add another integration",
   "integrations.shopifyDesc": "Sync your Shopify product catalog to enable AI-powered product replies",
   "integrations.sallaDesc": "Sync your Salla product catalog to enable AI-powered product replies",
-  "integrations.blockedByOther": "Disconnect your current store first to connect a different platform"
+  "integrations.disconnectedState": "This store was disconnected. Reconnect to restore AI replies.",
+  "integrations.reconnect": "Reconnect"
 }
