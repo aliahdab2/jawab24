@@ -12,7 +12,8 @@
       "Bash(npm run)",
       "Bash(git -C /Users/aliahdab/Documents/AutoReply diff --stat HEAD)",
       "Bash(git -C /Users/aliahdab/Documents/AutoReply stash)",
-      "Bash(git -C /Users/aliahdab/Documents/AutoReply stash pop)"
+      "Bash(git -C /Users/aliahdab/Documents/AutoReply stash pop)",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"ALTER TABLE ecommerce_products ADD COLUMN IF NOT EXISTS description text;\")"
     ],
     "additionalDirectories": [
       "/tmp",

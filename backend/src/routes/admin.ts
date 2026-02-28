@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps } from '../db/schema';
+import { getEnrichedKnowledgeBase } from '../services/ecommerce';
 import { eq, ilike, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { config } from '../config';
@@ -767,6 +768,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         workspaceId: pages.workspaceId,
                         knowledgeBase: pages.knowledgeBase,
                         kbActiveVersion: pages.kbActiveVersion,
+                        ecommerceStoreId: pages.ecommerceStoreId,
                     })
                     .from(pages)
                     .where(eq(pages.id, pageId))
@@ -885,8 +887,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             gapDetectorService.recordGap(pageId, question).catch(() => {});
                             gapRecorded = true;
                         }
-                    } catch {
+                    } catch (ragError) {
                         // Retrieval failed — fall back to static KB
+                        request.log.error(ragError, 'RAG retrieval failed in playground');
                     }
                 }
 
@@ -897,9 +900,19 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     ? 'dm'
                     : channel;
 
+                // Enrich KB with e-commerce product/policy data (same as production processor)
+                let pageKB = page.knowledgeBase || undefined;
+                if (page.ecommerceStoreId) {
+                    try {
+                        pageKB = await getEnrichedKnowledgeBase(pageKB, page.ecommerceStoreId);
+                    } catch {
+                        // Non-critical — fall back to raw KB
+                    }
+                }
+
                 const effectiveKB = (ragMode === 'on' && retrievedChunks.length > 0)
                     ? undefined
-                    : page.knowledgeBase || undefined;
+                    : pageKB;
 
                 const aiResponse = await aiService.generateReply({
                     comment: question,

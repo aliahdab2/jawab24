@@ -411,6 +411,7 @@ export interface EcommerceProduct {
   ecommerceStoreId: string;
   platformProductId: string;
   title: string;
+  description: string | null;
   productType: string | null;
   vendor: string | null;
   status: string;

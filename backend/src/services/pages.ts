@@ -321,16 +321,53 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();
 
-        // Fire-and-forget: trigger KB ingestion when knowledge base content changes
-        if (data.knowledgeBase !== undefined && data.knowledgeBase.trim() && updatedPage?.kbVersion) {
+        // Fire-and-forget: trigger full page ingestion (KB text + product chunks) when KB changes
+        const kbText = data.knowledgeBase;
+        const kbVersion = updatedPage?.kbVersion;
+        if (kbText !== undefined && kbText.trim() && kbVersion) {
             const ingestion = getIngestionService();
             if (ingestion) {
-                ingestion.ingestKnowledgeBase(pageId, data.knowledgeBase, updatedPage.kbVersion)
-                    .catch(err => captureError(err, 'KB ingestion failed during updatePage', { tags: { service: 'kb-ingestion', action: 'updatePage' }, extra: { pageId } }));
+                this.fetchProductsForPage(updatedPage.ecommerceStoreId)
+                    .then(productData =>
+                        ingestion.ingestFullPage(pageId, kbText, productData, kbVersion)
+                    )
+                    .catch(err => captureError(err, 'Full page ingestion failed during updatePage', { tags: { service: 'kb-ingestion', action: 'updatePage' }, extra: { pageId } }));
             }
         }
 
         return updatedPage;
+    }
+
+    /**
+     * Fetch active products for a page's linked e-commerce store (if any).
+     * Returns empty array if no store is linked or on error.
+     */
+    private async fetchProductsForPage(ecommerceStoreId: string | null | undefined): Promise<import('./kb/chunker').ProductData[]> {
+        if (!ecommerceStoreId) return [];
+        try {
+            const { ecommerceProducts } = await import('../db/schema');
+            const products = await db.select().from(ecommerceProducts)
+                .where(and(
+                    eq(ecommerceProducts.ecommerceStoreId, ecommerceStoreId),
+                    eq(ecommerceProducts.status, 'active'),
+                ));
+            return products.map(p => ({
+                platformProductId: p.platformProductId,
+                title: p.title,
+                description: p.description,
+                productType: p.productType,
+                vendor: p.vendor,
+                status: p.status || 'active',
+                priceRange: p.priceRange,
+                currency: p.currency,
+                totalInventory: p.totalInventory ?? 0,
+                hasVariants: p.hasVariants ?? false,
+                variantSummary: p.variantSummary,
+                tags: p.tags,
+            }));
+        } catch {
+            return [];
+        }
     }
 
     /**

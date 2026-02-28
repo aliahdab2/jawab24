@@ -1,0 +1,1 @@
+ALTER TABLE "ecommerce_products" ADD COLUMN "description" text;

@@ -297,6 +297,7 @@ export async function fetchStoreInfo(accessToken: string) {
 interface SallaProduct {
     id: number;
     name: string;
+    description?: string; // HTML — stripped to plain text before storage
     type: string;
     status: string; // 'sale', 'out', 'hidden', 'deleted'
     price: { amount: number; currency: string };
@@ -307,6 +308,11 @@ interface SallaProduct {
     }>;
     categories: Array<{ name: string }>;
     sku: string | null;
+}
+
+/** Strip HTML tags and collapse whitespace to get plain text from Salla descriptions */
+function stripHtml(html: string): string {
+    return html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 interface SallaProductsResponse {
@@ -381,6 +387,7 @@ export async function syncProducts(storeId: string) {
             return {
                 platformProductId: String(p.id),
                 title: p.name,
+                description: p.description ? stripHtml(p.description) : null,
                 productType: category,
                 vendor: null as string | null,
                 status: mapSallaStatus(p.status),

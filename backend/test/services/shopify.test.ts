@@ -101,6 +101,13 @@ vi.mock('../../src/lib/redis', () => ({
     },
 }));
 
+// Mock pages service (getIngestionService used by invalidateCachesForStore)
+vi.mock('../../src/services/pages', () => ({
+    getIngestionService: vi.fn(() => ({
+        ingestFullPage: vi.fn().mockResolvedValue(undefined),
+    })),
+}));
+
 // Mock global fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -542,12 +549,55 @@ describe('Shopify Service', () => {
     // --- invalidateCachesForStore ---
 
     describe('invalidateCachesForStore', () => {
-        /** Helper: mock db.select().from(pages).where(...) to return linked pages */
+        /**
+         * Helper: mock the full db.select() chain used by invalidateCachesForStore.
+         * The function calls db.select() multiple times:
+         *   1. Linked pages (from pages WHERE ecommerceStoreId)
+         *   2. Store policies (from ecommerceStores WHERE id) — .limit(1)
+         *   3. All active products (from ecommerceProducts WHERE storeId + active)
+         *   4. Page details per page (from pages WHERE id) — .limit(1) per page
+         */
         function mockLinkedPages(pageIds: string[]) {
-            mockSelect.mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(pageIds.map(id => ({ id }))),
-                }),
+            let callCount = 0;
+            mockSelect.mockImplementation(() => {
+                callCount++;
+                if (callCount === 1) {
+                    // 1. Linked pages
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue(pageIds.map(id => ({ id }))),
+                        }),
+                    };
+                }
+                if (callCount === 2) {
+                    // 2. Store policies
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue([{ policiesSummary: '' }]),
+                            }),
+                        }),
+                    };
+                }
+                if (callCount === 3) {
+                    // 3. All active products
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue([]),
+                        }),
+                    };
+                }
+                // 4+ Page details (one per page)
+                return {
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([{
+                                knowledgeBase: 'KB text',
+                                kbActiveVersion: 1,
+                            }]),
+                        }),
+                    }),
+                };
             });
         }
 

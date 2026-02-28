@@ -1,7 +1,7 @@
 import { normalizeArabic } from '@jawab24/shared';
 
 export interface KbChunk {
-    type: 'offering' | 'policy' | 'faq' | 'info' | 'hours' | 'location' | 'contact';
+    type: 'offering' | 'policy' | 'faq' | 'info' | 'hours' | 'location' | 'contact' | 'product';
     title: string;
     contentOriginal: string;
     contentNormalized: string;
@@ -9,6 +9,21 @@ export interface KbChunk {
     language: string;
     tokenCount: number;
     metadata: Record<string, unknown>;
+}
+
+export interface ProductData {
+    platformProductId: string;
+    title: string;
+    description?: string | null;
+    productType?: string | null;
+    vendor?: string | null;
+    status: string;
+    priceRange?: string | null;
+    currency?: string | null;
+    totalInventory: number;
+    hasVariants: boolean;
+    variantSummary?: string | null;
+    tags?: string | null;
 }
 
 /** Rough token estimate — Arabic averages ~3.5 chars/token */
@@ -233,6 +248,58 @@ export function chunkBusinessProfile(profile: Record<string, unknown>): KbChunk[
             tokenCount: estimateTokens(profile.about),
             metadata: { source: 'businessProfile' },
         });
+    }
+
+    return chunks;
+}
+
+/**
+ * Convert structured e-commerce product rows into KbChunk[] for embedding.
+ * Each active product becomes one or more chunks with type 'product'.
+ * Long descriptions are split with overlap to stay under MAX_CHUNK_TOKENS.
+ */
+export function chunkProducts(products: ProductData[]): KbChunk[] {
+    const chunks: KbChunk[] = [];
+
+    for (const p of products) {
+        if (p.status !== 'active') continue;
+
+        const lines: string[] = [`Product: ${p.title} (ID: ${p.platformProductId})`];
+        if (p.description) lines.push(p.description);
+        if (p.productType) lines.push(`Category: ${p.productType}`);
+        if (p.vendor) lines.push(`Vendor: ${p.vendor}`);
+        if (p.priceRange) {
+            const priceStr = p.currency ? `${p.priceRange} ${p.currency}` : p.priceRange;
+            lines.push(`Price: ${priceStr}`);
+        }
+        if (p.hasVariants && p.variantSummary) {
+            lines.push(`Variants: ${p.variantSummary}`);
+        }
+        if (p.totalInventory === 0) lines.push('Availability: out of stock');
+        else if (p.totalInventory <= 5) lines.push('Availability: low stock');
+        else lines.push('Availability: in stock');
+        if (p.tags) lines.push(`Tags: ${p.tags}`);
+
+        const content = lines.join('\n');
+        const textParts = splitLongText(content, MAX_CHUNK_TOKENS);
+
+        for (let i = 0; i < textParts.length; i++) {
+            const partContent = textParts[i];
+            const partTitle = textParts.length > 1
+                ? `${p.title} (${i + 1}/${textParts.length})`
+                : p.title;
+
+            chunks.push({
+                type: 'product' as const,
+                title: partTitle,
+                contentOriginal: partContent,
+                contentNormalized: normalizeArabic(partContent),
+                titleNormalized: normalizeArabic(partTitle),
+                language: detectChunkLanguage(p.title),
+                tokenCount: estimateTokens(partContent),
+                metadata: { source: 'ecommerce', platformProductId: p.platformProductId },
+            });
+        }
     }
 
     return chunks;

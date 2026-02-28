@@ -663,6 +663,7 @@ export const ecommerceProducts = pgTable('ecommerce_products', {
 
     // Product info
     title: varchar('title', { length: 500 }).notNull(),
+    description: text('description'), // Plain-text product description (features, specs)
     productType: varchar('product_type', { length: 255 }),
     vendor: varchar('vendor', { length: 255 }),
     status: varchar('status', { length: 20 }).default('active'), // 'active', 'draft', 'archived'

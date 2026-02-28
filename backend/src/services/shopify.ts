@@ -262,6 +262,7 @@ async function fetchShopInfo(shop: string, accessToken: string) {
 interface ShopifyGQLProduct {
     id: string;
     title: string;
+    description: string;
     productType: string;
     vendor: string;
     status: string;
@@ -309,6 +310,7 @@ async function fetchAllProducts(shop: string, accessToken: string): Promise<Shop
                     node {
                         id
                         title
+                        description
                         productType
                         vendor
                         status
@@ -376,7 +378,7 @@ export async function syncProducts(storeId: string, opts?: { storeDomain: string
     } else {
         const store = await getStoreById(storeId);
         accessToken = resolveStoreToken(store);
-        storeDomain = store!.storeDomain;
+        storeDomain = store?.storeDomain ?? '';
     }
 
     const products = await fetchAllProducts(storeDomain, accessToken);
@@ -395,6 +397,7 @@ export async function syncProducts(storeId: string, opts?: { storeDomain: string
         return {
             platformProductId: p.id.replace('gid://shopify/Product/', ''),
             title: p.title,
+            description: p.description || null,
             productType: p.productType || null,
             vendor: p.vendor || null,
             status: p.status.toLowerCase(),
@@ -465,7 +468,7 @@ export async function syncPolicies(storeId: string, opts?: { storeDomain: string
     } else {
         const store = await getStoreById(storeId);
         accessToken = resolveStoreToken(store);
-        storeDomain = store!.storeDomain;
+        storeDomain = store?.storeDomain ?? '';
     }
 
     const data = await shopifyGraphQL<{
@@ -506,7 +509,7 @@ export async function syncPolicies(storeId: string, opts?: { storeDomain: string
 export async function fullSync(storeId: string) {
     const store = await getStoreById(storeId);
     const accessToken = resolveStoreToken(store);
-    const storeDomain = store!.storeDomain;
+    const storeDomain = store?.storeDomain ?? '';
 
     const shopInfo = await fetchShopInfo(storeDomain, accessToken);
     await db.update(ecommerceStores).set({

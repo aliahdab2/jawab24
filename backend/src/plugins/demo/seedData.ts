@@ -667,6 +667,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     {
         platformProductId: 'demo_prod_1',
         title: 'iPhone 15 Pro',
+        description: 'شريحة A17 Pro مع أداء فائق، كاميرا رئيسية 48 ميجابكسل مع زوم بصري 5x، إطار من التيتانيوم خفيف ومتين، شاشة Super Retina XDR مقاس 6.1 بوصة مع ProMotion، منفذ USB-C، عمر بطارية يدوم طوال اليوم، مقاوم للماء IP68',
         productType: 'Smartphones',
         vendor: 'Apple',
         priceRange: '3,800 - 4,500 SAR',
@@ -679,6 +680,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     {
         platformProductId: 'demo_prod_2',
         title: 'Samsung Galaxy S24',
+        description: 'معالج Snapdragon 8 Gen 3، كاميرا 200 ميجابكسل مع ذكاء اصطناعي، شاشة Dynamic AMOLED 2X مقاس 6.2 بوصة بسطوع 2600 nit، بطارية 4000mAh مع شحن سريع 25W، مقاوم للماء IP68، يدعم Galaxy AI للترجمة الفورية وتحرير الصور',
         productType: 'Smartphones',
         vendor: 'Samsung',
         priceRange: '2,900 - 3,400 SAR',
@@ -691,6 +693,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     {
         platformProductId: 'demo_prod_3',
         title: 'MacBook Air M3',
+        description: 'شريحة Apple M3 مع وحدة معالجة رسومات 10 أنوية، ذاكرة موحدة 8GB أو 16GB، شاشة Liquid Retina بسطوع 500 nit، بطارية تدوم حتى 18 ساعة، كاميرا FaceTime HD بدقة 1080p، نظام صوت بأربع سماعات مع Spatial Audio، وزن خفيف 1.24 كجم فقط',
         productType: 'Laptops',
         vendor: 'Apple',
         priceRange: '5,200 - 6,500 SAR',
@@ -703,6 +706,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     {
         platformProductId: 'demo_prod_4',
         title: 'AirPods Pro (الجيل الثاني)',
+        description: 'سماعات لاسلكية بتقنية إلغاء الضوضاء النشط (ANC) مع وضع الشفافية، صوت مكاني مخصص مع تتبع حركة الرأس، مقاومة للماء والعرق IPX4، بطارية تدوم حتى 6 ساعات للسماعات و30 ساعة مع العلبة، شريحة H2 من Apple، يدعم الشحن عبر USB-C وMagSafe',
         productType: 'Accessories',
         vendor: 'Apple',
         priceRange: '850 SAR',
@@ -715,6 +719,7 @@ const DEMO_SHOPIFY_PRODUCTS = [
     {
         platformProductId: 'demo_prod_5',
         title: 'كفر حماية iPhone 15',
+        description: 'كفر حماية متين مصنوع من السيليكون الناعم مع إطار صلب مقاوم للصدمات، يحمي من السقوط حتى 2 متر، تصميم رفيع لا يضيف حجم كبير، فتحات دقيقة للأزرار والكاميرا، يدعم الشحن اللاسلكي MagSafe',
         productType: 'Accessories',
         vendor: 'متجر الإلكترونيات',
         priceRange: '120 - 180 SAR',
@@ -1077,6 +1082,15 @@ async function seedDemoShopify(userId: string, electronicsPageId: string, logger
     await db.update(pages)
         .set({ ecommerceStoreId: store.id })
         .where(eq(pages.id, electronicsPageId));
+
+    // Trigger RAG ingestion so product chunks are searchable (same as production sync)
+    try {
+        const { invalidateCachesForStore } = await import('../../services/ecommerce');
+        await invalidateCachesForStore(store.id);
+        logger.debug('[DemoData] RAG ingestion triggered for e-commerce store');
+    } catch {
+        // Non-critical — enriched KB text blob is the fallback
+    }
 
     logger.debug('[DemoData] Seeded e-commerce store', { storeId: store.id, products: DEMO_SHOPIFY_PRODUCTS.length });
 }

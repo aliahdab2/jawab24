@@ -2,8 +2,8 @@ import { db } from '../../db';
 import { pages } from '../../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { EmbeddingProvider, VectorStore, ChunkWithEmbedding } from './interfaces';
-import { chunkKnowledgeBase, chunkBusinessProfile } from './chunker';
-import type { KbChunk } from './chunker';
+import { chunkKnowledgeBase, chunkBusinessProfile, chunkProducts } from './chunker';
+import type { KbChunk, ProductData } from './chunker';
 import { gapDetectorService } from './gap-detector';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
@@ -86,6 +86,58 @@ export class KbIngestionService {
         this.logger.info('Business profile ingestion started', { pageId, kbVersion, chunkCount: chunks.length });
         const chunksWithEmbeddings = await this.embedChunks(pageId, chunks, kbVersion);
         await this.vectorStore.upsertChunks(pageId, chunksWithEmbeddings);
+    }
+
+    /**
+     * Full page re-ingestion: KB text + e-commerce products.
+     * Atomically activates the version only after ALL chunks are embedded and stored.
+     *
+     * Called from:
+     * - invalidateCachesForStore() when products sync
+     * - pages.updatePage() when merchant updates KB text
+     */
+    async ingestFullPage(
+        pageId: string,
+        rawKBText: string | undefined,
+        products: ProductData[],
+        kbVersion: number,
+    ): Promise<void> {
+        const kbChunks = rawKBText?.trim() ? chunkKnowledgeBase(rawKBText) : [];
+        const productChunks = chunkProducts(products);
+        const allChunks = [...kbChunks, ...productChunks];
+
+        if (allChunks.length === 0) {
+            this.logger.debug('Full page ingestion skipped: no chunks', { pageId, kbVersion });
+            return;
+        }
+
+        this.logger.info('Full page ingestion started', {
+            pageId, kbVersion,
+            kbChunks: kbChunks.length,
+            productChunks: productChunks.length,
+        });
+
+        const chunksWithEmbeddings = await this.embedChunks(pageId, allChunks, kbVersion);
+        await this.vectorStore.upsertChunks(pageId, chunksWithEmbeddings);
+
+        await db.update(pages)
+            .set({ kbActiveVersion: kbVersion })
+            .where(eq(pages.id, pageId));
+
+        try {
+            gapDetectorService.setLogger(this.logger);
+            await gapDetectorService.resolveAllForPage(pageId);
+        } catch (error) {
+            this.logger.error('Failed to resolve KB gaps after full page ingestion', {
+                error: error instanceof Error ? error.message : String(error),
+                pageId,
+            });
+        }
+
+        this.logger.info('Full page ingestion completed, version activated', {
+            pageId, kbVersion,
+            totalChunks: allChunks.length,
+        });
     }
 
     /**

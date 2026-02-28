@@ -58,6 +58,13 @@ class GapDetectorService {
 
             const intent = detectIntent(queryText);
 
+            // Only record gaps for specific knowledge-seeking intents.
+            // GREETING = social conversation, not a KB question.
+            // COMPLAINT = handled by escalation, not a KB gap.
+            // OTHER = too vague or conversational (e.g., "give me details",
+            //         "I didn't understand", "how are you") — not actionable.
+            if (intent === 'GREETING' || intent === 'COMPLAINT' || intent === 'OTHER') return;
+
             // Try to find an existing similar gap (trigram dedup + intent match)
             const existing = await this.findSimilarGap(pageId, normalized, intent);
 

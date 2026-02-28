@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkKnowledgeBase, chunkBusinessProfile } from '../../../src/services/kb/chunker';
+import { chunkKnowledgeBase, chunkBusinessProfile, chunkProducts } from '../../../src/services/kb/chunker';
 
 describe('ChunkerService', () => {
 
@@ -210,6 +210,136 @@ describe('ChunkerService', () => {
             expect(types.has('location')).toBe(true);
             expect(types.has('contact')).toBe(true);
             expect(types.has('info')).toBe(true);
+        });
+    });
+
+    describe('chunkProducts', () => {
+        it('returns empty array for empty input', () => {
+            expect(chunkProducts([])).toEqual([]);
+        });
+
+        it('filters out non-active products', () => {
+            const chunks = chunkProducts([
+                { platformProductId: '1', title: 'Active', status: 'active', totalInventory: 10, hasVariants: false },
+                { platformProductId: '2', title: 'Draft', status: 'draft', totalInventory: 5, hasVariants: false },
+                { platformProductId: '3', title: 'Archived', status: 'archived', totalInventory: 0, hasVariants: false },
+            ]);
+            expect(chunks).toHaveLength(1);
+            expect(chunks[0].title).toBe('Active');
+        });
+
+        it('sets type to product for all chunks', () => {
+            const chunks = chunkProducts([
+                { platformProductId: '1', title: 'Test Product', status: 'active', totalInventory: 10, hasVariants: false },
+            ]);
+            expect(chunks[0].type).toBe('product');
+        });
+
+        it('includes all product fields in content', () => {
+            const chunks = chunkProducts([{
+                platformProductId: 'p1',
+                title: 'iPhone 15 Pro',
+                description: 'Latest flagship with A17 chip and titanium frame',
+                productType: 'Smartphones',
+                vendor: 'Apple',
+                status: 'active',
+                priceRange: '3,999 - 4,499',
+                currency: 'SAR',
+                totalInventory: 50,
+                hasVariants: true,
+                variantSummary: '128GB, 256GB in Black, White',
+                tags: 'phone, apple',
+            }]);
+            const content = chunks[0].contentOriginal;
+            expect(content).toContain('Product: iPhone 15 Pro (ID: p1)');
+            expect(content).toContain('Latest flagship with A17 chip');
+            expect(content).toContain('Category: Smartphones');
+            expect(content).toContain('Vendor: Apple');
+            expect(content).toContain('Price: 3,999 - 4,499 SAR');
+            expect(content).toContain('Variants: 128GB, 256GB in Black, White');
+            expect(content).toContain('Availability: in stock');
+            expect(content).toContain('Tags: phone, apple');
+        });
+
+        it('includes product description when available', () => {
+            const chunks = chunkProducts([{
+                platformProductId: '1',
+                title: 'Wireless Earbuds',
+                description: 'Noise cancelling with 24h battery life',
+                status: 'active',
+                totalInventory: 20,
+                hasVariants: false,
+            }]);
+            expect(chunks[0].contentOriginal).toContain('Noise cancelling with 24h battery life');
+        });
+
+        it('marks out-of-stock products', () => {
+            const chunks = chunkProducts([
+                { platformProductId: '1', title: 'Sold Out', status: 'active', totalInventory: 0, hasVariants: false },
+            ]);
+            expect(chunks[0].contentOriginal).toContain('Availability: out of stock');
+        });
+
+        it('marks low-stock products (inventory <= 5)', () => {
+            const chunks = chunkProducts([
+                { platformProductId: '1', title: 'Almost Gone', status: 'active', totalInventory: 3, hasVariants: false },
+            ]);
+            expect(chunks[0].contentOriginal).toContain('Availability: low stock');
+        });
+
+        it('marks in-stock products (inventory > 5)', () => {
+            const chunks = chunkProducts([
+                { platformProductId: '1', title: 'Available', status: 'active', totalInventory: 100, hasVariants: false },
+            ]);
+            expect(chunks[0].contentOriginal).toContain('Availability: in stock');
+        });
+
+        it('normalizes Arabic product names and detects language', () => {
+            const chunks = chunkProducts([
+                { platformProductId: '1', title: 'عطر أصلي مع التوصيل', status: 'active', totalInventory: 10, hasVariants: false },
+            ]);
+            expect(chunks[0].language).toBe('ar');
+            // Alef with hamza should be normalized
+            expect(chunks[0].titleNormalized).not.toContain('أ');
+        });
+
+        it('stores platformProductId in metadata', () => {
+            const chunks = chunkProducts([
+                { platformProductId: 'shopify-123', title: 'Test', status: 'active', totalInventory: 10, hasVariants: false },
+            ]);
+            expect(chunks[0].metadata).toEqual({ source: 'ecommerce', platformProductId: 'shopify-123' });
+        });
+
+        it('handles product with minimal fields (no optional data)', () => {
+            const chunks = chunkProducts([
+                { platformProductId: '1', title: 'Simple Product', status: 'active', totalInventory: 100, hasVariants: false },
+            ]);
+            expect(chunks[0].contentOriginal).toContain('Product: Simple Product');
+            expect(chunks[0].contentOriginal).toContain('Availability: in stock');
+            expect(chunks[0].contentOriginal).not.toContain('Category:');
+            expect(chunks[0].contentOriginal).not.toContain('Vendor:');
+            expect(chunks[0].contentOriginal).not.toContain('Variants:');
+            expect(chunks[0].contentOriginal).not.toContain('Tags:');
+        });
+
+        it('splits products with very long descriptions into multiple chunks', () => {
+            const longDesc = 'Feature details. '.repeat(500); // ~8500 chars, well over 800 tokens
+            const chunks = chunkProducts([{
+                platformProductId: 'big-1',
+                title: 'Product With Long Description',
+                description: longDesc,
+                status: 'active',
+                totalInventory: 10,
+                hasVariants: false,
+            }]);
+            expect(chunks.length).toBeGreaterThan(1);
+            // All chunks should keep type and metadata
+            for (const chunk of chunks) {
+                expect(chunk.type).toBe('product');
+                expect(chunk.metadata).toEqual({ source: 'ecommerce', platformProductId: 'big-1' });
+            }
+            // Split chunks get numbered titles
+            expect(chunks[0].title).toContain('1/');
         });
     });
 });

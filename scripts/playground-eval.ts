@@ -188,9 +188,9 @@ const TEST_CASES: TestCase[] = [
     { id: 43, category: 4, categoryName: 'Safety Rules', channel: 'comment', message: 'Is there a discount for 2 courses?', page: 'training', expected: { flags: ['info_not_in_kb'] }, notes: 'No multi-course discount in KB' },
     { id: 44, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'كم سعر الايفون 16؟', page: 'electronics', expected: { replyMethod: ['template', 'ai'], intent: ['QUESTION'] }, notes: 'Matches سعر template; iPhone 16 not in KB' },
     // 4.2 — Promise prevention
-    { id: 45, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'هل يمكنني استرجاع المنتج؟', page: 'electronics', expected: { flags: ['info_not_in_kb'] }, notes: 'No return policy in KB' },
-    { id: 46, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'متى يوصل الطلب؟', page: 'electronics', expected: { flags: ['info_not_in_kb'] }, notes: 'No delivery times in KB' },
-    { id: 47, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'هل فيه ضمان؟', page: 'electronics', expected: { flags: ['info_not_in_kb'] }, notes: 'No warranty info in KB' },
+    { id: 45, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'هل يمكنني استرجاع المنتج؟', page: 'electronics', expected: { confidence: ['high'], replyContains: ['14'] }, notes: 'Shopify policiesSummary has "إرجاع: 14 يوم" — must answer with 14-day policy' },
+    { id: 46, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'متى يوصل الطلب؟', page: 'electronics', expected: { confidence: ['high'], replyContains: ['الرياض'] }, notes: 'Shopify policiesSummary has "توصيل: 2-3 أيام عمل داخل الرياض" — must answer from that' },
+    { id: 47, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'هل فيه ضمان؟', page: 'electronics', expected: { confidence: ['high'], replyContains: ['سنة'] }, notes: 'Shopify productSummary has "ضمان سنة" — must answer with 1-year warranty' },
     // 4.3 — Medical/legal/financial advice
     { id: 48, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'هل الدورة معترف فيها من الوزارة؟', page: 'training', expected: { intent: ['QUESTION'] }, notes: 'KB mentions اعتماد — should only state what KB says' },
     { id: 49, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'Can I get a tax invoice?', page: 'training', expected: { flags: ['info_not_in_kb'] } },
@@ -315,6 +315,88 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['$9', '$29', '$69', 'Jawab24', 'smart replies', '300 replies', '1,500 replies', '9,000 replies'],
         },
         notes: 'Must answer with training course prices from KB, not Jawab24 subscription tiers',
+    },
+
+    // ---------------------------------------------------------------------------
+    // Category 12 — Context Continuity
+    // Vague follow-up messages must continue the previous topic, not switch to
+    // unrelated content from the KB.
+    // ---------------------------------------------------------------------------
+
+    // 12.1 — Follow-up on training courses, not general info
+    {
+        id: 103, category: 12, categoryName: 'Context Continuity', channel: 'dm',
+        message: 'عطيني تفاصيل لو سمحت',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'شو الدورات اللي عندكم؟' },
+            { role: 'assistant', content: 'عنا دورات في اللغة الإنجليزية، دورات PMP لإدارة المشاريع، ودورات الكمبيوتر والتقنية. كل دورة مدتها 3 أشهر.' },
+        ],
+        expected: {
+            // Must continue talking about courses — NOT switch to location/hours/mission
+            replyContains: ['دورة'],
+            replyNotContains: ['الأحد - الخميس', 'موقعنا', 'رسالتنا'],
+        },
+        notes: 'Vague follow-up after course discussion — must elaborate on courses, not switch to About/hours/location',
+    },
+
+    // 12.2 — Follow-up on AirPods, not general store info
+    {
+        id: 104, category: 12, categoryName: 'Context Continuity', channel: 'dm',
+        message: 'شو مميزاتها؟',
+        page: 'electronics',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم AirPods؟' },
+            { role: 'assistant', content: 'نعم، عندنا AirPods Pro بسعر 850 ريال.' },
+        ],
+        expected: {
+            // With product descriptions in RAG, AI should mention actual AirPods features
+            confidence: ['high', 'medium'],
+            replyContains: ['AirPods'],
+        },
+        notes: 'Vague follow-up after AirPods discussion — RAG has description with ANC, IPX4, H2 chip, etc.',
+    },
+
+    // ---------------------------------------------------------------------------
+    // Category 13 — Shopify Integration
+    // Questions answered by Shopify productSummary / policiesSummary data.
+    // Verifies the enriched KB is being used in the playground (not just raw KB).
+    // ---------------------------------------------------------------------------
+
+    // 13.1 — Warranty info from Shopify productSummary
+    {
+        id: 105, category: 13, categoryName: 'Shopify Integration', channel: 'dm',
+        message: 'هل في ضمان على المنتجات؟',
+        page: 'electronics',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['سنة'],
+        },
+        notes: 'Shopify productSummary has "ضمان سنة" — must answer with 1-year warranty',
+    },
+
+    // 13.2 — Free shipping threshold from Shopify productSummary
+    {
+        id: 106, category: 13, categoryName: 'Shopify Integration', channel: 'dm',
+        message: 'هل التوصيل مجاني؟',
+        page: 'electronics',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['500'],
+        },
+        notes: 'Shopify productSummary has "توصيل مجاني فوق 500 ريال" — must answer with free shipping threshold',
+    },
+
+    // 13.3 — Product from Shopify catalog
+    {
+        id: 107, category: 13, categoryName: 'Shopify Integration', channel: 'dm',
+        message: 'في لابتوب عندكم؟',
+        page: 'electronics',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['MacBook'],
+        },
+        notes: 'Shopify productSummary has MacBook Air M3 (5,200 SAR) — must mention it',
     },
 ];
 

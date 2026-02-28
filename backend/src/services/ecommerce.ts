@@ -297,6 +297,64 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
             }
         }
 
+        // 4. Re-ingest linked pages into RAG with KB text + policies + ALL product chunks.
+        //    Policies are appended to KB text so they become searchable RAG chunks
+        //    (otherwise they're lost when RAG overrides the static KB blob).
+        const [storeForPolicies] = await db.select({ policiesSummary: ecommerceStores.policiesSummary })
+            .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
+        const policiesText = storeForPolicies?.policiesSummary ?? '';
+
+        const allProducts = await db.select().from(ecommerceProducts)
+            .where(and(
+                eq(ecommerceProducts.ecommerceStoreId, storeId),
+                eq(ecommerceProducts.status, 'active'),
+            ));
+
+        const productData = allProducts.map(p => ({
+            platformProductId: p.platformProductId,
+            title: p.title,
+            description: p.description,
+            productType: p.productType,
+            vendor: p.vendor,
+            status: p.status || 'active',
+            priceRange: p.priceRange,
+            currency: p.currency,
+            totalInventory: p.totalInventory ?? 0,
+            hasVariants: p.hasVariants ?? false,
+            variantSummary: p.variantSummary,
+            tags: p.tags,
+        }));
+
+        for (const pageId of pageIds) {
+            try {
+                const [page] = await db
+                    .select({ knowledgeBase: pages.knowledgeBase, kbActiveVersion: pages.kbActiveVersion })
+                    .from(pages)
+                    .where(eq(pages.id, pageId))
+                    .limit(1);
+
+                if (page?.kbActiveVersion !== null && page?.kbActiveVersion !== undefined) {
+                    const { getIngestionService } = await import('./pages');
+                    const ingestion = getIngestionService();
+                    if (ingestion) {
+                        // Combine page KB + store policies so both are RAG-indexed
+                        const kbWithPolicies = [page.knowledgeBase, policiesText]
+                            .filter(Boolean).join('\n\n') || undefined;
+                        ingestion.ingestFullPage(
+                            pageId,
+                            kbWithPolicies,
+                            productData,
+                            page.kbActiveVersion,
+                        ).catch(() => {
+                            // Non-critical — RAG ingestion failure doesn't break the sync
+                        });
+                    }
+                }
+            } catch {
+                // Non-critical — continue with other pages
+            }
+        }
+
         return pageIds.length;
     } catch (error) {
         captureError(error, 'E-commerce cache invalidation failed', {
@@ -504,6 +562,7 @@ export async function replaceProductsAndRebuildSummary(
     products: Array<{
         platformProductId: string;
         title: string;
+        description?: string | null;
         productType?: string | null;
         vendor?: string | null;
         status: string;
@@ -523,6 +582,7 @@ export async function replaceProductsAndRebuildSummary(
             ecommerceStoreId: storeId,
             platformProductId: p.platformProductId,
             title: p.title,
+            description: p.description || null,
             productType: p.productType || null,
             vendor: p.vendor || null,
             status: p.status,

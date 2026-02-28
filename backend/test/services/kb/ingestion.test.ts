@@ -174,4 +174,79 @@ describe('KbIngestionService', () => {
 
         expect(db.execute).toHaveBeenCalled();
     });
+
+    describe('ingestFullPage', () => {
+        it('combines KB text chunks and product chunks in single upsertChunks call', async () => {
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+            await service.ingestFullPage(
+                'page-1',
+                'Our restaurant serves pizza\n\nDelivery is free',
+                [{ platformProductId: 'p1', title: 'Margherita', status: 'active', totalInventory: 99, hasVariants: false }],
+                4,
+            );
+
+            expect(mockStore.upsertChunks).toHaveBeenCalledTimes(1);
+            const types = capturedChunks.map(c => c.type);
+            expect(types).toContain('product');
+            // KB text should also produce chunks
+            expect(capturedChunks.length).toBeGreaterThan(1);
+        });
+
+        it('all chunks share the same kbVersion', async () => {
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+            await service.ingestFullPage(
+                'page-1',
+                'FAQ section\n\nPolicy section',
+                [
+                    { platformProductId: 'p1', title: 'Product A', status: 'active', totalInventory: 10, hasVariants: false },
+                    { platformProductId: 'p2', title: 'Product B', status: 'active', totalInventory: 5, hasVariants: false },
+                ],
+                7,
+            );
+
+            for (const chunk of capturedChunks) {
+                expect(chunk.kbVersion).toBe(7);
+            }
+        });
+
+        it('works with KB text only (no products)', async () => {
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+            await service.ingestFullPage('page-1', 'Some KB text about our business', [], 2);
+
+            expect(mockStore.upsertChunks).toHaveBeenCalledTimes(1);
+            expect(capturedChunks.every(c => c.type !== 'product')).toBe(true);
+        });
+
+        it('works with products only (no KB text)', async () => {
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+            await service.ingestFullPage('page-1', undefined, [
+                { platformProductId: 'p1', title: 'Test Product', status: 'active', totalInventory: 10, hasVariants: false },
+            ], 5);
+
+            expect(mockStore.upsertChunks).toHaveBeenCalledTimes(1);
+            expect(capturedChunks.every(c => c.type === 'product')).toBe(true);
+        });
+
+        it('skips when both KB and products are empty', async () => {
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+            await service.ingestFullPage('page-1', '', [], 1);
+
+            expect(mockStore.upsertChunks).not.toHaveBeenCalled();
+            expect(mockEmbedding.embedBatch).not.toHaveBeenCalled();
+        });
+
+        it('resolves gaps after full page ingestion', async () => {
+            const { gapDetectorService } = await import('../../../src/services/kb/gap-detector');
+            const service = new KbIngestionService(mockEmbedding, mockStore);
+
+            await service.ingestFullPage(
+                'page-1',
+                'Some KB text',
+                [{ platformProductId: 'p1', title: 'Product', status: 'active', totalInventory: 10, hasVariants: false }],
+                3,
+            );
+
+            expect(gapDetectorService.resolveAllForPage).toHaveBeenCalledWith('page-1');
+        });
+    });
 });
