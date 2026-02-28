@@ -202,9 +202,9 @@ export class ReplyGenerator {
             if (pageId && senderId) {
                 const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 12);
 
-                // Run RAG retrieval if enabled
+                // Run RAG retrieval if enabled (pass history for context-aware search)
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm',
+                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory,
                 );
 
                 const aiResponse = await aiService.generateReply({
@@ -233,6 +233,7 @@ export class ReplyGenerator {
         staticKB: string | undefined,
         kbActiveVersion: number | null | undefined,
         channel: 'comment' | 'dm',
+        conversationHistory?: { role: string; content: string }[],
     ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[]; ragAttempted: boolean }> {
         const retrieval = getRetrievalService();
 
@@ -241,9 +242,29 @@ export class ReplyGenerator {
             return { effectiveKB: staticKB, ragAttempted: false };
         }
 
+        // Enrich vague follow-up queries with conversation context for better RAG retrieval.
+        // When a customer says "شو مميزاتها؟" after asking about AirPods, the RAG query
+        // becomes "AirPods Pro شو مميزاتها؟" so it finds the right product chunk.
+        let enrichedQuery = query;
+        if (conversationHistory && conversationHistory.length > 0) {
+            const lastAssistant = [...conversationHistory].reverse().find(m => m.role === 'assistant');
+            if (lastAssistant) {
+                // Only enrich if current query is short/vague (likely a follow-up)
+                const isVague = query.trim().split(/\s+/).length <= 6;
+                if (isVague) {
+                    // Take first 100 chars of last assistant reply as context
+                    const context = lastAssistant.content.slice(0, 100);
+                    enrichedQuery = `${context} ${query}`;
+                    this.logger.debug('[Generator] Enriched RAG query with conversation context', {
+                        original: query, enriched: enrichedQuery.slice(0, 120),
+                    });
+                }
+            }
+        }
+
         try {
             retrieval.setLogger(this.logger);
-            const { chunks, queryEmbedding } = await retrieval.retrieve(pageId, query, kbActiveVersion);
+            const { chunks, queryEmbedding } = await retrieval.retrieve(pageId, enrichedQuery, kbActiveVersion);
 
             if (chunks.length === 0) {
                 this.logger.debug('[Generator] RAG returned no chunks, using static KB', { pageId, channel });

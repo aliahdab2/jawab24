@@ -874,7 +874,17 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
                         const retrievalService = new RetrievalService(embeddingProvider);
                         retrievalService.setLogger(request.log);
-                        const result = await retrievalService.retrieve(pageId, question, activeVersion);
+
+                        // Enrich vague follow-up queries with conversation context for better RAG retrieval
+                        let ragQuery = question;
+                        if (conversationHistory && conversationHistory.length > 0) {
+                            const lastAssistant = [...conversationHistory].reverse().find(m => m.role === 'assistant');
+                            if (lastAssistant && question.trim().split(/\s+/).length <= 6) {
+                                ragQuery = `${lastAssistant.content.slice(0, 100)} ${question}`;
+                            }
+                        }
+
+                        const result = await retrievalService.retrieve(pageId, ragQuery, activeVersion);
                         queryEmbedding = result.queryEmbedding;
                         request.log.debug({ chunksFound: result.chunks.length, topScore: result.chunks[0]?.finalScore }, 'RAG retrieval result');
 
