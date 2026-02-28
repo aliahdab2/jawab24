@@ -30,6 +30,7 @@ vi.mock('../../src/services/salla', () => ({
 // --- Mocked shared ecommerce service ---
 const mockGetStoreByDomain = vi.fn();
 const mockGetStoreByWorkspace = vi.fn();
+const mockGetStoreByWorkspaceAny = vi.fn();
 const mockCreateStore = vi.fn().mockResolvedValue({ id: 'store-1', storeDomain: 'my-salla-store.salla.sa' });
 const mockDisconnectStore = vi.fn().mockResolvedValue(undefined);
 const mockDeactivateStore = vi.fn().mockResolvedValue(undefined);
@@ -41,6 +42,7 @@ const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-salla-123');
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreByDomain: (...args: any[]) => mockGetStoreByDomain(...args),
     getStoreByWorkspace: (...args: any[]) => mockGetStoreByWorkspace(...args),
+    getStoreByWorkspaceAny: (...args: any[]) => mockGetStoreByWorkspaceAny(...args),
     createStore: (...args: any[]) => mockCreateStore(...args),
     disconnectStore: (...args: any[]) => mockDisconnectStore(...args),
     deactivateStore: (...args: any[]) => mockDeactivateStore(...args),
