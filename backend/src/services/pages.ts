@@ -1,6 +1,6 @@
 import { db } from '../db';
-import { pages } from '../db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { pages, posts, comments, instagramComments, instagramMedia } from '../db/schema';
+import { eq, and, desc, sql, count } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import type { BusinessProfile } from '@jawab24/shared';
 import { facebookService } from './facebook';
@@ -208,33 +208,49 @@ export class PagesService {
         if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, ...emptyStats }));
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
+        // Two parallel queries (FB + IG) grouped by page_id — same pattern as commentsService.getStats()
         const statsMap = new Map<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>();
         try {
-            const statsRows = await db.execute(
-                sql`SELECT
-                    p.id AS page_id,
-                    (SELECT COUNT(*)::int FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id)
-                    + (SELECT COUNT(*)::int FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
-                    AS comments_count,
-                    (SELECT COUNT(*)::int FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id AND c.replied = true)
-                    + (SELECT COUNT(*)::int FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id AND ic.replied = true)
-                    AS replies_count,
-                    EXTRACT(EPOCH FROM GREATEST(
-                        (SELECT MAX(c.replied_at) FROM comments c JOIN posts po ON c.post_id = po.id WHERE po.page_id = p.id),
-                        (SELECT MAX(ic.replied_at) FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id WHERE im.page_id = p.id)
-                    )) AS last_activity
-                FROM pages p
-                WHERE p.workspace_id = ${workspaceId}`
-            );
+            const [fbRows, igRows] = await Promise.all([
+                db.select({
+                    pageId: pages.id,
+                    commentsCount: count(),
+                    repliesCount: sql<number>`count(*) FILTER (WHERE ${comments.replied} = true)`,
+                    lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${comments.repliedAt}))`,
+                })
+                    .from(comments)
+                    .innerJoin(posts, eq(comments.postId, posts.id))
+                    .innerJoin(pages, eq(posts.pageId, pages.id))
+                    .where(eq(pages.workspaceId, workspaceId))
+                    .groupBy(pages.id),
 
-            const rows = statsRows as unknown as Array<Record<string, unknown>>;
-            for (const row of rows) {
-                const cc = Number(row.comments_count) || 0;
-                const rc = Number(row.replies_count) || 0;
-                statsMap.set(row.page_id as string, {
-                    commentsCount: cc,
-                    repliesCount: rc,
-                    lastActivity: row.last_activity ? Math.round(Number(row.last_activity) * 1000) : null,
+                db.select({
+                    pageId: pages.id,
+                    commentsCount: count(),
+                    repliesCount: sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true)`,
+                    lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${instagramComments.repliedAt}))`,
+                })
+                    .from(instagramComments)
+                    .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                    .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                    .where(eq(pages.workspaceId, workspaceId))
+                    .groupBy(pages.id),
+            ]);
+
+            for (const row of fbRows) {
+                const existing = statsMap.get(row.pageId) ?? { commentsCount: 0, repliesCount: 0, lastActivity: null };
+                statsMap.set(row.pageId, {
+                    commentsCount: existing.commentsCount + Number(row.commentsCount),
+                    repliesCount: existing.repliesCount + Number(row.repliesCount),
+                    lastActivity: row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : existing.lastActivity,
+                });
+            }
+            for (const row of igRows) {
+                const existing = statsMap.get(row.pageId) ?? { commentsCount: 0, repliesCount: 0, lastActivity: null };
+                statsMap.set(row.pageId, {
+                    commentsCount: existing.commentsCount + Number(row.commentsCount),
+                    repliesCount: existing.repliesCount + Number(row.repliesCount),
+                    lastActivity: row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : existing.lastActivity,
                 });
             }
         } catch (err) {
