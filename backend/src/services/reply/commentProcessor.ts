@@ -10,6 +10,7 @@ import { Logger, noopLogger, CommentResult } from '../../types';
 import type { CommentPlatformAdapter } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { truncateAtSentence } from '../../utils/text';
+import { getStorePolicies } from '../ecommerce';
 
 /**
  * Unified Comment Processor
@@ -145,6 +146,12 @@ export class CommentProcessor {
             for (const integration of integrationRegistry.getEnabled()) {
                 const enriched = await integration.enrichKnowledgeBase(generatorContext.knowledgeBase, page as unknown as Record<string, unknown>);
                 if (enriched !== null) { generatorContext.knowledgeBase = enriched; break; }
+            }
+
+            // Fetch store policies separately so they survive RAG mode (RAG drops static KB)
+            const ecommerceStoreId = (page as unknown as Record<string, unknown>).ecommerceStoreId;
+            if (ecommerceStoreId && typeof ecommerceStoreId === 'string') {
+                try { generatorContext.storePolicies = await getStorePolicies(ecommerceStoreId); } catch { /* non-critical */ }
             }
 
             // Append business profile (hours, location, phone) to KB context

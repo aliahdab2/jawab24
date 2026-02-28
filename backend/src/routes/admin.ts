@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps } from '../db/schema';
-import { getEnrichedKnowledgeBase } from '../services/ecommerce';
+import { getEnrichedKnowledgeBase, getStorePolicies } from '../services/ecommerce';
 import { eq, ilike, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { config } from '../config';
@@ -905,9 +905,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
                 // Enrich KB with e-commerce product/policy data (same as production processor)
                 let pageKB = page.knowledgeBase || undefined;
+                let storePolicies: string | undefined;
                 if (page.ecommerceStoreId) {
                     try {
                         pageKB = await getEnrichedKnowledgeBase(pageKB, page.ecommerceStoreId);
+                        storePolicies = await getStorePolicies(page.ecommerceStoreId);
                     } catch {
                         // Non-critical — fall back to raw KB
                     }
@@ -924,6 +926,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         pageName: page.name ?? undefined,
                         knowledgeBase: effectiveKB,
                         retrievedChunks: retrievedChunks.length > 0 ? retrievedChunks : undefined,
+                        storePolicies,
                         channel: effectiveChannel,
                         kbActiveVersion: page.kbActiveVersion,
                         queryEmbedding,

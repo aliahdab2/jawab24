@@ -77,6 +77,7 @@ export interface AiGenerateRequest {
         previousReplies?: string[];
         knowledgeBase?: string;
         retrievedChunks?: RetrievedChunkContext[];
+        storePolicies?: string;
         channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
         kbActiveVersion?: number | null;

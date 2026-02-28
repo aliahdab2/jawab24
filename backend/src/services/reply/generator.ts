@@ -49,6 +49,7 @@ export interface GenerateReplyContext {
     pageName?: string;
     knowledgeBase?: string;
     kbActiveVersion?: number | null;
+    storePolicies?: string;
     // For comments
     postId?: string;
     postMessage?: string;
@@ -149,7 +150,7 @@ export class ReplyGenerator {
 
             const aiResponse = await aiService.generateReply({
                 comment: text,
-                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
+                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
@@ -203,7 +204,7 @@ export class ReplyGenerator {
 
                 const aiResponse = await aiService.generateReply({
                     comment: text,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
                 });
 
                 return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);

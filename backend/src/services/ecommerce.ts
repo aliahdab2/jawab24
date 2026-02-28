@@ -17,7 +17,7 @@ import { redis } from '../lib/redis';
 
 export type EcommercePlatform = 'shopify' | 'salla' | 'zid';
 
-export const KB_MAX_CHARS = 4000; // Must match ai-worker's KB_MAX_CHARS
+export const KB_MAX_CHARS = 8000; // Must match ai-worker's KB_MAX_CHARS
 
 // --- Store CRUD ---
 
@@ -365,6 +365,13 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
         });
         return 0;
     }
+}
+
+/** Fetch just the policiesSummary for a store (return, warranty, delivery, payment). */
+export async function getStorePolicies(ecommerceStoreId: string): Promise<string | undefined> {
+    const store = await getStoreById(ecommerceStoreId);
+    if (!store || !store.isActive) return undefined;
+    return store.policiesSummary || undefined;
 }
 
 // --- KB Enrichment ---

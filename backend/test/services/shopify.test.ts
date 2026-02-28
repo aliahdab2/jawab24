@@ -462,7 +462,7 @@ describe('Shopify Service', () => {
         it('should skip page KB when remaining space is less than 100 chars', async () => {
             const store = {
                 isActive: true,
-                productSummary: 'X'.repeat(3950),
+                productSummary: 'X'.repeat(7950),
                 policiesSummary: null,
             };
             mockSelect.mockReturnValue({

@@ -660,7 +660,7 @@ const DEMO_SHOPIFY_STORE = {
     platformData: { planName: 'basic' },
     productCount: 5,
     productSummary: `📱 منتجات متجر الإلكترونيات:\n\n1. iPhone 15 Pro - 3,800 ريال\n2. Samsung Galaxy S24 - 2,900 ريال\n3. MacBook Air M3 - 5,200 ريال\n4. AirPods Pro - 850 ريال\n5. كفر حماية iPhone 15 - 120 ريال\n\n🚚 توصيل مجاني فوق 500 ريال | ✅ ضمان سنة`,
-    policiesSummary: `إرجاع: 14 يوم\nتوصيل: 2-3 أيام عمل داخل الرياض\nدفع: بطاقة، تحويل، الدفع عند الاستلام`,
+    policiesSummary: `ضمان: سنة كاملة على جميع المنتجات\nإرجاع: 14 يوم\nتوصيل: 2-3 أيام عمل داخل الرياض، مجاني للطلبات فوق 500 ريال\nدفع: بطاقة، تحويل، الدفع عند الاستلام`,
 };
 
 const DEMO_SHOPIFY_PRODUCTS = [
