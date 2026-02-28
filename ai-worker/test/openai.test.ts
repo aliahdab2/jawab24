@@ -1396,8 +1396,8 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(systemPrompt).toContain('"offensive_or_abusive"');
     });
 
-    it('should use PROMPT_VERSION v12', () => {
-        expect(PROMPT_VERSION).toBe('v12');
+    it('should use PROMPT_VERSION v13', () => {
+        expect(PROMPT_VERSION).toBe('v13');
     });
 
     it('should use json_schema response format with strict schema', async () => {
