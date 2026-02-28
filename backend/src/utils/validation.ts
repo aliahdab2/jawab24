@@ -68,6 +68,9 @@ export const UpdateSettingsSchema = z.object({
     commentEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     messageEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     notificationsEnabled: z.boolean().optional(),
+    replyStyle: z.enum(['professional', 'casual', 'enthusiastic']).optional(),
+    brandVoiceNotes: z.string().max(500, 'Brand voice notes must be less than 500 characters').optional(),
+    holdLowConfidence: z.boolean().optional(),
 });
 
 // ==========================================

@@ -22,6 +22,7 @@ interface CacheContext {
     kbActiveVersion?: number | null;
     postMessage?: string;
     storePolicies?: string;
+    replyStyle?: string;
 }
 
 /** Shape returned by a successful exact-cache hit. */
@@ -69,6 +70,7 @@ export class AiService {
             `kbv:${ctx.kbActiveVersion ?? 0}`,
             `p:${ctx.postMessage || ''}`,
             `sp:${ctx.storePolicies ? crypto.createHash('md5').update(ctx.storePolicies).digest('hex').slice(0, 8) : ''}`,
+            `rs:${ctx.replyStyle || 'professional'}`,
             `pv:${PROMPT_VERSION}`,
         ].join(':');
 
@@ -215,6 +217,7 @@ export class AiService {
             kbActiveVersion,
             postMessage,
             storePolicies: request.context?.storePolicies,
+            replyStyle: request.context?.replyStyle,
         };
 
         // Layer 1: Exact cache (scoped per page + KB version + post context)

@@ -23,6 +23,9 @@ export interface SettingsState {
   commentEscalationMinutes: number;
   messageEscalationMinutes: number;
   handoffPauseDurationMinutes: number;
+  replyStyle: string;
+  brandVoiceNotes: string;
+  holdLowConfidence: boolean;
 }
 
 export interface SettingsCardProps {

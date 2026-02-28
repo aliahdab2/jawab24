@@ -161,8 +161,12 @@ export class CommentProcessor {
                     ? `${generatorContext.knowledgeBase}\n\n--- Business Info ---\n${profileText}`
                     : profileText;
             }
+            // Pass reply style settings to generator context
+            generatorContext.replyStyle = userSettings.replyStyle;
+            generatorContext.brandVoiceNotes = userSettings.brandVoiceNotes || undefined;
+
             const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
-            let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent } =
+            let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent, confidence } =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false, commentReplyMode);
 
             // Capture the original AI-generated reply before any modifications (fallback, truncation, CTA)
@@ -188,6 +192,26 @@ export class CommentProcessor {
                     ).catch(err => this.logger.error('Offensive comment notification failed', { err }));
                 }
                 pipelineMetrics.record(pipeline, 'skipped_risky');
+                return { success: true, commentId: comment.id };
+            }
+
+            // 8d. Hold low-confidence replies for merchant review when enabled
+            if (userSettings.holdLowConfidence && confidence === 'low' && replyMethod === 'ai') {
+                const lang = detectLanguageCode(commentMessage);
+                await adapter.markAsReplied(
+                    comment.id, '', replyMethod,
+                    lang === 'unknown' ? 'en' : lang,
+                    undefined, true, 'held_low_confidence', aiIntent, aiOriginalReply,
+                );
+                if (page.userId) {
+                    notificationService.sendTemplateNotification(
+                        page.userId,
+                        'flagged_reply',
+                        { senderName: fromName || 'Unknown', reason: 'held_low_confidence' },
+                        { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                    ).catch(err => this.logger.error('Held reply notification failed', { err }));
+                }
+                pipelineMetrics.record(pipeline, 'held_low_confidence');
                 return { success: true, commentId: comment.id };
             }
 

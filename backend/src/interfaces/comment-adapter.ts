@@ -35,6 +35,8 @@ export interface CommentReplyContext {
     pageId: string;
     accessToken?: string;
     storePolicies?: string;
+    replyStyle?: 'professional' | 'casual' | 'enthusiastic';
+    brandVoiceNotes?: string;
 }
 
 export interface SendCommentResult {

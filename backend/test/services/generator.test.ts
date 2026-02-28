@@ -823,7 +823,7 @@ describe('ReplyGenerator - Flagging System', () => {
 
             await generator.generateForMessage(baseContext, true);
 
-            expect(messagesService.getConversationHistory).toHaveBeenCalledWith('page-123', 'sender-456', 6);
+            expect(messagesService.getConversationHistory).toHaveBeenCalledWith('page-123', 'sender-456', 12);
             expect(aiService.generateReply).toHaveBeenCalledWith(
                 expect.objectContaining({
                     context: expect.objectContaining({

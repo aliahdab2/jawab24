@@ -281,6 +281,13 @@
       "when": 1772292092980,
       "tag": "0039_tiresome_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1772294464009,
+      "tag": "0040_flowery_vulture",
+      "breakpoints": true
     }
   ]
 }

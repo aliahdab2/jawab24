@@ -28,6 +28,7 @@ import {
   NotificationsCard,
   HandoffPauseCard,
   GreetingMessageCard,
+  ReplyStyleCard,
   DangerZone,
 } from '@/components/settings';
 import type { SettingsState } from '@/components/settings';
@@ -57,6 +58,9 @@ const INITIAL_SETTINGS: SettingsState = {
   commentEscalationMinutes: 60,
   messageEscalationMinutes: 30,
   handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
+  replyStyle: 'professional',
+  brandVoiceNotes: '',
+  holdLowConfidence: false,
 };
 
 const SettingsPage: NextPageWithLayout = () => {
@@ -117,6 +121,9 @@ const SettingsPage: NextPageWithLayout = () => {
         handoffPauseDurationMinutes: data.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES,
         notificationsEnabled: data.notificationsEnabled ?? true,
         pushNotifications: data.pushNotifications ?? true,
+        replyStyle: data.replyStyle || 'professional',
+        brandVoiceNotes: data.brandVoiceNotes || '',
+        holdLowConfidence: data.holdLowConfidence ?? false,
       };
       setSettings(newSettings);
       setInitialSettings(newSettings);
@@ -286,6 +293,7 @@ const SettingsPage: NextPageWithLayout = () => {
           </div>
 
           <HandoffPauseCard settings={settings} setSettings={setSettings} />
+          <ReplyStyleCard settings={settings} setSettings={setSettings} />
           <GreetingMessageCard settings={settings} setSettings={setSettings} />
         </div>
       )}

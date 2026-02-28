@@ -82,6 +82,8 @@ export interface AiGenerateRequest {
         conversationHistory?: ConversationMessage[];
         kbActiveVersion?: number | null;
         queryEmbedding?: number[];
+        replyStyle?: string;
+        brandVoiceNotes?: string;
     };
 }
 

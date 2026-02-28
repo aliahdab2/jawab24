@@ -56,6 +56,8 @@ export interface GenerateRequest {
         storePolicies?: string;
         channel?: 'comment' | 'dm';
         conversationHistory?: ConversationMessage[];
+        replyStyle?: string;
+        brandVoiceNotes?: string;
     };
 }
 
@@ -196,7 +198,9 @@ export class OpenAIService {
     }
 
     /**
-     * Build messages array including conversation history, trimmed to token budget
+     * Build messages array including conversation history, trimmed to token budget.
+     * When history > 8 messages, older messages (all except the last 4) are compressed
+     * into a short summary line to preserve context while saving tokens.
      */
     private buildMessages(request: GenerateRequest, systemPrompt: string): { messages: OpenAI.ChatCompletionMessageParam[]; tokenInfo: TokenInfo } {
         const messages: OpenAI.ChatCompletionMessageParam[] = [
@@ -206,11 +210,31 @@ export class OpenAIService {
         // Collect history messages separately so we can trim them
         const historyMessages: OpenAI.ChatCompletionMessageParam[] = [];
         if (request.context?.conversationHistory && request.context.conversationHistory.length > 0) {
-            for (const msg of request.context.conversationHistory) {
-                historyMessages.push({
-                    role: msg.role === 'user' ? 'user' : 'assistant',
-                    content: msg.content,
-                });
+            const history = request.context.conversationHistory;
+            const COMPRESS_THRESHOLD = 8;
+            const KEEP_RECENT = 4;
+
+            if (history.length > COMPRESS_THRESHOLD) {
+                // Compress older messages into a summary, keep last 4 verbatim
+                const olderMessages = history.slice(0, history.length - KEEP_RECENT);
+                const recentMessages = history.slice(history.length - KEEP_RECENT);
+
+                const summary = this.compressHistory(olderMessages);
+                historyMessages.push({ role: 'user', content: summary });
+
+                for (const msg of recentMessages) {
+                    historyMessages.push({
+                        role: msg.role === 'user' ? 'user' : 'assistant',
+                        content: msg.content,
+                    });
+                }
+            } else {
+                for (const msg of history) {
+                    historyMessages.push({
+                        role: msg.role === 'user' ? 'user' : 'assistant',
+                        content: msg.content,
+                    });
+                }
             }
         }
 
@@ -262,7 +286,16 @@ export class OpenAIService {
             || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');
         const isDM = channel === 'dm';
 
-        let prompt = `You are a friendly and professional customer service assistant for "${pageName}".
+        // Reply style — maps setting to prompt personality directive
+        const styleMap: Record<string, string> = {
+            professional: 'formal but warm',
+            casual: 'friendly and conversational',
+            enthusiastic: 'energetic and enthusiastic',
+        };
+        const replyStyle = request.context?.replyStyle;
+        const styleDirective = styleMap[replyStyle || ''] || styleMap.professional;
+
+        let prompt = `You are a ${styleDirective} customer service assistant for "${pageName}".
 ${isDM ? 'You are having a conversation with a customer via direct message.' : 'Your task is to respond to customer comments on social media posts.'}
 
 STEP 1 - IDENTIFY INTENT:
@@ -314,7 +347,7 @@ STEP 2 - RESPOND BASED ON INTENT:
 - SPAM_OR_IRRELEVANT → Do NOT reply. Set "reply" to an empty string "". The system will skip sending any message.
 
 RESPONSE GUIDELINES:
-- Be polite, helpful, and professional
+- Be ${styleDirective}, helpful, and attentive to the customer
 ${isDM
     ? '- You may provide full detailed answers including prices, availability, and specifics from <business_knowledge>.\n- When a customer asks about pricing, plans, packages, or what you offer: list ALL available options from <business_knowledge>, not just one. Customers expect to see their full range of choices.\n- Keep responses concise but thorough (up to 4 sentences).\n- CONTEXT CONTINUITY: When a customer\'s message is a vague follow-up or uses pronouns referring to a previously discussed topic (e.g., "give me details", "tell me more", "عطيني تفاصيل", "اخبرني أكثر", "ممكن تفاصيل", "شو مميزاتها؟", "كم سعرها؟", "هل هي متوفرة؟") without explicitly naming a new topic, look at the MOST RECENT assistant reply in the conversation to identify the SPECIFIC product/topic just discussed. Then answer about EXACTLY THAT product/topic. Example: if the last reply mentioned "AirPods Pro", and the customer asks "شو مميزاتها؟", answer about AirPods Pro specifically — even if details are limited. NEVER switch to a different product or topic. NEVER ask "which product do you mean?" when the conversation already makes it clear.'
     : '- CRITICAL: Public comment replies MUST be 1 sentence (max 2 if absolutely necessary). Maximum 40 words.\n- NEVER include prices, detailed specs, order info, or lengthy explanations in a public comment.\n- For QUESTION and PURCHASE_INTENT: give a brief acknowledgment, then say "Send us a message for details!" (or Arabic equivalent).\n- For COMPLIMENT and GREETING: a short warm reply is enough — no DM redirect needed.'}
@@ -326,7 +359,7 @@ ${isDM
     ? '- IMPORTANT: You ARE the business\'s page assistant talking to customers via DM. When you say "contact us" or "message us", you ARE the contact point. Do NOT tell customers to "contact us directly" or "send a DM" when they are ALREADY talking to you in a DM. Instead, ask them for the details you need right here in the conversation.'
     : '- For public comments: your reply will be visible to everyone. Keep it brief, warm, and redirect to DM for anything requiring detail.\n- Example good comment reply (English): "Thanks for asking! Send us a message and we\'ll share all the details 😊"\n- Example good comment reply (Arabic): "شكراً لسؤالك! راسلنا على الخاص ومنوافيك بكل التفاصيل 😊"'}
 - If a customer asks for contact info (phone, email, address) and it IS in <business_knowledge>, share it. If it is NOT, say you'll get that info for them and someone from the team will follow up.
-
+${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (follow these additional guidelines from the business owner):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, 500)}\n` : ''}
 CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER use your training knowledge to answer. The ONLY valid source is <business_knowledge>. If it is not in <business_knowledge>, you do not know it — even if you "know" it from your training data. This applies to ALL topics: products, prices, policies, hours, locations, and anything else.
 - NEVER mention Jawab24, auto-reply software, chatbot platforms, subscription plans ($9/$29/$69), AI reply credits, smart-reply quotas, or any tech/SaaS product. You are a customer service assistant for this business only. If a customer asks who built you or how you work, say you are the assistant for this page and redirect to their question.
@@ -474,6 +507,43 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
 {"reply":"عنا 3 باقات:\\n• المبتدئ – 9$ شهرياً\\n• الأعمال – 29$ شهرياً\\n• الاحترافية – 69$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","flags":[]}`;
 
         return prompt;
+    }
+
+    /**
+     * Compress older conversation messages into a brief summary line.
+     * Extracts key topics from user messages and summarizes assistant responses.
+     * This is a local text heuristic — no LLM call.
+     */
+    private compressHistory(messages: ConversationMessage[]): string {
+        const userTopics: string[] = [];
+        const assistantTopics: string[] = [];
+
+        for (const msg of messages) {
+            // Extract meaningful words (3+ chars, skip common stop words)
+            const words = msg.content
+                .replace(/[^\w\u0600-\u06FF\s]/g, ' ')
+                .split(/\s+/)
+                .filter(w => w.length >= 3);
+
+            // Take up to 5 key words per message as topic indicators
+            const keywords = words.slice(0, 5).join(', ');
+            if (!keywords) continue;
+
+            if (msg.role === 'user') {
+                userTopics.push(keywords);
+            } else {
+                assistantTopics.push(keywords);
+            }
+        }
+
+        const userPart = userTopics.length > 0
+            ? `customer asked about: ${userTopics.join('; ')}`
+            : 'customer sent messages';
+        const assistantPart = assistantTopics.length > 0
+            ? `You responded about: ${assistantTopics.join('; ')}`
+            : '';
+
+        return `[Earlier conversation summary] ${userPart}. ${assistantPart}`.trim();
     }
 
     /**

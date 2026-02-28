@@ -33,6 +33,7 @@ export type Outcome =
     | 'post_disabled'
     | 'media_disabled'
     | 'skipped_risky'
+    | 'held_low_confidence'
     | 'error';
 
 const PREFIX = 'metrics:pipeline:';

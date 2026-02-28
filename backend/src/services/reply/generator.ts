@@ -57,6 +57,9 @@ export interface GenerateReplyContext {
     accessToken?: string;
     // For messages
     senderId?: string;
+    // Reply customization
+    replyStyle?: string;
+    brandVoiceNotes?: string;
 }
 
 export type CommentReplyMode = 'public' | 'private' | 'dual';
@@ -68,6 +71,7 @@ export interface GenerateReplyResult {
     needsAttention?: boolean;
     flagReason?: string;
     aiIntent?: string;
+    confidence?: string;
 }
 
 /** Lazy-init retrieval service (only created when RAG_MODE != 'off' and OPENAI_API_KEY exists) */
@@ -150,7 +154,7 @@ export class ReplyGenerator {
 
             const aiResponse = await aiService.generateReply({
                 comment: text,
-                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
+                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
@@ -195,7 +199,7 @@ export class ReplyGenerator {
             }
 
             if (pageId && senderId) {
-                const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 6);
+                const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 12);
 
                 // Run RAG retrieval if enabled
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
@@ -204,7 +208,7 @@ export class ReplyGenerator {
 
                 const aiResponse = await aiService.generateReply({
                     comment: text,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding }
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
                 });
 
                 return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
@@ -297,7 +301,7 @@ export class ReplyGenerator {
         // Only dedup in DMs when AI can handle the fallback
         if (!aiEnabled || !pageId || !senderId || !result.replyText) return false;
 
-        const history = await messagesService.getConversationHistory(pageId, senderId, 6);
+        const history = await messagesService.getConversationHistory(pageId, senderId, 12);
         const isRepeat = history.some(m => m.role === 'assistant' && m.content === result.replyText);
 
         if (isRepeat) {
@@ -389,6 +393,7 @@ export class ReplyGenerator {
             needsAttention,
             flagReason,
             aiIntent: normalizedIntent,
+            confidence: aiResponse.confidence,
         };
     }
 }

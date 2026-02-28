@@ -31,6 +31,9 @@ export interface UserSettings {
     commentEscalationMinutes: number;
     messageEscalationMinutes: number;
     handoffPauseDurationMinutes: number;
+    replyStyle: 'professional' | 'casual' | 'enthusiastic';
+    brandVoiceNotes: string;
+    holdLowConfidence: boolean;
     notificationsEnabled: boolean;
 }
 
@@ -59,5 +62,8 @@ export interface UpdateSettingsDTO {
     commentEscalationMinutes?: number;
     messageEscalationMinutes?: number;
     handoffPauseDurationMinutes?: number;
+    replyStyle?: 'professional' | 'casual' | 'enthusiastic';
+    brandVoiceNotes?: string;
+    holdLowConfidence?: boolean;
     notificationsEnabled?: boolean;
 }

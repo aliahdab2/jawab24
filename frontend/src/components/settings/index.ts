@@ -8,5 +8,6 @@ export { ReplyDelayCard } from './ReplyDelayCard';
 export { NotificationsCard } from './NotificationsCard';
 export { HandoffPauseCard } from './HandoffPauseCard';
 export { GreetingMessageCard } from './GreetingMessageCard';
+export { ReplyStyleCard } from './ReplyStyleCard';
 export { DangerZone } from './DangerZone';
 export type { SettingsState, SettingsCardProps } from './types';

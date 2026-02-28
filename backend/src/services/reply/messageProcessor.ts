@@ -224,7 +224,7 @@ export class MessageProcessor {
                     ? `${knowledgeBase}\n\n--- Business Info ---\n${profileText}`
                     : profileText;
             }
-            let { replyText, replyMethod, needsAttention, flagReason, aiIntent } =
+            let { replyText, replyMethod, needsAttention, flagReason, aiIntent, confidence } =
                 await replyGenerator.generateForMessage(
                     {
                         workspaceId,
@@ -237,6 +237,8 @@ export class MessageProcessor {
                         kbActiveVersion: page.kbActiveVersion,
                         pageId: page.id,
                         senderId,
+                        replyStyle: userSettings.replyStyle,
+                        brandVoiceNotes: userSettings.brandVoiceNotes || undefined,
                     },
                     userSettings.aiEnabled ?? false,
                 );
@@ -267,6 +269,24 @@ export class MessageProcessor {
                     ).catch(err => this.logger.error('Offensive message notification failed', { err }));
                 }
                 pipelineMetrics.record(pipeline, 'skipped_risky');
+                return { success: true, messageId: platformMessageId };
+            }
+
+            // 12d. Hold low-confidence replies for merchant review when enabled
+            if (userSettings.holdLowConfidence && confidence === 'low' && replyMethod === 'ai') {
+                await messagesService.markAsReplied(
+                    storedMessage.id, '', replyMethod,
+                    true, 'held_low_confidence', aiIntent, db, aiOriginalReply,
+                );
+                if (page.userId) {
+                    notificationService.sendTemplateNotification(
+                        page.userId,
+                        'flagged_reply',
+                        { senderName: senderName || senderId, reason: 'held_low_confidence' },
+                        { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                    ).catch(err => this.logger.error('Held reply notification failed', { err }));
+                }
+                pipelineMetrics.record(pipeline, 'held_low_confidence');
                 return { success: true, messageId: platformMessageId };
             }
 

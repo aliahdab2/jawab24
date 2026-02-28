@@ -17,6 +17,7 @@ const PIPELINE_FIELDS = [
     'handoffPauseDurationMinutes', 'commentEscalationMinutes',
     'messageEscalationMinutes', 'defaultReplyLanguage',
     'supportedLanguages', 'autoDetectLanguage',
+    'replyStyle', 'brandVoiceNotes', 'holdLowConfidence',
 ] as const;
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
@@ -310,6 +311,9 @@ export class SettingsService {
             commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,
             handoffPauseDurationMinutes: record.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES,
+            replyStyle: (record.replyStyle as 'professional' | 'casual' | 'enthusiastic') || 'professional',
+            brandVoiceNotes: record.brandVoiceNotes || '',
+            holdLowConfidence: record.holdLowConfidence ?? false,
             notificationsEnabled: record.notificationsEnabled ?? true,
         };
     }

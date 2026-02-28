@@ -308,6 +308,10 @@ export const settings = pgTable('settings', {
     messageEscalationMinutes: integer('message_escalation_minutes').default(30),
     // Human handoff: default pause duration when user takes over a conversation
     handoffPauseDurationMinutes: integer('handoff_pause_duration_minutes').default(DEFAULT_HANDOFF_PAUSE_MINUTES),
+    // Reply style & confidence routing
+    replyStyle: varchar('reply_style', { length: 20 }).default('professional'),
+    brandVoiceNotes: text('brand_voice_notes').default(''),
+    holdLowConfidence: boolean('hold_low_confidence').default(false),
     // Push notification preferences
     notificationsEnabled: boolean('notifications_enabled').default(true).notNull(),
     createdAt: timestamp('created_at').defaultNow(),

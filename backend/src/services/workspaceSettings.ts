@@ -31,6 +31,9 @@ const DEFAULTS: WorkspaceSettings = {
     commentEscalationMinutes: 60,
     messageEscalationMinutes: 30,
     handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
+    replyStyle: 'professional',
+    brandVoiceNotes: '',
+    holdLowConfidence: false,
 };
 
 /** Default away message as send-time fallback when all stored values are empty */
