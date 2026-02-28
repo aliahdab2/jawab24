@@ -187,7 +187,7 @@ function ConnectedStoreCard({
             <p className="font-semibold text-surface-800">{store.storeName || store.storeDomain}</p>
             <p className="text-xs text-surface-600">
               {t(platform.productsKey)}: {store.productCount} &middot;{' '}
-              {t(platform.lastSyncKey)}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleDateString() : t(platform.neverKey)}
+              {t(platform.lastSyncKey)}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : t(platform.neverKey)}
             </p>
           </div>
           <div className="flex gap-2">
@@ -195,7 +195,7 @@ function ConnectedStoreCard({
               <RefreshCw className={clsx('w-4 h-4 me-1', syncing && 'animate-spin')} />
               {syncing ? t(platform.syncingKey) : t(platform.syncNowKey)}
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setShowDisconnectModal(true)}>
+            <Button variant="danger" size="sm" onClick={() => setShowDisconnectModal(true)}>
               <Unlink className="w-4 h-4 me-1" />
               {t(platform.disconnectKey)}
             </Button>
@@ -245,19 +245,23 @@ function ConnectedStoreCard({
 /*  Empty connect card (not connected)                                 */
 /* ------------------------------------------------------------------ */
 
-function ConnectCard({ platform }: { platform: PlatformConfig }) {
+function ConnectCard({ platform, blocked }: { platform: PlatformConfig; blocked?: boolean }) {
   const { t } = useTranslation();
 
   return (
-    <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4 flex flex-col items-center text-center">
+    <Card className={clsx('border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4 flex flex-col items-center text-center', blocked && 'opacity-60')}>
       <div className={clsx('w-16 h-16 rounded-2xl flex items-center justify-center mb-4 landscape:w-12 landscape:h-12', platform.accentBg, platform.accentText)}>
         {platform.icon}
       </div>
       <h3 className="font-bold text-lg landscape:text-base mb-1">{t(platform.nameKey)}</h3>
       <p className="text-sm text-surface-500 mb-4 landscape:text-xs landscape:mb-3">{t(platform.descKey)}</p>
-      <Button variant="primary" size="md">
-        {t('integrations.connect' as TranslationKey)}
-      </Button>
+      {blocked ? (
+        <p className="text-xs text-surface-400 italic">{t('integrations.blockedByOther' as TranslationKey)}</p>
+      ) : (
+        <Button variant="primary" size="md">
+          {t('integrations.connect' as TranslationKey)}
+        </Button>
+      )}
     </Card>
   );
 }
@@ -319,13 +323,13 @@ const IntegrationsPage: NextPageWithLayout = () => {
   const connectedPlatforms = PLATFORMS.filter((p) => stores[p.id]);
   const connectedIds = new Set(connectedPlatforms.map((p) => p.id));
 
-  // Hide competing e-commerce platforms: Shopify and Salla are mutually exclusive
-  const availablePlatforms = PLATFORMS.filter((p) => {
-    if (stores[p.id]) return false; // already connected
-    if (p.id === 'salla' && connectedIds.has('shopify')) return false;
-    if (p.id === 'shopify' && connectedIds.has('salla')) return false;
-    return true;
-  });
+  // Show unconnected platforms — mark competing ones as blocked instead of hiding them
+  const COMPETING = new Set(['shopify', 'salla', 'zid']);
+  const availablePlatforms = PLATFORMS.filter((p) => !stores[p.id]).map((p) => ({
+    ...p,
+    blocked: COMPETING.has(p.id) && connectedIds.size > 0 && !connectedIds.has(p.id) &&
+      [...connectedIds].some((id) => COMPETING.has(id)),
+  }));
 
   return (
     <>
@@ -363,7 +367,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
         {availablePlatforms.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 landscape:gap-3">
             {availablePlatforms.map((platform) => (
-              <ConnectCard key={platform.id} platform={platform} />
+              <ConnectCard key={platform.id} platform={platform} blocked={platform.blocked} />
             ))}
           </div>
         )}

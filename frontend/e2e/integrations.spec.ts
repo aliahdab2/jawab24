@@ -190,7 +190,7 @@ test.describe('Integrations Page', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('should hide competing platform when one is connected (Shopify connected hides Salla)', async ({ page }) => {
+  test('should show competing platform greyed out when one is connected (Shopify connected blocks Salla)', async ({ page }) => {
     await setupAuth(page);
     await mockAPIs(page, { shopifyStore: MOCK_SHOPIFY_STORE, pages: MOCK_PAGES });
 
@@ -199,10 +199,14 @@ test.describe('Integrations Page', () => {
     // Shopify store card should be visible
     await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
 
-    // Divider should NOT appear (competing platform is hidden)
-    await expect(page.getByText(en['integrations.addAnother'])).not.toBeVisible();
+    // Divider SHOULD appear — Salla is shown (greyed out) in the available section
+    await expect(page.getByText(en['integrations.addAnother']).first()).toBeVisible({ timeout: 10000 });
 
-    // No Connect buttons (Salla is hidden, not just unconnected)
+    // Salla card should appear (name visible) but with blocked message, not Connect button
+    await expect(page.getByText(en['salla.title']).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(en['integrations.blockedByOther']).first()).toBeVisible({ timeout: 10000 });
+
+    // No Connect buttons for Salla (blocked shows message instead)
     const connectButtons = page.getByRole('button', { name: en['integrations.connect'], exact: true });
     await expect(connectButtons).toHaveCount(0, { timeout: 10000 });
   });

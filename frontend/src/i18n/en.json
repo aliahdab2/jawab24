@@ -1383,5 +1383,6 @@
   "integrations.connect": "Connect",
   "integrations.addAnother": "Add another integration",
   "integrations.shopifyDesc": "Sync your Shopify product catalog to enable AI-powered product replies",
-  "integrations.sallaDesc": "Sync your Salla product catalog to enable AI-powered product replies"
+  "integrations.sallaDesc": "Sync your Salla product catalog to enable AI-powered product replies",
+  "integrations.blockedByOther": "Disconnect your current store first to connect a different platform"
 }

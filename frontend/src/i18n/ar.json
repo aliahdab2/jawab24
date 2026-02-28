@@ -1383,5 +1383,6 @@
   "integrations.connect": "ربط",
   "integrations.addAnother": "إضافة ربط آخر",
   "integrations.shopifyDesc": "زامن كتالوج منتجات Shopify لتفعيل الردود الذكية على أسئلة المنتجات",
-  "integrations.sallaDesc": "زامن كتالوج منتجات سلة لتفعيل الردود الذكية على أسئلة المنتجات"
+  "integrations.sallaDesc": "زامن كتالوج منتجات سلة لتفعيل الردود الذكية على أسئلة المنتجات",
+  "integrations.blockedByOther": "افصل متجرك الحالي أولاً للاتصال بمنصة مختلفة"
 }
