@@ -396,6 +396,7 @@ export async function getProducts(storeId: string): Promise<EcommerceProduct[]> 
         ecommerceStoreId: r.ecommerceStoreId,
         platformProductId: r.platformProductId,
         title: r.title,
+        description: r.description,
         productType: r.productType,
         vendor: r.vendor,
         status: r.status || 'active',

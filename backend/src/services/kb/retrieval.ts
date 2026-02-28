@@ -121,6 +121,13 @@ export class RetrievalService {
             LIMIT ${topK}
         `);
 
+        // DEBUG: log raw results
+        console.log('[RAG-DEBUG] raw results length:', (results as unknown as unknown[]).length, 'isArray:', Array.isArray(results));
+        if ((results as unknown as unknown[]).length > 0) {
+            const first = (results as unknown as Record<string, unknown>[])[0];
+            console.log('[RAG-DEBUG] first row keys:', Object.keys(first), 'vec_score:', first.vec_score, 'title:', first.title);
+        }
+
         const chunks = (results as unknown as Array<Record<string, unknown>>).map(row => ({
             id: row.id as string,
             type: row.type as string,
@@ -131,6 +138,8 @@ export class RetrievalService {
             textScore: Number(row.text_score),
             finalScore: Number(row.final_score),
         }));
+
+        console.log('[RAG-DEBUG] chunks after map:', chunks.length);
 
         this.logger.info('Retrieval completed', {
             pageId,
