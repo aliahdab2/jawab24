@@ -209,28 +209,22 @@ describe('Shopify Service', () => {
     // --- registerWebhooks ---
 
     describe('registerWebhooks', () => {
-        it('should register both webhooks', async () => {
+        it('should register all 4 webhooks including create and delete', async () => {
             mockFetch.mockResolvedValue({ ok: true });
 
             await registerWebhooks('test-store.myshopify.com', 'token123');
 
-            expect(mockFetch).toHaveBeenCalledTimes(2);
-            // First call: app/uninstalled
-            expect(mockFetch).toHaveBeenCalledWith(
-                'https://test-store.myshopify.com/admin/api/2025-01/webhooks.json',
-                expect.objectContaining({
-                    method: 'POST',
-                    body: expect.stringContaining('app/uninstalled'),
-                })
-            );
-            // Second call: products/update
-            expect(mockFetch).toHaveBeenCalledWith(
-                'https://test-store.myshopify.com/admin/api/2025-01/webhooks.json',
-                expect.objectContaining({
-                    method: 'POST',
-                    body: expect.stringContaining('products/update'),
-                })
-            );
+            expect(mockFetch).toHaveBeenCalledTimes(4);
+            const url = 'https://test-store.myshopify.com/admin/api/2025-01/webhooks.json';
+            const opts = { method: 'POST' };
+            // app/uninstalled
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('app/uninstalled') }));
+            // products/create — catches new products added by merchant
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/create') }));
+            // products/update
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/update') }));
+            // products/delete — catches products removed by merchant
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/delete') }));
         });
 
         it('should not throw on 422 (already exists)', async () => {

@@ -62,6 +62,16 @@ Facebook/Instagram Comment ─► Reply Pipeline ─► AI Generator ◄── E
 
 ## Setup
 
+### Dev Store Credentials
+
+| Field | Value |
+|-------|-------|
+| Store | `jawab24-demo.myshopify.com` |
+| Storefront password | `beblil` |
+| Admin | `jawab24-demo.myshopify.com/admin` |
+
+---
+
 ### 1. Create Shopify App
 
 1. Go to [Shopify Partners](https://partners.shopify.com/)

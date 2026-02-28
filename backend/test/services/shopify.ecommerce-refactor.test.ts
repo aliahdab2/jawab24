@@ -220,6 +220,44 @@ describe('Shopify service — ecommerce refactor regression', () => {
         });
     });
 
+    describe('getAllActiveStores', () => {
+        it('returns all active stores when no platform filter given', async () => {
+            const stores = [
+                { id: 'store-1', platform: 'shopify' },
+                { id: 'store-2', platform: 'salla' },
+            ];
+            // getAllActiveStores uses db.select().from().where() without .limit()
+            const mockWhere = vi.fn().mockResolvedValue(stores);
+            const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+            const { db } = await import('../../src/db');
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce({ from: mockFrom });
+
+            const result = await shopifyService.getAllActiveStores();
+            expect(result).toEqual(stores);
+        });
+
+        it('filters by platform when specified', async () => {
+            const stores = [{ id: 'store-1', platform: 'shopify' }];
+            const mockWhere = vi.fn().mockResolvedValue(stores);
+            const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+            const { db } = await import('../../src/db');
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce({ from: mockFrom });
+
+            const result = await shopifyService.getAllActiveStores('shopify');
+            expect(result).toEqual(stores);
+        });
+
+        it('returns empty array when no active stores exist', async () => {
+            const mockWhere = vi.fn().mockResolvedValue([]);
+            const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+            const { db } = await import('../../src/db');
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce({ from: mockFrom });
+
+            const result = await shopifyService.getAllActiveStores();
+            expect(result).toEqual([]);
+        });
+    });
+
     describe('getEnrichedKnowledgeBase', () => {
         it('returns page KB when store not found in ecommerceStores', async () => {
             mockSelectLimit.mockResolvedValueOnce([]);

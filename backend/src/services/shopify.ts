@@ -28,6 +28,7 @@ export {
     disconnectStore,
     linkStoreToPage,
     KB_MAX_CHARS,
+    getAllActiveStores,
 } from './ecommerce';
 
 // Re-export with Shopify-default platform binding for backward compat
@@ -91,7 +92,9 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
     const webhookUrl = `https://${config.shopify.hostName}/shopify/webhooks`;
     const topics = [
         { topic: 'app/uninstalled', address: `${webhookUrl}/uninstall` },
+        { topic: 'products/create', address: `${webhookUrl}/products-update` },
         { topic: 'products/update', address: `${webhookUrl}/products-update` },
+        { topic: 'products/delete', address: `${webhookUrl}/products-update` },
     ];
 
     for (const { topic, address } of topics) {

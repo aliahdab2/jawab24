@@ -269,6 +269,22 @@ const start = async () => {
       });
     }, 60_000);
 
+    // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms
+    // Catches stock changes from sales that webhooks don't cover (inventory_levels/update)
+    const { getAllActiveStores } = await import('./services/ecommerce');
+    const { enqueueSyncJob } = await import('./lib/ecommerceSyncQueue');
+    setInterval(async () => {
+      try {
+        const stores = await getAllActiveStores();
+        for (const store of stores) {
+          await enqueueSyncJob(store.id, store.platform as 'shopify' | 'salla' | 'zid');
+        }
+        server.log.info(`[EcommerceScheduler] Enqueued sync for ${stores.length} store(s)`);
+      } catch (err) {
+        server.log.error(err, '[EcommerceScheduler] Scheduled sync failed');
+      }
+    }, 6 * 60 * 60 * 1000); // Every 6 hours
+
     // Verify app-level webhook subscription with Facebook on startup
     // This ensures the callback URL is verified after every deploy
     facebookService.setLogger(createRequestLogger(server.log));

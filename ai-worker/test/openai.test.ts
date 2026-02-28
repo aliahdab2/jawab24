@@ -1100,6 +1100,34 @@ describe('OpenAI Service - Prompt Injection Sanitization', () => {
         expect(systemPrompt).toContain('Real info');
     });
 
+    it('should include inventory data freshness caveat in system prompt', async () => {
+        let capturedMessages: any[] = [];
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockImplementation(async (opts: any) => {
+                            capturedMessages = opts.messages;
+                            return {
+                                choices: [{ message: { content: JSON.stringify({ reply: 'OK', intent: 'QUESTION', confidence: 'high', flags: [] }) } }],
+                                usage: { total_tokens: 50 },
+                            };
+                        }),
+                    },
+                },
+            })),
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({ comment: 'Is the jacket in stock?' });
+
+        const systemPrompt = capturedMessages[0].content;
+        expect(systemPrompt).toContain('reflects the last sync');
+        expect(systemPrompt).toContain('verify availability before ordering');
+    });
+
     it('should include sarcasm detection guidance in system prompt', async () => {
         let capturedMessages: any[] = [];
 

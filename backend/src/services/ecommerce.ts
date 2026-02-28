@@ -40,6 +40,19 @@ export async function getStoreByWorkspace(platform: EcommercePlatform, workspace
     return result[0] || null;
 }
 
+/**
+ * Get all active stores, optionally filtered by platform.
+ * Used by the scheduled sync to refresh inventory across all connected stores.
+ */
+export async function getAllActiveStores(platform?: EcommercePlatform): Promise<Array<{ id: string; platform: string }>> {
+    const conditions = platform
+        ? and(eq(ecommerceStores.isActive, true), eq(ecommerceStores.platform, platform))
+        : eq(ecommerceStores.isActive, true);
+    return db.select({ id: ecommerceStores.id, platform: ecommerceStores.platform })
+        .from(ecommerceStores)
+        .where(conditions);
+}
+
 /** @deprecated Use getStoreByWorkspace — kept for OAuth flows that lack workspace context */
 export async function getStoreByUserId(platform: EcommercePlatform, userId: string) {
     const result = await db.select().from(ecommerceStores).where(
