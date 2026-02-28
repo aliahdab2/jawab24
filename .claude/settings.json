@@ -20,7 +20,9 @@
       "Bash(DATABASE_URL=\"postgres://postgres:postgres@localhost:5433/autoreply\" npx tsx -e \":*)",
       "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"DELETE FROM ai_cache; SELECT count\\(*\\) as remaining FROM ai_cache;\")",
       "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"SELECT tablename FROM pg_tables WHERE tablename LIKE ''%cache%'' OR tablename LIKE ''%semantic%'';\")",
-      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"DELETE FROM semantic_cache; DELETE FROM ai_cache;\")"
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"DELETE FROM semantic_cache; DELETE FROM ai_cache;\")",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"SELECT count\\(*\\) FROM semantic_cache; SELECT count\\(*\\) FROM ai_cache;\")",
+      "Bash(redis-cli KEYS '*cache*')"
     ],
     "additionalDirectories": [
       "/tmp",

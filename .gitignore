@@ -30,5 +30,8 @@ frontend/public/apk/
 google-services.json
 GoogleService-Info.plist
 
+# Claude Code local settings
+.claude/settings.json
+
 # CocoaPods (generated from Podfile)
 frontend/ios/App/Pods/
