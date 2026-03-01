@@ -2,7 +2,7 @@ import { useRouter } from 'next/router';
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { Shield, Users, ArrowLeft, FlaskConical } from 'lucide-react';
+import { Shield, Users, ArrowLeft, FlaskConical, Bell } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useTranslation } from '@/i18n';
 import clsx from 'clsx';
@@ -14,6 +14,7 @@ interface AdminLayoutProps {
 
 const adminNavItems = [
     { href: '/admin/customers', icon: Users, labelKey: 'admin.nav.customers' as const },
+    { href: '/admin/waitlist', icon: Bell, labelKey: 'admin.nav.waitlist' as const },
     { href: '/admin/playground', icon: FlaskConical, labelKey: 'admin.nav.playground' as const },
 ];
 

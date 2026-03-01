@@ -23,7 +23,8 @@
       "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"DELETE FROM semantic_cache; DELETE FROM ai_cache;\")",
       "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"SELECT count\\(*\\) FROM semantic_cache; SELECT count\\(*\\) FROM ai_cache;\")",
       "Bash(redis-cli KEYS '*cache*')",
-      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"DELETE FROM ai_cache; DELETE FROM semantic_cache;\")"
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d autoreply -c \"DELETE FROM ai_cache; DELETE FROM semantic_cache;\")",
+      "Read(//Users/aliahdab/.ssh/**)"
     ],
     "additionalDirectories": [
       "/tmp",

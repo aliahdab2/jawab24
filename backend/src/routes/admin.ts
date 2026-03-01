@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps } from '../db/schema';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails } from '../db/schema';
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../services/ecommerce';
 import { eq, ilike, desc, and, gte, lte, sql } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
@@ -1023,5 +1023,73 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 return reply.status(500).send({ success: false, error: 'Failed to generate AI reply' });
             }
         });
+
+        /**
+         * GET /admin/waitlist - List all waitlist signups with pagination and filters
+         * Query: ?page=1&limit=20&feature=early_access&search=email
+         */
+        adminProtected.get<{ Querystring: { page?: string; limit?: string; feature?: string; search?: string } }>(
+            '/waitlist',
+            { schema: { tags: ['Admin'], summary: 'List waitlist signups', security: auth } },
+            async (request, reply) => {
+                const {
+                    page = '1',
+                    limit = '20',
+                    feature,
+                    search,
+                } = request.query;
+
+                const pageNum = Math.max(1, parseInt(page, 10) || 1);
+                const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+                const offset = (pageNum - 1) * limitNum;
+
+                try {
+                    const conditions = [];
+                    if (feature) {
+                        conditions.push(eq(waitlistEmails.feature, feature));
+                    }
+                    if (search) {
+                        conditions.push(ilike(waitlistEmails.email, `%${search}%`));
+                    }
+
+                    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+                    const [entries, countResult] = await Promise.all([
+                        db.select()
+                            .from(waitlistEmails)
+                            .where(whereClause)
+                            .orderBy(desc(waitlistEmails.createdAt))
+                            .limit(limitNum)
+                            .offset(offset),
+                        db.select({ count: sql<number>`count(*)::int` })
+                            .from(waitlistEmails)
+                            .where(whereClause),
+                    ]);
+
+                    const total = countResult[0]?.count ?? 0;
+
+                    // Get distinct features for filter dropdown
+                    const features = await db
+                        .selectDistinct({ feature: waitlistEmails.feature })
+                        .from(waitlistEmails)
+                        .orderBy(waitlistEmails.feature);
+
+                    return reply.send({
+                        success: true,
+                        data: entries,
+                        features: features.map(f => f.feature),
+                        pagination: {
+                            page: pageNum,
+                            limit: limitNum,
+                            total,
+                            totalPages: Math.ceil(total / limitNum),
+                        },
+                    });
+                } catch (error) {
+                    request.log.error(error, 'Failed to list waitlist entries');
+                    return reply.status(500).send({ success: false, error: 'Failed to load waitlist' });
+                }
+            }
+        );
     });
 }

@@ -468,6 +468,23 @@ export const adminApi = {
     const response = await api.patch(`/admin/pages/${pageId}/kb`, { knowledgeBase });
     return response.data;
   },
+
+  // Waitlist — list signups with pagination/filters
+  getWaitlist: async (filters: {
+    page?: number;
+    limit?: number;
+    feature?: string;
+    search?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters.page) params.append('page', String(filters.page));
+    if (filters.limit) params.append('limit', String(filters.limit));
+    if (filters.feature) params.append('feature', filters.feature);
+    if (filters.search) params.append('search', filters.search);
+
+    const response = await api.get(`/admin/waitlist?${params.toString()}`);
+    return response.data;
+  },
 };
 
 // E-commerce API - Manage connected store (Shopify, Salla, Zid)
