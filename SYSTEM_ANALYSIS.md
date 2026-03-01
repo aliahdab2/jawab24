@@ -1501,6 +1501,345 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 ---
 
+# 12. Monitoring & Alerting
+# المراقبة والتنبيهات
+
+## English
+
+### What's Already Instrumented
+
+Jawab24 has a solid monitoring foundation across 5 layers:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  OBSERVABILITY STACK                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  LAYER 1: PIPELINE METRICS (Redis counters)                     │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 19 outcome types × 4 pipelines = 76 counters            │   │
+│  │ Endpoint: GET /health/pipeline-metrics                   │   │
+│  │ Auth: x-cleanup-token header                             │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  LAYER 2: AI COST TRACKING (PostgreSQL)                         │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Every AI call: model, tokensIn, tokensOut, costUsd,      │   │
+│  │ cached (bool), pipeline, userId, pageId                  │   │
+│  │ Table: ai_usage_log (180-day retention)                  │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  LAYER 3: ERROR TRACKING (Sentry)                               │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ All 5xx errors, async failures, circuit breaker opens    │   │
+│  │ Tags: service, context, action                           │   │
+│  │ Trace sampling: 10% prod, 100% dev                       │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  LAYER 4: STRUCTURED LOGGING (Pino → stdout)                    │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Every pipeline step timed with lap timer (⏱ labels)      │   │
+│  │ reply_sent event: method, intent, confidence, flags,     │   │
+│  │ duration, consolidated count                             │   │
+│  │ Auth headers auto-redacted in request logs               │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  LAYER 5: HEALTH PROBES (HTTP endpoints)                        │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ GET /health        → full status (DB, Stripe, AI)        │   │
+│  │ GET /health/live   → liveness (always 200)               │   │
+│  │ GET /health/ready  → readiness (DB check)                │   │
+│  │ GET /health/cache-stats → AI cache metrics               │   │
+│  │ GET /health/pipeline-metrics → outcome counters          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Pipeline Metrics: All 19 Outcomes
+
+These are tracked per pipeline (facebook_comment, instagram_comment, facebook_message, instagram_message):
+
+| Outcome | What It Means | Severity |
+|---------|--------------|----------|
+| `success` | Reply sent successfully | Normal |
+| `greeting_sent` | First-conversation greeting sent | Normal |
+| `page_not_found` | Page doesn't exist in DB | Error |
+| `no_user` | Page has no associated user | Error |
+| `no_workspace` | Page has no associated workspace | Error |
+| `auto_reply_disabled` | Platform auto-reply toggle off | Expected |
+| `settings_disabled` | Workspace settings disabled | Expected |
+| `post_disabled` | Post/media has auto-reply off | Expected |
+| `media_disabled` | Instagram media auto-reply off | Expected |
+| `debounce_skipped` | Newer message pending, skipped | Normal |
+| `handoff_active` | Human agent pause active | Expected |
+| `handoff_requeued` | Job re-enqueued after pause | Expected |
+| `rate_limited` | Rate limit exceeded (5/10 per min) | Watch |
+| `already_replied` | Already replied to this message | Normal |
+| `lock_contention` | Redis lock held by another worker | Watch |
+| `no_reply_generated` | AI/template failed to generate | Warning |
+| `send_failed` | Generated but failed to send | Error |
+| `skipped_risky` | Offensive/spam detected | Normal |
+| `held_low_confidence` | AI reply held for review | Normal |
+| `error` | Unhandled error in pipeline | Error |
+
+### AI Cost Tracking
+
+Every AI call logged to `ai_usage_log` table:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ai_usage_log row:                                      │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │ userId:     who triggered                         │  │
+│  │ pageId:     which page                            │  │
+│  │ model:      gpt-4.1-mini                          │  │
+│  │ tokensIn:   prompt tokens (0 if cached)           │  │
+│  │ tokensOut:  completion tokens (0 if cached)       │  │
+│  │ costUsd:    pre-computed USD cost                  │  │
+│  │ cached:     true/false                             │  │
+│  │ pipeline:   facebook_comment, etc.                │  │
+│  │ createdAt:  timestamp                              │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                         │
+│  Cost computed by estimateCostUsd() from aiPricing      │
+│  Fire-and-forget (never blocks reply pipeline)          │
+│  On write failure: increments ai_usage_log.dropped      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Cache Hit/Miss Events
+
+| Log Event | Meaning |
+|-----------|---------|
+| `ai_cache_hit_with_metadata` | Redis exact cache hit (full metadata) |
+| `ai_cache_hit_postgres` | Postgres fallback hit (Redis missed) |
+| `ai_cache_miss_legacy_discarded` | Old format entry discarded |
+| `ai_cache_miss_postgres_no_metadata` | Postgres row without metadata (skipped) |
+| `ai_cache_miss` | Full miss, calling AI Worker |
+
+### Circuit Breaker Observability
+
+```
+Normal operation: CLOSED
+         │
+    5 consecutive AI Worker failures
+         │
+         ▼
+    OPEN (30 seconds)
+    • Sentry warning on first open
+    • Pipeline metric: circuit.ai_worker.opened
+    • All requests get fallback reply
+         │
+    30s timeout expires
+         │
+         ▼
+    HALF-OPEN (probe with Redis lock)
+    • 1 request allowed through
+    • Success → CLOSED
+    • Failure → OPEN again
+
+    Failure counter auto-resets after 300s idle
+```
+
+**Redis keys:**
+- `cb:ai_worker:failures` — failure counter
+- `cb:ai_worker:open` — open state with TTL
+- `cb:ai_worker:probe_lock` — half-open probe lock
+- `metrics:pipeline:circuit.ai_worker.opened` — total open count
+
+**Config (env vars):**
+- `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default: 5)
+- `CIRCUIT_BREAKER_OPEN_DURATION_SECONDS` (default: 30)
+
+### Sentry Integration Map
+
+| Service | Error Tags | When |
+|---------|-----------|------|
+| Auth | `context: auth, action: create-*` | User/subscription creation |
+| Pages | `service: kb-ingestion` | KB update, page sync |
+| Facebook | `service: facebook` | Webhook, token refresh |
+| Instagram | `service: instagram` | Webhook, token refresh |
+| Shopify | `service: shopify` | Webhook registration |
+| Salla | `service: salla` | Token refresh, webhooks |
+| E-commerce | `service: {platform}` | Cache invalidation, claims |
+| Settings | `context: settings` | Workspace sync failures |
+| Notifications | `service: notifications` | Push send failures |
+| Escalation | `service: escalation` | Sweep/notify failures |
+| AI Worker | `circuit: ai_worker` | Circuit breaker opens |
+
+**Sentry config:**
+- Prod trace rate: 10%
+- Error replay: 10% of errors
+- Ignored: `Rate limit exceeded`, `ECONNREFUSED`, `ETIMEDOUT`, `ResizeObserver loop`
+
+### Health Endpoints Detail
+
+| Endpoint | Purpose | Auth | Status Codes |
+|----------|---------|------|-------------|
+| `GET /health` | Full service status (DB, Stripe, AI circuit) | None | 200 healthy/degraded, 503 unhealthy |
+| `GET /health/live` | Liveness probe (Docker/K8s) | None | Always 200 |
+| `GET /health/ready` | Readiness probe (DB connectivity) | None | 200 ready, 503 not ready |
+| `GET /health/cache-stats` | AI cache: total entries, hits, age | x-cleanup-token | 200/403 |
+| `GET /health/pipeline-metrics` | All 19×4 outcome counters | x-cleanup-token | 200/403 |
+| `POST /health/cleanup` | Run DB cleanup (cache, logs, tokens) | x-cleanup-token | 200 |
+
+### Database Cleanup Schedule
+
+| Table | Retention | Batch Size | Trigger |
+|-------|----------|------------|---------|
+| `ai_cache` | 30 days (by `lastUsedAt`) | 1,000 rows | `POST /health/cleanup` |
+| `logs` | 90 days | 1,000 rows | `POST /health/cleanup` |
+| `ai_usage_log` | 180 days | 1,000 rows | `POST /health/cleanup` |
+| `refresh_tokens` | Expired + revoked >7 days | All | `POST /health/cleanup` |
+
+### Recommended Alert Thresholds
+
+| Alert | Condition | Severity | Action |
+|-------|-----------|----------|--------|
+| **High error rate** | `error` outcome > 50 in 5 min | Critical | Check logs, likely infrastructure issue |
+| **Circuit breaker open** | `circuit.ai_worker.opened` increments | High | AI Worker or OpenAI is down |
+| **Send failures spike** | `send_failed` > 20 in 5 min | High | Facebook/Instagram API issue |
+| **AI cost spike** | Daily costUsd > 2x baseline | Medium | Cache miss rate high, or traffic spike |
+| **No-reply generated** | `no_reply_generated` > 100 in 1h | Medium | Template/AI both failing |
+| **Rate limit storm** | `rate_limited` > 500 in 5 min | Medium | Bot/spam attack on a page |
+| **Lock contention** | `lock_contention` > 50 in 5 min | Medium | Workers fighting over same sender |
+| **Usage log drops** | `ai_usage_log.dropped` > 0 | Low | DB write issues (cost tracking gap) |
+| **Cache hit rate low** | Exact cache hits < 30% of total | Low | Check if KB/products changed a lot |
+| **Queue backlog** | BullMQ waiting > 10,000 jobs | Medium | Worker concurrency too low or stuck |
+| **Held replies pile up** | `held_low_confidence` > 100/day | Low | KB may need updating (too many unknowns) |
+
+### Structured Log Events: Complete Reference
+
+#### Pipeline Timing (per message/comment)
+
+Every pipeline step is timed with a lap timer:
+
+```
+[facebook_message] ⏱ 1-getPage           {ms: 2,  messageId: "..."}
+[facebook_message] ⏱ 3-fetchSenderName    {ms: 45, messageId: "..."}
+[facebook_message] ⏱ 4-storeMessage       {ms: 8,  messageId: "..."}
+[facebook_message] ⏱ 5-debounce           {ms: 3,  messageId: "..."}
+[facebook_message] ⏱ 6-isPaused           {ms: 2,  messageId: "..."}
+[facebook_message] ⏱ 7-rateLimit          {ms: 1,  messageId: "..."}
+[facebook_message] ⏱ 8-settingsCheck      {ms: 4,  messageId: "..."}
+...
+```
+
+#### Reply Worker Lifecycle
+
+```
+[ReplyWorker] Starting job     {jobId, jobType, requestId, attemptNumber}
+[ReplyWorker] Processing ...   {jobId, requestId, pageId, commentId|messageId}
+[ReplyWorker] Job completed    {jobId, jobType, duration, replyMethod}
+[ReplyWorker] Job failed       {jobId, jobType, duration, error, attemptsMade}
+[ReplyWorker] Job stalled      {jobId}  ← watch for these!
+```
+
+#### Rate Limiting
+
+```
+[RateLimit] comment limit exceeded  {pageId, userId, count: 6, max: 5}  (warn)
+[RateLimit] Redis error, allowing   {error: "ECONNREFUSED"}             (error)
+```
+
+### Analytics Queries Available
+
+The `analytics` service computes these from live tables (30-day window):
+
+```
+{
+  totals: { comments, messages, replied, unreplied, replyRate, flagged },
+  byMethod: { template: 500, ai: 2500 },
+  byIntent: { GREETING: 100, QUESTION: 800, OFFENSIVE: 5, ... },
+  byLanguage: { en: 2000, ar: 1200 },
+  byPlatform: { facebook: 2500, instagram: 700 },
+  flags: { low_confidence: 45, offensive: 2, price_not_in_kb: 10 },
+  responseTime: { avgSeconds: 2.3, p50: 1.5, p95: 5.2 }
+}
+```
+
+### Monitoring Gaps (Not Yet Instrumented)
+
+| Gap | Impact | Recommendation |
+|-----|--------|----------------|
+| No database query tracing | Can't detect slow queries | Add Drizzle query logging |
+| No Redis latency metrics | Can't detect cache slowdowns | Add Redis operation timing |
+| No external API latency tracking | Can't detect FB/IG/Shopify slowdowns | Add Sentry spans for external calls |
+| No Prometheus /metrics endpoint | Can't use Grafana dashboards | Export pipeline metrics as Prometheus |
+| No frontend RUM | Can't track user experience | Add Sentry browser performance |
+| No distributed tracing | Can't correlate backend ↔ AI Worker | Add OpenTelemetry |
+
+## عربي
+
+### ما هو مُراقَب حالياً
+
+النظام يحتوي على 5 طبقات مراقبة:
+
+**الطبقة 1: مقاييس خط الإنتاج (Redis)**
+- 19 نتيجة × 4 خطوط إنتاج = 76 عداد
+- نقطة وصول: `GET /health/pipeline-metrics`
+
+**الطبقة 2: تتبع تكلفة AI (PostgreSQL)**
+- كل استدعاء AI: النموذج، التوكنات، التكلفة بالدولار، مخزن مؤقت أم لا
+- جدول: `ai_usage_log` (احتفاظ 180 يوم)
+
+**الطبقة 3: تتبع الأخطاء (Sentry)**
+- جميع أخطاء 5xx، الفشل غير المتزامن، فتح قاطع الدائرة
+- وسوم: الخدمة، السياق، الإجراء
+
+**الطبقة 4: السجلات المنظمة (Pino)**
+- كل خطوة في خط الإنتاج مُوقتة
+- حدث `reply_sent`: الطريقة، النية، الثقة، الأعلام، المدة
+
+**الطبقة 5: فحوصات الصحة (HTTP)**
+- `/health` → حالة كاملة (قاعدة بيانات، Stripe، دائرة AI)
+- `/health/live` → فحص الحياة (Docker)
+- `/health/ready` → فحص الجاهزية (اتصال قاعدة البيانات)
+
+### نتائج خط الإنتاج (19 نتيجة)
+
+| النتيجة | المعنى | الشدة |
+|---------|--------|-------|
+| `success` | الرد أُرسل بنجاح | طبيعي |
+| `greeting_sent` | ترحيب أول محادثة | طبيعي |
+| `page_not_found` | الصفحة غير موجودة | خطأ |
+| `no_user` / `no_workspace` | صفحة بدون مستخدم/مساحة عمل | خطأ |
+| `auto_reply_disabled` | الرد التلقائي مُعطّل | متوقع |
+| `debounce_skipped` | رسالة أحدث قادمة | طبيعي |
+| `handoff_active` | وكيل بشري نشط | متوقع |
+| `rate_limited` | تجاوز حد المعدل | مراقبة |
+| `lock_contention` | القفل محجوز من عامل آخر | مراقبة |
+| `no_reply_generated` | فشل التوليد | تحذير |
+| `send_failed` | فشل الإرسال | خطأ |
+| `skipped_risky` | محتوى مسيء/سبام | طبيعي |
+| `held_low_confidence` | محتجز للمراجعة | طبيعي |
+| `error` | خطأ غير متوقع | خطأ |
+
+### عتبات التنبيه المقترحة
+
+| التنبيه | الشرط | الشدة |
+|---------|-------|-------|
+| **معدل أخطاء عالي** | `error` > 50 في 5 دقائق | حرج |
+| **قاطع الدائرة مفتوح** | `circuit.ai_worker.opened` يزداد | عالي |
+| **فشل إرسال مرتفع** | `send_failed` > 20 في 5 دقائق | عالي |
+| **ارتفاع تكلفة AI** | التكلفة اليومية > 2× الأساس | متوسط |
+| **لا رد مُولَّد** | `no_reply_generated` > 100 في ساعة | متوسط |
+| **هجوم سبام** | `rate_limited` > 500 في 5 دقائق | متوسط |
+| **تنافس على القفل** | `lock_contention` > 50 في 5 دقائق | متوسط |
+| **تراكم ردود محتجزة** | `held_low_confidence` > 100/يوم | منخفض |
+
+### فجوات المراقبة
+
+| الفجوة | التأثير | التوصية |
+|--------|---------|---------|
+| لا تتبع لاستعلامات قاعدة البيانات | لا يمكن كشف الاستعلامات البطيئة | إضافة سجلات Drizzle |
+| لا مقاييس Redis | لا يمكن كشف بطء الكاش | إضافة توقيت عمليات Redis |
+| لا تتبع APIs خارجية | لا يمكن كشف بطء FB/IG | إضافة Sentry spans |
+| لا نقطة Prometheus | لا يمكن استخدام Grafana | تصدير المقاييس كـ Prometheus |
+
+---
+
 # Quick Reference Card / بطاقة مرجعية سريعة
 
 ```

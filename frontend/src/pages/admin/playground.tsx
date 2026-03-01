@@ -237,12 +237,22 @@ export default function AdminPlaygroundPage() {
         setLoading(true);
 
         try {
+            // Build full conversation history for DM mode:
+            // manual pre-loaded history + previous chat messages (excluding the current one)
+            let fullHistory = conversationHistory;
+            if (channel === 'dm') {
+                const chatHistory = messages
+                    .filter(m => !m.error && m.text)
+                    .map(m => ({ role: m.role as 'user' | 'assistant', content: m.text }));
+                fullHistory = [...conversationHistory, ...chatHistory];
+            }
+
             const res = await adminApi.testReply({
                 pageId: selectedPageId,
                 question: userMsg.text,
                 channel,
                 ...(channel === 'comment' && postMessage.trim() ? { postMessage: postMessage.trim() } : {}),
-                ...(channel === 'dm' && conversationHistory.length > 0 ? { conversationHistory } : {}),
+                ...(channel === 'dm' && fullHistory.length > 0 ? { conversationHistory: fullHistory } : {}),
             });
 
             const assistantMsg: PlaygroundMessage = {
@@ -272,7 +282,7 @@ export default function AdminPlaygroundPage() {
             // Re-focus input
             setTimeout(() => inputRef.current?.focus(), 100);
         }
-    }, [selectedPageId, question, channel, postMessage, conversationHistory, loading, t]);
+    }, [selectedPageId, question, channel, postMessage, conversationHistory, messages, loading, t]);
 
     const handleClear = useCallback(() => {
         setMessages([]);
