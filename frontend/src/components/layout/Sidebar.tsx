@@ -204,7 +204,7 @@ export const Sidebar = memo(function Sidebar() {
       <button
         onClick={toggleSidebar}
         className={clsx(
-          "absolute top-8 z-50 flex items-center justify-center w-8 h-8 rounded-full bg-white text-brand-600 hover:bg-brand-600 hover:text-white transition-all shadow-xl shadow-brand-500/10 cursor-pointer border border-brand-100/50",
+          "absolute top-8 z-50 flex items-center justify-center w-10 h-10 rounded-full bg-white text-brand-600 hover:bg-brand-600 hover:text-white transition-all shadow-xl shadow-brand-500/10 cursor-pointer border border-brand-100/50",
           "rtl:left-0 rtl:-translate-x-1/2",
           "ltr:right-0 ltr:translate-x-1/2",
           "opacity-0 group-hover/sidebar:opacity-100 focus:opacity-100 transition-opacity duration-300"
@@ -213,13 +213,13 @@ export const Sidebar = memo(function Sidebar() {
       >
         {sidebarOpen ? (
           <>
-            <ChevronRight className="w-4 h-4 rtl:block ltr:hidden" />
-            <ChevronLeft className="w-4 h-4 ltr:block rtl:hidden" />
+            <ChevronRight className="w-5 h-5 rtl:block ltr:hidden" />
+            <ChevronLeft className="w-5 h-5 ltr:block rtl:hidden" />
           </>
         ) : (
           <>
-            <ChevronLeft className="w-4 h-4 rtl:block ltr:hidden" />
-            <ChevronRight className="w-4 h-4 ltr:block rtl:hidden" />
+            <ChevronLeft className="w-5 h-5 rtl:block ltr:hidden" />
+            <ChevronRight className="w-5 h-5 ltr:block rtl:hidden" />
           </>
         )}
       </button>
