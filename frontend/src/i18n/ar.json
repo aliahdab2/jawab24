@@ -267,6 +267,7 @@
   "pages.connectedAgo": "تم الربط منذ {count} يوم",
   "pages.connectedDayAgo": "تم الربط منذ يوم واحد",
   "pages.shopifyConnectedBadge": "ردود ذكية مدعومة بمتجرك على Shopify",
+  "pages.totalIncoming": "الوارد",
   "comments.title": "التعليقات",
   "comments.description": "تتبع وأدر جميع التعليقات من صفحاتك المتصلة.",
   "comments.allComments": "عرض الكل",

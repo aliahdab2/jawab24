@@ -359,7 +359,7 @@ const PagesPage: NextPageWithLayout = () => {
                 {/* Stats Grid */}
                 <div className="grid grid-cols-3 gap-3 px-1 py-1 rounded-2xl bg-surface-50 border border-surface-100">
                   <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-1.5">{t('comments.title')}</p>
+                    <p className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-1.5">{t('pages.totalIncoming' as TranslationKey)}</p>
                     <p className="text-lg font-bold text-surface-900 leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center border-x border-surface-200">

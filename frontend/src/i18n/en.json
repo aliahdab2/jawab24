@@ -267,6 +267,7 @@
   "pages.connectedAgo": "Connected {count} days ago",
   "pages.connectedDayAgo": "Connected 1 day ago",
   "pages.shopifyConnectedBadge": "Smart replies powered by your Shopify store",
+  "pages.totalIncoming": "Incoming",
   "comments.title": "Comments",
   "comments.description": "Track and manage all comments from your connected pages.",
   "comments.allComments": "Show all",

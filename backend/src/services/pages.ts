@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramComments, instagramMedia } from '../db/schema';
+import { pages, posts, comments, instagramComments, instagramMedia, messages } from '../db/schema';
 import { eq, and, desc, sql, count } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import type { BusinessProfile } from '@jawab24/shared';
@@ -208,10 +208,10 @@ export class PagesService {
         if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, ...emptyStats }));
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
-        // Two parallel queries (FB + IG) grouped by page_id — same pattern as commentsService.getStats()
+        // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
         const statsMap = new Map<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>();
         try {
-            const [fbRows, igRows] = await Promise.all([
+            const [fbRows, igRows, msgRows] = await Promise.all([
                 db.select({
                     pageId: pages.id,
                     commentsCount: count(),
@@ -235,24 +235,37 @@ export class PagesService {
                     .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
                     .where(eq(pages.workspaceId, workspaceId))
                     .groupBy(pages.id),
+
+                // DM/Messenger conversations (messages table has direct pageId FK)
+                db.select({
+                    pageId: pages.id,
+                    commentsCount: count(),
+                    repliesCount: sql<number>`count(*) FILTER (WHERE ${messages.replied} = true)`,
+                    lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${messages.repliedAt}))`,
+                })
+                    .from(messages)
+                    .innerJoin(pages, eq(messages.pageId, pages.id))
+                    .where(and(eq(pages.workspaceId, workspaceId), eq(messages.direction, 'incoming')))
+                    .groupBy(pages.id),
             ]);
 
-            for (const row of fbRows) {
-                const existing = statsMap.get(row.pageId) ?? { commentsCount: 0, repliesCount: 0, lastActivity: null };
-                statsMap.set(row.pageId, {
-                    commentsCount: existing.commentsCount + Number(row.commentsCount),
-                    repliesCount: existing.repliesCount + Number(row.repliesCount),
-                    lastActivity: row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : existing.lastActivity,
-                });
-            }
-            for (const row of igRows) {
-                const existing = statsMap.get(row.pageId) ?? { commentsCount: 0, repliesCount: 0, lastActivity: null };
-                statsMap.set(row.pageId, {
-                    commentsCount: existing.commentsCount + Number(row.commentsCount),
-                    repliesCount: existing.repliesCount + Number(row.repliesCount),
-                    lastActivity: row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : existing.lastActivity,
-                });
-            }
+            const mergeRows = (rows: typeof fbRows) => {
+                for (const row of rows) {
+                    const existing = statsMap.get(row.pageId) ?? { commentsCount: 0, repliesCount: 0, lastActivity: null };
+                    const rowActivity = row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : null;
+                    statsMap.set(row.pageId, {
+                        commentsCount: existing.commentsCount + Number(row.commentsCount),
+                        repliesCount: existing.repliesCount + Number(row.repliesCount),
+                        lastActivity: rowActivity
+                            ? (existing.lastActivity ? Math.max(existing.lastActivity, rowActivity) : rowActivity)
+                            : existing.lastActivity,
+                    });
+                }
+            };
+
+            mergeRows(fbRows);
+            mergeRows(igRows);
+            mergeRows(msgRows);
         } catch (err) {
             captureError(err, 'Pages stats query failed', { level: 'warning', tags: { service: 'pages' } });
         }
