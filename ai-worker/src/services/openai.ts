@@ -280,7 +280,9 @@ export class OpenAIService {
         const rawPageName = request.context?.pageName || 'our page';
         // Sanitize to prevent prompt injection via page name
         const pageName = rawPageName.replace(/["\n\r\t\\]/g, '').slice(0, 100);
-        const language = request.language || 'the same language as the message';
+        const language = request.language || this.detectLanguage(request.comment) || 'en';
+        const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
+        const languageName = languageNames[language] || 'English';
         const retrievedChunks = request.context?.retrievedChunks;
         const knowledgeBase = request.context?.knowledgeBase;
         const channel = request.context?.channel
@@ -355,7 +357,7 @@ RESPONSE GUIDELINES:
 ${isDM
     ? '- You may provide full detailed answers including prices, availability, and specifics from <business_knowledge>.\n- When a customer asks about pricing, plans, packages, or what you offer: list ALL available options from <business_knowledge>, not just one. Customers expect to see their full range of choices.\n- Keep responses concise but thorough (up to 4 sentences).\n- CONTEXT CONTINUITY: When a customer\'s message is a vague follow-up or uses pronouns referring to a previously discussed topic (e.g., "give me details", "tell me more", "عطيني تفاصيل", "اخبرني أكثر", "ممكن تفاصيل", "شو مميزاتها؟", "كم سعرها؟", "هل هي متوفرة؟") without explicitly naming a new topic, look at the MOST RECENT assistant reply in the conversation to identify the SPECIFIC product/topic just discussed. Then answer about EXACTLY THAT product/topic. Example: if the last reply mentioned "AirPods Pro", and the customer asks "شو مميزاتها؟", answer about AirPods Pro specifically — even if details are limited. NEVER switch to a different product or topic. NEVER ask "which product do you mean?" when the conversation already makes it clear.\n- CRITICAL: When conversation history is present and the customer\'s message is a vague follow-up, you MUST search <business_knowledge> for the SPECIFIC topic from the last exchange. If KB has relevant info about that topic, use it and set confidence to "high" or "medium". Do NOT default to low confidence just because the customer\'s message alone is vague — the conversation context resolves the ambiguity.'
     : '- CRITICAL: Public comment replies MUST be 1 sentence (max 2 if absolutely necessary). Maximum 40 words.\n- NEVER include prices, detailed specs, order info, or lengthy explanations in a public comment.\n- For QUESTION and PURCHASE_INTENT: give a brief acknowledgment, then say "Send us a message for details!" (or Arabic equivalent).\n- For COMPLIMENT and GREETING: a short warm reply is enough — no DM redirect needed.'}
-- CRITICAL: Reply in the SAME language the customer wrote in. If they write in English, reply in English. If in Arabic, reply in Arabic. For unrecognized languages, default to English (NOT Arabic). Detected language: ${language}
+- CRITICAL: You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic).
 - Never be defensive or argumentative
 - Use appropriate emojis sparingly (1-2 max)
 - For Arabic messages: Reply in the SAME dialect the customer used. Match their style naturally (Egyptian, Levantine, Gulf, Maghrebi, Iraqi, or formal). Do NOT use formal Arabic when they use colloquial dialect.
@@ -682,10 +684,12 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
 
         // Check 3: Language mismatch — reply language differs from input
         if (reply) {
-            const inputLang = this.detectLanguage(request.comment);
+            const inputLang = request.language || this.detectLanguage(request.comment);
             const replyLang = this.detectLanguage(reply);
             if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
                 flags.push('language_mismatch');
+                flags.push(`expected_lang:${inputLang}`);
+                flags.push(`reply_lang:${replyLang}`);
             }
         }
 

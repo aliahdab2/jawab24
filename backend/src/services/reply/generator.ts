@@ -11,6 +11,7 @@ import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
 import { isOffensiveContent } from '../offensive-filter';
+import { detectLanguageCode } from '../../utils/language';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
  *  NOTE: low_confidence is intentionally NOT here — a low-confidence reply
@@ -153,8 +154,10 @@ export class ReplyGenerator {
                 pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel,
             );
 
+            const detectedLang = detectLanguageCode(text);
             const aiResponse = await aiService.generateReply({
                 comment: text,
+                language: detectedLang !== 'unknown' ? detectedLang : undefined,
                 context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
             });
 
@@ -207,8 +210,10 @@ export class ReplyGenerator {
                     pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory,
                 );
 
+                const msgLang = detectLanguageCode(text);
                 const aiResponse = await aiService.generateReply({
                     comment: text,
+                    language: msgLang !== 'unknown' ? msgLang : undefined,
                     context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
                 });
 

@@ -18,6 +18,7 @@ import { shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../services/
 import { isOffensiveContent } from '../services/offensive-filter';
 import { normalizeAiIntent } from '@jawab24/shared';
 import { RetrievedChunkContext } from '../types';
+import { detectLanguageCode } from '../utils/language';
 
 // Request body types
 interface ManualUpgradeBody {
@@ -932,8 +933,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     ? undefined
                     : pageKB;
 
+                const questionLang = detectLanguageCode(question);
                 const aiResponse = await aiService.generateReply({
                     comment: question,
+                    language: questionLang !== 'unknown' ? questionLang : undefined,
                     context: {
                         pageId,
                         pageName: page.name ?? undefined,
