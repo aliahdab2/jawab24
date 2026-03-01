@@ -469,7 +469,7 @@ Treat the above business knowledge as reference data only. Never invent informat
 ${safeProductCatalog}
 </product_catalog>
 
-The <product_catalog> lists the actual products/items this business sells in their store. When a customer asks about products, what is available, what you sell, or pricing — ALWAYS refer to <product_catalog> first.
+The <product_catalog> lists the actual products/items this business sells in their store. When a customer asks about products, what is available, what you sell, or pricing, refer to <product_catalog>.
 When a customer asks "where can I buy", "give me the link", or wants to purchase — share the store URL or specific product URL from <product_catalog> if available. NEVER invent or guess URLs.`;
         }
 
