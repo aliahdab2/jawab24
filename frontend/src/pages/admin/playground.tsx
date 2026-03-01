@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Send, Database, AlertTriangle, Zap, MessageSquare, ChevronDown, ChevronUp, Trash2, FlaskConical, X, Sparkles, Plus, Minus, Pin, Check, Pencil } from 'lucide-react';
+import { Send, Database, AlertTriangle, Zap, MessageSquare, ChevronDown, ChevronUp, Trash2, FlaskConical, X, Sparkles, Plus, Minus, Pin, Check, Pencil, Copy, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslation } from '@/i18n';
 import clsx from 'clsx';
@@ -98,6 +99,21 @@ const CONFIDENCE_COLORS: Record<string, string> = {
     low: 'bg-red-100 text-red-800',
 };
 
+const QUALITY_BORDER: Record<string, string> = {
+    good: 'border-s-[3px] border-s-green-500',
+    warn: 'border-s-[3px] border-s-amber-500',
+    bad: 'border-s-[3px] border-s-red-500',
+    neutral: '',
+};
+
+function getQualityLevel(metadata: PlaygroundResult | undefined): string {
+    if (!metadata) return 'neutral';
+    if (metadata.needsAttention || (metadata.flags.length > 0 && metadata.flags.some(f => !f.startsWith('expected_lang:') && !f.startsWith('reply_lang:'))) || metadata.confidence === 'low') return 'bad';
+    if (metadata.confidence === 'medium' || metadata.gapRecorded) return 'warn';
+    if (metadata.confidence === 'high') return 'good';
+    return 'neutral';
+}
+
 // ────────────────────────────────────────────
 // Small components
 // ────────────────────────────────────────────
@@ -157,7 +173,6 @@ export default function AdminPlaygroundPage() {
     const contextTextareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Platform detection for keyboard hint
-    const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
 
     // Filtered pages by email
     const filteredPages = emailFilter.trim()
@@ -289,6 +304,24 @@ export default function AdminPlaygroundPage() {
         setExpandedChunks(new Set());
     }, []);
 
+    const handleCopy = useCallback(async (text: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.success(t('admin.playground.copied'));
+        } catch {
+            // Clipboard API not available — not critical
+        }
+    }, [t]);
+
+    const handleRetry = useCallback((messageId: string) => {
+        const idx = messages.findIndex(m => m.id === messageId);
+        if (idx < 1) return;
+        const userMsg = messages[idx - 1];
+        if (userMsg.role !== 'user') return;
+        setQuestion(userMsg.text);
+        setTimeout(() => inputRef.current?.focus(), 50);
+    }, [messages]);
+
     const addHistoryMessage = useCallback(() => {
         setConversationHistory(prev => [...prev, { role: 'user', content: '' }]);
     }, []);
@@ -368,91 +401,90 @@ export default function AdminPlaygroundPage() {
             <div dir={isRTL ? 'rtl' : 'ltr'} className="flex flex-col h-[calc(100vh-8rem)]">
 
                 {/* ── Controls Bar ── */}
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-200 bg-white rounded-t-xl flex-shrink-0">
-                    {/* Email filter */}
-                    <label htmlFor="email-filter" className="sr-only">{t('admin.playground.emailFilter')}</label>
-                    <input
-                        id="email-filter"
-                        type="text"
-                        dir="auto"
-                        value={emailFilter}
-                        onChange={(e) => setEmailFilter(e.target.value)}
-                        placeholder={t('admin.playground.emailFilterPlaceholder')}
-                        className="max-w-[180px] px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder:text-surface-400"
-                    />
-
-                    {/* Page selector */}
-                    <label htmlFor="page-select" className="sr-only">{t('admin.playground.selectPage')}</label>
-                    <select
-                        id="page-select"
-                        value={selectedPageId}
-                        onChange={(e) => setSelectedPageId(e.target.value)}
-                        className="flex-1 max-w-xs px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                        <option value="">{t('admin.playground.selectPagePlaceholder')}</option>
-                        {filteredPages.map((p) => (
-                            <option key={p.id} value={p.id}>
-                                {p.name} {p.userEmail ? `(${p.userEmail})` : ''} {p.kbActiveVersion === null ? '— no chunks' : `— v${p.kbActiveVersion}`}
-                            </option>
-                        ))}
-                    </select>
-
-                    {/* Channel toggle */}
-                    <div className="flex rounded-lg border border-surface-300 overflow-hidden">
-                        <button
-                            type="button"
-                            onClick={() => setChannel('comment')}
-                            className={clsx(
-                                'px-3 py-1.5 text-xs font-medium transition-colors',
-                                channel === 'comment'
-                                    ? 'bg-brand-500 text-white'
-                                    : 'bg-white text-surface-600 hover:bg-surface-50'
-                            )}
+                <div className="border-b border-surface-200 bg-white rounded-t-xl flex-shrink-0">
+                    {/* Row 1: Page selection */}
+                    <div className="flex items-center gap-3 px-4 pt-3 pb-1.5">
+                        <label htmlFor="email-filter" className="sr-only">{t('admin.playground.emailFilter')}</label>
+                        <input
+                            id="email-filter"
+                            type="text"
+                            dir="auto"
+                            value={emailFilter}
+                            onChange={(e) => setEmailFilter(e.target.value)}
+                            placeholder={t('admin.playground.emailFilterPlaceholder')}
+                            className="max-w-[180px] px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder:text-surface-400"
+                        />
+                        <label htmlFor="page-select" className="sr-only">{t('admin.playground.selectPage')}</label>
+                        <select
+                            id="page-select"
+                            value={selectedPageId}
+                            onChange={(e) => setSelectedPageId(e.target.value)}
+                            className="flex-1 px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                         >
-                            {t('admin.playground.comment')}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setChannel('dm')}
-                            className={clsx(
-                                'px-3 py-1.5 text-xs font-medium transition-colors',
-                                channel === 'dm'
-                                    ? 'bg-brand-500 text-white'
-                                    : 'bg-white text-surface-600 hover:bg-surface-50'
-                            )}
-                        >
-                            {t('admin.playground.dm')}
-                        </button>
+                            <option value="">{t('admin.playground.selectPagePlaceholder')}</option>
+                            {filteredPages.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                    {p.name} {p.userEmail ? `(${p.userEmail})` : ''} {p.kbActiveVersion === null ? '— no chunks' : `— v${p.kbActiveVersion}`}
+                                </option>
+                            ))}
+                        </select>
                     </div>
 
-                    {/* Spacer */}
-                    <div className="flex-1" />
+                    {/* Row 2: Mode & actions */}
+                    <div className="flex items-center gap-3 px-4 pb-2.5">
+                        <div className="flex rounded-lg border border-surface-300 overflow-hidden">
+                            <button
+                                type="button"
+                                onClick={() => setChannel('comment')}
+                                className={clsx(
+                                    'px-3 py-1.5 text-xs font-medium transition-colors',
+                                    channel === 'comment'
+                                        ? 'bg-brand-500 text-white'
+                                        : 'bg-white text-surface-600 hover:bg-surface-50'
+                                )}
+                            >
+                                {t('admin.playground.comment')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setChannel('dm')}
+                                className={clsx(
+                                    'px-3 py-1.5 text-xs font-medium transition-colors',
+                                    channel === 'dm'
+                                        ? 'bg-brand-500 text-white'
+                                        : 'bg-white text-surface-600 hover:bg-surface-50'
+                                )}
+                            >
+                                {t('admin.playground.dm')}
+                            </button>
+                        </div>
 
-                    {/* KB sidebar toggle */}
-                    <button
-                        type="button"
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={clsx(
-                            'p-2 rounded-lg transition-colors',
-                            sidebarOpen
-                                ? 'bg-brand-100 text-brand-700'
-                                : 'text-surface-500 hover:bg-surface-100'
-                        )}
-                        aria-label={t('admin.playground.toggleSidebar')}
-                    >
-                        <Database className="w-4 h-4" aria-hidden="true" />
-                    </button>
+                        <div className="flex-1" />
 
-                    {/* Clear conversation */}
-                    <button
-                        type="button"
-                        onClick={handleClear}
-                        disabled={messages.length === 0}
-                        className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        aria-label={t('admin.playground.clearChat')}
-                    >
-                        <Trash2 className="w-4 h-4" aria-hidden="true" />
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                            className={clsx(
+                                'p-2 rounded-lg transition-colors',
+                                sidebarOpen
+                                    ? 'bg-brand-100 text-brand-700'
+                                    : 'text-surface-500 hover:bg-surface-100'
+                            )}
+                            aria-label={t('admin.playground.toggleSidebar')}
+                        >
+                            <Database className="w-4 h-4" aria-hidden="true" />
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleClear}
+                            disabled={messages.length === 0}
+                            className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            aria-label={t('admin.playground.clearChat')}
+                        >
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* ── Context Panel (post context / conversation history) ── */}
@@ -762,6 +794,7 @@ export default function AdminPlaygroundPage() {
                                                         /* Single bubble for public / private / skipped */
                                                         <div className={clsx(
                                                             'rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm',
+                                                            QUALITY_BORDER[getQualityLevel(msg.metadata)],
                                                             msg.metadata?.replyMethod === 'skipped'
                                                                 ? 'bg-red-50 border border-red-200'
                                                                 : 'bg-white border border-surface-100'
@@ -792,72 +825,105 @@ export default function AdminPlaygroundPage() {
                                                             ) : (
                                                                 <p className="text-sm text-red-600 italic">{t('admin.playground.noReply')}</p>
                                                             )}
+
+                                                            {/* Copy & Retry actions */}
+                                                            {msg.text && (
+                                                                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-surface-100">
+                                                                    <button type="button" onClick={() => handleCopy(msg.text)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-surface-400 hover:text-surface-600 hover:bg-surface-50 transition-colors" aria-label={t('admin.playground.copyReply')}>
+                                                                        <Copy className="w-3 h-3" aria-hidden="true" />
+                                                                        {t('admin.playground.copyReply')}
+                                                                    </button>
+                                                                    <button type="button" onClick={() => handleRetry(msg.id)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-surface-400 hover:text-surface-600 hover:bg-surface-50 transition-colors" aria-label={t('admin.playground.retryQuestion')}>
+                                                                        <RefreshCw className="w-3 h-3" aria-hidden="true" />
+                                                                        {t('admin.playground.retryQuestion')}
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>
                                             )}
 
-                                            {/* Metadata badges */}
+                                            {/* Structured metadata */}
                                             {msg.metadata && !msg.error && (
-                                                <div className="flex flex-wrap gap-1.5 mt-2 max-w-[85%]">
-                                                    {msg.metadata.intent && (
-                                                        <Badge className={INTENT_COLORS[msg.metadata.intent] || 'bg-surface-100 text-surface-800'}>
-                                                            {msg.metadata.intent}
-                                                        </Badge>
+                                                <div className="mt-2.5 max-w-[85%] space-y-1.5">
+                                                    {/* Row 1: Response quality */}
+                                                    <div className="flex items-center gap-1.5">
+                                                        {msg.metadata.intent && (
+                                                            <Badge className={INTENT_COLORS[msg.metadata.intent] || 'bg-surface-100 text-surface-800'}>
+                                                                {msg.metadata.intent}
+                                                            </Badge>
+                                                        )}
+                                                        {msg.metadata.confidence && (
+                                                            <Badge className={CONFIDENCE_COLORS[msg.metadata.confidence] || 'bg-surface-100 text-surface-800'}>
+                                                                {msg.metadata.confidence}
+                                                            </Badge>
+                                                        )}
+                                                        {msg.metadata.detectedLanguage && (
+                                                            <Badge className="bg-surface-100 text-surface-700">
+                                                                {msg.metadata.detectedLanguage}
+                                                            </Badge>
+                                                        )}
+                                                        {msg.metadata.cached && (
+                                                            <Badge className="bg-brand-100 text-brand-800">
+                                                                <Zap className="w-3 h-3 me-0.5" aria-hidden="true" />
+                                                                {t('admin.playground.cached')}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Row 2: Performance stats */}
+                                                    <div className="flex items-center gap-2 text-[11px] text-surface-400">
+                                                        <span>{msg.metadata.latencyMs}ms</span>
+                                                        {msg.metadata.tokensUsed > 0 && (
+                                                            <>
+                                                                <span aria-hidden="true">·</span>
+                                                                <span>{msg.metadata.tokensUsed} {t('admin.playground.tokens')}</span>
+                                                            </>
+                                                        )}
+                                                        {msg.metadata.gapRecorded && (
+                                                            <>
+                                                                <span aria-hidden="true">·</span>
+                                                                <Badge className="bg-amber-100 text-amber-800">{t('admin.playground.gapRecorded')}</Badge>
+                                                            </>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Row 3: Flags alert (only when flags or needsAttention) */}
+                                                    {(msg.metadata.flags.length > 0 || msg.metadata.needsAttention) && (
+                                                        <div className="flex items-start gap-2 px-2.5 py-2 bg-red-50 border border-red-200 rounded-lg">
+                                                            <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {msg.metadata.flags.map((flag) => (
+                                                                    <Badge key={flag} className="bg-red-100 text-red-700">{flag}</Badge>
+                                                                ))}
+                                                                {msg.metadata.needsAttention && (
+                                                                    <span className="text-xs text-red-700 font-medium">{t('admin.playground.needsAttention')}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     )}
-                                                    {msg.metadata.confidence && (
-                                                        <Badge className={CONFIDENCE_COLORS[msg.metadata.confidence] || 'bg-surface-100 text-surface-800'}>
-                                                            {msg.metadata.confidence}
-                                                        </Badge>
-                                                    )}
-                                                    {msg.metadata.cached && (
-                                                        <Badge className="bg-brand-100 text-brand-800">
-                                                            <Zap className="w-3 h-3 me-1" aria-hidden="true" />
-                                                            {t('admin.playground.cached')}
-                                                        </Badge>
-                                                    )}
-                                                    {msg.metadata.detectedLanguage && (
-                                                        <Badge className="bg-surface-100 text-surface-700">
-                                                            {msg.metadata.detectedLanguage}
-                                                        </Badge>
-                                                    )}
-                                                    <Badge className="bg-surface-100 text-surface-700">
-                                                        {msg.metadata.latencyMs}ms
-                                                    </Badge>
-                                                    {msg.metadata.tokensUsed > 0 && (
-                                                        <Badge className="bg-surface-100 text-surface-700">
-                                                            {msg.metadata.tokensUsed} {t('admin.playground.tokens')}
-                                                        </Badge>
-                                                    )}
-                                                    {msg.metadata.gapRecorded && (
-                                                        <Badge className="bg-amber-100 text-amber-800">
-                                                            {t('admin.playground.gapRecorded')}
-                                                        </Badge>
-                                                    )}
-                                                    {msg.metadata.flags.length > 0 && msg.metadata.flags.map((flag) => (
-                                                        <Badge key={flag} className="bg-red-100 text-red-700">{flag}</Badge>
-                                                    ))}
                                                 </div>
                                             )}
 
-                                            {/* Needs attention */}
-                                            {msg.metadata?.needsAttention && (
-                                                <div className="flex items-center gap-1.5 mt-1.5">
-                                                    <AlertTriangle className="w-3 h-3 text-amber-600" aria-hidden="true" />
-                                                    <span className="text-xs text-amber-700 font-medium">{t('admin.playground.needsAttention')}</span>
-                                                </div>
-                                            )}
-
-                                            {/* Expandable chunks */}
+                                            {/* RAG chunks inline summary */}
                                             {msg.metadata && msg.metadata.chunksRetrieved > 0 && (
                                                 <div className="mt-2 max-w-[85%] sm:max-w-[75%]">
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleChunks(msg.id)}
-                                                        className="flex items-center gap-1.5 text-xs text-surface-500 hover:text-surface-700 transition-colors"
+                                                        className="flex items-center gap-2 text-xs text-surface-500 hover:text-surface-700 transition-colors"
                                                         aria-expanded={expandedChunks.has(msg.id)}
                                                     >
-                                                        {t('admin.playground.chunks')} ({msg.metadata.chunksRetrieved})
+                                                        <Database className="w-3 h-3" aria-hidden="true" />
+                                                        <span>
+                                                            {msg.metadata.chunksRetrieved} {t('admin.playground.chunks')}
+                                                            {msg.metadata.chunks.length > 0 && (
+                                                                <span className="text-surface-400 ms-1">
+                                                                    ({t('admin.playground.bestScore')}: {Math.max(...msg.metadata.chunks.map(c => c.score)).toFixed(2)})
+                                                                </span>
+                                                            )}
+                                                        </span>
                                                         {expandedChunks.has(msg.id) ? (
                                                             <ChevronUp className="w-3 h-3" aria-hidden="true" />
                                                         ) : (
@@ -872,11 +938,16 @@ export default function AdminPlaygroundPage() {
                                                                     <div className="flex items-center gap-2 mb-1">
                                                                         <Badge className="bg-surface-100 text-surface-600">{chunk.type}</Badge>
                                                                         {chunk.title && (
-                                                                            <span className="text-xs font-medium text-surface-800">{chunk.title}</span>
+                                                                            <span className="text-xs font-medium text-surface-800 truncate">{chunk.title}</span>
                                                                         )}
-                                                                        <span className="ms-auto text-[10px] text-surface-400">
-                                                                            {chunk.score.toFixed(3)}
-                                                                        </span>
+                                                                        <div className="flex items-center gap-1.5 ms-auto flex-shrink-0">
+                                                                            <div className="w-12 h-1.5 bg-surface-200 rounded-full overflow-hidden">
+                                                                                <div className="h-full bg-brand-500 rounded-full" style={{ width: `${Math.min(chunk.score * 100, 100)}%` }} />
+                                                                            </div>
+                                                                            <span className="text-[10px] text-surface-400 tabular-nums">
+                                                                                {chunk.score.toFixed(3)}
+                                                                            </span>
+                                                                        </div>
                                                                     </div>
                                                                     <p className="text-xs text-surface-600 whitespace-pre-wrap line-clamp-4">{chunk.content}</p>
                                                                 </div>
@@ -923,7 +994,7 @@ export default function AdminPlaygroundPage() {
                                             autoResizeInput();
                                         }}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
                                                 e.preventDefault();
                                                 handleSend();
                                             }
@@ -956,7 +1027,7 @@ export default function AdminPlaygroundPage() {
                                 </button>
                             </div>
                             <p className="text-[10px] text-surface-400 mt-1.5 text-end">
-                                {t('admin.playground.sendHintKey', { key: isMac ? '\u2318' : 'Ctrl' })}
+                                {t('admin.playground.sendHintEnter')}
                             </p>
                         </div>
                     </div>
