@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Sparkles, CheckCircle, Gauge, Timer, Bot, Zap, User } from 'lucide-react';
+import { Sparkles, CheckCircle, Gauge, Timer } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { formatDuration } from '@/lib/formatDuration';
@@ -9,11 +9,6 @@ interface CommandCenterProps {
   repliedToday: number;
   replyRate: string;
   avgSpeedSeconds: number | null;
-  byMethod: {
-    ai: number;
-    template: number;
-    manual: number;
-  };
   hasError?: boolean;
   onRetry?: () => void;
 }
@@ -32,7 +27,6 @@ export function CommandCenter({
   repliedToday,
   replyRate,
   avgSpeedSeconds,
-  byMethod,
   hasError,
   onRetry,
 }: CommandCenterProps) {
@@ -76,9 +70,6 @@ export function CommandCenter({
       iconColor: 'text-violet-600',
     },
   ];
-
-  const totalReplies = byMethod.ai + byMethod.template + byMethod.manual;
-  const showBreakdown = totalReplies > 0;
 
   if (hasError) {
     return (
@@ -148,34 +139,6 @@ export function CommandCenter({
         })}
       </div>
 
-      {/* Reply Breakdown */}
-      {showBreakdown && (
-        <div className="border-t border-surface-100 px-4 py-3 sm:px-5 sm:py-3.5 flex flex-wrap items-center gap-3 sm:gap-4">
-          <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-surface-400">
-            {t('dashboard.commandCenter.replyBreakdown' as TranslationKey)}
-          </span>
-          <div className="flex items-center gap-2 sm:gap-3">
-            {byMethod.ai > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 bg-brand-50 px-2 py-1 rounded-full">
-                <Bot className="w-3 h-3" aria-hidden="true" />
-                {byMethod.ai} {t('dashboard.commandCenter.smartReplies' as TranslationKey)}
-              </span>
-            )}
-            {byMethod.template > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full">
-                <Zap className="w-3 h-3" aria-hidden="true" />
-                {byMethod.template} {t('dashboard.commandCenter.templateReplies' as TranslationKey)}
-              </span>
-            )}
-            {byMethod.manual > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-surface-600 bg-surface-100 px-2 py-1 rounded-full">
-                <User className="w-3 h-3" aria-hidden="true" />
-                {byMethod.manual} {t('dashboard.commandCenter.manualReplies' as TranslationKey)}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
     </Card>
   );
 }

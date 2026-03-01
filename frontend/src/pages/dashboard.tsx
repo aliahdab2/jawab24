@@ -433,11 +433,6 @@ const DashboardPage: NextPageWithLayout = () => {
         repliedToday={statsData.repliedToday}
         replyRate={analytics?.totals?.replyRate ?? '0'}
         avgSpeedSeconds={analytics?.responseTime?.avgSeconds ?? null}
-        byMethod={{
-          ai: statsData.aiReplies + statsData.messagesAiReplies,
-          template: statsData.templateReplies + statsData.messagesTemplateReplies,
-          manual: statsData.manualReplies + statsData.messagesManualReplies,
-        }}
         hasError={sectionErrors.comments && sectionErrors.messages && sectionErrors.analytics}
         onRetry={fetchDashboardData}
       />
