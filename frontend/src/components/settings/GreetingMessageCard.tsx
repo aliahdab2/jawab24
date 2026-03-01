@@ -26,7 +26,7 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
       </div>
       <textarea
         aria-label={t('settings.greetingMessage.title')}
-        className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'italic italic-arabic rtl' : 'ltr'}`}
+        className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'italic italic-arabic' : ''}`}
         placeholder={placeholder}
         dir="auto"
         value={displayValue}

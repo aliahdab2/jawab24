@@ -20,6 +20,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
+          dir="auto"
           className={clsx(
             'input',
             error && 'border-red-500 focus:ring-red-500',

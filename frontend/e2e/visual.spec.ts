@@ -93,6 +93,30 @@ const MOCK_RULES = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Freeze Date.now and new Date() to a fixed point so dashboard date strings
+// (e.g. "Sunday, March 1") never drift and break snapshots.
+const FROZEN_DATE = '2026-01-15T12:00:00.000Z'; // matches mock createdAt dates
+
+function freezeDate(page: import('@playwright/test').Page) {
+  return page.addInitScript((isoDate: string) => {
+    const fixed = new Date(isoDate).getTime();
+    const OrigDate = window.Date;
+    // @ts-expect-error — overriding Date constructor
+    window.Date = class extends OrigDate {
+      constructor(...args: unknown[]) {
+        if (args.length === 0) {
+          super(fixed);
+        } else {
+          // @ts-expect-error — spread into Date constructor
+          super(...args);
+        }
+      }
+
+      static now() { return fixed; }
+    };
+  }, FROZEN_DATE);
+}
+
 function setupAuth(page: import('@playwright/test').Page, language: 'en' | 'ar' = 'en') {
   return page.addInitScript((lang: 'en' | 'ar') => {
     localStorage.setItem('auth-storage', JSON.stringify({
@@ -143,6 +167,7 @@ test.describe('RTL Layout — Arabic', () => {
   test.use({ viewport: { width: 390, height: 844 } }); // iPhone 14 Pro
 
   test.beforeEach(async ({ page }) => {
+    await freezeDate(page);
     await setupAuth(page, 'ar');
     await setupApiMocks(page);
   });
@@ -177,6 +202,7 @@ test.describe('Safe Area Positioning — English', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test.beforeEach(async ({ page }) => {
+    await freezeDate(page);
     await setupAuth(page, 'en');
     await setupApiMocks(page);
   });
@@ -211,6 +237,7 @@ test.describe('Landscape Mode', () => {
   test.use({ viewport: { width: 844, height: 390 } }); // iPhone 14 Pro landscape
 
   test.beforeEach(async ({ page }) => {
+    await freezeDate(page);
     await setupAuth(page, 'en');
     await setupApiMocks(page);
   });
@@ -248,6 +275,7 @@ test.describe('Dashboard Page Spacing', () => {
   test.use({ viewport: { width: 390, height: 844 } }); // iPhone 14 Pro
 
   test.beforeEach(async ({ page }) => {
+    await freezeDate(page);
     await setupAuth(page, 'en');
     await setupApiMocks(page);
   });

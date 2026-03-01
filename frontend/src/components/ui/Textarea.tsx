@@ -20,6 +20,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         <textarea
           ref={ref}
           id={textareaId}
+          dir="auto"
           className={clsx(
             'input min-h-[100px] resize-y',
             error && 'border-red-500 focus:ring-red-500',

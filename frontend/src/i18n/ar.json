@@ -499,7 +499,7 @@
   "settings.replyStyle.professional": "رسمي",
   "settings.replyStyle.casual": "عفوي",
   "settings.replyStyle.enthusiastic": "حماسي",
-  "settings.replyStyle.brandVoice": "ملاحظات صوت العلامة التجارية",
+  "settings.replyStyle.brandVoice": "تعليمات خاصة للردود",
   "settings.replyStyle.brandVoicePlaceholder": "مثال: دائماً اذكر التوصيل المجاني، استخدم اسم العميل عند الإمكان...",
   "settings.replyStyle.holdLowConfidence": "مراجعة الردود غير المؤكدة",
   "settings.replyStyle.holdLowConfidenceDesc": "احتفظ بالردود الذكية منخفضة الثقة لمراجعتك قبل الإرسال",
