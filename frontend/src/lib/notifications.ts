@@ -187,12 +187,14 @@ function handleNotificationTap(action: ActionPerformed): void {
     }
 
     // 2. Fallback: route based on notification type
+    const isMessage = data?.dataType === 'message';
     let route = '/dashboard';
     switch (type) {
         case 'stale_comment':
         case 'new_comment':
         case 'flagged_reply':
-            route = '/comments';
+        case 'skipped_reply':
+            route = isMessage ? '/messages?filter=flagged' : '/comments?filter=flagged';
             break;
         case 'payment_failed':
         case 'subscription_expiring':
@@ -200,6 +202,7 @@ function handleNotificationTap(action: ActionPerformed): void {
             route = '/pricing';
             break;
         case 'page_disconnected':
+        case 'kb_gap':
             route = '/pages';
             break;
         default:

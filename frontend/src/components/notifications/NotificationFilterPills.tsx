@@ -6,7 +6,7 @@ export type NotificationFilter = 'all' | 'comments' | 'billing' | 'system';
 
 export const FILTER_TYPE_MAP: Record<NotificationFilter, string[] | null> = {
     all: null,
-    comments: ['stale_comment', 'new_comment', 'flagged_reply'],
+    comments: ['stale_comment', 'new_comment', 'flagged_reply', 'skipped_reply'],
     billing: ['payment_failed', 'subscription_expiring', 'trial_ending', 'subscription_renewed'],
     system: ['page_disconnected', 'kb_gap'],
 };

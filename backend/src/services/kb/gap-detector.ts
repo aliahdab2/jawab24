@@ -184,7 +184,7 @@ class GapDetectorService {
                 userId,
                 'kb_gap',
                 { pageName, topic: shortQuery },
-                { pageId, intent, occurrenceCount, sampleQuery },
+                { pageId, intent, occurrenceCount, sampleQuery, deepLink: `/pages#page-${pageId}` },
             );
 
             this.logger.info('Gap notification sent to merchant', {

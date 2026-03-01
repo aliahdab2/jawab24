@@ -50,6 +50,7 @@ const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     stale_comment:         { icon: Bell,          iconColor: 'text-amber-600',   bgColor: 'bg-amber-50',   ringColor: 'ring-amber-200/60' },
     new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600',    bgColor: 'bg-blue-50',    ringColor: 'ring-blue-200/60' },
     flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600',     bgColor: 'bg-red-50',     ringColor: 'ring-red-200/60' },
+    skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600',   bgColor: 'bg-amber-50',   ringColor: 'ring-amber-200/60' },
     payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600',     bgColor: 'bg-red-50',     ringColor: 'ring-red-200/60' },
     subscription_expiring: { icon: Clock,         iconColor: 'text-orange-600',  bgColor: 'bg-orange-50',  ringColor: 'ring-orange-200/60' },
     trial_ending:          { icon: Clock,         iconColor: 'text-orange-600',  bgColor: 'bg-orange-50',  ringColor: 'ring-orange-200/60' },
@@ -62,7 +63,7 @@ const DEFAULT_STYLE: NotificationStyle = {
     icon: Bell, iconColor: 'text-brand-600', bgColor: 'bg-brand-50', ringColor: 'ring-brand-200/60',
 };
 
-const ACTIONABLE_TYPES = new Set(['stale_comment', 'new_comment', 'flagged_reply']);
+const ACTIONABLE_TYPES = new Set(['stale_comment', 'new_comment', 'flagged_reply', 'skipped_reply']);
 const GROUP_TIME_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -75,11 +76,15 @@ function getNotificationRoute(notification: Notification): string | null {
     const data = notification.data as Record<string, string> | undefined;
     if (data?.deepLink) return data.deepLink;
 
+    // Fallback: determine route from notification type + data.type (comment vs message)
+    const isMessage = data?.type === 'message';
+
     switch (notification.type) {
         case 'stale_comment':
         case 'new_comment':
         case 'flagged_reply':
-            return '/comments';
+        case 'skipped_reply':
+            return isMessage ? '/messages?filter=flagged' : '/comments?filter=flagged';
         case 'payment_failed':
         case 'subscription_expiring':
         case 'subscription_renewed':
@@ -278,7 +283,8 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
             handleMarkAsRead(notification.id);
         }
         setIsOpen(false);
-        router.push('/comments');
+        const route = getNotificationRoute(notification);
+        router.push(route || '/comments');
     };
 
     const handleMarkAllAsRead = async () => {
