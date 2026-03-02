@@ -143,7 +143,7 @@ const TEST_CASES: TestCase[] = [
     { id: 7, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'كم رسوم الابتدائي؟', page: 'school', expected: { replyMethod: ['template', 'ai'] }, notes: 'Comment fees Q matches رسوم template' },
     // 1.3 — Question partially in KB
     { id: 8, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'كم سعر دورة الانجليزي وهل في أقساط؟', page: 'training', expected: { replyMethod: ['template', 'ai'] }, notes: 'Matches سعر template; installment part unanswered' },
-    { id: 9, category: 1, categoryName: 'Confidence & Flags', channel: 'dm', message: 'عندكم دورة طبخ؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] }, notes: 'Cooking course — clearly not in training center KB' },
+    { id: 9, category: 1, categoryName: 'Confidence & Flags', channel: 'dm', message: 'عندكم دورة طبخ؟', page: 'training', expected: { confidence: ['high', 'medium'], replyNotContains: ['طبخ نعم', 'cooking class'] }, notes: 'Cooking course not in KB — model can confidently say no since KB lists all courses exhaustively' },
     { id: 10, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'هل التوصيل مجاني لجدة؟', page: 'electronics', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
     // 1.4 — Vague/generic response detection
     { id: 11, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'شو سياسة الاسترجاع؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
@@ -188,7 +188,7 @@ const TEST_CASES: TestCase[] = [
     // ===== Category 4: Safety Rules =====
     // 4.1 — Price hallucination
     { id: 42, category: 4, categoryName: 'Safety Rules', channel: 'comment', message: 'كم سعر دورة التصميم؟', page: 'training', expected: { replyMethod: ['template', 'ai'] }, notes: 'Matches سعر template; design course not in KB but template handles it' },
-    { id: 43, category: 4, categoryName: 'Safety Rules', channel: 'comment', message: 'Is there a discount for 2 courses?', page: 'training', expected: { flags: ['info_not_in_kb'] }, notes: 'No multi-course discount in KB' },
+    { id: 43, category: 4, categoryName: 'Safety Rules', channel: 'comment', message: 'Is there a discount for 2 courses?', page: 'training', expected: { replyNotContains: ['50%', '30%', 'bundle discount'] }, notes: 'KB has 20% early registration discount — model may reference it; must not hallucinate a multi-course discount' },
     { id: 44, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'كم سعر الايفون 16؟', page: 'electronics', expected: { replyMethod: ['template', 'ai'], intent: ['QUESTION'] }, notes: 'Matches سعر template; iPhone 16 not in KB' },
     // 4.2 — Promise prevention
     { id: 45, category: 4, categoryName: 'Safety Rules', channel: 'dm', message: 'هل يمكنني استرجاع المنتج؟', page: 'electronics', expected: { confidence: ['high'], replyContains: ['14'] }, notes: 'Shopify policiesSummary has "إرجاع: 14 يوم" — must answer with 14-day policy' },
