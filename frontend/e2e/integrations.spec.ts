@@ -148,7 +148,7 @@ test.describe('Integrations Page', () => {
 
     await page.goto('/en/integrations');
 
-    await expect(page).toHaveTitle(/Integrations.*Jawab24/i);
+    await expect(page).toHaveTitle(new RegExp(`${en['integrations.title']}.*Jawab24`, 'i'));
     await expect(
       page.locator('h1').filter({ hasText: en['integrations.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
@@ -317,7 +317,7 @@ test.describe('Integrations Page', () => {
 
     await page.goto('/en/integrations');
 
-    await expect(page).toHaveTitle(/Integrations.*Jawab24/i, { timeout: 15000 });
+    await expect(page).toHaveTitle(new RegExp(`${en['integrations.title']}.*Jawab24`, 'i'), { timeout: 15000 });
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
 
     // No store cards shown (all APIs failed = null → not rendered)
