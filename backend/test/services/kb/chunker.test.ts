@@ -123,6 +123,45 @@ describe('ChunkerService', () => {
             const chunks = chunkKnowledgeBase(text);
             expect(chunks.length).toBeGreaterThanOrEqual(2);
         });
+
+        it('keeps structured KB sections together (does not fragment by blank lines)', () => {
+            // Simulates the serialized format from the frontend KB editor
+            const text = [
+                '💰 المنتجات والخدمات:',
+                'نحنا خدمة مخصص للردود الذكية للزبائن',
+                '',
+                '✦ الأسعار:',
+                'خطط الاشتراك',
+                '',
+                '1️⃣ الباقة التجريبية',
+                '',
+                'السعر:',
+                '9 دولار شهرياً',
+                '',
+                '2️⃣ باقة الأعمال',
+                '',
+                'السعر:',
+                '29 دولار شهرياً',
+            ].join('\n');
+
+            const chunks = chunkKnowledgeBase(text);
+
+            // Should produce 2 chunks (one per section), NOT 7+ fragments
+            expect(chunks).toHaveLength(2);
+
+            // The pricing chunk should contain ALL pricing info in one chunk
+            const pricingChunk = chunks.find(c => c.contentOriginal.includes('9 دولار'));
+            expect(pricingChunk).toBeDefined();
+            expect(pricingChunk!.contentOriginal).toContain('29 دولار');
+            expect(pricingChunk!.contentOriginal).toContain('الباقة التجريبية');
+            expect(pricingChunk!.contentOriginal).toContain('باقة الأعمال');
+        });
+
+        it('detects offering type for Arabic pricing section with ال prefix', () => {
+            const text = '✦ الأسعار:\nباقة 1: 9 دولار\nباقة 2: 29 دولار';
+            const chunks = chunkKnowledgeBase(text);
+            expect(chunks[0].type).toBe('offering');
+        });
     });
 
     describe('chunkBusinessProfile', () => {

@@ -3,7 +3,7 @@ import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails } from '../db/schema';
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../services/ecommerce';
-import { eq, ilike, desc, and, gte, lte, sql } from 'drizzle-orm';
+import { eq, ilike, desc, and, gte, lte, sql, isNotNull } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { config } from '../config';
 import { aiService } from '../services/ai';
@@ -742,6 +742,70 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             } catch (error) {
                 request.log.error(error, 'Admin KB update failed');
                 return reply.status(500).send({ success: false, error: 'Failed to update KB' });
+            }
+        });
+
+        /**
+         * POST /admin/kb/re-ingest - Re-ingest KB for all pages (or a specific page)
+         * Triggers chunking + embedding with the latest chunker logic.
+         * Use after deploying chunker improvements so existing KBs benefit immediately.
+         */
+        adminProtected.post<{ Body: { pageId?: string } }>('/kb/re-ingest', {
+            schema: { tags: ['Admin'], summary: 'Re-ingest KB chunks for all (or one) page', security: auth },
+        }, async (request: FastifyRequest<{ Body: { pageId?: string } }>, reply: FastifyReply) => {
+            const ingestion = getIngestionService();
+            if (!ingestion) {
+                return reply.status(503).send({ success: false, error: 'Ingestion service unavailable (no OpenAI key)' });
+            }
+
+            try {
+                const { pageId } = request.body || {};
+
+                // Fetch pages with KB content
+                const condition = pageId
+                    ? and(eq(pages.id, pageId), isNotNull(pages.knowledgeBase))
+                    : isNotNull(pages.knowledgeBase);
+
+                const pagesWithKB = await db
+                    .select({ id: pages.id, name: pages.name, knowledgeBase: pages.knowledgeBase, kbVersion: pages.kbVersion })
+                    .from(pages)
+                    .where(condition);
+
+                if (pagesWithKB.length === 0) {
+                    return reply.send({ success: true, data: { reIngested: 0, message: 'No pages with KB content found' } });
+                }
+
+                const results: { pageId: string; name: string | null; status: string; newVersion: number }[] = [];
+
+                for (const p of pagesWithKB) {
+                    try {
+                        const newVersion = (p.kbVersion ?? 0) + 1;
+
+                        // Bump version
+                        await db.update(pages).set({
+                            kbVersion: newVersion,
+                            kbUpdatedAt: new Date(),
+                            updatedAt: new Date(),
+                        }).where(eq(pages.id, p.id));
+
+                        // Run ingestion (await to ensure it completes before moving to next page)
+                        await ingestion.ingestKnowledgeBase(p.id, p.knowledgeBase ?? '', newVersion);
+
+                        results.push({ pageId: p.id, name: p.name, status: 'ok', newVersion });
+                        request.log.info({ pageId: p.id, newVersion }, 'KB re-ingested');
+                    } catch (err) {
+                        request.log.error(err, `KB re-ingestion failed for page ${p.id}`);
+                        results.push({ pageId: p.id, name: p.name, status: 'error', newVersion: p.kbVersion ?? 0 });
+                    }
+                }
+
+                return reply.send({
+                    success: true,
+                    data: { reIngested: results.filter(r => r.status === 'ok').length, total: pagesWithKB.length, results },
+                });
+            } catch (error) {
+                request.log.error(error, 'KB re-ingestion failed');
+                return reply.status(500).send({ success: false, error: 'Failed to re-ingest KB' });
             }
         });
 

@@ -47,20 +47,28 @@ const OVERLAP_CHARS = 100;
 /**
  * Known section headers (Arabic + English) that indicate chunk boundaries.
  * Case-insensitive matching is done after normalization.
+ * Arabic patterns include optional ال prefix (e.g., الأسعار → أسعار).
  */
 const SECTION_PATTERNS: { pattern: RegExp; type: KbChunk['type'] }[] = [
-    { pattern: /^(delivery|shipping|توصيل|شحن)/i, type: 'policy' },
-    { pattern: /^(return|refund|exchange|ارجاع|استبدال|استرجاع)/i, type: 'policy' },
-    { pattern: /^(payment|دفع|طرق الدفع)/i, type: 'policy' },
-    { pattern: /^(warranty|ضمان|كفالة)/i, type: 'policy' },
-    { pattern: /^(hours|ساعات|مواعيد|أوقات العمل)/i, type: 'hours' },
-    { pattern: /^(location|address|عنوان|موقع|فرع)/i, type: 'location' },
-    { pattern: /^(phone|contact|هاتف|تواصل|اتصال)/i, type: 'contact' },
-    { pattern: /^(faq|أسئلة|الأسئلة الشائعة)/i, type: 'faq' },
-    { pattern: /^(menu|قائمة|منيو)/i, type: 'offering' },
-    { pattern: /^(products?|services?|منتجات|خدمات)/i, type: 'offering' },
-    { pattern: /^(prices?|pricing|أسعار|سعر)/i, type: 'offering' },
+    { pattern: /^(?:ال)?(delivery|shipping|توصيل|شحن)/i, type: 'policy' },
+    { pattern: /^(?:ال)?(return|refund|exchange|ارجاع|استبدال|استرجاع)/i, type: 'policy' },
+    { pattern: /^(?:ال)?(payment|دفع|طرق الدفع)/i, type: 'policy' },
+    { pattern: /^(?:ال)?(warranty|ضمان|كفالة)/i, type: 'policy' },
+    { pattern: /^(?:ال)?(hours|ساعات|مواعيد|أوقات العمل)/i, type: 'hours' },
+    { pattern: /^(?:ال)?(location|address|عنوان|موقع|فرع)/i, type: 'location' },
+    { pattern: /^(?:ال)?(phone|contact|هاتف|تواصل|اتصال)/i, type: 'contact' },
+    { pattern: /^(?:ال)?(faq|أسئلة|الأسئلة الشائعة)/i, type: 'faq' },
+    { pattern: /^(?:ال)?(menu|قائمة|منيو)/i, type: 'offering' },
+    { pattern: /^(?:ال)?(products?|services?|منتجات|خدمات)/i, type: 'offering' },
+    { pattern: /^(?:ال)?(prices?|pricing|أسعار|سعر)/i, type: 'offering' },
 ];
+
+/**
+ * Known KB section header markers from the frontend serialization format.
+ * Preset sections use specific emojis (💰, 📝), custom sections use ✦.
+ * The pattern matches: marker + space + label (1-50 chars) + colon
+ */
+const KB_SECTION_HEADER_RE = /^(?:💰|📝|✦)[\u{FE0E}\u{FE0F}]?\s+[^:\n]{1,50}:/u;
 
 /** Strip leading emoji and variation selectors from text */
 function stripLeadingEmoji(text: string): string {
@@ -115,18 +123,58 @@ function splitLongText(text: string, maxTokens: number): string[] {
 }
 
 /**
+ * Split raw KB text into logical sections by detecting section headers.
+ * Keeps each section (header + all content until next header) as one unit.
+ * Falls back to double-newline splitting when no section headers are found.
+ *
+ * This prevents structured KB content (e.g., pricing with blank lines between
+ * plans) from being fragmented into tiny, meaningless chunks.
+ */
+function splitIntoLogicalSections(rawText: string): string[] {
+    const lines = rawText.split('\n');
+    const sections: string[] = [];
+    let currentLines: string[] = [];
+    let foundMarker = false;
+
+    for (const line of lines) {
+        if (KB_SECTION_HEADER_RE.test(line.trimStart())) {
+            if (currentLines.length > 0) {
+                foundMarker = true;
+                const text = currentLines.join('\n').trim();
+                if (text) sections.push(text);
+            }
+            currentLines = [line];
+        } else {
+            currentLines.push(line);
+        }
+    }
+
+    // Flush last section
+    const lastText = currentLines.join('\n').trim();
+    if (lastText) sections.push(lastText);
+
+    // If no section markers found, fall back to double-newline splitting
+    if (!foundMarker) {
+        return rawText.split(/\n\n+/).filter(s => s.trim());
+    }
+
+    return sections;
+}
+
+/**
  * Parse raw KB text into typed, normalized chunks ready for embedding.
  *
  * Splitting strategy:
- * 1. Split by double-newline into sections
- * 2. Detect type per section from headers/content
- * 3. Split oversized sections further with overlap
- * 4. Normalize all text with normalizeArabic()
+ * 1. Detect logical sections by section headers (💰, 📝, ✦)
+ * 2. Fall back to double-newline splitting if no headers found
+ * 3. Detect type per section from headers/content
+ * 4. Split oversized sections further with overlap
+ * 5. Normalize all text with normalizeArabic()
  */
 export function chunkKnowledgeBase(rawText: string): KbChunk[] {
     if (!rawText || !rawText.trim()) return [];
 
-    const sections = rawText.split(/\n\n+/).filter(s => s.trim());
+    const sections = splitIntoLogicalSections(rawText);
     const chunks: KbChunk[] = [];
 
     for (const section of sections) {
