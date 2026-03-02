@@ -21,6 +21,7 @@ vi.mock('../../src/controllers/shopify', () => ({
     syncStore: vi.fn(),
     getStoreProducts: vi.fn(),
     linkPage: vi.fn(),
+    unlinkPage: vi.fn(),
 }));
 
 describe('Shopify Routes', () => {
@@ -56,6 +57,7 @@ describe('Shopify Routes', () => {
         expect(registeredRoutes).toContain('POST /store/sync');
         expect(registeredRoutes).toContain('GET /store/products');
         expect(registeredRoutes).toContain('PATCH /store/link-page');
+        expect(registeredRoutes).toContain('PATCH /store/unlink-page');
     });
 
     it('should protect API routes with authentication', async () => {
@@ -85,6 +87,7 @@ describe('Shopify Routes', () => {
         expect(protectedRoutes).toContain('POST /store/sync');
         expect(protectedRoutes).toContain('GET /store/products');
         expect(protectedRoutes).toContain('PATCH /store/link-page');
+        expect(protectedRoutes).toContain('PATCH /store/unlink-page');
 
         // OAuth and webhook routes should NOT be in protected list
         expect(protectedRoutes).not.toContain('GET /auth');
