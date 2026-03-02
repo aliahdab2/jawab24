@@ -76,6 +76,7 @@ const CommentsPage: NextPageWithLayout = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
+  const pendingDeepLinkRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -217,12 +218,37 @@ const CommentsPage: NextPageWithLayout = () => {
     router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
   }, [filter, router]);
 
-  // Update internal filter when URL changes
+  // Update internal filter when URL changes (+ deep-link handling)
   useEffect(() => {
     if (!router.isReady) return;
+    const commentId = router.query.commentId as string | undefined;
+    if (commentId) {
+      // Store target ID and switch to "all" so the comment is visible regardless of status
+      pendingDeepLinkRef.current = commentId;
+      setFilter('all');
+      // Clean URL immediately to avoid re-triggering
+      const params = new URLSearchParams(window.location.search);
+      params.delete('commentId');
+      params.delete('filter');
+      router.replace({ pathname: router.pathname, query: Object.fromEntries(params) }, undefined, { shallow: true });
+      return;
+    }
     const currentParam = router.query.filter as string | undefined;
     setFilter(resolveFilter(currentParam));
-  }, [router.isReady, router.query.filter]);
+  }, [router.isReady, router.query.filter, router.query.commentId, router]);
+
+  // Deep-link: auto-select comment after "all" data loads
+  useEffect(() => {
+    if (!pendingDeepLinkRef.current || isLoading || filter !== 'all') return;
+    const targetId = pendingDeepLinkRef.current;
+    const found = allComments.find(c => c.id === targetId);
+    if (found) {
+      setSelectedComment(found);
+    } else if (allComments.length > 0) {
+      toast.info(t('comments.deepLinkNotFound' as TranslationKey));
+    }
+    pendingDeepLinkRef.current = null;
+  }, [allComments, isLoading, filter, t]);
 
   // Update Page Title
   useEffect(() => {

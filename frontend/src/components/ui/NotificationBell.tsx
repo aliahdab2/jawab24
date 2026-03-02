@@ -74,17 +74,25 @@ function getNotificationStyle(type: string): NotificationStyle {
 
 function getNotificationRoute(notification: Notification): string | null {
     const data = notification.data as Record<string, string> | undefined;
-    if (data?.deepLink) return data.deepLink;
-
-    // Fallback: determine route from notification type + data.type (comment vs message)
     const isMessage = data?.type === 'message';
 
+    // Comment/message notifications: deep-link to the specific item when possible
+    const isCommentType = ['stale_comment', 'new_comment', 'flagged_reply', 'skipped_reply'].includes(notification.type);
+    if (isCommentType) {
+        if (isMessage && data?.messageId) {
+            return `/messages?messageId=${encodeURIComponent(data.messageId)}`;
+        }
+        if (!isMessage && data?.commentId) {
+            return `/comments?commentId=${encodeURIComponent(data.commentId)}`;
+        }
+        // Fallback to filter page when no specific ID available
+        return isMessage ? '/messages?filter=needs_action' : '/comments?filter=needs_action';
+    }
+
+    // Non-comment notifications: use stored deepLink or type-based fallback
+    if (data?.deepLink) return data.deepLink;
+
     switch (notification.type) {
-        case 'stale_comment':
-        case 'new_comment':
-        case 'flagged_reply':
-        case 'skipped_reply':
-            return isMessage ? '/messages?filter=flagged' : '/comments?filter=flagged';
         case 'payment_failed':
         case 'subscription_expiring':
         case 'subscription_renewed':

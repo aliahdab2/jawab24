@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/store';
 import { rulesApi, templatesApi } from '@/lib/api';
 import { extractArrayData } from '@/lib/api-utils';
 import { Zap, Plus, BookTemplate, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import { RuleCard } from '@/components/rules';
 import type { Rule, Template } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
@@ -142,6 +143,13 @@ const RulesPage: NextPageWithLayout = () => {
   };
 
   const handleToggle = async (id: string, active: boolean) => {
+    if (active) {
+      const rule = rules.find(r => r.id === id);
+      if (rule?.templateId && !templates.find(tp => tp.id === rule.templateId)) {
+        toast.error(t('rules.cannotEnableMissingTemplate' as TranslationKey));
+        return;
+      }
+    }
     setRules(rules.map(r => r.id === id ? { ...r, active } : r));
     try {
       await rulesApi.update(id, { active });

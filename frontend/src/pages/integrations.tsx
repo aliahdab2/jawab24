@@ -376,7 +376,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
 };
 
 IntegrationsPage.getLayout = (page: ReactElement) => (
-  <DashboardLayout title="Integrations">{page}</DashboardLayout>
+  <DashboardLayout title="Stores">{page}</DashboardLayout>
 );
 
 export default IntegrationsPage;

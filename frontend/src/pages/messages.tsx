@@ -72,6 +72,7 @@ const MessagesPage: NextPageWithLayout = () => {
   const [filter, setFilter] = useState<FilterType>('needs_action');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const pendingDeepLinkRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -112,12 +113,22 @@ const MessagesPage: NextPageWithLayout = () => {
     router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
   }, [filter, router]);
 
-  // Update internal filter when URL changes
+  // Update internal filter when URL changes (+ deep-link handling)
   useEffect(() => {
     if (!router.isReady) return;
+    const messageId = router.query.messageId as string | undefined;
+    if (messageId) {
+      pendingDeepLinkRef.current = messageId;
+      setFilter('all');
+      const params = new URLSearchParams(window.location.search);
+      params.delete('messageId');
+      params.delete('filter');
+      router.replace({ pathname: router.pathname, query: Object.fromEntries(params) }, undefined, { shallow: true });
+      return;
+    }
     const currentParam = router.query.filter as string | undefined;
     setFilter(resolveFilter(currentParam));
-  }, [router.isReady, router.query.filter]);
+  }, [router.isReady, router.query.filter, router.query.messageId, router]);
 
   // API params derived from current filter
   const apiParams = useMemo(() => getApiParams(filter), [filter]);
@@ -320,6 +331,21 @@ const MessagesPage: NextPageWithLayout = () => {
     });
 
   }, [allMessages, debouncedSearch, checkConversationNeedsAttention]);
+
+  // Deep-link: auto-select conversation after "all" data loads
+  useEffect(() => {
+    if (!pendingDeepLinkRef.current || isLoading || filter !== 'all') return;
+    const targetId = pendingDeepLinkRef.current;
+    const found = conversations.find(c =>
+      c.messages.some(m => m.id === targetId)
+    );
+    if (found) {
+      setSelectedConversation(found);
+    } else if (allMessages.length > 0) {
+      toast.info(t('messages.deepLinkNotFound' as TranslationKey));
+    }
+    pendingDeepLinkRef.current = null;
+  }, [conversations, allMessages, isLoading, filter, t]);
 
   // Resolved page name + URL for modal — avoids pages.find() in JSX on every render
   const selectedPageName = useMemo(

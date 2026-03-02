@@ -181,7 +181,22 @@ function handleNotificationTap(action: ActionPerformed): void {
         if (data?.customData) customData = JSON.parse(data.customData);
     } catch { /* ignore parse errors */ }
 
-    if (customData?.deepLink) {
+    // 1a. Prefer item-specific deep links for comment/message notifications
+    const isCommentType = ['stale_comment', 'new_comment', 'flagged_reply', 'skipped_reply'].includes(type || '');
+    if (isCommentType && customData) {
+        const isMessage = customData.type === 'message';
+        if (isMessage && customData.messageId) {
+            if (typeof window !== 'undefined') window.location.href = `/messages?messageId=${encodeURIComponent(customData.messageId)}`;
+            return;
+        }
+        if (!isMessage && customData.commentId) {
+            if (typeof window !== 'undefined') window.location.href = `/comments?commentId=${encodeURIComponent(customData.commentId)}`;
+            return;
+        }
+    }
+
+    // 1b. For non-comment types, use stored deepLink
+    if (customData?.deepLink && !isCommentType) {
         if (typeof window !== 'undefined') window.location.href = customData.deepLink;
         return;
     }
@@ -194,7 +209,7 @@ function handleNotificationTap(action: ActionPerformed): void {
         case 'new_comment':
         case 'flagged_reply':
         case 'skipped_reply':
-            route = isMessage ? '/messages?filter=flagged' : '/comments?filter=flagged';
+            route = isMessage ? '/messages?filter=needs_action' : '/comments?filter=needs_action';
             break;
         case 'payment_failed':
         case 'subscription_expiring':
