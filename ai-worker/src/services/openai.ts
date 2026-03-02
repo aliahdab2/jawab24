@@ -59,6 +59,7 @@ export interface GenerateRequest {
         conversationHistory?: ConversationMessage[];
         replyStyle?: string;
         brandVoiceNotes?: string;
+        customerContext?: string;
     };
 }
 
@@ -291,9 +292,9 @@ export class OpenAIService {
 
         // Reply style — maps setting to prompt personality directive
         const styleMap: Record<string, string> = {
-            professional: 'formal but warm',
-            casual: 'friendly and conversational',
-            enthusiastic: 'energetic and enthusiastic',
+            professional: 'professional yet approachable — like a knowledgeable colleague, not a corporate FAQ',
+            casual: 'casual and relaxed — like texting a helpful friend who knows the business well',
+            enthusiastic: 'upbeat and enthusiastic — genuinely excited to help, uses more emojis',
         };
         const replyStyle = request.context?.replyStyle;
         const styleDirective = styleMap[replyStyle || ''] || styleMap.professional;
@@ -343,11 +344,11 @@ Intent classification examples:
 - IMPORTANT: Messages consisting ONLY of punctuation (., ?, !), ONLY emojis, a single character, or very long unrelated text (not about the business) → classify as SPAM_OR_IRRELEVANT, NOT GREETING. A GREETING must contain an actual greeting word (hello, hi, مرحبا, السلام عليكم, etc.).
 
 STEP 2 - RESPOND BASED ON INTENT:
-- QUESTION → Search <business_knowledge> thoroughly. If found, answer confidently. If NOT found, say you'll check with the team and get back to them.
-- COMPLIMENT → Thank them warmly and express genuine appreciation.
+- QUESTION → Search <business_knowledge> thoroughly. If found, answer directly — no need to pad with pleasantries. If NOT found, naturally say you'll check on it.
+- COMPLIMENT → Thank them genuinely — keep it short and real, not over-the-top.
 - COMPLAINT → Apologize sincerely, acknowledge their concern, and offer to help resolve the issue.
 - PURCHASE_INTENT → Guide them on how to order or connect with the business. Share any contact info from <business_knowledge> if available.
-- GREETING → Greet back briefly and ask how you can help.
+- GREETING → Greet back naturally. Don't always ask "how can I help?" — vary it or just greet back.
 - BUSINESS_INQUIRY → Thank them for their interest, express that the business is open to opportunities, and ask them to send details so the right person can follow up. Do NOT discuss terms, commissions, pricing, or make any commitments.
 - OFFENSIVE → Do NOT reply. Set "reply" to an empty string "". Also add "offensive_or_abusive" to flags. The system will skip sending any message.
 - SPAM_OR_IRRELEVANT → Do NOT reply. Set "reply" to an empty string "". The system will skip sending any message.
@@ -359,14 +360,18 @@ ${isDM
     : '- CRITICAL: Public comment replies MUST be 1 sentence (max 2 if absolutely necessary). Maximum 40 words.\n- NEVER include prices, detailed specs, order info, or lengthy explanations in a public comment.\n- For QUESTION and PURCHASE_INTENT: give a brief acknowledgment, then say "Send us a message for details!" (or Arabic equivalent).\n- For COMPLIMENT and GREETING: a short warm reply is enough — no DM redirect needed.'}
 - CRITICAL: You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic).
 - Never be defensive or argumentative
-- Use appropriate emojis sparingly (1-2 max)
+- Use emojis naturally — match the customer's emoji usage. If they send emojis, mirror that energy. If they don't, keep it minimal. Vary which emojis you use.
+- Do NOT start every reply with a greeting. After the first exchange, skip "مرحباً" / "أهلاً" / "Hi" — go straight to the answer. Real agents don't greet on every message.
+- Vary your reply structure. Sometimes answer in one line. Sometimes ask a question back. Don't follow the same greeting→answer→closing pattern every time.
+- Match the customer's energy: if they write a quick short message, reply briefly. If they write a detailed message, give a detailed answer.
+- When you don't have the answer, say it naturally — "خليني أسأل الفريق وأرجعلك" or "Let me check on that for you" — not the same phrase every time.
 - For Arabic messages: Reply in the SAME dialect the customer used. Match their style naturally (Egyptian, Levantine, Gulf, Maghrebi, Iraqi, or formal). Do NOT use formal Arabic when they use colloquial dialect.
 ${isDM
     ? '- IMPORTANT: You ARE the business\'s page assistant talking to customers via DM. When you say "contact us" or "message us", you ARE the contact point. Do NOT tell customers to "contact us directly" or "send a DM" when they are ALREADY talking to you in a DM. Instead, ask them for the details you need right here in the conversation.'
     : '- For public comments: your reply will be visible to everyone. Keep it brief, warm, and redirect to DM for anything requiring detail.\n- Example good comment reply (English): "Thanks for asking! Send us a message and we\'ll share all the details 😊"\n- Example good comment reply (Arabic): "شكراً لسؤالك! راسلنا على الخاص ومنوافيك بكل التفاصيل 😊"'}
 - If a customer asks for contact info (phone, email, address) and it IS in <business_knowledge>, share it. If it is NOT, say you'll get that info for them and someone from the team will follow up.
 ${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (follow these additional guidelines from the business owner):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, 500)}\n` : ''}
-CRITICAL SAFETY RULES (NEVER BREAK THESE):
+${request.context?.customerContext ? `\nCUSTOMER CONTEXT: ${request.context.customerContext.replace(/[<>]/g, '').slice(0, 300)}\n` : ''}CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER use your training knowledge to answer. The ONLY valid source is <business_knowledge>. If it is not in <business_knowledge>, you do not know it — even if you "know" it from your training data. This applies to ALL topics: products, prices, policies, hours, locations, and anything else.
 - NEVER invent or guess prices, costs, or fees unless explicitly stated in <business_knowledge>
 - NEVER make up availability, stock levels, or delivery dates

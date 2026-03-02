@@ -279,6 +279,7 @@ export class MessageProcessor {
                         kbActiveVersion: page.kbActiveVersion,
                         pageId: page.id,
                         senderId,
+                        senderName,
                         replyStyle: userSettings.replyStyle,
                         brandVoiceNotes: userSettings.brandVoiceNotes || undefined,
                     },

@@ -85,6 +85,7 @@ export interface AiGenerateRequest {
         queryEmbedding?: number[];
         replyStyle?: string;
         brandVoiceNotes?: string;
+        customerContext?: string;
     };
 }
 

@@ -59,6 +59,7 @@ export interface GenerateReplyContext {
     accessToken?: string;
     // For messages
     senderId?: string;
+    senderName?: string;
     // Reply customization
     replyStyle?: string;
     brandVoiceNotes?: string;
@@ -204,6 +205,9 @@ export class ReplyGenerator {
 
             if (pageId && senderId) {
                 const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 12);
+                const customerSummary = await messagesService.getCustomerSummary(pageId, senderId);
+                const namePart = context.senderName ? `Customer name: ${context.senderName}.` : '';
+                const customerContext = [namePart, customerSummary].filter(Boolean).join(' ') || undefined;
 
                 // Run RAG retrieval if enabled (pass history for context-aware search)
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
@@ -214,7 +218,7 @@ export class ReplyGenerator {
                 const aiResponse = await aiService.generateReply({
                     comment: text,
                     language: msgLang !== 'unknown' ? msgLang : undefined,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext }
                 });
 
                 return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);

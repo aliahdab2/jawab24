@@ -37,6 +37,7 @@ interface TestCase {
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
     brandVoiceNotes?: string;
+    customerContext?: string;
     expected: {
         replyMethod?: string[];
         intent?: string[];
@@ -532,6 +533,62 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Purchase intent after browsing conversation — AI should recognize registration intent',
     },
+
+    // ===== Category 18: Customer Awareness =====
+
+    // 18.1 — First-time customer with name context, AI gets context and replies correctly
+    {
+        id: 118, category: 18, categoryName: 'Customer Awareness', channel: 'dm',
+        message: 'مرحبا، عندكم دورات؟',
+        page: 'training',
+        customerContext: 'Customer name: محمد.',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+        },
+        notes: 'First-time customer with name context — AI should reply correctly about courses',
+    },
+
+    // 18.2 — Returning customer context, AI should answer about courses (not get confused by context)
+    {
+        id: 119, category: 18, categoryName: 'Customer Awareness', channel: 'dm',
+        message: 'مرحبا، رجعت أسأل عن الدورات',
+        page: 'training',
+        customerContext: 'Customer name: أحمد. Returning customer (8 previous messages, last active 2 days ago, past topics: QUESTION, PURCHASE_INTENT).',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+        },
+        notes: 'Returning customer — AI gets context, should still answer the question correctly',
+    },
+
+    // 18.3 — Follow-up message should NOT repeat customer name
+    {
+        id: 120, category: 18, categoryName: 'Customer Awareness', channel: 'dm',
+        message: 'وكم سعرها؟',
+        page: 'training',
+        customerContext: 'Customer name: محمد.',
+        conversationHistory: [
+            { role: 'user', content: 'مرحبا، عندكم دورة انجليزي؟' },
+            { role: 'assistant', content: 'أهلاً محمد! نعم عندنا دورة اللغة الإنجليزية بسعر 1500 ريال لمدة 3 أشهر.' },
+        ],
+        expected: {
+            replyNotContains: ['محمد'],
+        },
+        notes: 'Follow-up message — AI should NOT repeat the customer name after first greeting',
+    },
+
+    // 18.4 — No name provided, should reply normally (baseline)
+    {
+        id: 121, category: 18, categoryName: 'Customer Awareness', channel: 'dm',
+        message: 'عندكم دورات انجليزي؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+        },
+        notes: 'No customer context — baseline, should reply normally without any name',
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -643,6 +700,7 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
     if (test.conversationHistory) body.conversationHistory = test.conversationHistory;
     if (test.replyStyle) body.replyStyle = test.replyStyle;
     if (test.brandVoiceNotes) body.brandVoiceNotes = test.brandVoiceNotes;
+    if (test.customerContext) body.customerContext = test.customerContext;
 
     const start = Date.now();
     try {

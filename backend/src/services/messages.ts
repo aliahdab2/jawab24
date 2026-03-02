@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, sql, gt, ne, isNotNull } from 'drizzle-orm';
+import { eq, desc, asc, and, sql, gt, ne, isNotNull, count, max } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages, conversationPauses } from '../db/schema';
 import { ConversationMessage } from '../types';
@@ -348,6 +348,41 @@ export class MessagesService {
             content: msg.message,
             timestamp: msg.createdAt || undefined,
         }));
+    }
+
+    /**
+     * Get a brief summary of a returning customer's history.
+     * Returns undefined for first-time customers.
+     */
+    async getCustomerSummary(pageId: string, senderId: string): Promise<string | undefined> {
+        const stats = await db.select({
+            totalMessages: count(),
+            lastSeen: max(messages.createdAt),
+        })
+        .from(messages)
+        .where(and(
+            eq(messages.pageId, pageId),
+            eq(messages.senderId, senderId),
+            eq(messages.direction, 'incoming'),
+        ));
+
+        const { totalMessages, lastSeen } = stats[0] || {};
+        if (!totalMessages || totalMessages <= 1) return undefined;
+
+        const pastIntents = await db.selectDistinct({ intent: messages.aiIntent })
+            .from(messages)
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                isNotNull(messages.aiIntent),
+            ))
+            .limit(5);
+
+        const intents = pastIntents.map(r => r.intent).filter(Boolean).join(', ');
+        const daysSince = lastSeen ? Math.floor((Date.now() - new Date(lastSeen).getTime()) / 86400000) : null;
+        const daysAgo = daysSince === 0 ? 'today' : daysSince === 1 ? 'yesterday' : `${daysSince} days ago`;
+
+        return `Returning customer (${totalMessages} previous messages, last active ${daysAgo}${intents ? `, past topics: ${intents}` : ''}).`;
     }
 
     /**

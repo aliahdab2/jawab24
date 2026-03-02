@@ -749,10 +749,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          * POST /admin/ai/playground - Test AI reply with full metadata
          * Body: { pageId, question, channel }
          */
-        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string } }>('/ai/playground', {
+        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string; customerContext?: string } }>('/ai/playground', {
             schema: { tags: ['Admin'], summary: 'Test AI reply generation with full metadata', security: auth },
-        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string } }>, reply: FastifyReply) => {
-            const { pageId, question, channel, postMessage, conversationHistory, replyStyle, brandVoiceNotes } = request.body;
+        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string; customerContext?: string } }>, reply: FastifyReply) => {
+            const { pageId, question, channel, postMessage, conversationHistory, replyStyle, brandVoiceNotes, customerContext } = request.body;
             const startTime = Date.now();
 
             if (!pageId || !question?.trim()) {
@@ -951,6 +951,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
                         ...(replyStyle ? { replyStyle } : {}),
                         ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
+                        ...(customerContext ? { customerContext } : {}),
                     },
                 });
 

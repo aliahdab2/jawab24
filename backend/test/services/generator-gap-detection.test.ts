@@ -37,6 +37,7 @@ vi.mock('../../src/services/ai', () => ({
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
         getConversationHistory: vi.fn().mockResolvedValue([]),
+        getCustomerSummary: vi.fn().mockResolvedValue(undefined),
     },
 }));
 

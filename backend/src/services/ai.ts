@@ -23,6 +23,7 @@ interface CacheContext {
     postMessage?: string;
     storePolicies?: string;
     replyStyle?: string;
+    customerContext?: string;
 }
 
 /** Shape returned by a successful exact-cache hit. */
@@ -71,6 +72,7 @@ export class AiService {
             `p:${ctx.postMessage || ''}`,
             `sp:${ctx.storePolicies ? crypto.createHash('md5').update(ctx.storePolicies).digest('hex').slice(0, 8) : ''}`,
             `rs:${ctx.replyStyle || 'professional'}`,
+            `cc:${ctx.customerContext ? crypto.createHash('md5').update(ctx.customerContext).digest('hex').slice(0, 8) : ''}`,
             `pv:${PROMPT_VERSION}`,
         ].join(':');
 
@@ -218,6 +220,7 @@ export class AiService {
             postMessage,
             storePolicies: request.context?.storePolicies,
             replyStyle: request.context?.replyStyle,
+            customerContext: request.context?.customerContext,
         };
 
         // Layer 1: Exact cache (scoped per page + KB version + post context)
@@ -275,6 +278,8 @@ export class AiService {
                 // These queries still benefit from exact cache; only skip vector similarity.
                 if (detectedPreGptIntent === 'OTHER') {
                     this.logger.debug('Skipping semantic cache for OTHER intent', { pageId });
+                } else if (request.context?.customerContext) {
+                    this.logger.debug('Skipping semantic cache for personalized customer context', { pageId });
                 } else {
                     semanticCacheService.setLogger(this.logger);
                     const semanticHit = await Sentry.startSpan(
