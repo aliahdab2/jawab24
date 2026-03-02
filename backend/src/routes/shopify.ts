@@ -26,4 +26,5 @@ export default async function shopifyRoutes(fastify: FastifyInstance) {
     fastify.post('/store/sync', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.syncStore);
     fastify.get('/store/products', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.getStoreProducts);
     fastify.patch('/store/link-page', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.linkPage);
+    fastify.patch('/store/unlink-page', { preHandler: [authenticate, resolveWorkspace] }, shopifyController.unlinkPage);
 }

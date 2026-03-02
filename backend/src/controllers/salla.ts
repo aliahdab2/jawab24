@@ -8,6 +8,7 @@ import {
     createStore,
     disconnectStore,
     linkStoreToPage,
+    unlinkStoreFromPage,
     getProducts,
     mapToEcommerceStore,
     createPendingInstall,
@@ -272,6 +273,26 @@ export async function linkPage(request: FastifyRequest, reply: FastifyReply) {
 
     try {
         await linkStoreToPage(store.id, pageId, req.workspaceId);
+        return reply.send({ ok: true });
+    } catch (error) {
+        if (error instanceof Error && error.message?.includes('does not belong to workspace')) {
+            return reply.status(403).send({ error: 'Page does not belong to workspace' });
+        }
+        throw error;
+    }
+}
+
+export async function unlinkPage(request: FastifyRequest, reply: FastifyReply) {
+    const req = request as WorkspaceRequest;
+    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+    const { pageId } = request.body as { pageId?: string };
+
+    if (!pageId) {
+        return reply.status(400).send({ error: 'pageId is required' });
+    }
+
+    try {
+        await unlinkStoreFromPage(pageId, req.workspaceId);
         return reply.send({ ok: true });
     } catch (error) {
         if (error instanceof Error && error.message?.includes('does not belong to workspace')) {

@@ -27,6 +27,7 @@ export {
     buildProductSummary,
     disconnectStore,
     linkStoreToPage,
+    unlinkStoreFromPage,
     KB_MAX_CHARS,
     getAllActiveStores,
 } from './ecommerce';

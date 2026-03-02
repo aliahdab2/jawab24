@@ -38,6 +38,7 @@ interface PlatformConfig {
   syncProducts: () => Promise<unknown>;
   disconnectStore: () => Promise<unknown>;
   linkPage: (pageId: string) => Promise<unknown>;
+  unlinkPage: (pageId: string) => Promise<unknown>;
   disconnectConfirmKey: TranslationKey;
   syncSuccessKey: TranslationKey;
   syncErrorKey: TranslationKey;
@@ -45,6 +46,8 @@ interface PlatformConfig {
   disconnectErrorKey: TranslationKey;
   pageLinkedKey: TranslationKey;
   pageLinkErrorKey: TranslationKey;
+  pageUnlinkedKey: TranslationKey;
+  pageUnlinkErrorKey: TranslationKey;
   productsKey: TranslationKey;
   lastSyncKey: TranslationKey;
   syncNowKey: TranslationKey;
@@ -69,6 +72,7 @@ const PLATFORMS: PlatformConfig[] = [
     syncProducts: ecommerceApi.syncProducts,
     disconnectStore: ecommerceApi.disconnectStore,
     linkPage: ecommerceApi.linkPage,
+    unlinkPage: ecommerceApi.unlinkPage,
     disconnectConfirmKey: 'shopify.disconnectConfirm' as TranslationKey,
     syncSuccessKey: 'shopify.syncSuccess' as TranslationKey,
     syncErrorKey: 'shopify.syncError' as TranslationKey,
@@ -76,6 +80,8 @@ const PLATFORMS: PlatformConfig[] = [
     disconnectErrorKey: 'shopify.disconnectError' as TranslationKey,
     pageLinkedKey: 'shopify.pageLinked' as TranslationKey,
     pageLinkErrorKey: 'shopify.pageLinkError' as TranslationKey,
+    pageUnlinkedKey: 'shopify.pageUnlinked' as TranslationKey,
+    pageUnlinkErrorKey: 'shopify.pageUnlinkError' as TranslationKey,
     productsKey: 'shopify.products' as TranslationKey,
     lastSyncKey: 'shopify.lastSync' as TranslationKey,
     syncNowKey: 'shopify.syncNow' as TranslationKey,
@@ -98,6 +104,7 @@ const PLATFORMS: PlatformConfig[] = [
     syncProducts: sallaApi.syncProducts,
     disconnectStore: sallaApi.disconnectStore,
     linkPage: sallaApi.linkPage,
+    unlinkPage: sallaApi.unlinkPage,
     disconnectConfirmKey: 'salla.disconnectConfirm' as TranslationKey,
     syncSuccessKey: 'salla.syncSuccess' as TranslationKey,
     syncErrorKey: 'salla.syncError' as TranslationKey,
@@ -105,6 +112,8 @@ const PLATFORMS: PlatformConfig[] = [
     disconnectErrorKey: 'salla.disconnectError' as TranslationKey,
     pageLinkedKey: 'salla.pageLinked' as TranslationKey,
     pageLinkErrorKey: 'salla.pageLinkError' as TranslationKey,
+    pageUnlinkedKey: 'salla.pageUnlinked' as TranslationKey,
+    pageUnlinkErrorKey: 'salla.pageUnlinkError' as TranslationKey,
     productsKey: 'salla.products' as TranslationKey,
     lastSyncKey: 'salla.lastSync' as TranslationKey,
     syncNowKey: 'salla.syncNow' as TranslationKey,
@@ -168,12 +177,19 @@ function ConnectedStoreCard({
   };
 
   const handleLinkPage = async (pageId: string) => {
+    const alreadyLinked = pages.find((p) => p.id === pageId)?.ecommerceStoreId === store.id;
+
     try {
-      await platform.linkPage(pageId);
-      toast.success(t(platform.pageLinkedKey));
+      if (alreadyLinked) {
+        await platform.unlinkPage(pageId);
+        toast.success(t(platform.pageUnlinkedKey));
+      } else {
+        await platform.linkPage(pageId);
+        toast.success(t(platform.pageLinkedKey));
+      }
       onLinkPage(pageId);
     } catch {
-      toast.error(t(platform.pageLinkErrorKey));
+      toast.error(t(alreadyLinked ? platform.pageUnlinkErrorKey : platform.pageLinkErrorKey));
     }
   };
 

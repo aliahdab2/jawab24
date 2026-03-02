@@ -513,6 +513,10 @@ export const ecommerceApi = {
     const response = await api.patch('/shopify/store/link-page', { pageId });
     return response.data;
   },
+  unlinkPage: async (pageId: string) => {
+    const response = await api.patch('/shopify/store/unlink-page', { pageId });
+    return response.data;
+  },
   getIntegrationStatus: async (): Promise<Record<string, boolean>> => {
     try {
       const response = await api.get('/integrations/status');
@@ -551,6 +555,10 @@ export const sallaApi = {
   },
   linkPage: async (pageId: string) => {
     const response = await api.patch('/salla/store/link-page', { pageId });
+    return response.data;
+  },
+  unlinkPage: async (pageId: string) => {
+    const response = await api.patch('/salla/store/unlink-page', { pageId });
     return response.data;
   },
 };

@@ -21,4 +21,5 @@ export default async function sallaRoutes(fastify: FastifyInstance) {
     fastify.post('/store/sync', { preHandler: [authenticate, resolveWorkspace] }, sallaController.syncStore);
     fastify.get('/store/products', { preHandler: [authenticate, resolveWorkspace] }, sallaController.getStoreProducts);
     fastify.patch('/store/link-page', { preHandler: [authenticate, resolveWorkspace] }, sallaController.linkPage);
+    fastify.patch('/store/unlink-page', { preHandler: [authenticate, resolveWorkspace] }, sallaController.unlinkPage);
 }

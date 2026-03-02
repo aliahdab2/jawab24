@@ -206,6 +206,24 @@ export async function linkStoreToPage(storeId: string, pageId: string, workspace
     });
 }
 
+/**
+ * Unlink a single page from its e-commerce store (with ownership validation)
+ */
+export async function unlinkStoreFromPage(pageId: string, workspaceId: string) {
+    await db.transaction(async (tx) => {
+        const page = await tx.select().from(pages)
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .limit(1);
+
+        if (!page[0]) {
+            throw new Error('Page not found or does not belong to workspace');
+        }
+
+        await tx.update(pages).set({ ecommerceStoreId: null, updatedAt: new Date() })
+            .where(eq(pages.id, pageId));
+    });
+}
+
 // --- Product Summary ---
 
 /** Build the public product URL from platform + domain + handle/slug */
