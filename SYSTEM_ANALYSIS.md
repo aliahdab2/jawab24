@@ -1,7 +1,7 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
 > **Pre-Launch Reference Document / وثيقة مرجعية قبل الإطلاق**
-> Generated: 2026-02-28
+> Generated: 2026-02-28 | Updated: 2026-03-02 (v18 — customer awareness)
 
 ---
 
@@ -260,16 +260,19 @@ Customer message: "كم سعر القميص الأزرق؟"
 │     ├─ Product catalog (if e-commerce linked)                   │
 │     ├─ Post message (for comments)                              │
 │     ├─ Conversation history (for DMs, compressed if > 8 msgs)  │
+│     ├─ Customer context (name + returning status, DMs only)     │
 │     ├─ Reply style (professional/casual/enthusiastic)           │
 │     └─ Brand voice notes                                        │
 │                                                                 │
 │  3. CHECK EXACT CACHE (Redis → Postgres fallback)               │
 │     Key = SHA256(comment + lang + pageId + kbVersion +          │
-│                   postMsg + policies + style + promptVersion)   │
+│           postMsg + policies + style + promptVersion +          │
+│           customerContext)                                      │
 │     └─ HIT? → Return cached {reply, intent, confidence, flags} │
 │                                                                 │
 │  4. CHECK SEMANTIC CACHE (Vector similarity)                    │
 │     └─ Skipped for PRICE/PURCHASE_INTENT (exact answers only)  │
+│     └─ Skipped when customerContext present (personalized)      │
 │     └─ Similar question asked before? → Return cached reply     │
 │                                                                 │
 │  5. CALL AI WORKER (HTTP POST /generate)                        │
@@ -340,9 +343,10 @@ Customer message: "كم سعر القميص الأزرق؟"
 
 **الخطوة 7ب: توليد رد الذكاء الاصطناعي**
 - فحص حد الاشتراك
-- بناء السياق (قاعدة معرفة + منتجات + سياسات + تاريخ محادثة)
-- فحص الكاش الدقيق (Redis/Postgres)
-- فحص الكاش الدلالي (تشابه متجهات)
+- بناء السياق (قاعدة معرفة + منتجات + سياسات + تاريخ محادثة + سياق العميل)
+- سياق العميل (للرسائل المباشرة فقط): اسم العميل + حالة عميل عائد
+- فحص الكاش الدقيق (Redis/Postgres) — يشمل سياق العميل في المفتاح
+- فحص الكاش الدلالي (تشابه متجهات) — يُتخطى عند وجود سياق عميل مخصص
 - استدعاء AI Worker (OpenAI gpt-4.1-mini)
 - حفظ في الكاش
 
@@ -524,7 +528,7 @@ CUSTOMER SENDS MESSAGE/COMMENT
 
 ### What Exactly Gets Sent to OpenAI
 
-The system prompt sent to gpt-4.1-mini is approximately **3,000+ words** and consists of 8 sections:
+The system prompt sent to gpt-4.1-mini is approximately **3,000+ words** and consists of 9 sections:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -538,9 +542,12 @@ The system prompt sent to gpt-4.1-mini is approximately **3,000+ words** and con
 │  │  '[pageName]'."                                          │   │
 │  │                                                          │   │
 │  │  Style mapping:                                          │   │
-│  │  • professional → "formal but warm"                      │   │
-│  │  • casual → "friendly and conversational"                │   │
-│  │  • enthusiastic → "energetic and enthusiastic"           │   │
+│  │  • professional → "professional yet approachable —       │   │
+│  │    like a knowledgeable colleague"                       │   │
+│  │  • casual → "casual and relaxed — like texting a         │   │
+│  │    helpful friend who knows the business"                │   │
+│  │  • enthusiastic → "upbeat and enthusiastic —             │   │
+│  │    genuinely excited to help"                            │   │
 │  │                                                          │   │
 │  │  Channel mapping:                                        │   │
 │  │  • comment → "respond to customer comments on social     │   │
@@ -600,6 +607,19 @@ The system prompt sent to gpt-4.1-mini is approximately **3,000+ words** and con
 │  │                                                          │   │
 │  │ EMOJI: 1-2 max, sparingly                                │   │
 │  │ BRAND VOICE: Follow brandVoiceNotes if provided          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  SECTION 4b: CUSTOMER CONTEXT (DMs only, conditional)          │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Only present when customerContext is available:          │   │
+│  │                                                          │   │
+│  │ "CUSTOMER CONTEXT: Customer name: محمد.                  │   │
+│  │  Returning customer (8 previous messages,                │   │
+│  │  last active 2 days ago, past topics: QUESTION)."        │   │
+│  │                                                          │   │
+│  │ GPT uses this as information — no forced greeting        │   │
+│  │ behavior. The AI naturally incorporates the name         │   │
+│  │ and returning status when appropriate.                   │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │  SECTION 5: CRITICAL SAFETY RULES (~960 words)                 │
@@ -698,7 +718,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 
 ### ما الذي يُرسل بالضبط إلى OpenAI
 
-يتكون الـ System Prompt من **3,000+ كلمة** مقسمة إلى 8 أقسام:
+يتكون الـ System Prompt من **3,000+ كلمة** مقسمة إلى 9 أقسام:
 
 **القسم 1: الدور والسياق** - "أنت مساعد خدمة عملاء [أسلوب] لـ '[اسم الصفحة]'"
 
@@ -723,6 +743,11 @@ After OpenAI returns, the system runs **6 automated checks**:
 - التعليقات العامة: جملة أو جملتين فقط، 40 كلمة كحد أقصى
 - الرسائل المباشرة: تفاصيل كاملة، أسعار، قوائم
 - لا تقل "راسلنا" عندما تكون بالفعل في رسالة مباشرة!
+
+**القسم 4ب: سياق العميل** (للرسائل المباشرة فقط، اختياري)
+- يظهر فقط عند توفر سياق العميل
+- مثال: "اسم العميل: محمد. عميل عائد (8 رسائل سابقة، آخر نشاط قبل يومين)"
+- GPT يستخدم هذه المعلومات بشكل طبيعي — بدون إجبار على التحية
 
 **القسم 5: قواعد الأمان الحرجة**
 - استخدم فقط قاعدة المعرفة كمصدر
@@ -1113,7 +1138,8 @@ Customer question arrives
 │    postMessage +                     │
 │    storePolicies_hash +              │
 │    replyStyle +                      │
-│    PROMPT_VERSION                    │
+│    PROMPT_VERSION +                  │
+│    customerContext                   │
 │  )                                   │
 │                                      │
 │  Value: {reply, intent,              │
@@ -1149,6 +1175,9 @@ Customer question arrives
 │    • PURCHASE_INTENT intent          │
 │    (exact answers required — only    │
 │     exact hash cache remains active) │
+│    • customerContext present         │
+│    (personalized replies shouldn't   │
+│     be served to other customers)    │
 │  Skipped for OTHER intent            │
 ├────────────┬─────────────────────────┘
 │  MISS      │ HIT → Return cached reply
@@ -1174,6 +1203,7 @@ Customer question arrives
 | Products synced | Redis flushed | Rows deleted |
 | Policies changed | Hash changes = new keys | Auto (part of KB ingest) |
 | Reply style changed | New keys (style in hash) | N/A |
+| Customer context differs | New keys (context in hash) | Skipped entirely |
 | Prompt version bumped | New keys (version in hash) | Old entries filtered |
 
 ## عربي
@@ -1181,7 +1211,7 @@ Customer question arrives
 ### بنية الكاش ثلاثية الطبقات
 
 **الطبقة 1: الكاش الدقيق (Redis)**
-- مفتاح: SHA256 (التعليق + اللغة + معرف الصفحة + إصدار KB + المنشور + السياسات + الأسلوب + إصدار الأوامر)
+- مفتاح: SHA256 (التعليق + اللغة + معرف الصفحة + إصدار KB + المنشور + السياسات + الأسلوب + إصدار الأوامر + سياق العميل)
 - القيمة: {الرد، النية، الثقة، الأعلام}
 - مدة الصلاحية: 30 يوم
 - احتياطي: PostgreSQL
@@ -1190,6 +1220,7 @@ Customer question arrives
 - تضمين السؤال مقابل التضمينات المخزنة
 - عتبات حسب النية: تحية=0.88، شكوى=0.95، افتراضي=0.93
 - **يُتخطى بالكامل** لنوايا PRICE و PURCHASE_INTENT (تحتاج إجابات دقيقة)
+- **يُتخطى بالكامل** عند وجود سياق عميل مخصص (ردود مخصصة لا يجب تقديمها لعملاء آخرين)
 
 **الطبقة 3: استدعاء AI كامل**
 - HTTP POST إلى AI Worker
@@ -1467,7 +1498,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Rate Limit | 10 msgs/min per sender |
 | Worker Concurrency | 5 jobs |
 | Cache TTL | 30 days |
-| Prompt Version | v14 |
+| Prompt Version | v18 |
 | Queue Retries | 3 (exponential backoff) |
 | Handoff Pause | 15 minutes default |
 | Reply Lock TTL | 60 seconds (Redis SET NX EX) |
