@@ -1419,5 +1419,11 @@
   "integrations.shopifyDesc": "زامن كتالوج منتجات Shopify لتفعيل الردود الذكية على أسئلة المنتجات",
   "integrations.sallaDesc": "زامن كتالوج منتجات سلة لتفعيل الردود الذكية على أسئلة المنتجات",
   "integrations.disconnectedState": "تم فصل هذا المتجر. أعد الاتصال لاستعادة الردود الذكية.",
-  "integrations.reconnect": "إعادة الاتصال"
+  "integrations.reconnect": "إعادة الاتصال",
+
+  "sse.newComment": "تعليق جديد من {name}",
+  "sse.newMessage": "رسالة جديدة من {name}",
+  "sse.aiRepliedComment": "رد الذكاء الاصطناعي على تعليق",
+  "sse.aiRepliedMessage": "رد الذكاء الاصطناعي على رسالة",
+  "sse.view": "عرض"
 }

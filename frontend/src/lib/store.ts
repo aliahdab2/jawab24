@@ -154,16 +154,27 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
+export type SSEStatus = 'connected' | 'reconnecting' | 'disconnected';
+
 interface UIState {
   sidebarOpen: boolean;
   language: Language;
   _hasHydrated: boolean;
   isOnboardingVisible: boolean;
+  // SSE live counters (ephemeral — not persisted, reset on page reload)
+  unreadComments: number;
+  unreadMessages: number;
+  sseStatus: SSEStatus;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setLanguage: (lang: Language) => void;
   setHasHydrated: (state: boolean) => void;
   setOnboardingVisible: (visible: boolean) => void;
+  incrementUnreadComments: () => void;
+  incrementUnreadMessages: () => void;
+  resetUnreadComments: () => void;
+  resetUnreadMessages: () => void;
+  setSSEStatus: (status: SSEStatus) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -173,11 +184,19 @@ export const useUIStore = create<UIState>()(
       language: 'ar' as Language,
       _hasHydrated: false,
       isOnboardingVisible: false,
+      unreadComments: 0,
+      unreadMessages: 0,
+      sseStatus: 'disconnected' as SSEStatus,
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setLanguage: (lang) => set({ language: lang }),
       setHasHydrated: (state) => set({ _hasHydrated: state }),
       setOnboardingVisible: (visible) => set({ isOnboardingVisible: visible }),
+      incrementUnreadComments: () => set((state) => ({ unreadComments: state.unreadComments + 1 })),
+      incrementUnreadMessages: () => set((state) => ({ unreadMessages: state.unreadMessages + 1 })),
+      resetUnreadComments: () => set({ unreadComments: 0 }),
+      resetUnreadMessages: () => set({ unreadMessages: 0 }),
+      setSSEStatus: (status) => set({ sseStatus: status }),
     }),
     {
       name: 'ui-storage',

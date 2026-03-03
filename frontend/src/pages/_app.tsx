@@ -17,6 +17,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { useSSE } from '@/hooks';
 
 /**
  * Type for pages with persistent layouts
@@ -236,6 +237,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       return () => clearTimeout(timer);
     });
   }, [hasHydrated, isAuthenticated, authToken]);
+
+  // SSE: real-time updates (comment/message received, reply sent, etc.)
+  useSSE();
 
   const handleEnablePush = useCallback(() => {
     setShowPushPrompt(false);

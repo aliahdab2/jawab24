@@ -7,7 +7,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import { useDebounce } from '@/hooks';
 import { commentsApi, pagesApi, type CommentsQueryParams } from '@/lib/api';
 import {
@@ -68,7 +68,11 @@ const COMMENTS_PER_PAGE = 50;
 const CommentsPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { isAuthenticated } = useAuthStore();
+  const resetUnreadComments = useUIStore((s) => s.resetUnreadComments);
   const router = useRouter();
+
+  // Reset unread badge when visiting comments page
+  useEffect(() => { resetUnreadComments(); }, [resetUnreadComments]);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -150,7 +154,7 @@ const CommentsPage: NextPageWithLayout = () => {
       return res.data;
     },
     enabled: isAuthenticated,
-    refetchInterval: 30000, // Refresh every 30s
+    // SSE handles real-time updates — no polling needed
   });
 
   // Use server stats or fallback to defaults

@@ -12,6 +12,7 @@ import type { CommentPlatformAdapter } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { truncateAtSentence } from '../../utils/text';
 import { getStoreContextForAI } from '../ecommerce';
+import { publishSSEEvent } from '../../lib/eventBus';
 
 /**
  * Unified Comment Processor
@@ -95,6 +96,14 @@ export class CommentProcessor {
             const { comment, isNew } = await adapter.storeComment(
                 content.id, platformCommentId, commentMessage, fromId, fromName,
             );
+
+            // SSE: notify merchant that a new comment arrived
+            publishSSEEvent(userId, 'comment:received', {
+                commentId: comment.id,
+                pageId: page.id,
+                fromName: fromName ?? null,
+                message: commentMessage,
+            });
 
             // Early exit: settings disabled (after storing so the comment is persisted)
             if (!isCommentsEnabled) {
@@ -290,6 +299,12 @@ export class CommentProcessor {
 
             if (!sendResult.success) {
                 pipelineMetrics.record(pipeline, 'send_failed');
+                // SSE: notify merchant of failed reply
+                publishSSEEvent(userId, 'comment:reply_failed', {
+                    commentId: comment.id,
+                    pageId: page.id,
+                    error: sendResult.error || 'Failed to send reply',
+                });
                 return { success: false, commentId: comment.id, error: sendResult.error };
             }
 
@@ -315,6 +330,18 @@ export class CommentProcessor {
                     { senderName: fromName || 'Unknown', reason: flagReason || 'AI flagged this reply' },
                     { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
+            }
+
+            // SSE: notify merchant that a reply was sent
+            publishSSEEvent(userId, 'comment:reply_sent', {
+                commentId: comment.id,
+                pageId: page.id,
+                replyMethod: replyMethod as 'template' | 'ai',
+                replyText,
+            });
+            // SSE: update usage counter if AI reply
+            if (replyMethod === 'ai') {
+                publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });
             }
 
             pipelineMetrics.record(pipeline, 'success');

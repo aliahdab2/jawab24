@@ -35,11 +35,33 @@ vi.mock('@/lib/api', () => ({
 }));
 
 // 3. Mock Store
+const mockUIState = {
+  sidebarOpen: true,
+  language: 'en',
+  _hasHydrated: true,
+  isOnboardingVisible: false,
+  unreadComments: 0,
+  unreadMessages: 0,
+  sseStatus: 'disconnected',
+  toggleSidebar: vi.fn(),
+  setSidebarOpen: vi.fn(),
+  setLanguage: vi.fn(),
+  setHasHydrated: vi.fn(),
+  setOnboardingVisible: vi.fn(),
+  incrementUnreadComments: vi.fn(),
+  incrementUnreadMessages: vi.fn(),
+  resetUnreadComments: vi.fn(),
+  resetUnreadMessages: vi.fn(),
+  setSSEStatus: vi.fn(),
+};
+
 vi.mock('@/lib/store', () => ({
   useAuthStore: vi.fn(() => ({
     isAuthenticated: true,
   })),
-  useUIStore: vi.fn(() => ({})),
+  useUIStore: vi.fn((selector?: (state: typeof mockUIState) => unknown) =>
+    selector ? selector(mockUIState) : mockUIState,
+  ),
 }));
 
 // 4. Mock Router

@@ -12,6 +12,7 @@ import { db } from '../../db';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { getStoreContextForAI } from '../ecommerce';
+import { publishSSEEvent } from '../../lib/eventBus';
 
 /**
  * Unified Message Processor
@@ -110,6 +111,14 @@ export class MessageProcessor {
                 senderName,
             );
             lap('4-storeMessage');
+
+            // SSE: notify merchant that a new message arrived
+            publishSSEEvent(userId, 'message:received', {
+                messageId: platformMessageId,
+                pageId: page.id,
+                senderId,
+                senderName: senderName ?? null,
+            });
 
             // 4b. Acquire distributed lock — prevents two workers from replying to
             //     the same sender simultaneously (covers greeting race + reply race).
@@ -344,6 +353,12 @@ export class MessageProcessor {
             } catch (error) {
                 pipelineMetrics.record(pipeline, 'send_failed');
                 this.logger.error(`[${platform}] Failed to send reply`, { error: String(error) });
+                // SSE: notify merchant of failed reply
+                publishSSEEvent(userId, 'message:reply_failed', {
+                    messageId: platformMessageId,
+                    pageId: page.id,
+                    error: 'Failed to send reply',
+                });
                 return { success: false, messageId: platformMessageId, error: 'Failed to send reply' };
             }
             lap('13-sendReply');
@@ -379,6 +394,18 @@ export class MessageProcessor {
                     { senderName: senderName || senderId, reason: flagReason || 'AI flagged this reply' },
                     { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
+            }
+
+            // SSE: notify merchant that a reply was sent
+            publishSSEEvent(userId, 'message:reply_sent', {
+                messageId: platformMessageId,
+                pageId: page.id,
+                replyMethod: replyMethod as 'template' | 'ai',
+                replyText,
+            });
+            // SSE: update usage counter if AI reply
+            if (replyMethod === 'ai') {
+                publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });
             }
 
             pipelineMetrics.record(pipeline, 'success');

@@ -36,6 +36,9 @@ import workspaceRoutes from "./routes/workspace";
 import { translationRoutes } from "./routes/translation";
 import integrationsRoutes from "./routes/integrations";
 import waitlistRoutes from "./routes/waitlist";
+import sseRoutes from "./routes/sse";
+import { sseManager } from "./lib/sseManager";
+import { shutdownEventBus } from "./lib/eventBus";
 import { integrationRegistry } from "./integrations";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
@@ -223,6 +226,10 @@ const start = async () => {
     // Waitlist (public - no auth required)
     await server.register(waitlistRoutes, { prefix: "/api/waitlist" });
 
+    // SSE real-time events (authenticated inside the route handler)
+    await server.register(sseRoutes, { prefix: "/sse" });
+    sseManager.start();
+
     // Register e-commerce integration routes (Shopify, future WooCommerce, etc.)
     for (const integration of integrationRegistry.getEnabled()) {
       await integration.registerRoutes(server);
@@ -319,6 +326,10 @@ const gracefulShutdown = async (signal: string) => {
       ...integrationRegistry.getEnabled().map(i => i.onShutdown()),
     ]);
     console.log("✅ Workers stopped");
+
+    // Close SSE connections + event bus before closing server
+    await sseManager.shutdown();
+    await shutdownEventBus();
 
     await server.close();
     await redis.quit();

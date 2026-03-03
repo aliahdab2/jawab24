@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import { MessageCard, type Conversation } from '@/components/messages';
 import { MessageDetailModal } from '@/components/messages/MessageDetailModal';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import { useDebounce } from '@/hooks';
 import { messagesApi, pagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
@@ -65,7 +65,11 @@ const MESSAGES_PER_PAGE = 50;
 const MessagesPage: NextPageWithLayout = () => {
   const { t, language, dateLocale } = useTranslation();
   const { isAuthenticated } = useAuthStore();
+  const resetUnreadMessages = useUIStore((s) => s.resetUnreadMessages);
   const router = useRouter();
+
+  // Reset unread badge when visiting messages page
+  useEffect(() => { resetUnreadMessages(); }, [resetUnreadMessages]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -216,7 +220,7 @@ const MessagesPage: NextPageWithLayout = () => {
       return res.data;
     },
     enabled: isAuthenticated,
-    refetchInterval: 30000,
+    // SSE handles real-time updates — no polling needed
   });
 
   const stats = useMemo(() => {
@@ -346,6 +350,15 @@ const MessagesPage: NextPageWithLayout = () => {
     }
     pendingDeepLinkRef.current = null;
   }, [conversations, allMessages, isLoading, filter, t]);
+
+  // Live sync: when SSE invalidates the messages query, update the open conversation thread
+  useEffect(() => {
+    if (!selectedConversation) return;
+    const updated = conversations.find(c => c.senderId === selectedConversation.senderId);
+    if (updated && updated.messages.length !== selectedConversation.messages.length) {
+      setSelectedConversation(updated);
+    }
+  }, [conversations, selectedConversation]);
 
   // Resolved page name + URL for modal — avoids pages.find() in JSX on every render
   const selectedPageName = useMemo(

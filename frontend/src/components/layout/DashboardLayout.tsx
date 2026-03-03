@@ -28,6 +28,9 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const isRTL = language === 'ar';
   const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
   const { sidebarOpen, isOnboardingVisible } = useUIStore();
+  const unreadComments = useUIStore((s) => s.unreadComments);
+  const unreadMessages = useUIStore((s) => s.unreadMessages);
+  const sseStatus = useUIStore((s) => s.sseStatus);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
 
@@ -163,7 +166,12 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
               <BrandLogo variant="vector" className="w-9 h-9" />
             </Link>
 
-            <NotificationBell variant="dark" />
+            <div className="flex items-center gap-2">
+              {sseStatus === 'reconnecting' && (
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+              )}
+              <NotificationBell variant="dark" />
+            </div>
           </div>
         )}
 
@@ -225,12 +233,14 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 icon={<MessageSquare className="w-7 h-7" />}
                 label={t('nav.comments')}
                 active={router.pathname === '/comments'}
+                badge={unreadComments}
               />
               <MobileNavButton
                 onClick={() => router.push('/messages')}
                 icon={<MessageCircle className="w-7 h-7" />}
                 label={t('nav.messages')}
                 active={router.pathname === '/messages'}
+                badge={unreadMessages}
               />
               <MobileNavButton
                 onClick={() => setMobileMenuOpen(true)}
@@ -295,11 +305,12 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 }
 
 // Mobile nav button component
-function MobileNavButton({ onClick, icon, label, active }: {
+function MobileNavButton({ onClick, icon, label, active, badge }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  badge?: number;
 }) {
   return (
     <button
@@ -307,10 +318,15 @@ function MobileNavButton({ onClick, icon, label, active }: {
       className="flex flex-col items-center justify-center h-full w-full relative group min-h-[44px]"
     >
       <div className={clsx(
-        "transition-all duration-200 mb-1",
+        "relative transition-all duration-200 mb-1",
         active ? "text-brand-600 scale-100 opacity-100" : "text-surface-500 scale-100 opacity-40 group-hover:opacity-60"
       )}>
         {icon}
+        {badge != null && badge > 0 && (
+          <span className="absolute -top-1.5 -end-2.5 flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
       </div>
       <span className={clsx(
         "text-[11px] tracking-wide transition-all leading-tight",

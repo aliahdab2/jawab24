@@ -150,6 +150,9 @@ export const Sidebar = memo(function Sidebar() {
   const router = useRouter();
   const { logout, user, fbToken } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
+  const unreadComments = useUIStore((s) => s.unreadComments);
+  const unreadMessages = useUIStore((s) => s.unreadMessages);
+  const sseStatus = useUIStore((s) => s.sseStatus);
   const { t } = useTranslation();
   const isDemoUser = useIsDemoUser();
 
@@ -241,9 +244,12 @@ export const Sidebar = memo(function Sidebar() {
             {BRAND_ASSETS.meta.appName}
           </span>
         </Link>
-        {/* Notification Bell - only visible when sidebar is expanded */}
+        {/* Notification Bell + Connection Status - only visible when sidebar is expanded */}
         {sidebarOpen && (
-          <div className="text-white me-2">
+          <div className="flex items-center gap-1 text-white me-2">
+            {sseStatus === 'reconnecting' && (
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" title="Reconnecting..." />
+            )}
             <NotificationBell />
           </div>
         )}
@@ -283,6 +289,24 @@ export const Sidebar = memo(function Sidebar() {
                       isActive ? "text-white" : "text-surface-500 group-hover/nav:text-brand-400"
                     )} />
                     {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
+
+                    {/* Unread badge */}
+                    {item.href === '/comments' && unreadComments > 0 && (
+                      <span className={clsx(
+                        'flex items-center justify-center bg-red-500 text-white font-bold rounded-full flex-shrink-0',
+                        sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
+                      )}>
+                        {sidebarOpen ? (unreadComments > 99 ? '99+' : unreadComments) : ''}
+                      </span>
+                    )}
+                    {item.href === '/messages' && unreadMessages > 0 && (
+                      <span className={clsx(
+                        'flex items-center justify-center bg-red-500 text-white font-bold rounded-full flex-shrink-0',
+                        sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
+                      )}>
+                        {sidebarOpen ? (unreadMessages > 99 ? '99+' : unreadMessages) : ''}
+                      </span>
+                    )}
 
                     {/* Tooltip — visible only when sidebar is collapsed */}
                     {!sidebarOpen && (

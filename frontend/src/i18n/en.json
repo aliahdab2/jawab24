@@ -1419,5 +1419,11 @@
   "integrations.shopifyDesc": "Sync your Shopify product catalog to enable AI-powered product replies",
   "integrations.sallaDesc": "Sync your Salla product catalog to enable AI-powered product replies",
   "integrations.disconnectedState": "This store was disconnected. Reconnect to restore AI replies.",
-  "integrations.reconnect": "Reconnect"
+  "integrations.reconnect": "Reconnect",
+
+  "sse.newComment": "New comment from {name}",
+  "sse.newMessage": "New message from {name}",
+  "sse.aiRepliedComment": "AI replied to a comment",
+  "sse.aiRepliedMessage": "AI replied to a message",
+  "sse.view": "View"
 }

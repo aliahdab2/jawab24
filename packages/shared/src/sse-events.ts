@@ -1,0 +1,61 @@
+// SSE Event Types for Jawab24 Real-Time Updates
+
+/** All SSE event types the backend can emit */
+export type SSEEventType =
+    | 'comment:received'
+    | 'comment:reply_sent'
+    | 'comment:reply_failed'
+    | 'message:received'
+    | 'message:reply_sent'
+    | 'message:reply_failed'
+    | 'usage:updated'
+    | 'heartbeat';
+
+/** Maps each event type to its data payload */
+export interface SSEEventDataMap {
+    'comment:received': {
+        commentId: string;
+        pageId: string;
+        fromName: string | null;
+        message: string;
+    };
+    'comment:reply_sent': {
+        commentId: string;
+        pageId: string;
+        replyMethod: 'template' | 'ai';
+        replyText: string;
+    };
+    'comment:reply_failed': {
+        commentId: string;
+        pageId: string;
+        error: string;
+    };
+    'message:received': {
+        messageId: string;
+        pageId: string;
+        senderId: string;
+        senderName: string | null;
+    };
+    'message:reply_sent': {
+        messageId: string;
+        pageId: string;
+        replyMethod: 'template' | 'ai';
+        replyText: string;
+    };
+    'message:reply_failed': {
+        messageId: string;
+        pageId: string;
+        error: string;
+    };
+    'usage:updated': {
+        aiRepliesUsed: number;
+    };
+    'heartbeat': Record<string, never>;
+}
+
+/** Full SSE event shape (type + timestamp + data) */
+export interface SSEEvent<T extends SSEEventType = SSEEventType> {
+    type: T;
+    timestamp: string;
+    data: SSEEventDataMap[T];
+}

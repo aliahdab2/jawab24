@@ -6,6 +6,9 @@ export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 
+// --- SSE Event Types ---
+export * from './sse-events';
+
 // --- Message Types ---
 export interface Message {
   id: string;

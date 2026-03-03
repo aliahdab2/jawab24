@@ -13,3 +13,4 @@ export { useLandscape } from './useLandscape';
 export { useBodyScrollLock } from './useBodyScrollLock';
 export { useSwipe } from './useSwipe';
 export { useDebounce } from './useDebounce';
+export { useSSE } from './useSSE';
