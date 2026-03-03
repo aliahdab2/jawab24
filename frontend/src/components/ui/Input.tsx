@@ -8,9 +8,12 @@ interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'childr
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, helperText, className, id, ...props }, ref) => {
+  ({ label, error, helperText, className, id, dir = 'auto', value, ...props }, ref) => {
     const generatedId = useId();
     const inputId = id || generatedId;
+    // When dir is "auto" and value is empty, inherit direction from parent
+    // so placeholder text aligns correctly in RTL mode
+    const effectiveDir = dir === 'auto' && !value ? undefined : dir;
 
     return (
       <div className="w-full">
@@ -20,12 +23,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
-          dir="auto"
+          dir={effectiveDir}
           className={clsx(
             'input',
             error && 'border-red-500 focus:ring-red-500',
             className
           )}
+          value={value}
           {...props}
         />
         {error && (

@@ -28,7 +28,7 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
         aria-label={t('settings.greetingMessage.title')}
         className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'italic italic-arabic' : ''}`}
         placeholder={placeholder}
-        dir="auto"
+        dir={displayValue ? 'auto' : undefined}
         value={displayValue}
         onChange={(e) => {
           const newValue = e.target.value;

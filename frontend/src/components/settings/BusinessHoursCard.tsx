@@ -212,7 +212,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                   aria-label={t('settings.awayMessage.title')}
                   className="input min-h-[56px] landscape:min-h-[44px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-surface-400 placeholder:italic"
                   placeholder={placeholder}
-                  dir="auto"
+                  dir={displayValue ? 'auto' : undefined}
                   value={displayValue}
                   onChange={(e) => {
                     const newValue = e.target.value;

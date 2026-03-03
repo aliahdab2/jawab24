@@ -8,9 +8,12 @@ interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, error, helperText, className, id, ...props }, ref) => {
+  ({ label, error, helperText, className, id, dir = 'auto', value, ...props }, ref) => {
     const generatedId = useId();
     const textareaId = id || generatedId;
+    // When dir is "auto" and value is empty, inherit direction from parent
+    // so placeholder text aligns correctly in RTL mode
+    const effectiveDir = dir === 'auto' && !value ? undefined : dir;
 
     return (
       <div className="w-full">
@@ -20,12 +23,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         <textarea
           ref={ref}
           id={textareaId}
-          dir="auto"
+          dir={effectiveDir}
           className={clsx(
             'input min-h-[100px] resize-y',
             error && 'border-red-500 focus:ring-red-500',
             className
           )}
+          value={value}
           {...props}
         />
         {error && (
