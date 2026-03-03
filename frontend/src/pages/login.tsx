@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { Capacitor } from '@capacitor/core';
+import clsx from 'clsx';
 import {
   Zap,
   ShieldCheck,
@@ -330,28 +331,68 @@ export default function LoginPage() {
           {/* Content:
               - Mobile: Content at top, terms at bottom
               - Desktop: Content near top, terms below content */}
-          <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col lg:justify-center pb-safe">
+          <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col justify-center pb-safe">
             {/* Main content wrapper */}
             <div className="w-full max-w-lg mx-auto pt-6 lg:pt-8">
-              <div className="text-center lg:text-start mb-8">
-                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 tracking-tight">
-                  {t('auth.welcomeBack')}
+              <div className="text-center lg:text-start mb-6">
+                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-3 tracking-tight">
+                  {t('auth.welcome')}
                 </h2>
                 <p className="text-base sm:text-lg lg:text-xl text-surface-500 font-medium">
                   {t('auth.welcomeBackDesc')}
                 </p>
+
+                {/* Trust signals */}
+                <div className="hidden lg:flex items-center gap-6 mt-5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+                    <span className="text-sm font-bold text-surface-600">{t('auth.stat1Label')}</span>
+                  </div>
+                  <div className="w-px h-4 bg-surface-200" aria-hidden="true" />
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" />
+                    <span className="text-sm font-bold text-surface-600">{t('auth.stat2Label')}</span>
+                  </div>
+                  <div className="w-px h-4 bg-surface-200" aria-hidden="true" />
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-brand-500" aria-hidden="true" />
+                    <span className="text-sm font-bold text-surface-600">{t('auth.stat3Label')}</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Mobile marketing highlights - visible only on small screens */}
-              <div className="flex gap-3 lg:hidden mb-2">
+              {/* Mobile feature highlights — compact row */}
+              <div className="flex gap-3 lg:hidden mb-3">
                 {features.map((f, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-surface-50 border border-surface-100">
+                  <div
+                    key={i}
+                    className={clsx(
+                      'flex-1 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-surface-50 border border-surface-100',
+                      'animate-slide-up',
+                      i === 0 && 'animation-delay-100',
+                      i === 1 && 'animation-delay-200',
+                      i === 2 && 'animation-delay-300',
+                    )}
+                  >
                     <div className={`w-8 h-8 rounded-lg ${f.bg} flex items-center justify-center`}>
                       <f.icon className={`w-4 h-4 ${f.color}`} />
                     </div>
                     <span className="text-[11px] font-bold text-surface-700 text-center leading-tight">{f.title}</span>
                   </div>
                 ))}
+              </div>
+
+              {/* Mobile testimonial strip */}
+              <div className="lg:hidden flex items-center gap-3 p-3 rounded-xl bg-surface-50 border border-surface-100 mb-1 animate-slide-up animation-delay-500">
+                <div className="flex gap-0.5 flex-shrink-0">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <Star key={s} className="w-3 h-3 text-amber-400 fill-amber-400" aria-hidden="true" />
+                  ))}
+                </div>
+                <p className="text-xs text-surface-600 font-medium italic line-clamp-2 min-w-0">
+                  &ldquo;{t('auth.testimonialQuote')}&rdquo;
+                  <span className="not-italic text-surface-400 ms-1">— {t('auth.testimonialAuthor')}</span>
+                </p>
               </div>
 
               <div className="space-y-5">
@@ -425,38 +466,42 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                <Button
-                  onClick={handleFacebookLogin}
-                  size="lg"
-                  className="w-full bg-[#166FE5] hover:bg-[#1565D8] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/20 font-bold text-lg lg:text-xl group transition-all active:scale-95"
-                >
-                  <div className="flex items-center justify-center gap-3 text-white">
-                    <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
-                    <span className="text-white">{t('auth.loginWithFacebook')}</span>
-                  </div>
-                </Button>
-
-                {/* Demo Mode - Self-contained component (only renders when enabled) */}
-                <DemoLoginButton />
-
-                <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-white border border-surface-200 shadow-sm">
-                  <div className="flex gap-4">
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-5 h-5 sm:w-6 sm:h-6 text-brand-600" />
+                {/* Social proof card — motivates before the CTA */}
+                <div className="p-4 rounded-2xl bg-brand-50 border border-brand-100">
+                  <div className="flex gap-3 items-start">
+                    <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 text-brand-600" aria-hidden="true" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-surface-900 text-base mb-1">{t('auth.didYouKnow')}</h3>
-                      <p className="text-surface-600 text-sm sm:text-base font-medium leading-relaxed">
+                      <h3 className="font-bold text-brand-900 text-sm mb-0.5">{t('auth.didYouKnow')}</h3>
+                      <p className="text-brand-700 text-sm font-medium leading-relaxed">
                         {t('auth.didYouKnowDesc')}
                       </p>
                     </div>
                   </div>
                 </div>
+
+                {/* CTA zone */}
+                <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 to-transparent p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
+                  <Button
+                    onClick={handleFacebookLogin}
+                    size="lg"
+                    className="w-full bg-[#166FE5] hover:bg-[#1565D8] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl group transition-all active:scale-95"
+                  >
+                    <div className="flex items-center justify-center gap-3 text-white">
+                      <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
+                      <span className="text-white">{t('auth.loginWithFacebook')}</span>
+                    </div>
+                  </Button>
+
+                  {/* Demo Mode - Self-contained component (only renders when enabled) */}
+                  <DemoLoginButton />
+                </div>
               </div>
             </div>
 
-            {/* Terms - pushed to bottom on mobile, below content on desktop */}
-            <div className="w-full max-w-lg mx-auto mt-auto py-6 lg:py-8 lg:mt-8 text-center lg:text-start">
+            {/* Terms */}
+            <div className="w-full max-w-lg mx-auto mt-6 py-4 lg:py-8 lg:mt-8 text-center lg:text-start">
               <p className="text-sm text-surface-400 font-medium">
                 {t('auth.termsAgreement')}
                 <br className="sm:hidden" />
