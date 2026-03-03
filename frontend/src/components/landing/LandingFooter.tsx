@@ -94,19 +94,28 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
         </div>
 
         <div className="pt-6 sm:pt-12 border-t border-white/10 pb-safe">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-            <div className="text-surface-500 font-bold text-xs sm:text-sm tracking-widest uppercase text-start" dir="ltr">
-              © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-surface-500 text-xs sm:text-sm" dir="ltr">
+          <div className="flex flex-col items-center gap-3 sm:gap-4 text-center" dir="ltr">
+            <p className="text-surface-400 text-xs sm:text-sm font-medium">
+              {t('landing.footer.operatedBy' as TranslationKey)}
+            </p>
+            <p className="text-surface-300 text-sm sm:text-base font-semibold">
+              {t('landing.footer.operatorName' as TranslationKey)}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-surface-400 text-xs sm:text-sm">
               <span className="flex items-center gap-1">
                 <MapPin className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
                 {t('landing.footer.businessInfo' as TranslationKey)}
               </span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-surface-400 text-xs sm:text-sm">
+              <span>{t('landing.footer.orgNumber' as TranslationKey)}</span>
               <span aria-hidden="true">|</span>
               <a href="mailto:support@jawab24.com" className="hover:text-brand-400 transition-colors">support@jawab24.com</a>
               <span aria-hidden="true">|</span>
               <a href="tel:+46700224720" className="hover:text-brand-400 transition-colors">{t('landing.footer.phoneNumber' as TranslationKey)}</a>
+            </div>
+            <div className="text-surface-500 font-bold text-xs tracking-widest uppercase">
+              © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
             </div>
           </div>
         </div>
