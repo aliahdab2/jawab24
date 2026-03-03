@@ -238,8 +238,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     });
   }, [hasHydrated, isAuthenticated, authToken]);
 
-  // SSE: real-time updates (comment/message received, reply sent, etc.)
-  useSSE();
+  // SSE: moved to <SSEManager /> inside QueryClientProvider (see below)
 
   const handleEnablePush = useCallback(() => {
     setShowPushPrompt(false);
@@ -314,59 +313,70 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     };
   }, [hasHydrated]);
 
-  // Hydration guard - show skeleton while loading for better UX
-  if (!hasHydrated) {
-    return <AppSkeleton />;
-  }
-
   // Use persistent layout if page defines one
   // This prevents DashboardLayout (and Sidebar) from remounting on navigation
   const getLayout = Component.getLayout ?? ((page) => page);
 
+  // Always wrap in QueryClientProvider so hooks in child components can access it.
+  // The hydration guard is inside the provider to avoid the "No QueryClient set" error
+  // that occurs during Next.js prerendering when useQueryClient() is called outside a provider.
   return (
     <QueryClientProvider client={queryClient}>
-      <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <title>{BRAND_ASSETS.meta.appTitle}</title>
-        <meta name="description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
-        <meta name="theme-color" content={BRAND_ASSETS.meta.themeColor} />
-        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+      {!hasHydrated ? (
+        <AppSkeleton />
+      ) : (
+        <>
+          <SSEManager />
+          <Head>
+            <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+            <title>{BRAND_ASSETS.meta.appTitle}</title>
+            <meta name="description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
+            <meta name="theme-color" content={BRAND_ASSETS.meta.themeColor} />
+            <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 
-        {/* Canonical URL - Dynamic based on locale */}
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en' : '')} />
+            {/* Canonical URL - Dynamic based on locale */}
+            <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en' : '')} />
 
-        {/* Hreflang Tags for Multi-language Support */}
-        <link rel="alternate" hrefLang="ar" href={BRAND_ASSETS.urls.canonical('/')} />
-        <link rel="alternate" hrefLang="en" href={BRAND_ASSETS.urls.canonical('/en')} />
-        <link rel="alternate" hrefLang="x-default" href={BRAND_ASSETS.urls.canonical('/')} />
+            {/* Hreflang Tags for Multi-language Support */}
+            <link rel="alternate" hrefLang="ar" href={BRAND_ASSETS.urls.canonical('/')} />
+            <link rel="alternate" hrefLang="en" href={BRAND_ASSETS.urls.canonical('/en')} />
+            <link rel="alternate" hrefLang="x-default" href={BRAND_ASSETS.urls.canonical('/')} />
 
-        {/* Open Graph Defaults */}
-        <meta property="og:site_name" content={BRAND_ASSETS.meta.appName} />
-        <meta property="og:title" content={BRAND_ASSETS.meta.appTitle} />
-        <meta property="og:description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
-        <meta property="og:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
-        <meta property="og:type" content="website" />
-        <meta property="og:locale" content={locale === 'ar' ? 'ar_SA' : 'en_US'} />
-        <meta property="og:locale:alternate" content={locale === 'ar' ? 'en_US' : 'ar_SA'} />
+            {/* Open Graph Defaults */}
+            <meta property="og:site_name" content={BRAND_ASSETS.meta.appName} />
+            <meta property="og:title" content={BRAND_ASSETS.meta.appTitle} />
+            <meta property="og:description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
+            <meta property="og:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
+            <meta property="og:type" content="website" />
+            <meta property="og:locale" content={locale === 'ar' ? 'ar_SA' : 'en_US'} />
+            <meta property="og:locale:alternate" content={locale === 'ar' ? 'en_US' : 'ar_SA'} />
 
-        {/* Twitter Card */}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={BRAND_ASSETS.meta.appTitle} />
-        <meta name="twitter:description" content="Smart AI auto-replies for Facebook & Instagram. الرد الذكي التلقائي لفيسبوك وإنستغرام." />
-        <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
+            {/* Twitter Card */}
+            <meta name="twitter:card" content="summary_large_image" />
+            <meta name="twitter:title" content={BRAND_ASSETS.meta.appTitle} />
+            <meta name="twitter:description" content="Smart AI auto-replies for Facebook & Instagram. الرد الذكي التلقائي لفيسبوك وإنستغرام." />
+            <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
 
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-      </Head>
-      <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
-        <ErrorBoundary name="root" resetKeys={router.asPath}>
-          {getLayout(<Component {...pageProps} />)}
-          <Toaster richColors position="top-center" closeButton duration={4000} />
-          {showPushPrompt && (
-            <NotificationPrePrompt onEnable={handleEnablePush} onDismiss={handleDismissPush} />
-          )}
-        </ErrorBoundary>
-      </AppShell>
+            <meta name="mobile-web-app-capable" content="yes" />
+            <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+          </Head>
+          <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
+            <ErrorBoundary name="root" resetKeys={router.asPath}>
+              {getLayout(<Component {...pageProps} />)}
+              <Toaster richColors position="top-center" closeButton duration={4000} />
+              {showPushPrompt && (
+                <NotificationPrePrompt onEnable={handleEnablePush} onDismiss={handleDismissPush} />
+              )}
+            </ErrorBoundary>
+          </AppShell>
+        </>
+      )}
     </QueryClientProvider>
   );
+}
+
+/** Renders nothing — mounts useSSE inside QueryClientProvider so it can access the QueryClient */
+function SSEManager() {
+  useSSE();
+  return null;
 }
