@@ -226,7 +226,7 @@ test.describe('Dashboard Page', () => {
 
     // Dashboard header must be visible
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Command Center should show Smart Replies count: 20 (comments AI) + 5 (messages AI) = 25
@@ -248,7 +248,7 @@ test.describe('Dashboard Page', () => {
 
     // Wait for dashboard to load
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // SmartStatusBanner uses unreplied (12) + pending (5) = 17
@@ -285,7 +285,7 @@ test.describe('Dashboard Page', () => {
     await page.goto('/en/dashboard');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Banner should NOT be visible when count is 0
@@ -297,7 +297,7 @@ test.describe('Dashboard Page', () => {
 
     // Wait for dashboard content to render
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // The page should have meaningful text content, not just an image
@@ -351,7 +351,7 @@ test.describe('Dashboard Page', () => {
 
     // Header should be visible
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
@@ -360,7 +360,7 @@ test.describe('Dashboard Page', () => {
 
     // Wait for dashboard to load
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // With only 1 page, the accordion should auto-expand
@@ -390,7 +390,7 @@ test.describe('Dashboard Page', () => {
     await page.goto('/en/dashboard');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.title'] }).first()
+      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Both page buttons should be visible and collapsed
