@@ -84,6 +84,11 @@
   [dir="rtl"] {
     font-family: 'Cairo', 'DM Sans', system-ui, sans-serif;
   }
+
+  /* Keyboard focus indicators for accessibility (WCAG 2.1 AA) */
+  a:focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500 rounded-sm;
+  }
 }
 
 @layer components {

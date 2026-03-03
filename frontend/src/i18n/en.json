@@ -153,6 +153,7 @@
   "auth.testimonialQuote": "Saved me hours of work daily, and customers are impressed with the speed and accuracy!",
   "auth.testimonialAuthor": "Marketing Manager",
   "dashboard.title": "Dashboard",
+  "dashboard.greeting": "Welcome",
   "dashboard.overview": "Your pages activity summary",
   "dashboard.totalComments": "Comments",
   "dashboard.totalCommentsDesc": "Your page comments",

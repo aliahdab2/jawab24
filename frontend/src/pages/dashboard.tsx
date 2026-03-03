@@ -42,17 +42,28 @@ function SectionError({ onRetry }: { onRetry: () => void }) {
 }
 
 function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
+  const roundedPercent = Math.round(percent);
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-end text-xs">
         <span className="font-bold text-surface-500 opacity-80 uppercase tracking-wider">
           {label}
         </span>
-        <div className="flex items-baseline gap-1">
+        <div className="flex items-baseline gap-1.5">
           <span className="font-bold text-surface-900 text-lg leading-none">
             {used.toLocaleString()}
           </span>
           <span className="text-surface-400 font-medium text-xs">/ {limit ? limit.toLocaleString() : '∞'}</span>
+          {limit && (
+            <span className={clsx(
+              'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+              roundedPercent > 90 ? 'text-red-600 bg-red-50' :
+                roundedPercent > 75 ? 'text-amber-600 bg-amber-50' :
+                  'text-surface-400'
+            )}>
+              {roundedPercent}%
+            </span>
+          )}
         </div>
       </div>
       <div className="h-2.5 w-full bg-surface-100 rounded-full overflow-hidden shadow-inner p-0.5 relative">
@@ -89,7 +100,7 @@ const PLAN_NAME_KEYS: Record<string, TranslationKey> = {
 
 const DashboardPage: NextPageWithLayout = () => {
   const { t, intlLocale } = useTranslation();
-  const { isAuthenticated, fbToken } = useAuthStore();
+  const { isAuthenticated, fbToken, user } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
   
@@ -407,7 +418,12 @@ const DashboardPage: NextPageWithLayout = () => {
       )}
       {/* Header */}
       <PageHeader
-        title={t('dashboard.title')}
+        title={(() => {
+          const firstName = user?.name?.split(' ')[0];
+          return firstName
+            ? `${t('dashboard.greeting')}, ${firstName}`
+            : t('dashboard.title');
+        })()}
         description={`${t('dashboard.overview')} · ${new Date().toLocaleDateString(intlLocale, { weekday: 'long', month: 'long', day: 'numeric' })}`}
       />
 
@@ -478,9 +494,9 @@ const DashboardPage: NextPageWithLayout = () => {
                 ));
               })()
             ) : (
-              <div className="py-12 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
-                  <MessageSquare className="w-7 h-7 text-surface-300" />
+              <div className="py-8 text-center">
+                <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
+                  <MessageSquare className="w-6 h-6 text-surface-300" />
                 </div>
                 <p className="text-sm font-medium text-surface-500 mb-1">
                   {t('dashboard.noRecentComments')}

@@ -153,6 +153,7 @@
   "auth.testimonialQuote": "وفر لي ساعات من العمل يومياً، والعملاء منبهرون بسرعة الرد ودقته!",
   "auth.testimonialAuthor": "مدير تسويق",
   "dashboard.title": "لوحة التحكم",
+  "dashboard.greeting": "مرحباً",
   "dashboard.overview": "ملخص نشاط صفحاتك",
   "dashboard.totalComments": "إجمالي التعليقات",
   "dashboard.totalCommentsDesc": "تعليقات صفحاتك",

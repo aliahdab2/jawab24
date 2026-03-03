@@ -191,7 +191,7 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <aside
       className={clsx(
-        'fixed top-0 h-screen flex flex-col overflow-hidden bg-surface-900 text-white transition-all duration-500 z-40 shadow-2xl group/sidebar',
+        'fixed top-0 h-screen flex flex-col overflow-visible bg-surface-900 text-white transition-all duration-500 z-40 shadow-2xl group/sidebar',
         sidebarOpen ? 'w-64' : 'w-20'
       )}
       style={{
@@ -255,7 +255,7 @@ export const Sidebar = memo(function Sidebar() {
           <div key={group.labelKey} className={groupIndex > 0 ? 'mt-5' : ''}>
             {/* Group label — visible only when sidebar is expanded */}
             {sidebarOpen && (
-              <p className="px-3 mb-2 text-[10px] font-bold text-surface-500 uppercase tracking-[0.15em]">
+              <p className="px-3 mb-2 text-[11px] font-bold text-surface-500 uppercase tracking-[0.15em]">
                 {t(group.labelKey as TranslationKey)}
               </p>
             )}
@@ -271,7 +271,7 @@ export const Sidebar = memo(function Sidebar() {
                     key={item.key}
                     href={item.href}
                     className={clsx(
-                      'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group relative',
+                      'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group/nav relative',
                       isActive
                         ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20'
                         : 'text-surface-400 hover:bg-white/5 hover:text-white',
@@ -279,10 +279,17 @@ export const Sidebar = memo(function Sidebar() {
                     )}
                   >
                     <item.icon className={clsx(
-                      "w-6 h-6 flex-shrink-0 transition-transform group-hover:scale-110",
-                      isActive ? "text-white" : "text-surface-500 group-hover:text-brand-400"
+                      "w-6 h-6 flex-shrink-0 transition-transform group-hover/nav:scale-110",
+                      isActive ? "text-white" : "text-surface-500 group-hover/nav:text-brand-400"
                     )} />
                     {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
+
+                    {/* Tooltip — visible only when sidebar is collapsed */}
+                    {!sidebarOpen && (
+                      <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-800 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+                        {t(item.key as TranslationKey)}
+                      </span>
+                    )}
 
                     {isActive && (
                       <div className={clsx(
@@ -304,7 +311,7 @@ export const Sidebar = memo(function Sidebar() {
             <Link
               href="/admin/customers"
               className={clsx(
-                'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group relative',
+                'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group/nav relative',
                 router.pathname.startsWith('/admin')
                   ? 'bg-amber-600 text-white shadow-xl shadow-amber-600/20'
                   : 'text-surface-400 hover:bg-white/5 hover:text-white',
@@ -312,10 +319,15 @@ export const Sidebar = memo(function Sidebar() {
               )}
             >
               <Shield className={clsx(
-                "w-6 h-6 flex-shrink-0 transition-transform group-hover:scale-110",
-                router.pathname.startsWith('/admin') ? "text-white" : "text-amber-500 group-hover:text-amber-400"
+                "w-6 h-6 flex-shrink-0 transition-transform group-hover/nav:scale-110",
+                router.pathname.startsWith('/admin') ? "text-white" : "text-amber-500 group-hover/nav:text-amber-400"
               )} />
               {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('admin.title' as TranslationKey)}</span>}
+              {!sidebarOpen && (
+                <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-800 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+                  {t('admin.title' as TranslationKey)}
+                </span>
+              )}
 
               {router.pathname.startsWith('/admin') && (
                 <div className={clsx(
@@ -348,12 +360,17 @@ export const Sidebar = memo(function Sidebar() {
         <button
           onClick={handleLogout}
           className={clsx(
-            "w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-surface-200 hover:bg-red-500 hover:text-white transition-all duration-300 group",
+            "w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-surface-200 hover:bg-red-500 hover:text-white transition-all duration-300 group/nav relative",
             !sidebarOpen && "justify-center"
           )}
         >
-          <LogOut className="w-6 h-6 flex-shrink-0 group-hover:-translate-x-1 transition-transform" />
+          <LogOut className="w-6 h-6 flex-shrink-0 group-hover/nav:-translate-x-1 transition-transform" />
           {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('nav.logout' as TranslationKey)}</span>}
+          {!sidebarOpen && (
+            <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-800 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+              {t('nav.logout' as TranslationKey)}
+            </span>
+          )}
         </button>
       </div>
     </aside>
