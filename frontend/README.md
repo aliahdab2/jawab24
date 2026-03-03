@@ -4,7 +4,7 @@ Web dashboard for Jawab24 - part of the monorepo.
 
 ## Tech Stack
 
-- **Framework:** Next.js 13
+- **Framework:** Next.js 15
 - **Language:** TypeScript
 - **Styling:** TailwindCSS
 - **State:** Zustand

@@ -33,10 +33,12 @@ export default async function geoRoutes(fastify: FastifyInstance) {
             route: '/geo/check',
         }, 'Geo check request');
 
-        return reply.send({
-            sanctioned,
-            country: geo?.country,
-            // Do not expose region to avoid revealing precise location
-        });
+        return reply
+            .header('Cache-Control', 'public, max-age=300')
+            .send({
+                sanctioned,
+                country: geo?.country,
+                // Do not expose region to avoid revealing precise location
+            });
     });
 }

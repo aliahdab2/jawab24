@@ -80,7 +80,9 @@ export default async function versionRoutes(fastify: FastifyInstance) {
         schema: { tags: ['Health'], summary: 'Get full version and deployment info' },
     }, async (_request, reply) => {
         const info = getVersionInfo();
-        return reply.send(info);
+        return reply
+            .header('Cache-Control', 'public, max-age=86400, immutable')
+            .send(info);
     });
 
     // Simple version for health checks
@@ -88,6 +90,8 @@ export default async function versionRoutes(fastify: FastifyInstance) {
         schema: { tags: ['Health'], summary: 'Get short version string' },
     }, async (_request, reply) => {
         const info = getVersionInfo();
-        return reply.send({ v: info.shortVersion });
+        return reply
+            .header('Cache-Control', 'public, max-age=86400, immutable')
+            .send({ v: info.shortVersion });
     });
 }

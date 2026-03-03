@@ -28,10 +28,6 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Log error to console in development
-    console.error('ErrorBoundary caught an error:', error);
-    console.error('Component stack:', errorInfo.componentStack);
-
     // Send to Sentry if configured
     if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
       Sentry.captureException(error, {

@@ -560,7 +560,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                             ? 'max-h-[60vh]'
                             : 'top-20 sm:end-auto sm:start-[272px] sm:w-[420px] max-h-[70vh]',
                     )}
-                    style={isDark ? { top: 'calc(env(safe-area-inset-top, 0px) + 4.5rem)' } : undefined}
+                    style={isDark ? { top: 'calc(var(--sai-top) + 4.5rem)' } : undefined}
                     dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
                     {/* Header Row 1: Title + Close */}

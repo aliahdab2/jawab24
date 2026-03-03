@@ -86,7 +86,7 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
             : t('landing.features.integrationsPlaceholder')
         }
         className="flex-1 min-w-0 bg-transparent px-2 sm:px-3 py-2 sm:py-2.5 text-sm sm:text-base text-surface-900 placeholder:text-surface-400 focus:outline-none"
-        dir={email ? 'ltr' : undefined}
+        dir="auto"
         aria-label={
           isBanner
             ? t('landing.comingSoon.placeholder')

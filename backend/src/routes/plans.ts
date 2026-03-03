@@ -23,10 +23,12 @@ export default async function plansRoutes(fastify: FastifyInstance) {
     fastify.get('/', { schema: { tags: ['Plans'], summary: 'Get all active plans (public)' } }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const plans = await plansService.getActivePlans();
-            return reply.send({
-                success: true,
-                data: plans,
-            });
+            return reply
+                .header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+                .send({
+                    success: true,
+                    data: plans,
+                });
         } catch (error) {
             request.log.error(error, 'Failed to get plans');
             return reply.status(500).send({
@@ -53,10 +55,12 @@ export default async function plansRoutes(fastify: FastifyInstance) {
                     });
                 }
                 
-                return reply.send({
-                    success: true,
-                    data: plan,
-                });
+                return reply
+                    .header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+                    .send({
+                        success: true,
+                        data: plan,
+                    });
             } catch (error) {
                 request.log.error(error, 'Failed to get plan');
                 return reply.status(500).send({

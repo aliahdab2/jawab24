@@ -476,6 +476,21 @@ npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility
    await expect(page.locator('h1').filter({ hasText: en['rules.title'] })).toBeVisible();
    ```
 
+12. **Never use `console.error` for error reporting — use `captureError()` or Sentry directly** — All error logging must go through Sentry so errors are tracked in production. The only acceptable patterns are:
+    - `captureError(error, 'fallback message', { tags: {...} })` from `lib/sentryHelpers.ts`
+    - `Sentry.captureException(error, { extra, tags })` for error boundaries (class components can't use helpers easily)
+    - Infrastructure errors (Redis disconnect, graceful shutdown) may use DUAL logging: `console.error()` AND `captureError()` together
+
+    ```tsx
+    // ❌ WRONG - error only visible in browser console, lost in production
+    console.error('Failed to save settings:', error);
+
+    // ✅ CORRECT - tracked in Sentry with context
+    captureError(error, 'Failed to save settings', {
+      tags: { page: 'settings', action: 'save' },
+    });
+    ```
+
 ---
 
 ## 📁 Project Structure
@@ -710,6 +725,7 @@ return (
 | `<input>` or `<textarea>` without `aria-label` or linked `<label>` | Use UI components (`Input`, `Textarea`) which auto-link labels, or add `aria-label={t('...')}` |
 | Hardcoded English in `aria-label` | Use `aria-label={t('key')}` — screen readers need translated labels too |
 | Hardcoded translated strings in E2E tests | Import `en.json`/`ar.json` and use `en['key']`/`ar['key']` — tests break when translations change |
+| `console.error(...)` for error reporting | Use `captureError()` from `sentryHelpers.ts` — errors must be tracked in Sentry, not just the browser console |
 
 ---
 
