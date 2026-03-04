@@ -491,6 +491,46 @@ npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility
     });
     ```
 
+### 13. Dark Mode — Always Add `dark:` Overrides - CRITICAL
+
+**Every hardcoded Tailwind color utility MUST have a `dark:` override.**
+
+The app supports light/dark/system themes. The dark mode palette is defined via CSS variables in `globals.css` (`.dark {}` block). Semantic tokens (`bg-card`, `text-foreground`, `bg-muted`, `border-theme-border`) auto-switch — but **hardcoded Tailwind colors do NOT**.
+
+```tsx
+// ❌ WRONG — dark-on-dark: text invisible, bg washed out
+className="bg-amber-50 text-amber-700 border border-amber-100"
+
+// ✅ CORRECT — always pair with dark: overrides
+className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800"
+```
+
+**The pattern for any `{color}-50/100` background + `{color}-700/800/900` text:**
+| Light | Dark |
+|-------|------|
+| `bg-{color}-50` | `dark:bg-{color}-900/30` |
+| `bg-{color}-100` | `dark:bg-{color}-900/50` |
+| `text-{color}-700` through `-900` | `dark:text-{color}-300` |
+| `text-{color}-600` | `dark:text-{color}-400` |
+| `border-{color}-100` through `-200` | `dark:border-{color}-700` through `-800` |
+
+**Prefer semantic tokens when possible:**
+- `bg-card` instead of `bg-white`
+- `bg-background` instead of no `bg-*` on inputs/textareas
+- `text-foreground` instead of `text-gray-900`
+- `border-theme-border` instead of `border-gray-200`
+
+**Common mistakes:**
+- `bg-blue-50/50` on an active row → invisible muddy gray in dark mode
+- `text-blue-800` on a badge → dark text on dark background (1.47:1 contrast)
+- `<textarea>` with `text-foreground` but no `bg-*` → white-on-white (browser default bg is white)
+- `bg-green-100` checkmark circles → bright holes in dark UI
+
+**Before committing, check:**
+- Search for `bg-{color}-50`, `bg-{color}-100`, `text-{color}-700`, `text-{color}-800`, `text-{color}-900` in your changes
+- Every instance must have a corresponding `dark:` override on the same element
+- Or better: use semantic tokens that auto-switch
+
 ---
 
 ## 📁 Project Structure
@@ -726,6 +766,9 @@ return (
 | Hardcoded English in `aria-label` | Use `aria-label={t('key')}` — screen readers need translated labels too |
 | Hardcoded translated strings in E2E tests | Import `en.json`/`ar.json` and use `en['key']`/`ar['key']` — tests break when translations change |
 | `console.error(...)` for error reporting | Use `captureError()` from `sentryHelpers.ts` — errors must be tracked in Sentry, not just the browser console |
+| `bg-amber-50 text-amber-700` without `dark:` overrides | Always add `dark:bg-amber-900/30 dark:text-amber-300` — hardcoded colors don't auto-switch in dark mode |
+| `<textarea>` or `<input>` with `text-foreground` but no `bg-*` | Add `bg-background` — browser default bg is white, causing white-on-white in dark mode |
+| `bg-green-100` circles/badges in dark mode | Add `dark:bg-green-900/30` — light pastel backgrounds look like bright holes in dark UI |
 
 ---
 
@@ -790,3 +833,4 @@ refactor(css): consolidate safe areas
 - [ ] **Works in landscape mode** (no bottom gap, side padding correct)
 - [ ] Modals don't overflow screen in landscape
 - [ ] **Accessibility**: form inputs have labels, interactive elements are keyboard accessible, heading hierarchy is logical
+- [ ] **Dark mode**: every hardcoded `bg-{color}-50/100` and `text-{color}-700/800/900` has a `dark:` override
