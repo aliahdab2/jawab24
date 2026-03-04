@@ -536,6 +536,39 @@
            dark:bg-emerald-900/20 dark:text-emerald-200 dark:border-emerald-800;
   }
 
+  /* --- Landing page theme classes --- */
+  .landing-section-dark {
+    @apply bg-zinc-900 dark:bg-zinc-900 text-white;
+  }
+
+  .landing-icon-shell {
+    @apply bg-card/90 dark:bg-surface-100/90 border border-theme-border backdrop-blur shadow-xl;
+  }
+
+  .landing-phone-frame {
+    @apply bg-surface-200 dark:bg-surface-300 border-[6px] border-surface-100 dark:border-surface-400;
+  }
+
+  .landing-phone-notch {
+    @apply bg-surface-800 dark:bg-surface-500;
+  }
+
+  .landing-phone-screen {
+    @apply bg-gradient-to-br from-white to-brand-50/30 dark:from-surface-100 dark:to-brand-900/20 border border-white/50 dark:border-surface-400/70;
+  }
+
+  .landing-chat-bubble {
+    @apply bg-card border border-brand-50 dark:border-surface-400;
+  }
+
+  .landing-platform-chip-facebook {
+    @apply bg-[#1877F2]/10 text-[#1877F2] hover:bg-[#1877F2] hover:text-white;
+  }
+
+  .landing-platform-chip-instagram {
+    @apply bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 dark:text-pink-300 hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white;
+  }
+
   .gradient-text {
     @apply bg-gradient-to-r from-brand-600 to-accent-500 bg-clip-text text-transparent;
     padding-bottom: 0.1em;

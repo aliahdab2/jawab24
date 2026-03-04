@@ -88,12 +88,12 @@ export default function LandingPage() {
               </Link>
 
               <div className="flex items-center gap-1 sm:gap-4">
-                <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
+                <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all">
                   {t('landing.nav.pricing')}
                 </Link>
                 <button
                   onClick={toggleLanguage}
-                  className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all"
                 >
                   {t('common.switchLanguage')}
                 </button>
@@ -132,7 +132,7 @@ export default function LandingPage() {
         <LandingHero isAuthenticated={isAuthenticated} />
 
         {/* Stats Section */}
-        <section className="py-8 sm:py-16 bg-zinc-900 relative">
+        <section className="py-8 sm:py-16 landing-section-dark relative">
           <div className="absolute top-0 start-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent"></div>
           <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
             {statsList.map((stat, i) => (
@@ -145,17 +145,17 @@ export default function LandingPage() {
         </section>
 
         {/* Upcoming Integrations Section */}
-        <section className="py-10 sm:py-16 bg-gradient-to-br from-background via-card to-emerald-50/30">
+        <section className="py-10 sm:py-16 bg-gradient-to-br from-background via-card to-emerald-50/30 dark:to-emerald-950/20">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="relative rounded-2xl sm:rounded-3xl bg-card border border-theme-border shadow-xl shadow-surface-200/50 overflow-hidden">
               <div className="absolute top-0 start-0 end-0 h-1 bg-gradient-to-r from-[#96bf48] to-[#004956]" />
               <div className="p-6 sm:p-10 flex flex-col items-center text-center gap-5 sm:gap-6">
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#96bf48]/10 flex items-center justify-center">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#96bf48]/10 dark:bg-[#96bf48]/20 flex items-center justify-center">
                     <ShoppingBag className="w-7 h-7 sm:w-8 sm:h-8 text-[#96bf48]" />
                   </div>
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#BAF3E6] flex items-center justify-center">
-                    <SallaIcon className="w-7 h-7 sm:w-8 sm:h-8 text-[#004956]" />
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#BAF3E6] dark:bg-[#004956] flex items-center justify-center">
+                    <SallaIcon className="w-7 h-7 sm:w-8 sm:h-8 text-[#004956] dark:text-[#BAF3E6]" />
                   </div>
                 </div>
                 <div>
@@ -181,7 +181,7 @@ export default function LandingPage() {
 
         {/* Fixed bottom safe area background (native/PWA only via --min-safe-bottom) */}
         <div
-          className="fixed-safe-bg bottom-safe-bg bg-zinc-900"
+          className="fixed-safe-bg bottom-safe-bg landing-section-dark"
           aria-hidden="true"
         />
       </div>

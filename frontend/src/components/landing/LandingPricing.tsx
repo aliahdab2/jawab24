@@ -10,7 +10,7 @@ export function LandingPricing() {
     <section id="pricing" className="py-12 sm:py-20 lg:py-32 bg-background relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-8 sm:mb-16">
-          <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full bg-brand-50 text-brand-600 border border-brand-100 mb-4 sm:mb-6 font-bold text-[10px] sm:text-xs uppercase tracking-widest">
+          <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full status-brand border mb-4 sm:mb-6 font-bold text-[10px] sm:text-xs uppercase tracking-widest">
             {t('pricing.description')}
           </div>
           <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-3 sm:mb-6 tracking-tight">
@@ -24,8 +24,8 @@ export function LandingPricing() {
         {/* Plan Features Preview */}
         <div className="grid grid-cols-3 gap-2 sm:gap-8 mb-8 sm:mb-16 max-w-4xl mx-auto">
           {/* Starter */}
-          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 transition-colors">
-            <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center">
+          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 dark:hover:bg-surface-100 transition-colors">
+            <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl icon-bg-blue flex items-center justify-center">
               <Zap className="w-5 h-5 sm:w-7 sm:h-7" />
             </div>
             <h3 className="text-sm sm:text-lg font-bold text-foreground mb-1 sm:mb-2">{t('pricing.starter')}</h3>
@@ -40,7 +40,7 @@ export function LandingPricing() {
           </div>
 
           {/* Business */}
-          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl bg-brand-50 border sm:border-2 border-brand-200 relative">
+          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl status-brand border sm:border-2 relative">
             <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-700 text-white text-[10px] sm:text-xs font-bold rounded-full whitespace-nowrap">
               {t('pricing.popular')}
             </div>
@@ -59,8 +59,8 @@ export function LandingPricing() {
           </div>
 
           {/* Pro */}
-          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 transition-colors">
-            <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center">
+          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 dark:hover:bg-surface-100 transition-colors">
+            <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl icon-bg-violet flex items-center justify-center">
               <Crown className="w-5 h-5 sm:w-7 sm:h-7" />
             </div>
             <h3 className="text-sm sm:text-lg font-bold text-foreground mb-1 sm:mb-2">{t('pricing.pro')}</h3>
@@ -78,7 +78,7 @@ export function LandingPricing() {
         {/* CTA */}
         <div className="text-center">
           <Link href="/pricing">
-            <Button size="lg" className="px-6 sm:px-12 py-4 sm:py-6 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl shadow-xl shadow-brand-200">
+            <Button size="lg" className="px-6 sm:px-12 py-4 sm:py-6 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl shadow-xl shadow-brand-200 dark:shadow-brand-900/40">
               <span className="flex items-center gap-2">
                 {t('pricing.viewPricingDetails')}
                 <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />

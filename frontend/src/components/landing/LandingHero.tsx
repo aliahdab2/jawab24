@@ -26,13 +26,13 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
   const { t } = useTranslation();
 
   return (
-    <section className="relative pt-8 sm:pt-12 lg:pt-20 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50">
+    <section className="relative pt-8 sm:pt-12 lg:pt-20 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200">
       {/* Animated Background Elements */}
-      <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
-      <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
+      <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 dark:bg-brand-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
+      <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 dark:bg-violet-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
       {/* Centered Glowing Background */}
       <div className="absolute top-1/2 inset-x-0 flex justify-center -translate-y-1/2 pointer-events-none">
-        <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 rounded-full blur-[80px] sm:blur-[150px]" />
+        <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 dark:from-brand-900/20 dark:to-violet-900/20 rounded-full blur-[80px] sm:blur-[150px]" />
       </div>
 
       <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -64,7 +64,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               )}
               {!isAuthenticated && (
                 <Link href="/pricing" className="w-full sm:w-auto">
-                  <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-gray-300 hover:border-brand-500 bg-card hover:bg-card transition-all shadow-lg">
+                  <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-theme-border hover:border-brand-500 bg-card hover:bg-card transition-all shadow-lg dark:shadow-black/20">
                     {t('landing.hero.cta2')}
                   </Button>
                 </Link>
@@ -73,11 +73,11 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
 
             {/* Platform Icons */}
             <div className="hidden sm:flex items-center gap-3 sm:gap-6 animate-slide-up animation-delay-300">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#1877F2]/10 text-[#1877F2] font-bold text-sm sm:text-base hover:bg-[#1877F2] hover:text-white transition-all cursor-default">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-facebook font-bold text-sm sm:text-base transition-all cursor-default">
                 <Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>{t('landing.platforms.facebook')}</span>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 font-bold text-sm sm:text-base hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white transition-all cursor-default">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-instagram font-bold text-sm sm:text-base transition-all cursor-default">
                 <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>{t('landing.platforms.instagram')}</span>
               </div>
@@ -91,10 +91,10 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
 
               {/* Phone Mockup */}
-              <div className="relative bg-[#E5E7EB] rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5 shadow-2xl shadow-brand-900/20 border-[6px] border-[#F3F4F6]">
-                <div className="absolute top-4 sm:top-5 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 bg-[#1F2937] rounded-full z-10"></div>
+              <div className="relative landing-phone-frame rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5 shadow-2xl shadow-brand-900/20">
+                <div className="absolute top-4 sm:top-5 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 landing-phone-notch rounded-full z-10"></div>
 
-                <div className="bg-gradient-to-br from-white to-brand-50/30 rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative border border-white/50">
+                <div className="landing-phone-screen rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative">
                   <div className="p-2.5 sm:p-4 h-full flex flex-col justify-evenly">
                     <div className="flex items-center justify-between pt-1 sm:pt-2 px-4">
                       <div className="flex items-center gap-0.5 sm:gap-1">
@@ -117,7 +117,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
                         <div className="w-4 h-4 sm:w-5 sm:h-5 lg:w-7 lg:h-7 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
                           <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-surface-600" />
                         </div>
-                        <div className="bg-white rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-sm border border-brand-50 max-w-full">
+                        <div className="landing-chat-bubble rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-sm max-w-full">
                           <p className="text-[8px] sm:text-[11px] lg:text-base text-surface-700 font-medium leading-tight lg:leading-relaxed">{t('landing.hero.chatQuery')}</p>
                         </div>
                       </div>
@@ -136,7 +136,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
 
               {/* Floating Elements */}
               <div className="absolute -start-4 sm:-start-8 top-1/4 animate-float-rotate">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-blue-500/20 border-b-2 border-blue-100">
+                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
                   <div className="w-full h-full rounded-full bg-[#1877F2] flex items-center justify-center">
                     <Facebook className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                   </div>
@@ -144,7 +144,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               </div>
 
               <div className="absolute -end-4 sm:-end-8 top-1/3 animate-float-orbit">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-pink-500/20 border-b-2 border-pink-100">
+                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
                   <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
                     <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                   </div>
@@ -152,7 +152,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               </div>
 
               <div className="absolute -start-4 sm:-start-8 top-2/3 animate-float-rotate z-10">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-emerald-500/20 border-b-2 border-emerald-100">
+                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
                   <div className="w-full h-full rounded-full bg-[#96bf48] flex items-center justify-center relative">
                     <ShoppingBag className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
                   </div>
@@ -160,9 +160,9 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               </div>
 
               <div className="absolute -end-4 sm:-end-8 top-2/3 animate-float-orbit z-10">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-white/90 backdrop-blur p-1.5 shadow-xl shadow-teal-500/20 border-b-2 border-teal-100">
-                  <div className="w-full h-full rounded-full bg-[#BAF3E6] flex items-center justify-center relative">
-                    <SallaIcon className="w-5 h-5 sm:w-7 sm:h-7 text-[#004956]" />
+                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
+                  <div className="w-full h-full rounded-full bg-[#BAF3E6] dark:bg-[#004956] flex items-center justify-center relative">
+                    <SallaIcon className="w-5 h-5 sm:w-7 sm:h-7 text-[#004956] dark:text-[#BAF3E6]" />
                   </div>
                 </div>
               </div>

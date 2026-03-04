@@ -102,7 +102,7 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
           'me-1 sm:me-1.5 px-4 sm:px-5 py-1.5 sm:py-2',
           isBanner
             ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-sm shadow-amber-500/25'
-            : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm shadow-zinc-900/15',
+            : 'bg-brand-600 text-white hover:bg-brand-700 dark:bg-brand-500 dark:hover:bg-brand-400 shadow-sm shadow-brand-900/20',
           'disabled:opacity-60 disabled:cursor-not-allowed',
         )}
       >

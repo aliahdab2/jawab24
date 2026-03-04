@@ -491,21 +491,43 @@ npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility
     });
     ```
 
-### 13. Dark Mode — Always Add `dark:` Overrides - CRITICAL
+### 13. Dark Mode — Use Semantic CSS Classes - CRITICAL
 
-**Every hardcoded Tailwind color utility MUST have a `dark:` override.**
+**Use the semantic CSS classes defined in `globals.css` instead of writing `dark:` overrides inline.**
 
 The app supports light/dark/system themes. The dark mode palette is defined via CSS variables in `globals.css` (`.dark {}` block). Semantic tokens (`bg-card`, `text-foreground`, `bg-muted`, `border-theme-border`) auto-switch — but **hardcoded Tailwind colors do NOT**.
 
+**Preferred approach — use semantic classes from `globals.css`:**
+
 ```tsx
-// ❌ WRONG — dark-on-dark: text invisible, bg washed out
+// ❌ WRONG — hardcoded colors without dark: overrides
 className="bg-amber-50 text-amber-700 border border-amber-100"
 
-// ✅ CORRECT — always pair with dark: overrides
+// ❌ AVOID — manual dark: overrides (verbose, error-prone)
 className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800"
+
+// ✅ BEST — semantic class (dark mode built in, single source of truth)
+className="status-warning border"
 ```
 
-**The pattern for any `{color}-50/100` background + `{color}-700/800/900` text:**
+**Available semantic classes** (defined in `globals.css` `@layer components`):
+
+| Category | Classes |
+|----------|---------|
+| **Status badges** | `status-success`, `status-warning`, `status-error`, `status-info`, `status-violet`, `status-brand` |
+| **Icon backgrounds** | `icon-bg-emerald`, `icon-bg-amber`, `icon-bg-violet`, `icon-bg-red`, `icon-bg-brand`, `icon-bg-blue`, `icon-bg-slate`, `icon-bg-orange`, `icon-bg-purple`, `icon-bg-green` |
+| **Icon backgrounds (light)** | `icon-bg-emerald-light`, `icon-bg-amber-light`, `icon-bg-violet-light`, `icon-bg-red-light`, `icon-bg-brand-light` |
+| **Alert boxes** | `alert-success`, `alert-warning`, `alert-error` |
+| **Notification rings** | `notif-ring-amber`, `notif-ring-blue`, `notif-ring-red`, `notif-ring-orange`, `notif-ring-emerald`, `notif-ring-slate` |
+| **Reply indicators** | `reply-source-ai`, `reply-source-template`, `reply-bubble` |
+
+**Notes:**
+- Status and alert classes set `border-color` but you must add `border` yourself
+- Icon-bg classes set both `background` and `text` color — don't add a separate text color on the icon
+- Check `globals.css` for the full list before creating new inline `dark:` overrides
+
+**When no semantic class exists**, fall back to manual `dark:` overrides:
+
 | Light | Dark |
 |-------|------|
 | `bg-{color}-50` | `dark:bg-{color}-900/30` |
@@ -514,22 +536,19 @@ className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 b
 | `text-{color}-600` | `dark:text-{color}-400` |
 | `border-{color}-100` through `-200` | `dark:border-{color}-700` through `-800` |
 
-**Prefer semantic tokens when possible:**
+**Also prefer semantic tokens when possible:**
 - `bg-card` instead of `bg-white`
 - `bg-background` instead of no `bg-*` on inputs/textareas
 - `text-foreground` instead of `text-gray-900`
 - `border-theme-border` instead of `border-gray-200`
 
-**Common mistakes:**
-- `bg-blue-50/50` on an active row → invisible muddy gray in dark mode
-- `text-blue-800` on a badge → dark text on dark background (1.47:1 contrast)
-- `<textarea>` with `text-foreground` but no `bg-*` → white-on-white (browser default bg is white)
-- `bg-green-100` checkmark circles → bright holes in dark UI
+**Exception — Landing page is light-only:**
+The landing page (`/landing`) and its components (`components/landing/*`) use a fixed light design. They do NOT need `dark:` overrides. Landing-specific classes (e.g. `landing-section-dark`, `landing-phone-frame`) are defined in `globals.css` and handle any needed dark adjustments internally.
 
 **Before committing, check:**
 - Search for `bg-{color}-50`, `bg-{color}-100`, `text-{color}-700`, `text-{color}-800`, `text-{color}-900` in your changes
-- Every instance must have a corresponding `dark:` override on the same element
-- Or better: use semantic tokens that auto-switch
+- Use a semantic class if one exists — don't duplicate the `dark:` overrides inline
+- If no semantic class fits and you're outside the landing page, add `dark:` overrides manually
 
 ---
 
@@ -766,9 +785,9 @@ return (
 | Hardcoded English in `aria-label` | Use `aria-label={t('key')}` — screen readers need translated labels too |
 | Hardcoded translated strings in E2E tests | Import `en.json`/`ar.json` and use `en['key']`/`ar['key']` — tests break when translations change |
 | `console.error(...)` for error reporting | Use `captureError()` from `sentryHelpers.ts` — errors must be tracked in Sentry, not just the browser console |
-| `bg-amber-50 text-amber-700` without `dark:` overrides | Always add `dark:bg-amber-900/30 dark:text-amber-300` — hardcoded colors don't auto-switch in dark mode |
+| `bg-amber-50 text-amber-700` without `dark:` overrides | Use semantic class `status-warning` (or `alert-warning`, `icon-bg-amber`) — check `globals.css` for available classes before adding inline `dark:` overrides |
 | `<textarea>` or `<input>` with `text-foreground` but no `bg-*` | Add `bg-background` — browser default bg is white, causing white-on-white in dark mode |
-| `bg-green-100` circles/badges in dark mode | Add `dark:bg-green-900/30` — light pastel backgrounds look like bright holes in dark UI |
+| `bg-green-100` circles/badges in dark mode | Use `icon-bg-emerald` or `icon-bg-green` — or add `dark:bg-green-900/30` if no semantic class fits |
 
 ---
 
@@ -833,4 +852,4 @@ refactor(css): consolidate safe areas
 - [ ] **Works in landscape mode** (no bottom gap, side padding correct)
 - [ ] Modals don't overflow screen in landscape
 - [ ] **Accessibility**: form inputs have labels, interactive elements are keyboard accessible, heading hierarchy is logical
-- [ ] **Dark mode**: every hardcoded `bg-{color}-50/100` and `text-{color}-700/800/900` has a `dark:` override
+- [ ] **Dark mode**: use semantic classes (`status-*`, `icon-bg-*`, `alert-*`) from `globals.css` — only add inline `dark:` overrides when no class fits. Landing page is exempt.
