@@ -311,30 +311,28 @@ export function MessageDetailModal({
 
           {/* Compose row: textarea + send button */}
           <div className="flex items-end gap-2">
-            <div className="flex-1 min-w-0">
-              <textarea
-                value={replyText}
-                onChange={(e) => { setReplyText(e.target.value); setSendError(null); }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                dir="auto"
-                placeholder={t('messages.typeReply' as TranslationKey)}
-                aria-label={t('messages.typeReply' as TranslationKey)}
-                rows={1}
-                className="w-full resize-none rounded-full border border-theme-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
-                style={{ minHeight: '40px', maxHeight: '120px' }}
-                disabled={isReplying}
-              />
-            </div>
+            <textarea
+              value={replyText}
+              onChange={(e) => { setReplyText(e.target.value); setSendError(null); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              dir="auto"
+              placeholder={t('messages.typeReply' as TranslationKey)}
+              aria-label={t('messages.typeReply' as TranslationKey)}
+              rows={1}
+              className="flex-1 min-w-0 resize-none rounded-full border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+              style={{ height: '42px', maxHeight: '120px' }}
+              disabled={isReplying}
+            />
             <button
               onClick={handleSend}
               disabled={!replyText.trim() || isReplying}
               aria-label={t('comments.reply' as TranslationKey)}
-              className="flex-shrink-0 w-10 h-10 rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
+              className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
             >
               {isReplying
                 ? <Loader2 className="w-4 h-4 animate-spin" />
