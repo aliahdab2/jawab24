@@ -23,6 +23,10 @@ vi.mock('@/lib/store', () => ({
     useAuthStore: () => ({
         isAuthenticated: true,
     }),
+    useUIStore: Object.assign(
+        (selector: (s: Record<string, unknown>) => unknown) => selector({ theme: 'system', language: 'en', setTheme: vi.fn(), setLanguage: vi.fn(), _hasHydrated: true }),
+        { getState: () => ({ theme: 'system', language: 'en', setTheme: vi.fn(), setLanguage: vi.fn(), _hasHydrated: true }) }
+    ),
 }));
 
 // Mock @/lib/api to use axios mock adapter

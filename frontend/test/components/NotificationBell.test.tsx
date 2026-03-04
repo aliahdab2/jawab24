@@ -370,7 +370,7 @@ describe('NotificationBell', () => {
 
             // Read notification has surface hover
             const readNotif = screen.getByText('Subscription Renewed').closest('div[class*="cursor-pointer"]');
-            expect(readNotif?.className).toContain('hover:bg-surface-50');
+            expect(readNotif?.className).toContain('hover:bg-muted');
         });
 
         it('should display notification content structure (title, body, timestamp)', async () => {

@@ -10,7 +10,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
   const { t } = useTranslation();
 
   return (
-    <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3">
+    <Card className="border-none shadow-md shadow-theme-border/30 p-4 landscape:p-3">
       <div className="flex items-center gap-4 mb-4 landscape:mb-3">
         <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
           <Sparkles className="w-5 h-5" />

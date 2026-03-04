@@ -120,16 +120,16 @@ describe('SwipeableNotificationItem', () => {
     expect(outer?.className).toContain('custom-class');
   });
 
-  it('should render foreground with bg-white class', () => {
+  it('should render foreground with bg-card class', () => {
     const { container } = render(
       <SwipeableNotificationItem onDismiss={vi.fn()}>
         <span>Content</span>
       </SwipeableNotificationItem>
     );
 
-    // The foreground div (last child of outer) should have bg-white
+    // The foreground div (last child of outer) should have bg-card
     const outer = container.firstElementChild;
     const foreground = outer?.lastElementChild;
-    expect(foreground?.className).toContain('bg-white');
+    expect(foreground?.className).toContain('bg-card');
   });
 });
