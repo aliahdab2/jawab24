@@ -387,13 +387,15 @@ test.describe('Rules Page', () => {
     });
 
     await page.goto('/en/rules');
-    await page.waitForLoadState('domcontentloaded');
+    await page.waitForLoadState('networkidle');
 
+    // Page should not show an unrecoverable crash
     await expect(page.locator('text=Something went wrong')).not.toBeVisible({ timeout: 10000 });
 
-    // Wait for page to render some content despite API failures
-    await expect(page.locator('body')).not.toBeEmpty({ timeout: 5000 });
-    const bodyText = await page.locator('body').innerText();
-    expect(bodyText.length).toBeGreaterThan(20);
+    // Verify the page rendered — wait for any visible text content
+    await expect(async () => {
+      const bodyText = await page.locator('body').innerText();
+      expect(bodyText.length).toBeGreaterThan(20);
+    }).toPass({ timeout: 10000 });
   });
 });
