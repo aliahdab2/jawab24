@@ -76,6 +76,7 @@ vi.mock('../../src/services/workspaceSettings', () => ({
     workspaceSettingsService: {
         isCommentsAutoReplyEnabled: vi.fn(),
         isMessagesAutoReplyEnabled: vi.fn(),
+        isAutoReplyEnabledFromSettings: vi.fn(),
         getReplyDelay: vi.fn(),
         getSettings: vi.fn(),
         getAwayMessage: vi.fn(),
@@ -238,8 +239,15 @@ describe('InstagramReplyService', () => {
         vi.mocked(pagesService.getPageByInstagramId).mockResolvedValue(mockPage as any);
         vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
         vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
-        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ aiEnabled: true } as any);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            aiEnabled: true,
+            commentsAutoReply: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+            handoffPauseDurationMinutes: 30,
+        } as any);
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'AI generated reply',
             replyMethod: 'ai' as const,
@@ -317,7 +325,7 @@ describe('InstagramReplyService', () => {
         });
 
         it('should return error when comments auto-reply is disabled', async () => {
-            vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(false);
+            vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
             setupDbForComment();
 
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
@@ -391,7 +399,7 @@ describe('InstagramReplyService', () => {
         });
 
         it('should send away message when auto-reply disabled and away message configured', async () => {
-            vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(false);
+            vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
             vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are currently away');
             setupDbForMessage();
 
@@ -405,7 +413,7 @@ describe('InstagramReplyService', () => {
         });
 
         it('should not fail if away message sending fails', async () => {
-            vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(false);
+            vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
             vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('Away');
             vi.mocked(instagramService.sendDirectMessage).mockRejectedValue(new Error('blocked'));
             setupDbForMessage();
@@ -445,7 +453,13 @@ describe('InstagramReplyService', () => {
         });
 
         it('should skip reply when AI is disabled and no template matches', async () => {
-            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ aiEnabled: false } as any);
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+                aiEnabled: false,
+                commentsAutoReply: true,
+                messagesAutoReply: true,
+                replyDelay: 0,
+                handoffPauseDurationMinutes: 30,
+            } as any);
             vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
                 replyText: null,
                 replyMethod: 'ai' as const,

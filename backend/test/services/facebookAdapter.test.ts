@@ -17,8 +17,17 @@ vi.mock('../../src/services/messages', () => ({
     },
 }));
 
+// Mock Redis (used by sender-name cache layer)
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+    },
+}));
+
 import { facebookService } from '../../src/services/facebook';
 import { messagesService } from '../../src/services/messages';
+import { redis } from '../../src/lib/redis';
 
 describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     const adapter = new FacebookMessageAdapter();
@@ -77,5 +86,40 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
         expect(messagesService.getSenderNameBySenderId).not.toHaveBeenCalled();
         // getSenderProfile called without pageId (no Conversations API fallback)
         expect(facebookService.getSenderProfile).toHaveBeenCalledWith(SENDER_ID, ACCESS_TOKEN, undefined);
+    });
+
+    it('returns name from Redis cache on DB miss (skips Facebook API)', async () => {
+        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(redis.get).mockResolvedValue('Redis Cached Name');
+
+        const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
+
+        expect(name).toBe('Redis Cached Name');
+        expect(redis.get).toHaveBeenCalledWith(`sender_name:${SENDER_ID}`);
+        expect(facebookService.getSenderProfile).not.toHaveBeenCalled();
+    });
+
+    it('writes name to Redis after Facebook API fetch', async () => {
+        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(redis.get).mockResolvedValue(null);
+        vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'From API' });
+
+        const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
+
+        expect(name).toBe('From API');
+        expect(redis.set).toHaveBeenCalledWith(
+            `sender_name:${SENDER_ID}`, 'From API', 'EX', 86400,
+        );
+    });
+
+    it('falls through to API when Redis throws', async () => {
+        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(redis.get).mockRejectedValue(new Error('Redis down'));
+        vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'Fallback API' });
+
+        const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
+
+        expect(name).toBe('Fallback API');
+        expect(facebookService.getSenderProfile).toHaveBeenCalled();
     });
 });

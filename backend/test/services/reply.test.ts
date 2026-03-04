@@ -98,6 +98,7 @@ describe('Reply Service', () => {
         // Default mock implementations for workspaceSettingsService
         vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
         vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             aiEnabled: true,
