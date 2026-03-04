@@ -19,23 +19,13 @@ export function DemoLoginButton() {
 
   return (
     <>
-      {/* Divider */}
-      <div className="relative flex items-center justify-center">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-surface-200"></div>
-        </div>
-        <div className="relative bg-white px-4">
-          <span className="text-sm text-surface-400 font-medium">{t('auth.or')}</span>
-        </div>
-      </div>
-      
       {/* Demo Button */}
       <Button
         onClick={login}
         loading={isLoading}
         variant="secondary"
         size="lg"
-        className="w-full py-5 sm:py-6 rounded-2xl border-2 border-dashed border-brand-300 hover:border-brand-500 hover:bg-brand-50 font-bold text-base lg:text-lg transition-all"
+        className="w-full mt-3 py-5 sm:py-6 rounded-2xl border-2 border-dashed border-brand-300 hover:border-brand-500 hover:bg-brand-50 font-bold text-base lg:text-lg transition-all"
       >
         <div className="flex items-center justify-center gap-3">
           <Play className="w-5 h-5 lg:w-6 lg:h-6 text-brand-600" />

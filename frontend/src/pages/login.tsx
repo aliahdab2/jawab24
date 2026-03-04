@@ -382,19 +382,6 @@ export default function LoginPage() {
                 ))}
               </div>
 
-              {/* Mobile testimonial strip */}
-              <div className="lg:hidden flex items-center gap-3 p-3 rounded-xl bg-surface-50 border border-surface-100 mb-1 animate-slide-up animation-delay-500">
-                <div className="flex gap-0.5 flex-shrink-0">
-                  {[1, 2, 3, 4, 5].map(s => (
-                    <Star key={s} className="w-3 h-3 text-amber-400 fill-amber-400" aria-hidden="true" />
-                  ))}
-                </div>
-                <p className="text-xs text-surface-600 font-medium italic line-clamp-2 min-w-0">
-                  &ldquo;{t('auth.testimonialQuote')}&rdquo;
-                  <span className="not-italic text-surface-400 ms-1">— {t('auth.testimonialAuthor')}</span>
-                </p>
-              </div>
-
               <div className="space-y-5">
                 {/* Shopify-first install banner */}
                 {urlParams?.get('shopify_pending') === 'true' && (
