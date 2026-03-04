@@ -43,12 +43,12 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   const getIconBg = () => {
     switch (variant) {
       case 'danger':
-        return 'bg-red-100 dark:bg-red-900/30';
+        return 'icon-bg-red';
       case 'warning':
-        return 'bg-amber-100 dark:bg-amber-900/30';
+        return 'icon-bg-amber';
       case 'info':
       default:
-        return 'bg-brand-100 dark:bg-brand-900/30';
+        return 'icon-bg-brand';
     }
   };
 

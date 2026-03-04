@@ -21,8 +21,8 @@ export function DemoBanner({ className = '' }: DemoBannerProps) {
   if (!isDemoUser) return null;
 
   return (
-    <div className={`bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700 px-4 py-2 ${className}`}>
-      <div className="flex items-center justify-center gap-2 text-amber-800 dark:text-amber-300">
+    <div className={`alert-warning border-b px-4 py-2 ${className}`}>
+      <div className="flex items-center justify-center gap-2">
         <Info className="w-4 h-4 flex-shrink-0" />
         <span className="text-sm font-medium">{t('auth.demoBanner')}</span>
       </div>

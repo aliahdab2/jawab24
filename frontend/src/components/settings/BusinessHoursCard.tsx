@@ -77,8 +77,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                     className={clsx(
                       'px-2 py-0.5 rounded-full text-[10px] font-bold transition-all animate-in fade-in',
                       isActive
-                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50'
-                        : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
+                        ? 'status-success hover:bg-emerald-200 dark:hover:bg-emerald-900/50'
+                        : 'status-error hover:bg-red-200 dark:hover:bg-red-900/50'
                     )}
                   >
                     {isActive ? '🟢' : '🔴'} {isActive ? t('settings.businessHours.statusActive' as TranslationKey) : t('settings.businessHours.statusInactive' as TranslationKey)}
@@ -103,8 +103,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
             {/* During Hours */}
             <div className="flex items-center justify-center gap-3">
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                  <Clock className="w-7 h-7 text-green-600" />
+                <div className="w-14 h-14 rounded-2xl icon-bg-green flex items-center justify-center">
+                  <Clock className="w-7 h-7" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
                   {t('settings.businessHours.duringLabel')}
@@ -124,8 +124,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
             {/* Outside Hours */}
             <div className="flex items-center justify-center gap-3">
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                  <Clock className="w-7 h-7 text-purple-600" />
+                <div className="w-14 h-14 rounded-2xl icon-bg-purple flex items-center justify-center">
+                  <Clock className="w-7 h-7" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
                   {t('settings.businessHours.outsideLabel')}
@@ -133,8 +133,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               </div>
               <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                  <Mail className="w-7 h-7 text-orange-600" />
+                <div className="w-14 h-14 rounded-2xl icon-bg-orange flex items-center justify-center">
+                  <Mail className="w-7 h-7" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
                   {t('settings.businessHours.awayMessage')}
@@ -176,7 +176,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
 
             {/* Error Message */}
             {hasError && settings.businessHoursOnly && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 animate-in fade-in slide-in-from-top-1">
+              <div className="flex items-start gap-2 p-3 rounded-xl alert-error border animate-in fade-in slide-in-from-top-1">
                 <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-bold text-red-700">{t('settings.businessHoursError' as TranslationKey)}</p>

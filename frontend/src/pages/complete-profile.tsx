@@ -244,7 +244,7 @@ export default function CompleteProfilePage() {
             {/* Server error */}
             {error && !showEmailError && (
               <div 
-                className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-xl animate-fade-in"
+                className="p-4 alert-error border rounded-xl animate-fade-in"
                 role="alert"
               >
                 <p className={`text-sm text-red-800 dark:text-red-300 flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>

@@ -106,7 +106,7 @@ export function PageAccordionItem({
               {page.commentsCount || 0} {t('dashboard.comments')}
             </span>
             {pendingCount > 0 && (
-              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">
+              <span className="text-xs font-semibold status-warning px-1.5 py-0.5 rounded">
                 {pendingCount} {t('dashboard.pending')}
               </span>
             )}

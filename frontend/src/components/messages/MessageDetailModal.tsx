@@ -188,7 +188,7 @@ export function MessageDetailModal({
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className={clsx(
               "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner flex-shrink-0",
-              conversation.needsHumanAttention ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-brand-100 text-brand-600'
+              conversation.needsHumanAttention ? 'icon-bg-red' : 'icon-bg-brand'
             )}>
               <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
@@ -304,7 +304,7 @@ export function MessageDetailModal({
           className="p-4 sm:p-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
         >
           {sendError && (
-            <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-xs font-medium">
+            <div className="mb-3 px-3 py-2 rounded-lg alert-error text-xs font-medium">
               {sendError}
             </div>
           )}

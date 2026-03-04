@@ -83,20 +83,20 @@ interface GapData {
 // ────────────────────────────────────────────
 
 const INTENT_COLORS: Record<string, string> = {
-    QUESTION: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-    COMPLAINT: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-    COMPLIMENT: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-    PURCHASE_INTENT: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+    QUESTION: 'status-info',
+    COMPLAINT: 'status-error',
+    COMPLIMENT: 'status-success',
+    PURCHASE_INTENT: 'status-violet',
     GREETING: 'bg-muted text-foreground',
-    BUSINESS_INQUIRY: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-    OFFENSIVE: 'bg-red-200 text-red-900 dark:bg-red-900/30 dark:text-red-300',
+    BUSINESS_INQUIRY: 'status-warning',
+    OFFENSIVE: 'status-error',
     SPAM_OR_IRRELEVANT: 'bg-muted text-muted-foreground',
 };
 
 const CONFIDENCE_COLORS: Record<string, string> = {
-    high: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-    medium: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-    low: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+    high: 'status-success',
+    medium: 'status-warning',
+    low: 'status-error',
 };
 
 const QUALITY_BORDER: Record<string, string> = {
@@ -884,7 +884,7 @@ export default function AdminPlaygroundPage() {
                                                         {msg.metadata.gapRecorded && (
                                                             <>
                                                                 <span aria-hidden="true">·</span>
-                                                                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{t('admin.playground.gapRecorded')}</Badge>
+                                                                <Badge className="status-warning">{t('admin.playground.gapRecorded')}</Badge>
                                                             </>
                                                         )}
                                                     </div>
@@ -1071,8 +1071,8 @@ export default function AdminPlaygroundPage() {
                                             </div>
 
                                             {kbStatus.kbActiveVersion === null && (
-                                                <div className="p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg mb-3">
-                                                    <p className="text-xs text-amber-700 dark:text-amber-300">{t('admin.playground.noActiveVersion')}</p>
+                                                <div className="p-3 alert-warning border rounded-lg mb-3">
+                                                    <p className="text-xs">{t('admin.playground.noActiveVersion')}</p>
                                                 </div>
                                             )}
 
@@ -1207,7 +1207,7 @@ export default function AdminPlaygroundPage() {
                                                                     x{gap.occurrenceCount}
                                                                 </Badge>
                                                                 {gap.resolved && (
-                                                                    <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                                                                    <Badge className="status-success">
                                                                         {t('admin.playground.gapResolved')}
                                                                     </Badge>
                                                                 )}

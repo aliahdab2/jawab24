@@ -332,7 +332,7 @@ const CommentsPage: NextPageWithLayout = () => {
         icon: Sparkles,
         variant: 'empty',
         iconColorClass: 'text-violet-500',
-        iconBgClass: 'bg-violet-50 dark:bg-violet-900/30',
+        iconBgClass: 'icon-bg-violet-light',
         title: t('comments.emptyAutoReplied' as TranslationKey),
         subtitle: t('comments.emptyAutoRepliedSub' as TranslationKey),
       },

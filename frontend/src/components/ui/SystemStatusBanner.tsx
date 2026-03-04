@@ -52,13 +52,13 @@ export function SystemStatusBanner({
 
   const Icon = isSuccess ? Zap : isWarning ? AlertTriangle : AlertCircle;
 
-  const bgClass = isSuccess ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' :
-                  isWarning ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-900 dark:text-amber-300' :
-                  'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-900 dark:text-red-300';
+  const bgClass = isSuccess ? 'alert-success' :
+                  isWarning ? 'alert-warning' :
+                  'alert-error';
 
-  const iconBgClass = isSuccess ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400' :
-                        isWarning ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400' :
-                        'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400';
+  const iconBgClass = isSuccess ? 'icon-bg-emerald' :
+                        isWarning ? 'icon-bg-amber' :
+                        'icon-bg-red';
 
   const borderAccent = isSuccess ? 'border-s-4 border-s-emerald-500'
     : isWarning ? 'border-s-4 border-s-amber-500'

@@ -313,7 +313,7 @@ const RulesPage: NextPageWithLayout = () => {
             />
           </div>
           {modalKeywordConflicts.length > 0 && (
-            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 border border-amber-100 dark:border-amber-700 text-xs text-amber-700 dark:text-amber-300">
+            <div className="p-3 rounded-xl alert-warning border text-xs">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <div>

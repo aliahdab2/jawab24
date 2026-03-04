@@ -35,11 +35,11 @@ interface Pagination {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-    active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-    trialing: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-    past_due: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-    canceled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
-    paused: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300',
+    active: 'status-success',
+    trialing: 'status-info',
+    past_due: 'status-warning',
+    canceled: 'status-error',
+    paused: 'bg-muted text-muted-foreground',
 };
 
 export default function AdminCustomersPage() {
@@ -264,7 +264,7 @@ export default function AdminCustomersPage() {
                                                 {customer.subscription ? (
                                                     <span className={clsx(
                                                         'inline-flex px-2 py-1 text-xs font-medium rounded-full',
-                                                        STATUS_COLORS[customer.subscription.status] || 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'
+                                                        STATUS_COLORS[customer.subscription.status] || 'bg-muted text-muted-foreground'
                                                     )}>
                                                         {t(`admin.customers.status.${customer.subscription.status}` as TranslationKey) || customer.subscription.status}
                                                     </span>

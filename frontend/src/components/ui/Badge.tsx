@@ -11,10 +11,10 @@ interface BadgeProps {
 
 export function Badge({ children, variant = 'default', size = 'md', className, onClick }: BadgeProps) {
   const variantClasses = {
-    success: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800',
-    warning: 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800',
-    error: 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800',
-    info: 'bg-brand-50 text-brand-700 border border-brand-100',
+    success: 'status-success border',
+    warning: 'status-warning border',
+    error: 'status-error border',
+    info: 'status-brand border',
     default: 'bg-surface-50 text-surface-600 border border-surface-200',
   };
 

@@ -17,12 +17,12 @@ interface EmptyStateProps {
 
 const variantStyles: Record<EmptyStateVariant, { iconBg: string; iconColor: string }> = {
   empty: {
-    iconBg: 'bg-brand-50',
-    iconColor: 'text-brand-600',
+    iconBg: 'icon-bg-brand-light',
+    iconColor: '',
   },
   success: {
-    iconBg: 'bg-emerald-50 dark:bg-emerald-900/30',
-    iconColor: 'text-emerald-500 dark:text-emerald-400',
+    iconBg: 'icon-bg-emerald-light',
+    iconColor: '',
   },
   search: {
     iconBg: 'bg-muted',

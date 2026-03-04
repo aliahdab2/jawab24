@@ -47,16 +47,16 @@ interface NotificationStyle {
 }
 
 const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
-    stale_comment:         { icon: Bell,          iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'ring-amber-200/60 dark:ring-amber-700/60' },
-    new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600 dark:text-blue-400',       bgColor: 'bg-blue-50 dark:bg-blue-900/30',       ringColor: 'ring-blue-200/60 dark:ring-blue-700/60' },
-    flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'ring-red-200/60 dark:ring-red-700/60' },
-    skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'ring-amber-200/60 dark:ring-amber-700/60' },
-    payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'ring-red-200/60 dark:ring-red-700/60' },
-    subscription_expiring: { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'ring-orange-200/60 dark:ring-orange-700/60' },
-    trial_ending:          { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'ring-orange-200/60 dark:ring-orange-700/60' },
-    subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'ring-emerald-200/60 dark:ring-emerald-700/60' },
-    page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600 dark:text-slate-400',     bgColor: 'bg-slate-100 dark:bg-slate-900/30',    ringColor: 'ring-slate-200/60 dark:ring-slate-700/60' },
-    kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'ring-amber-200/60 dark:ring-amber-700/60' },
+    stale_comment:         { icon: Bell,          iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
+    new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600 dark:text-blue-400',       bgColor: 'bg-blue-50 dark:bg-blue-900/30',       ringColor: 'notif-ring-blue' },
+    flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
+    skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
+    payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
+    subscription_expiring: { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
+    trial_ending:          { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
+    subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
+    page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600 dark:text-slate-400',     bgColor: 'bg-slate-100 dark:bg-slate-900/30',    ringColor: 'notif-ring-slate' },
+    kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
 };
 
 const DEFAULT_STYLE: NotificationStyle = {

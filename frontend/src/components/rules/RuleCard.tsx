@@ -127,7 +127,7 @@ export function RuleCard({
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {(rule.keywords || []).map((keyword) => (
-                  <span key={keyword} className="px-2.5 py-1 rounded-lg bg-card border border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300 text-xs font-bold shadow-sm">
+                  <span key={keyword} className="px-2.5 py-1 rounded-lg bg-card status-info border text-xs font-bold shadow-sm">
                     {keyword}
                   </span>
                 ))}

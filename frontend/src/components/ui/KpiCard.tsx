@@ -66,11 +66,11 @@ export function KpiCard({
 
                 <div className={clsx(
                     "w-11 h-11 sm:w-13 sm:h-13 rounded-2xl flex items-center justify-center shadow-lg transition-all duration-500 group-hover:rotate-6 group-hover:scale-110 flex-shrink-0",
-                    color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
-                        color === 'emerald' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 shadow-emerald-500/10' :
-                            color === 'amber' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 shadow-amber-500/10' :
-                                color === 'violet' ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 shadow-violet-500/10' :
-                                    'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 shadow-red-500/10'
+                    color === 'brand' ? 'icon-bg-brand-light' :
+                        color === 'emerald' ? 'icon-bg-emerald-light' :
+                            color === 'amber' ? 'icon-bg-amber-light' :
+                                color === 'violet' ? 'icon-bg-violet-light' :
+                                    'icon-bg-red-light'
                 )}>
                     <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>

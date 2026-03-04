@@ -106,7 +106,7 @@ export function CommentCard({
     return (
       <div className={clsx(
         "w-8 h-8 rounded-full flex items-center justify-center shadow-sm border-2 border-card",
-        isAI ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+        isAI ? "reply-source-ai" : "reply-source-template"
       )}>
         {isAI ? <Sparkles className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
       </div>
@@ -142,14 +142,14 @@ export function CommentCard({
       {/* Needs Attention Badge */}
       {needsAttention ? (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
-           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100 dark:border-red-800">
+           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full status-error border text-[10px] font-bold uppercase tracking-wider animate-pulse-soft">
              <AlertTriangle className="w-3 h-3" />
              {t('comments.needsAttention')}
            </div>
         </div>
       ) : !comment.replied && (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
-           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider border border-amber-100 dark:border-amber-800">
+           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full status-warning border text-[10px] font-bold uppercase tracking-wider">
               <Clock className="w-3 h-3" />
               {t('comments.pending')}
            </div>
@@ -215,7 +215,7 @@ export function CommentCard({
 
                  {/* Bubble */}
                  <div className="relative">
-                    <div className="px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl rounded-se-sm text-foreground dark:text-emerald-200 text-sm leading-relaxed border border-emerald-100 dark:border-emerald-800 shadow-sm">
+                    <div className="px-4 py-3 reply-bubble rounded-2xl rounded-se-sm text-sm leading-relaxed border shadow-sm">
                        <p className={clsx(variant === 'compact' ? "line-clamp-2 italic" : "whitespace-pre-wrap")}>
                           {comment.replyText}
                        </p>
