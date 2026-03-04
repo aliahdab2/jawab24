@@ -189,6 +189,25 @@ export class WorkspaceSettingsService {
     }
 
     /**
+     * Synchronous check: is auto-reply enabled for messages or comments?
+     * Accepts a pre-fetched WorkspaceSettings object to avoid redundant Redis calls.
+     */
+    isAutoReplyEnabledFromSettings(settings: WorkspaceSettings, type: 'messages' | 'comments'): boolean {
+        const flag = type === 'messages' ? settings.messagesAutoReply : settings.commentsAutoReply;
+        if (!flag) return false;
+
+        if (settings.businessHoursOnly) {
+            return this.isWithinBusinessHours(
+                settings.businessHoursStart,
+                settings.businessHoursEnd,
+                settings.timezone,
+            );
+        }
+
+        return true;
+    }
+
+    /**
      * Check if current time is within business hours.
      */
     private isWithinBusinessHours(start: string, end: string, timezone: string): boolean {

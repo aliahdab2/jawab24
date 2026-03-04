@@ -138,7 +138,7 @@ export class MessageProcessor {
             //    When replyDelay > 0, skip this early check — the delay acts as a
             //    consolidation window, and we re-check after the delay (step 10b).
             const internalMessageId = adapter.getInternalMessageId(platformMessageId);
-            const replyDelay = await workspaceSettingsService.getReplyDelay(workspaceId);
+            const replyDelay = userSettings.replyDelay;
             if (replyDelay === 0) {
                 const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, internalMessageId);
                 lap('5-debounce');
@@ -151,10 +151,15 @@ export class MessageProcessor {
                 lap('5-debounce(skipped,delay>0)');
             }
 
-            // 6. Handoff pause check
+            // 6-8. Run independent guard checks in parallel to reduce latency
             const pauseMinutes = userSettings.handoffPauseDurationMinutes;
-            const isPaused = await messagesService.isPaused(page.id, senderId, pauseMinutes);
-            lap('6-isPaused');
+            const isMessagesEnabled = workspaceSettingsService.isAutoReplyEnabledFromSettings(userSettings, 'messages');
+            const [isPaused, rateCheck] = await Promise.all([
+                messagesService.isPaused(page.id, senderId, pauseMinutes),
+                rateLimiter.check(page.id, senderId, 'message'),
+            ]);
+            lap('6-8-guardChecks');
+
             if (isPaused) {
                 const remainingMs = await messagesService.getRemainingPauseMs(page.id, senderId, pauseMinutes);
                 const delayMs = remainingMs > 0 ? remainingMs + 5000 : pauseMinutes * 60 * 1000;
@@ -165,18 +170,12 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Handoff active', handoffDelayMs: delayMs };
             }
 
-            // 7. Rate limit check
-            const rateCheck = await rateLimiter.check(page.id, senderId, 'message');
-            lap('7-rateLimit');
             if (!rateCheck.allowed) {
                 pipelineMetrics.record(pipeline, 'rate_limited');
                 this.logger.info(`[${platform}] Message rate limited`, { senderId, count: rateCheck.count });
                 return { success: false, messageId: platformMessageId, error: 'Rate limited' };
             }
 
-            // 8. Workspace settings check
-            const isMessagesEnabled = await workspaceSettingsService.isMessagesAutoReplyEnabled(workspaceId);
-            lap('8-settingsCheck');
             if (!isMessagesEnabled) {
                 const customerLang = detectLanguageCode(messageText);
                 const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);

@@ -80,8 +80,9 @@ export class CommentProcessor {
             const userId = page.userId;
             const workspaceId = page.workspaceId;
 
-            // 2. Check workspace settings
-            const isCommentsEnabled = await workspaceSettingsService.isCommentsAutoReplyEnabled(workspaceId);
+            // 2. Load workspace settings (cached in Redis)
+            const userSettings = await workspaceSettingsService.getSettings(workspaceId);
+            const isCommentsEnabled = workspaceSettingsService.isAutoReplyEnabledFromSettings(userSettings, 'comments');
 
             // 3. Find or create content entity (post/media)
             const content = await adapter.findOrCreateContent(page.id, contentId);
@@ -126,11 +127,14 @@ export class CommentProcessor {
             }
 
             try {
-            // 5. Handoff pause check
-            const userSettings = await workspaceSettingsService.getSettings(workspaceId);
+            // 5-6. Run independent guard checks in parallel
             if (fromId) {
                 const pauseMinutes = userSettings.handoffPauseDurationMinutes;
-                const isPaused = await messagesService.isPaused(page.id, fromId, pauseMinutes);
+                const [isPaused, rateCheck] = await Promise.all([
+                    messagesService.isPaused(page.id, fromId, pauseMinutes),
+                    rateLimiter.check(page.id, fromId, 'comment'),
+                ]);
+
                 if (isPaused) {
                     const remainingMs = await messagesService.getRemainingPauseMs(page.id, fromId, pauseMinutes);
                     const delayMs = remainingMs > 0 ? remainingMs + 5000 : pauseMinutes * 60 * 1000;
@@ -140,11 +144,7 @@ export class CommentProcessor {
                     });
                     return { success: false, commentId: comment.id, error: 'Handoff active', handoffDelayMs: delayMs };
                 }
-            }
 
-            // 6. Rate limit check
-            if (fromId) {
-                const rateCheck = await rateLimiter.check(page.id, fromId, 'comment');
                 if (!rateCheck.allowed) {
                     pipelineMetrics.record(pipeline, 'rate_limited');
                     this.logger.info(`[${platform}] Comment rate limited`, { fromId, count: rateCheck.count });
@@ -155,7 +155,7 @@ export class CommentProcessor {
             }
 
             // 7. Reply delay
-            const replyDelay = await workspaceSettingsService.getReplyDelay(workspaceId);
+            const replyDelay = userSettings.replyDelay;
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
             }

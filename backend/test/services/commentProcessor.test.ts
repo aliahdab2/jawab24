@@ -111,13 +111,13 @@ describe('CommentProcessor', () => {
         vi.clearAllMocks();
         await pipelineMetrics.reset();
 
-        vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
-        vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
             commentsAutoReply: true,
+            replyDelay: 0,
         } as any);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
@@ -231,7 +231,7 @@ describe('CommentProcessor', () => {
     });
 
     it('should return error when comments auto-reply disabled in settings', async () => {
-        vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
         const adapter = createMockAdapter();
 
         const result = await commentProcessor.processComment(
@@ -283,6 +283,7 @@ describe('CommentProcessor', () => {
             userId: 'user-uuid',
             aiEnabled: true,
             commentsAutoReply: true,
+            replyDelay: 0,
             handoffPauseDurationMinutes: 15,
         } as any);
         const adapter = createMockAdapter();

@@ -85,12 +85,13 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         vi.clearAllMocks();
         pipelineMetrics.reset();
 
-        vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
-        vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
         } as any);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
@@ -258,12 +259,13 @@ describe('MessageProcessor — Handoff Re-enqueue', () => {
         vi.clearAllMocks();
         pipelineMetrics.reset();
 
-        vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
-        vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
             aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
             handoffPauseDurationMinutes: 20,
         } as any);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
