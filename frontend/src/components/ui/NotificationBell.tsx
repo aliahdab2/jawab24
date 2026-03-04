@@ -385,7 +385,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         indented && 'ps-14',
                         isUnread
                             ? 'bg-brand-50/40 hover:bg-brand-50/70'
-                            : 'hover:bg-surface-50',
+                            : 'hover:bg-muted',
                     )}
                     onClick={() => handleNotificationClick(notification)}
                 >
@@ -410,8 +410,8 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 <p className={clsx(
                                     'text-[13px] leading-snug truncate',
                                     isUnread
-                                        ? 'font-semibold text-surface-900'
-                                        : 'font-normal text-surface-500',
+                                        ? 'font-semibold text-foreground'
+                                        : 'font-normal text-muted-foreground',
                                 )}>
                                     {notification.title}
                                 </p>
@@ -423,7 +423,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                             {/* Body */}
                             <p className={clsx(
                                 'text-xs leading-relaxed mt-0.5 line-clamp-2',
-                                isUnread ? 'text-surface-600' : 'text-surface-400',
+                                isUnread ? 'text-muted-foreground' : 'text-surface-400',
                             )}>
                                 {notification.body}
                             </p>
@@ -456,8 +456,8 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         <div className="flex items-center self-center flex-shrink-0">
                             {getNotificationRoute(notification) ? (
                                 <>
-                                    <ChevronRight className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors ltr:block rtl:hidden" />
-                                    <ChevronLeft className="w-4 h-4 text-surface-300 group-hover:text-surface-500 transition-colors rtl:block ltr:hidden" />
+                                    <ChevronRight className="w-4 h-4 text-surface-300 group-hover:text-muted-foreground transition-colors ltr:block rtl:hidden" />
+                                    <ChevronLeft className="w-4 h-4 text-surface-300 group-hover:text-muted-foreground transition-colors rtl:block ltr:hidden" />
                                 </>
                             ) : isUnread ? (
                                 <button
@@ -484,7 +484,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         const typeLabelKey = `notifications.typeLabel.${group.type}` as TranslationKey;
 
         return (
-            <div key={group.id} className="border-b border-surface-100">
+            <div key={group.id} className="border-b border-theme-border">
                 <SwipeableNotificationItem
                     onDismiss={() => handleDismissGroup(group)}
                     enabled={group.unreadCount > 0}
@@ -530,7 +530,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                             : 'hover:bg-white/10 text-white/90'
                         : isOpen
                             ? 'bg-brand-100 text-brand-700'
-                            : 'hover:bg-surface-100 text-surface-600',
+                            : 'hover:bg-muted text-muted-foreground',
                 )}
                 aria-label={t('notifications.title')}
             >
@@ -555,7 +555,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                 <div
                     ref={dropdownRef}
                     className={clsx(
-                        'fixed start-4 end-4 bg-white rounded-2xl shadow-2xl shadow-surface-900/10 border border-surface-100 overflow-hidden z-[100] animate-fade-in',
+                        'fixed start-4 end-4 bg-card rounded-2xl shadow-2xl shadow-surface-900/10 border border-theme-border overflow-hidden z-[100] animate-fade-in',
                         isDark
                             ? 'max-h-[60vh]'
                             : 'top-20 sm:end-auto sm:start-[272px] sm:w-[420px] max-h-[70vh]',
@@ -564,9 +564,9 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                     dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
                     {/* Header Row 1: Title + Close */}
-                    <div className="flex items-center justify-between px-5 pt-3.5 pb-2 bg-gradient-to-b from-surface-50 to-white">
+                    <div className="flex items-center justify-between px-5 pt-3.5 pb-2 bg-gradient-to-b from-muted to-card">
                         <div className="flex items-center gap-2.5">
-                            <h3 className="font-bold text-surface-900">
+                            <h3 className="font-bold text-foreground">
                                 {t('notifications.title')}
                             </h3>
                             {unreadCount > 0 && (
@@ -577,7 +577,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         </div>
                         <button
                             onClick={() => setIsOpen(false)}
-                            className="p-1.5 rounded-lg hover:bg-surface-100 text-surface-400 hover:text-surface-600 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-muted text-surface-400 hover:text-muted-foreground transition-colors"
                             aria-label={t('notifications.close')}
                         >
                             <X className="w-4 h-4" />
@@ -605,7 +605,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 onChange={setActiveFilter}
                                 counts={filterCounts}
                             />
-                            <div className="border-b border-surface-100" />
+                            <div className="border-b border-theme-border" />
                         </>
                     )}
 

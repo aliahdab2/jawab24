@@ -151,17 +151,17 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
       <div
-        className="bg-white rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden"
+        className="bg-card rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden"
         style={{ paddingBottom: '8px' }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-surface-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-theme-border flex-shrink-0">
           <div className="flex items-center gap-3 landscape:gap-2">
             <div className="w-9 h-9 landscape:w-8 landscape:h-8 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center">
               <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-semibold text-surface-900">
+              <h2 className="text-base sm:text-lg font-semibold text-foreground">
                 {t('kb.title' as TranslationKey)}
               </h2>
               <p className="text-xs sm:text-sm text-surface-500 landscape:hidden">{page.name}</p>
@@ -242,7 +242,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-surface-100 flex-shrink-0 bg-surface-50">
+        <div className="flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-theme-border flex-shrink-0 bg-surface-50">
           {/* Raw mode toggle */}
           <button
             type="button"

@@ -138,14 +138,14 @@ export default function AdminCustomersPage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-display font-bold text-surface-900">
+                        <h1 className="text-2xl font-display font-bold text-foreground">
                             {t('admin.customers.title')}
                         </h1>
-                        <p className="text-surface-500 mt-1">
+                        <p className="text-muted-foreground mt-1">
                             {t('admin.customers.subtitle')}
                         </p>
                     </div>
-                    <div className="text-sm text-surface-500">
+                    <div className="text-sm text-muted-foreground">
                         {pagination.total} {t('admin.customers.totalCustomers')}
                     </div>
                 </div>
@@ -155,14 +155,14 @@ export default function AdminCustomersPage() {
                     <div className="flex flex-col sm:flex-row gap-4">
                         {/* Search */}
                         <div className="relative flex-1">
-                            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+                            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <input
                                 type="text"
                                 placeholder={t('admin.customers.searchPlaceholder')}
                                 aria-label={t('admin.customers.searchPlaceholder')}
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                className="w-full ps-10 pe-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
+                                className="w-full ps-10 pe-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
                             />
                         </div>
 
@@ -171,7 +171,7 @@ export default function AdminCustomersPage() {
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
                             aria-label={t('admin.customers.allStatuses')}
-                            className="px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-white"
+                            className="px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card"
                         >
                             <option value="">{t('admin.customers.allStatuses')}</option>
                             <option value="active">{t('admin.customers.status.active')}</option>
@@ -185,7 +185,7 @@ export default function AdminCustomersPage() {
                             value={planFilter}
                             onChange={(e) => setPlanFilter(e.target.value)}
                             aria-label={t('admin.customers.allPlans')}
-                            className="px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-white"
+                            className="px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card"
                         >
                             <option value="">{t('admin.customers.allPlans')}</option>
                             {plans.filter(p => p.isActive).map((plan) => (
@@ -200,7 +200,7 @@ export default function AdminCustomersPage() {
                 {/* Table */}
                 <Card padding="none">
                     {loading ? (
-                        <div className="p-8 text-center text-surface-400">
+                        <div className="p-8 text-center text-muted-foreground">
                             {t('common.loading')}
                         </div>
                     ) : error ? (
@@ -208,55 +208,55 @@ export default function AdminCustomersPage() {
                             {error}
                         </div>
                     ) : customers.length === 0 ? (
-                        <div className="p-8 text-center text-surface-400">
+                        <div className="p-8 text-center text-muted-foreground">
                             {t('admin.customers.noCustomers')}
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full">
-                                <thead className="bg-surface-50 border-b border-surface-200">
+                                <thead className="bg-background border-b border-theme-border">
                                     <tr>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('admin.customers.table.customer')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('admin.customers.table.plan')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('admin.customers.table.status')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('admin.customers.table.periodEnd')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('admin.customers.table.signedUp')}
                                         </th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-surface-100">
+                                <tbody className="divide-y divide-theme-border">
                                     {customers.map((customer) => (
                                         <tr
                                             key={customer.id}
                                             onClick={() => handleRowClick(customer.id)}
-                                            className="hover:bg-surface-50 cursor-pointer transition-colors"
+                                            className="hover:bg-background cursor-pointer transition-colors"
                                         >
                                             <td className="px-4 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 bg-surface-200 rounded-full flex items-center justify-center">
-                                                        <User className="w-4 h-4 text-surface-500" />
+                                                    <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
+                                                        <User className="w-4 h-4 text-muted-foreground" />
                                                     </div>
                                                     <div>
-                                                        <div className="font-medium text-surface-900">
+                                                        <div className="font-medium text-foreground">
                                                             {customer.name || t('admin.customers.noName')}
                                                         </div>
-                                                        <div className="text-sm text-surface-500">
+                                                        <div className="text-sm text-muted-foreground">
                                                             {customer.email || t('admin.customers.noEmail')}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-4 py-4">
-                                                <span className="text-sm font-medium text-surface-700">
+                                                <span className="text-sm font-medium text-foreground/70">
                                                     {customer.subscription?.planName || t('admin.customers.noPlan')}
                                                 </span>
                                             </td>
@@ -269,13 +269,13 @@ export default function AdminCustomersPage() {
                                                         {t(`admin.customers.status.${customer.subscription.status}` as TranslationKey) || customer.subscription.status}
                                                     </span>
                                                 ) : (
-                                                    <span className="text-surface-400 text-sm">-</span>
+                                                    <span className="text-muted-foreground text-sm">-</span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-4 text-sm text-surface-600">
+                                            <td className="px-4 py-4 text-sm text-muted-foreground">
                                                 {formatDate(customer.subscription?.currentPeriodEnd || null)}
                                             </td>
-                                            <td className="px-4 py-4 text-sm text-surface-600">
+                                            <td className="px-4 py-4 text-sm text-muted-foreground">
                                                 {formatDate(customer.createdAt)}
                                             </td>
                                         </tr>
@@ -287,8 +287,8 @@ export default function AdminCustomersPage() {
 
                     {/* Pagination */}
                     {pagination.totalPages > 1 && (
-                        <div className="px-4 py-3 border-t border-surface-200 flex items-center justify-between">
-                            <div className="text-sm text-surface-500">
+                        <div className="px-4 py-3 border-t border-theme-border flex items-center justify-between">
+                            <div className="text-sm text-muted-foreground">
                                 {t('admin.customers.pagination.showing', {
                                     from: (pagination.page - 1) * pagination.limit + 1,
                                     to: Math.min(pagination.page * pagination.limit, pagination.total),
@@ -299,17 +299,17 @@ export default function AdminCustomersPage() {
                                 <button
                                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                                     disabled={pagination.page <= 1}
-                                    className="p-2 rounded-lg border border-surface-200 hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <ChevronLeft className={clsx('w-4 h-4', isRTL && 'rotate-180')} />
                                 </button>
-                                <span className="text-sm text-surface-600">
+                                <span className="text-sm text-muted-foreground">
                                     {pagination.page} / {pagination.totalPages}
                                 </span>
                                 <button
                                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                                     disabled={pagination.page >= pagination.totalPages}
-                                    className="p-2 rounded-lg border border-surface-200 hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <ChevronRight className={clsx('w-4 h-4', isRTL && 'rotate-180')} />
                                 </button>

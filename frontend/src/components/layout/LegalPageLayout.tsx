@@ -57,10 +57,10 @@ export function LegalPageLayout({
         <meta name="twitter:image" content={ogImage} />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-slate-900 text-white">
+      <div className="flex-1 overflow-y-auto bg-background text-foreground">
         {/* Fixed top safe area background */}
         <div
-          className="fixed-safe-bg top-safe-bg bg-slate-900"
+          className="fixed-safe-bg top-safe-bg bg-background"
           aria-hidden="true"
         />
 
@@ -75,7 +75,7 @@ export function LegalPageLayout({
 
           <h1 className="text-4xl font-bold mb-2">{title}</h1>
           {lastUpdatedLabel && lastUpdatedDate && (
-            <p className="text-slate-400 mb-8">
+            <p className="text-muted-foreground mb-8">
               {lastUpdatedLabel} {lastUpdatedDate}
             </p>
           )}
@@ -85,10 +85,10 @@ export function LegalPageLayout({
             {sections.map((section, index) => (
               <section key={index}>
                 <h2 className="text-xl font-semibold text-brand-400 mb-3">{section.title}</h2>
-                <p className="text-slate-300 leading-relaxed">{section.text}</p>
+                <p className="text-foreground/70 leading-relaxed">{section.text}</p>
 
                 {section.items && (
-                  <ul className="mt-3 space-y-2 text-slate-300 ps-6">
+                  <ul className="mt-3 space-y-2 text-foreground/70 ps-6">
                     {section.items.map((item, i) => (
                       <li key={i} className="list-disc">{item}</li>
                     ))}
@@ -112,7 +112,7 @@ export function LegalPageLayout({
                 )}
 
                 {section.corporate && (
-                  <div className="mt-3 text-slate-300 space-y-1">
+                  <div className="mt-3 text-foreground/70 space-y-1">
                     <p><strong>{section.corporate.name}</strong></p>
                     <p>{section.corporate.type}</p>
                     <p>{section.corporate.orgNr}</p>
@@ -124,8 +124,8 @@ export function LegalPageLayout({
           </div>
 
           {/* Version Info */}
-          <div className="mt-12 pt-8 border-t border-slate-700 text-center">
-            <p className="text-xs text-slate-500">
+          <div className="mt-12 pt-8 border-t border-theme-border text-center">
+            <p className="text-xs text-muted-foreground">
               © {new Date().getFullYear()} Jawab24 • v{process.env.NEXT_PUBLIC_BUILD_TIME 
                 ? new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleDateString() 
                 : 'Dev'}
@@ -135,7 +135,7 @@ export function LegalPageLayout({
 
         {/* Fixed bottom safe area background - matches dark page background */}
         <div
-          className="fixed-safe-bg bottom-safe-bg bg-slate-900"
+          className="fixed-safe-bg bottom-safe-bg bg-background"
           aria-hidden="true"
         />
       </div>

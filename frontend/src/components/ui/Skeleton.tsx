@@ -43,9 +43,9 @@ export function Skeleton({
 export function AppSkeleton({ variant = 'default' }: { variant?: 'default' | 'dashboard' | 'landing' }) {
     if (variant === 'dashboard') {
         return (
-            <div className="min-h-screen bg-surface-50">
+            <div className="min-h-screen bg-background">
                 {/* Sidebar skeleton */}
-                <div className="hidden lg:block fixed inset-y-0 start-0 w-64 bg-white border-e border-surface-100">
+                <div className="hidden lg:block fixed inset-y-0 start-0 w-64 bg-card border-e border-theme-border">
                     <div className="p-6 animate-pulse">
                         <Skeleton height={40} width={120} className="mb-8 rounded-xl" />
                         <div className="space-y-3">
@@ -84,9 +84,9 @@ export function AppSkeleton({ variant = 'default' }: { variant?: 'default' | 'da
 
     if (variant === 'landing') {
         return (
-            <div className="min-h-screen bg-white">
+            <div className="min-h-screen bg-card">
                 {/* Nav skeleton */}
-                <div className="border-b border-surface-100 px-6 py-4 animate-pulse">
+                <div className="border-b border-theme-border px-6 py-4 animate-pulse">
                     <div className="max-w-6xl mx-auto flex justify-between items-center">
                         <Skeleton width={140} height={40} className="rounded-xl" />
                         <div className="flex gap-3">
@@ -111,9 +111,9 @@ export function AppSkeleton({ variant = 'default' }: { variant?: 'default' | 'da
         );
     }
 
-    // Default - minimal white screen (no spinner/circular elements)
+    // Default - minimal screen (no spinner/circular elements)
     return (
-        <div className="min-h-screen bg-white" />
+        <div className="min-h-screen bg-card" />
     );
 }
 

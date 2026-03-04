@@ -14,25 +14,25 @@ export default function DataDeletion() {
         <link rel="canonical" href="https://jawab24.com/data-deletion" />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-surface-50 py-12 px-4 sm:px-6 lg:px-8 text-start pt-safe pb-safe px-safe">
-        <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm p-8 border border-surface-200">
-          <h1 className="text-3xl font-bold text-surface-900 mb-8">{t('dataDeletion.header')}</h1>
+      <div className="flex-1 overflow-y-auto bg-background py-12 px-4 sm:px-6 lg:px-8 text-start pt-safe pb-safe px-safe">
+        <div className="max-w-3xl mx-auto bg-card rounded-2xl shadow-sm p-8 border border-theme-border">
+          <h1 className="text-3xl font-bold text-foreground mb-8">{t('dataDeletion.header')}</h1>
 
           <div className="prose prose-slate max-w-none">
-            <p className="text-surface-500 mb-6 italic text-sm">
+            <p className="text-muted-foreground mb-6 italic text-sm">
               <strong>{t('dataDeletion.lastUpdated')}</strong> {t('dataDeletion.updateDate')}
             </p>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.howToDeleteTitle')}</h2>
-              <p className="text-surface-700 mb-4">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.howToDeleteTitle')}</h2>
+              <p className="text-foreground/70 mb-4">
                 {t('dataDeletion.howToDeleteText')}
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.option1Title')}</h2>
-              <ol className="list-decimal ps-6 text-surface-700 space-y-2">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.option1Title')}</h2>
+              <ol className="list-decimal ps-6 text-foreground/70 space-y-2">
                 <li>
                   {t('dataDeletion.option1Step1')}{' '}
                   <a href="https://jawab24.com" className="text-brand-600 hover:underline font-medium">
@@ -43,14 +43,14 @@ export default function DataDeletion() {
                 <li>{t('dataDeletion.option1Step3')} <strong>{t('settings.deleteAccount')}</strong></li>
                 <li>{t('dataDeletion.option1Step4')}</li>
               </ol>
-              <p className="text-surface-600 mt-4 p-3 bg-red-50 rounded-lg border border-red-100 text-sm">
+              <p className="text-muted-foreground mt-4 p-3 bg-red-50 rounded-lg border border-red-100 text-sm">
                 {t('dataDeletion.option1Note')}
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.option2Title')}</h2>
-              <ol className="list-decimal ps-6 text-surface-700 space-y-2">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.option2Title')}</h2>
+              <ol className="list-decimal ps-6 text-foreground/70 space-y-2">
                 <li>
                   {t('dataDeletion.option2Step1')}{' '}
                   <a
@@ -69,24 +69,24 @@ export default function DataDeletion() {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.option3Title')}</h2>
-              <p className="text-surface-700 mb-4">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.option3Title')}</h2>
+              <p className="text-foreground/70 mb-4">
                 {t('dataDeletion.option3Text')}
               </p>
-              <p className="text-surface-700">
+              <p className="text-foreground/70">
                 <strong>{t('dataDeletion.option3Email')}</strong>{' '}
                 <a href="mailto:support@jawab24.com" className="text-brand-600 hover:underline font-medium">
                   support@jawab24.com
                 </a>
               </p>
-              <p className="text-surface-600 mt-4 text-sm">
+              <p className="text-muted-foreground mt-4 text-sm">
                 {t('dataDeletion.option3Note')}
               </p>
             </section>
 
-            <section className="mb-8 p-6 bg-surface-50 rounded-2xl border border-surface-100">
-              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.whatWillBeDeletedTitle')}</h2>
-              <ul className="list-disc ps-6 text-surface-700 space-y-2">
+            <section className="mb-8 p-6 bg-background rounded-2xl border border-theme-border">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.whatWillBeDeletedTitle')}</h2>
+              <ul className="list-disc ps-6 text-foreground/70 space-y-2">
                 <li>{t('dataDeletion.whatItemAccount')}</li>
                 <li>{t('dataDeletion.whatItemPages')}</li>
                 <li>{t('dataDeletion.whatItemContent')}</li>
@@ -97,14 +97,14 @@ export default function DataDeletion() {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-surface-900 mb-4">{t('dataDeletion.dataRetentionTitle')}</h2>
-              <p className="text-surface-700 leading-relaxed">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.dataRetentionTitle')}</h2>
+              <p className="text-foreground/70 leading-relaxed">
                 {t('dataDeletion.dataRetentionText')}
               </p>
             </section>
           </div>
 
-          <div className="mt-8 pt-8 border-t border-surface-100">
+          <div className="mt-8 pt-8 border-t border-theme-border">
             <Link href="/landing" className="text-brand-600 hover:text-brand-700 font-bold inline-flex items-center gap-2 transition-colors">
               <ArrowLeft className="w-5 h-5 transition-transform rtl:rotate-180" />
               {t('dataDeletion.backToHome')}
@@ -113,8 +113,8 @@ export default function DataDeletion() {
         </div>
 
         {/* Fixed safe area backgrounds */}
-        <div className="fixed-safe-bg top-safe-bg bg-white" aria-hidden="true" />
-        <div className="fixed-safe-bg bottom-safe-bg bg-surface-100" aria-hidden="true" />
+        <div className="fixed-safe-bg top-safe-bg bg-card" aria-hidden="true" />
+        <div className="fixed-safe-bg bottom-safe-bg bg-muted" aria-hidden="true" />
       </div>
     </>
   );

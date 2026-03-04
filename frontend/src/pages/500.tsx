@@ -21,14 +21,14 @@ export default function Custom500() {
         <title>500 - {BRAND_ASSETS.meta.appName}</title>
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-dvh bg-surface-50 flex flex-col items-center justify-center px-4">
+      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-dvh bg-background flex flex-col items-center justify-center px-4">
         {/* Brand header */}
         <Link href="/landing" className="flex items-center gap-3 mb-10 group">
           <BrandLogo
             variant="main"
             className="w-12 h-12 group-hover:rotate-6 transition-transform"
           />
-          <span className="font-display font-bold text-2xl text-surface-900 tracking-tight">
+          <span className="font-display font-bold text-2xl text-foreground tracking-tight">
             {BRAND_ASSETS.meta.appName}
           </span>
         </Link>
@@ -46,10 +46,10 @@ export default function Custom500() {
         {/* Content */}
         <div className="text-center max-w-md">
           <p className="text-7xl font-display font-extrabold text-red-400 mb-4">500</p>
-          <h1 className="text-2xl font-bold text-surface-900 mb-2">
+          <h1 className="text-2xl font-bold text-foreground mb-2">
             {t('errors.serverErrorTitle')}
           </h1>
-          <p className="text-surface-500 mb-8 leading-relaxed">
+          <p className="text-muted-foreground mb-8 leading-relaxed">
             {t('errors.serverErrorDesc')}
           </p>
 
@@ -65,7 +65,7 @@ export default function Custom500() {
 
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-2 px-6 py-3 border border-surface-200 text-surface-700 font-bold rounded-xl hover:bg-surface-100 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 border border-theme-border text-foreground/70 font-bold rounded-xl hover:bg-muted transition-colors"
             >
               <Home className="w-5 h-5" />
               {t('errors.goHome')}
@@ -75,7 +75,7 @@ export default function Custom500() {
               href={`https://wa.me/${WHATSAPP_NUMBER}?text=${supportMessage}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 py-3 text-surface-600 font-bold rounded-xl hover:bg-surface-100 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 text-muted-foreground font-bold rounded-xl hover:bg-muted transition-colors"
             >
               <MessageCircle className="w-5 h-5" />
               {t('errors.contactSupport')}

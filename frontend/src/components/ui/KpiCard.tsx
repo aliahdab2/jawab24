@@ -34,7 +34,7 @@ export function KpiCard({
     return (
         <Card
             className={clsx(
-                "animate-slide-up relative overflow-hidden group border-none bg-white transition-all duration-300 hover:-translate-y-1",
+                "animate-slide-up relative overflow-hidden group border-none bg-card transition-all duration-300 hover:-translate-y-1",
                 className
             )}
             hover
@@ -56,10 +56,10 @@ export function KpiCard({
 
             <div className="relative z-10 px-4 py-4 sm:px-5 sm:py-5 flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                    <p className="text-[26px] sm:text-[32px] font-bold text-surface-900 leading-none tracking-tight mb-1.5 truncate">
+                    <p className="text-[26px] sm:text-[32px] font-bold text-foreground leading-none tracking-tight mb-1.5 truncate">
                         {typeof value === 'number' ? value.toLocaleString() : value}
                     </p>
-                    <p className="text-[10px] sm:text-xs font-bold text-surface-500 truncate leading-tight opacity-70">
+                    <p className="text-[10px] sm:text-xs font-bold text-muted-foreground truncate leading-tight opacity-70">
                         {title}
                     </p>
                 </div>

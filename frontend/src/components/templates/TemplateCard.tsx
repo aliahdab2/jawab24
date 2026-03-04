@@ -37,19 +37,19 @@ export function TemplateCard({
       hover
       className={clsx(
         "animate-slide-up border-none transition-all duration-300 rounded-3xl overflow-hidden group flex flex-col h-full",
-        !template.active ? 'opacity-75 grayscale-[0.5]' : 'bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
+        !template.active ? 'opacity-75 grayscale-[0.5]' : 'bg-card shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
       )}
       padding="none"
       style={{ animationDelay: `${index * 0.05}s` } as React.CSSProperties}
     >
       {/* Header */}
-      <div className="p-5 border-b border-surface-100 bg-gradient-to-br from-surface-50 to-white flex items-start justify-between gap-4">
+      <div className="p-5 border-b border-theme-border bg-gradient-to-br from-surface-50 to-card flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-inner transition-colors ${template.active ? 'bg-accent-100 text-accent-600' : 'bg-surface-200 text-surface-400'}`}>
             <BookTemplate className="w-6 h-6" />
           </div>
           <div className="text-start">
-            <h3 className="font-bold text-surface-900 text-lg leading-tight">{template.name}</h3>
+            <h3 className="font-bold text-foreground text-lg leading-tight">{template.name}</h3>
             {template.usageCount !== undefined && (
               <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-surface-400">
                 <Zap className="w-3 h-3 text-amber-500" />
@@ -93,7 +93,7 @@ export function TemplateCard({
       </div>
 
       {/* Actions Footer */}
-      <div className="px-5 py-4 mt-auto border-t border-surface-100 bg-surface-50/30 flex items-center justify-between">
+      <div className="px-5 py-4 mt-auto border-t border-theme-border bg-surface-50/30 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${template.active ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
           <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">

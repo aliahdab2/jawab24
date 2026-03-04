@@ -171,7 +171,7 @@ export function MessageDetailModal({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="relative bg-white rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
+        className="relative bg-card rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -179,11 +179,11 @@ export function MessageDetailModal({
         <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-3 pb-0 text-xs text-surface-400">
           <span className="font-medium">{t('messages.title')}</span>
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
-          <span className="font-semibold text-surface-600 truncate">{conversation.senderName || t('common.user' as TranslationKey)}</span>
+          <span className="font-semibold text-muted-foreground truncate">{conversation.senderName || t('common.user' as TranslationKey)}</span>
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 pt-2 sm:pt-3 border-b border-surface-100 flex-shrink-0">
+        <div className="flex items-center justify-between p-4 sm:p-6 pt-2 sm:pt-3 border-b border-theme-border flex-shrink-0">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className={clsx(
               "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner flex-shrink-0",
@@ -192,7 +192,7 @@ export function MessageDetailModal({
               <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="text-start min-w-0">
-              <h2 className="text-base sm:text-xl font-bold text-surface-900 leading-tight truncate">
+              <h2 className="text-base sm:text-xl font-bold text-foreground leading-tight truncate">
                 {conversation.senderName || t('common.user' as TranslationKey)}
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
@@ -250,7 +250,7 @@ export function MessageDetailModal({
                   "max-w-[90%] sm:max-w-[85%] rounded-2xl p-3 sm:p-4 shadow-sm",
                   msg.direction === 'outgoing'
                     ? 'bg-brand-600 text-white rounded-be-none'
-                    : 'bg-white text-surface-900 rounded-bs-none border border-surface-100'
+                    : 'bg-card text-foreground rounded-bs-none border border-theme-border'
                 )}>
                   <p className="text-sm leading-relaxed italic-arabic">{msg.message}</p>
                 </div>
@@ -300,7 +300,7 @@ export function MessageDetailModal({
 
         {/* Footer — Reply + Actions */}
         <div
-          className="p-4 sm:p-6 pb-safe-content border-t border-surface-100 bg-white flex-shrink-0"
+          className="p-4 sm:p-6 pb-safe-content border-t border-theme-border bg-card flex-shrink-0"
         >
           {sendError && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium">
@@ -324,7 +324,7 @@ export function MessageDetailModal({
                 placeholder={t('messages.typeReply' as TranslationKey)}
                 aria-label={t('messages.typeReply' as TranslationKey)}
                 rows={2}
-                className="w-full resize-none rounded-2xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all outline-none"
+                className="w-full resize-none rounded-2xl border border-theme-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
                 style={{ minHeight: '64px', maxHeight: '160px' }}
                 disabled={isReplying}
               />

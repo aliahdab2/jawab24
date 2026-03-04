@@ -36,7 +36,7 @@ export function SwipeableNotificationItem({
 
   return (
     <div
-      className={`relative overflow-hidden border-b border-surface-100 ${className ?? ''}`}
+      className={`relative overflow-hidden border-b border-theme-border ${className ?? ''}`}
       style={isDismissing ? { pointerEvents: 'none' } : undefined}
     >
       {/* Background revealed during swipe — both sides */}
@@ -60,7 +60,7 @@ export function SwipeableNotificationItem({
       {/* Foreground — swipeable layer */}
       <div
         ref={ref}
-        className="relative bg-white"
+        className="relative bg-card"
         onClickCapture={handleClick}
       >
         {children}

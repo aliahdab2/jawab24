@@ -11,7 +11,7 @@ export function KnowledgeBaseRawEditor({ value, onChange, maxLength, ariaLabel }
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <textarea
-        className="flex-1 w-full min-h-[200px] p-4 border-2 border-surface-200 rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 text-sm leading-relaxed placeholder:text-surface-300"
+        className="flex-1 w-full min-h-[200px] p-4 border-2 border-theme-border rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-foreground text-sm leading-relaxed placeholder:text-surface-300"
         value={value}
         onChange={(e) => onChange(e.target.value.slice(0, maxLength))}
         maxLength={maxLength}

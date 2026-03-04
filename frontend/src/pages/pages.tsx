@@ -254,7 +254,7 @@ const PagesPage: NextPageWithLayout = () => {
               style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
             >
               {/* Header with gradient background */}
-              <div className="p-4 sm:p-6 bg-gradient-to-br from-surface-50 to-white border-b border-surface-100 flex items-start gap-4">
+              <div className="p-4 sm:p-6 bg-gradient-to-br from-background to-card border-b border-theme-border flex items-start gap-4">
                 {/* Page avatar */}
                 <div className="w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden bg-brand-600 flex items-center justify-center">
                   {!imgError[page.id] ? (
@@ -271,7 +271,7 @@ const PagesPage: NextPageWithLayout = () => {
 
                 {/* Page info */}
                 <div className="min-w-0 flex-1 text-start">
-                  <h3 className="text-lg font-bold text-surface-900 line-clamp-2" title={page.name}>{page.name}</h3>
+                  <h3 className="text-lg font-bold text-foreground line-clamp-2" title={page.name}>{page.name}</h3>
                 </div>
 
                 {/* External link to Facebook page */}
@@ -279,7 +279,7 @@ const PagesPage: NextPageWithLayout = () => {
                   href={`https://facebook.com/${page.facebookPageId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-9 h-9 rounded-xl bg-surface-100 flex items-center justify-center text-surface-400 hover:bg-surface-200 hover:text-surface-600 transition-colors flex-shrink-0"
+                  className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-muted-foreground transition-colors flex-shrink-0"
                   aria-label={`${t('common.openOn')} Facebook`}
                 >
                   <ExternalLink className="w-4 h-4" />
@@ -290,14 +290,14 @@ const PagesPage: NextPageWithLayout = () => {
                 {/* Platform Toggles */}
                 <div className="flex flex-col gap-3">
                   {/* Facebook row */}
-                  <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 border-blue-200' : 'bg-surface-50 border-surface-100'}`}>
+                  <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 border-blue-200' : 'bg-background border-theme-border'}`}>
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
                         <FileText className="w-4 h-4" />
                       </div>
                       <div className="min-w-0">
-                        <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-surface-600'}`}>Facebook</p>
-                        <p className={`text-xs font-medium ${page.autoReplyEnabled ? 'text-blue-500' : 'text-surface-500'}`}>
+                        <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-muted-foreground'}`}>Facebook</p>
+                        <p className={`text-xs font-medium ${page.autoReplyEnabled ? 'text-blue-500' : 'text-muted-foreground'}`}>
                           {page.autoReplyEnabled ? t('common.enabled') : t('common.disabled')}
                         </p>
                       </div>
@@ -314,8 +314,8 @@ const PagesPage: NextPageWithLayout = () => {
                     className={clsx(
                       'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
                       page.instagramUsername
-                        ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-200' : 'bg-surface-50 border-surface-100')
-                        : 'bg-surface-50 border-surface-100 border-dashed'
+                        ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-200' : 'bg-background border-theme-border')
+                        : 'bg-background border-theme-border border-dashed'
                     )}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -331,14 +331,14 @@ const PagesPage: NextPageWithLayout = () => {
                         <p className={clsx(
                           'text-sm font-bold',
                           page.instagramUsername
-                            ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-surface-600')
-                            : 'text-surface-400'
+                            ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-muted-foreground')
+                            : 'text-muted-foreground'
                         )}>Instagram</p>
                         <p className={clsx(
                           'text-xs font-medium',
                           page.instagramUsername
-                            ? (page.instagramAutoReplyEnabled ? 'text-pink-500' : 'text-surface-500')
-                            : 'text-surface-400'
+                            ? (page.instagramAutoReplyEnabled ? 'text-pink-500' : 'text-muted-foreground')
+                            : 'text-muted-foreground'
                         )}>
                           {page.instagramUsername
                             ? `@${page.instagramUsername}`
@@ -357,17 +357,17 @@ const PagesPage: NextPageWithLayout = () => {
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-3 px-1 py-1 rounded-2xl bg-surface-50 border border-surface-100">
+                <div className="grid grid-cols-3 gap-3 px-1 py-1 rounded-2xl bg-background border border-theme-border">
                   <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-1.5">{t('pages.totalIncoming' as TranslationKey)}</p>
-                    <p className="text-lg font-bold text-surface-900 leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('pages.totalIncoming' as TranslationKey)}</p>
+                    <p className="text-lg font-bold text-foreground leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
                   </div>
-                  <div className="py-3 text-center border-x border-surface-200">
-                    <p className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-1.5">{t('dashboard.autoReplies')}</p>
-                    <p className="text-lg font-bold text-surface-900 leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
+                  <div className="py-3 text-center border-x border-theme-border">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('dashboard.autoReplies')}</p>
+                    <p className="text-lg font-bold text-foreground leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-surface-500 uppercase tracking-widest mb-1.5">{t('dashboard.replyRate')}</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('dashboard.replyRate')}</p>
                     <p className="text-lg font-bold text-emerald-600 leading-none">{page.replyRate || 0}%</p>
                   </div>
                 </div>
@@ -386,22 +386,22 @@ const PagesPage: NextPageWithLayout = () => {
                   onClick={() => openKnowledgeBase(page)}
                   className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${page.knowledgeBase
                     ? 'border-brand-500 bg-brand-50/30'
-                    : 'border-dashed border-surface-300 bg-white hover:border-brand-400 hover:bg-brand-50/10'
+                    : 'border-dashed border-surface-300 bg-card hover:border-brand-400 hover:bg-brand-50/10'
                     }`}
                 >
                   <div className="relative z-10 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${page.knowledgeBase ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-surface-100 text-surface-400 group-hover:bg-brand-100 group-hover:text-brand-600'}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${page.knowledgeBase ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600'}`}>
                         <BookOpen className="w-5 h-5" />
                       </div>
                       <div className="text-start">
-                        <p className={`text-sm font-bold ${page.knowledgeBase ? 'text-brand-900' : 'text-surface-700'}`}>
+                        <p className={`text-sm font-bold ${page.knowledgeBase ? 'text-brand-900' : 'text-foreground/70'}`}>
                           {page.knowledgeBase
                             ? t('pages.businessInfoActive')
                             : t('pages.addBusinessInfo')
                           }
                         </p>
-                        <p className="text-xs font-medium text-surface-500 uppercase tracking-tight mt-0.5">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-tight mt-0.5">
                           {page.knowledgeBase
                             ? t('pages.clickToEdit')
                             : t('pages.improveAIQuality')
@@ -415,14 +415,14 @@ const PagesPage: NextPageWithLayout = () => {
               </div>
 
               {/* Status Footer */}
-              <div className="px-6 py-4 bg-surface-50/50 border-t border-surface-100 flex items-center justify-between">
+              <div className="px-6 py-4 bg-background/50 border-t border-theme-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
-                  <span className="text-xs font-bold text-surface-500 uppercase tracking-widest">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                     {(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? t('common.active') : t('common.inactive')}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-surface-500">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                   <span
                     className="text-xs font-bold uppercase tracking-tighter"

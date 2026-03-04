@@ -87,10 +87,10 @@ const INTENT_COLORS: Record<string, string> = {
     COMPLAINT: 'bg-red-100 text-red-800',
     COMPLIMENT: 'bg-green-100 text-green-800',
     PURCHASE_INTENT: 'bg-purple-100 text-purple-800',
-    GREETING: 'bg-surface-100 text-surface-800',
+    GREETING: 'bg-muted text-foreground',
     BUSINESS_INQUIRY: 'bg-amber-100 text-amber-800',
     OFFENSIVE: 'bg-red-200 text-red-900',
-    SPAM_OR_IRRELEVANT: 'bg-surface-200 text-surface-600',
+    SPAM_OR_IRRELEVANT: 'bg-muted text-muted-foreground',
 };
 
 const CONFIDENCE_COLORS: Record<string, string> = {
@@ -401,7 +401,7 @@ export default function AdminPlaygroundPage() {
             <div dir={isRTL ? 'rtl' : 'ltr'} className="flex flex-col h-[calc(100vh-8rem)]">
 
                 {/* ── Controls Bar ── */}
-                <div className="border-b border-surface-200 bg-white rounded-t-xl flex-shrink-0">
+                <div className="border-b border-theme-border bg-card rounded-t-xl flex-shrink-0">
                     {/* Row 1: Page selection */}
                     <div className="flex items-center gap-3 px-4 pt-3 pb-1.5">
                         <label htmlFor="email-filter" className="sr-only">{t('admin.playground.emailFilter')}</label>
@@ -412,7 +412,7 @@ export default function AdminPlaygroundPage() {
                             value={emailFilter}
                             onChange={(e) => setEmailFilter(e.target.value)}
                             placeholder={t('admin.playground.emailFilterPlaceholder')}
-                            className="max-w-[180px] px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder:text-surface-400"
+                            className="max-w-[180px] px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder:text-muted-foreground"
                         />
                         <label htmlFor="page-select" className="sr-only">{t('admin.playground.selectPage')}</label>
                         <select
@@ -440,7 +440,7 @@ export default function AdminPlaygroundPage() {
                                     'px-3 py-1.5 text-xs font-medium transition-colors',
                                     channel === 'comment'
                                         ? 'bg-brand-500 text-white'
-                                        : 'bg-white text-surface-600 hover:bg-surface-50'
+                                        : 'bg-card text-muted-foreground hover:bg-background'
                                 )}
                             >
                                 {t('admin.playground.comment')}
@@ -452,7 +452,7 @@ export default function AdminPlaygroundPage() {
                                     'px-3 py-1.5 text-xs font-medium transition-colors',
                                     channel === 'dm'
                                         ? 'bg-brand-500 text-white'
-                                        : 'bg-white text-surface-600 hover:bg-surface-50'
+                                        : 'bg-card text-muted-foreground hover:bg-background'
                                 )}
                             >
                                 {t('admin.playground.dm')}
@@ -468,7 +468,7 @@ export default function AdminPlaygroundPage() {
                                 'p-2 rounded-lg transition-colors',
                                 sidebarOpen
                                     ? 'bg-brand-100 text-brand-700'
-                                    : 'text-surface-500 hover:bg-surface-100'
+                                    : 'text-muted-foreground hover:bg-muted'
                             )}
                             aria-label={t('admin.playground.toggleSidebar')}
                         >
@@ -479,7 +479,7 @@ export default function AdminPlaygroundPage() {
                             type="button"
                             onClick={handleClear}
                             disabled={messages.length === 0}
-                            className="p-2 rounded-lg text-surface-500 hover:bg-surface-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            className="p-2 rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             aria-label={t('admin.playground.clearChat')}
                         >
                             <Trash2 className="w-4 h-4" aria-hidden="true" />
@@ -494,16 +494,16 @@ export default function AdminPlaygroundPage() {
                         {channel === 'comment' && (
                             contextExpanded ? (
                                 /* ── Expanded context panel ── */
-                                <div className="px-4 py-3 border-b border-surface-200 bg-surface-50/50 flex-shrink-0">
+                                <div className="px-4 py-3 border-b border-theme-border bg-background/50 flex-shrink-0">
                                     <div className="flex items-center justify-between mb-1.5">
-                                        <label htmlFor="post-context" className="flex items-center gap-1.5 text-xs font-medium text-surface-600">
+                                        <label htmlFor="post-context" className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                             <Pin className="w-3 h-3" aria-hidden="true" />
                                             {t('admin.playground.postContext')}
                                         </label>
                                         <button
                                             type="button"
                                             onClick={() => setContextExpanded(false)}
-                                            className="p-1 rounded text-surface-400 hover:text-surface-600 transition-colors"
+                                            className="p-1 rounded text-muted-foreground hover:text-muted-foreground transition-colors"
                                             aria-label={t('admin.playground.collapseContext')}
                                         >
                                             <ChevronUp className="w-4 h-4" aria-hidden="true" />
@@ -519,8 +519,8 @@ export default function AdminPlaygroundPage() {
                                         placeholder={t('admin.playground.postContextPlaceholder')}
                                         rows={6}
                                         className={clsx(
-                                            'w-full resize-y rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm',
-                                            'text-surface-900 placeholder:text-surface-400',
+                                            'w-full resize-y rounded-lg border border-theme-border bg-card px-3 py-2 text-sm',
+                                            'text-foreground placeholder:text-muted-foreground',
                                             'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20',
                                             'transition-all outline-none',
                                             'min-h-[144px] max-h-[30vh]'
@@ -538,12 +538,12 @@ export default function AdminPlaygroundPage() {
                                         'flex items-center gap-2 px-4 py-2.5 border-b flex-shrink-0 cursor-pointer transition-colors',
                                         postMessage.trim()
                                             ? 'bg-brand-50/50 border-brand-200 hover:bg-brand-50'
-                                            : 'bg-surface-50/50 border-surface-200 border-dashed hover:bg-surface-100'
+                                            : 'bg-background/50 border-theme-border border-dashed hover:bg-muted'
                                     )}
                                     aria-label={t('admin.playground.expandContext')}
                                 >
                                     <Pin className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />
-                                    <span className="text-sm text-surface-700 truncate flex-1" dir="auto">
+                                    <span className="text-sm text-foreground/70 truncate flex-1" dir="auto">
                                         {postMessage.trim()
                                             ? postMessage.split('\n')[0].slice(0, 80) + (postMessage.length > 80 ? '...' : '')
                                             : t('admin.playground.postContextEmpty')
@@ -552,7 +552,7 @@ export default function AdminPlaygroundPage() {
                                     <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); setContextExpanded(true); }}
-                                        className="p-1 rounded text-surface-400 hover:text-surface-600 transition-colors flex-shrink-0"
+                                        className="p-1 rounded text-muted-foreground hover:text-muted-foreground transition-colors flex-shrink-0"
                                         aria-label={t('admin.playground.expandContext')}
                                     >
                                         <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
@@ -561,7 +561,7 @@ export default function AdminPlaygroundPage() {
                                         <button
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); setPostMessage(''); }}
-                                            className="p-1 rounded text-surface-400 hover:text-red-500 transition-colors flex-shrink-0"
+                                            className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0"
                                             aria-label={t('admin.playground.clearContext')}
                                         >
                                             <X className="w-3.5 h-3.5" aria-hidden="true" />
@@ -575,9 +575,9 @@ export default function AdminPlaygroundPage() {
                         {channel === 'dm' && (
                             historyExpanded ? (
                                 /* ── Expanded conversation history ── */
-                                <div className="px-4 py-3 border-b border-surface-200 bg-surface-50/50 flex-shrink-0">
+                                <div className="px-4 py-3 border-b border-theme-border bg-background/50 flex-shrink-0">
                                     <div className="flex items-center justify-between mb-1.5">
-                                        <label className="flex items-center gap-1.5 text-xs font-medium text-surface-600">
+                                        <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                             <MessageSquare className="w-3 h-3" aria-hidden="true" />
                                             {t('admin.playground.conversationHistory')}
                                         </label>
@@ -593,7 +593,7 @@ export default function AdminPlaygroundPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => setHistoryExpanded(false)}
-                                                className="p-1 rounded text-surface-400 hover:text-surface-600 transition-colors"
+                                                className="p-1 rounded text-muted-foreground hover:text-muted-foreground transition-colors"
                                                 aria-label={t('admin.playground.collapseHistory')}
                                             >
                                                 <ChevronUp className="w-4 h-4" aria-hidden="true" />
@@ -601,7 +601,7 @@ export default function AdminPlaygroundPage() {
                                         </div>
                                     </div>
                                     {conversationHistory.length === 0 ? (
-                                        <p className="text-xs text-surface-400 italic">{t('admin.playground.conversationHistoryHint')}</p>
+                                        <p className="text-xs text-muted-foreground italic">{t('admin.playground.conversationHistoryHint')}</p>
                                     ) : (
                                         <div className="space-y-2 max-h-40 overflow-y-auto">
                                             {conversationHistory.map((msg, i) => (
@@ -609,7 +609,7 @@ export default function AdminPlaygroundPage() {
                                                     <select
                                                         value={msg.role}
                                                         onChange={(e) => updateHistoryMessage(i, 'role', e.target.value)}
-                                                        className="flex-shrink-0 rounded-lg border border-surface-200 bg-white px-2 py-1.5 text-xs text-surface-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                                                        className="flex-shrink-0 rounded-lg border border-theme-border bg-card px-2 py-1.5 text-xs text-foreground/70 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
                                                         aria-label={`${t('admin.playground.conversationHistory')} ${i + 1}`}
                                                     >
                                                         <option value="user">{t('admin.playground.roleCustomer')}</option>
@@ -621,12 +621,12 @@ export default function AdminPlaygroundPage() {
                                                         value={msg.content}
                                                         onChange={(e) => updateHistoryMessage(i, 'content', e.target.value)}
                                                         placeholder={t('admin.playground.messagePlaceholder')}
-                                                        className="flex-1 rounded-lg border border-surface-200 bg-white px-3 py-1.5 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+                                                        className="flex-1 rounded-lg border border-theme-border bg-card px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
                                                     />
                                                     <button
                                                         type="button"
                                                         onClick={() => removeHistoryMessage(i)}
-                                                        className="flex-shrink-0 p-1.5 text-surface-400 hover:text-red-500 transition-colors"
+                                                        className="flex-shrink-0 p-1.5 text-muted-foreground hover:text-red-500 transition-colors"
                                                         aria-label={t('admin.playground.removeMessage')}
                                                     >
                                                         <Minus className="w-3.5 h-3.5" aria-hidden="true" />
@@ -647,18 +647,18 @@ export default function AdminPlaygroundPage() {
                                         'flex items-center gap-2 px-4 py-2.5 border-b flex-shrink-0 cursor-pointer transition-colors',
                                         conversationHistory.length > 0
                                             ? 'bg-brand-50/50 border-brand-200 hover:bg-brand-50'
-                                            : 'bg-surface-50/50 border-surface-200 border-dashed hover:bg-surface-100'
+                                            : 'bg-background/50 border-theme-border border-dashed hover:bg-muted'
                                     )}
                                     aria-label={t('admin.playground.expandHistory')}
                                 >
                                     <MessageSquare className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />
-                                    <span className="text-sm text-surface-700 truncate flex-1">
+                                    <span className="text-sm text-foreground/70 truncate flex-1">
                                         {conversationHistory.length > 0
                                             ? t('admin.playground.historyCount_other', { count: conversationHistory.length })
                                             : t('admin.playground.conversationHistoryHint')
                                         }
                                     </span>
-                                    <ChevronDown className="w-4 h-4 text-surface-400 flex-shrink-0" aria-hidden="true" />
+                                    <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
                                 </div>
                             )
                         )}
@@ -672,7 +672,7 @@ export default function AdminPlaygroundPage() {
                     <div className="flex-1 flex flex-col min-w-0">
 
                         {/* Message Thread */}
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-surface-50/50 space-y-4">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background/50 space-y-4">
 
                             {/* Empty state with step guide */}
                             {messages.length === 0 && !loading && (
@@ -681,10 +681,10 @@ export default function AdminPlaygroundPage() {
                                         <div className="w-14 h-14 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-4">
                                             <FlaskConical className="w-7 h-7 text-brand-500" aria-hidden="true" />
                                         </div>
-                                        <h3 className="text-lg font-display font-bold text-surface-900 mb-2">
+                                        <h3 className="text-lg font-display font-bold text-foreground mb-2">
                                             {t('admin.playground.emptyTitle')}
                                         </h3>
-                                        <p className="text-sm text-surface-500 mb-6">
+                                        <p className="text-sm text-muted-foreground mb-6">
                                             {t('admin.playground.emptyDescription')}
                                         </p>
 
@@ -710,27 +710,27 @@ export default function AdminPlaygroundPage() {
 
                                             {/* Step 2: Add context (optional) */}
                                             <div className={clsx(
-                                                'flex items-center gap-3 p-3 rounded-xl bg-surface-50 border border-surface-200',
+                                                'flex items-center gap-3 p-3 rounded-xl bg-background border border-theme-border',
                                                 !selectedPageId && 'opacity-50'
                                             )}>
                                                 <div className="w-6 h-6 rounded-full bg-surface-300 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                                                     2
                                                 </div>
-                                                <span className="text-sm text-surface-600 flex-1">
+                                                <span className="text-sm text-muted-foreground flex-1">
                                                     {t('admin.playground.step2')}
                                                 </span>
-                                                <Badge className="bg-surface-100 text-surface-500">{t('common.optional')}</Badge>
+                                                <Badge className="bg-muted text-muted-foreground">{t('common.optional')}</Badge>
                                             </div>
 
                                             {/* Step 3: Type question */}
                                             <div className={clsx(
-                                                'flex items-center gap-3 p-3 rounded-xl bg-surface-50 border border-surface-200',
+                                                'flex items-center gap-3 p-3 rounded-xl bg-background border border-theme-border',
                                                 !selectedPageId && 'opacity-50'
                                             )}>
                                                 <div className="w-6 h-6 rounded-full bg-surface-300 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                                                     3
                                                 </div>
-                                                <span className="text-sm text-surface-600">
+                                                <span className="text-sm text-muted-foreground">
                                                     {t('admin.playground.step3')}
                                                 </span>
                                             </div>
@@ -748,7 +748,7 @@ export default function AdminPlaygroundPage() {
                                             <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-be-none p-3 sm:p-4 shadow-sm bg-brand-600 text-white">
                                                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                                             </div>
-                                            <span className="text-[10px] text-surface-400 mt-1.5">{formatTime(msg.timestamp)}</span>
+                                            <span className="text-[10px] text-muted-foreground mt-1.5">{formatTime(msg.timestamp)}</span>
                                         </div>
                                     ) : (
                                         /* ── Assistant bubble (left) ── */
@@ -768,14 +768,14 @@ export default function AdminPlaygroundPage() {
                                                     {msg.metadata?.commentReplyMode === 'dual' && msg.text ? (
                                                         <>
                                                             {/* Public comment nudge */}
-                                                            <div className="rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm bg-white border border-surface-100">
+                                                            <div className="rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm bg-card border border-theme-border">
                                                                 <div className="flex items-center gap-1.5 mb-2">
-                                                                    <MessageSquare className="w-3 h-3 text-surface-400" aria-hidden="true" />
-                                                                    <span className="text-[10px] font-medium uppercase tracking-wider text-surface-500">
+                                                                    <MessageSquare className="w-3 h-3 text-muted-foreground" aria-hidden="true" />
+                                                                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                                                                         {t('admin.playground.commentReply')}
                                                                     </span>
                                                                 </div>
-                                                                <p className="text-sm leading-relaxed text-surface-900">
+                                                                <p className="text-sm leading-relaxed text-foreground">
                                                                     {msg.metadata.nudgeText || 'تم إرسال التفاصيل برسالة خاصة 📩'}
                                                                 </p>
                                                             </div>
@@ -787,7 +787,7 @@ export default function AdminPlaygroundPage() {
                                                                         {t('admin.playground.privateMessage')} · {t(`admin.playground.${msg.metadata.replyMethod}`)}
                                                                     </span>
                                                                 </div>
-                                                                <p className="text-sm leading-relaxed text-surface-900 whitespace-pre-wrap">{msg.text}</p>
+                                                                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
                                                             </div>
                                                         </>
                                                     ) : (
@@ -797,7 +797,7 @@ export default function AdminPlaygroundPage() {
                                                             QUALITY_BORDER[getQualityLevel(msg.metadata)],
                                                             msg.metadata?.replyMethod === 'skipped'
                                                                 ? 'bg-red-50 border border-red-200'
-                                                                : 'bg-white border border-surface-100'
+                                                                : 'bg-card border border-theme-border'
                                                         )}>
                                                             {/* Reply source indicator */}
                                                             {msg.metadata && (
@@ -821,19 +821,19 @@ export default function AdminPlaygroundPage() {
                                                             )}
 
                                                             {msg.text ? (
-                                                                <p className="text-sm leading-relaxed text-surface-900 whitespace-pre-wrap">{msg.text}</p>
+                                                                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
                                                             ) : (
                                                                 <p className="text-sm text-red-600 italic">{t('admin.playground.noReply')}</p>
                                                             )}
 
                                                             {/* Copy & Retry actions */}
                                                             {msg.text && (
-                                                                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-surface-100">
-                                                                    <button type="button" onClick={() => handleCopy(msg.text)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-surface-400 hover:text-surface-600 hover:bg-surface-50 transition-colors" aria-label={t('admin.playground.copyReply')}>
+                                                                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-theme-border">
+                                                                    <button type="button" onClick={() => handleCopy(msg.text)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-muted-foreground hover:bg-background transition-colors" aria-label={t('admin.playground.copyReply')}>
                                                                         <Copy className="w-3 h-3" aria-hidden="true" />
                                                                         {t('admin.playground.copyReply')}
                                                                     </button>
-                                                                    <button type="button" onClick={() => handleRetry(msg.id)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-surface-400 hover:text-surface-600 hover:bg-surface-50 transition-colors" aria-label={t('admin.playground.retryQuestion')}>
+                                                                    <button type="button" onClick={() => handleRetry(msg.id)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-muted-foreground hover:bg-background transition-colors" aria-label={t('admin.playground.retryQuestion')}>
                                                                         <RefreshCw className="w-3 h-3" aria-hidden="true" />
                                                                         {t('admin.playground.retryQuestion')}
                                                                     </button>
@@ -850,17 +850,17 @@ export default function AdminPlaygroundPage() {
                                                     {/* Row 1: Response quality */}
                                                     <div className="flex items-center gap-1.5">
                                                         {msg.metadata.intent && (
-                                                            <Badge className={INTENT_COLORS[msg.metadata.intent] || 'bg-surface-100 text-surface-800'}>
+                                                            <Badge className={INTENT_COLORS[msg.metadata.intent] || 'bg-muted text-foreground'}>
                                                                 {msg.metadata.intent}
                                                             </Badge>
                                                         )}
                                                         {msg.metadata.confidence && (
-                                                            <Badge className={CONFIDENCE_COLORS[msg.metadata.confidence] || 'bg-surface-100 text-surface-800'}>
+                                                            <Badge className={CONFIDENCE_COLORS[msg.metadata.confidence] || 'bg-muted text-foreground'}>
                                                                 {msg.metadata.confidence}
                                                             </Badge>
                                                         )}
                                                         {msg.metadata.detectedLanguage && (
-                                                            <Badge className="bg-surface-100 text-surface-700">
+                                                            <Badge className="bg-muted text-foreground/70">
                                                                 {msg.metadata.detectedLanguage}
                                                             </Badge>
                                                         )}
@@ -873,7 +873,7 @@ export default function AdminPlaygroundPage() {
                                                     </div>
 
                                                     {/* Row 2: Performance stats */}
-                                                    <div className="flex items-center gap-2 text-[11px] text-surface-400">
+                                                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                                                         <span>{msg.metadata.latencyMs}ms</span>
                                                         {msg.metadata.tokensUsed > 0 && (
                                                             <>
@@ -912,14 +912,14 @@ export default function AdminPlaygroundPage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleChunks(msg.id)}
-                                                        className="flex items-center gap-2 text-xs text-surface-500 hover:text-surface-700 transition-colors"
+                                                        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground/70 transition-colors"
                                                         aria-expanded={expandedChunks.has(msg.id)}
                                                     >
                                                         <Database className="w-3 h-3" aria-hidden="true" />
                                                         <span>
                                                             {msg.metadata.chunksRetrieved} {t('admin.playground.chunks')}
                                                             {msg.metadata.chunks.length > 0 && (
-                                                                <span className="text-surface-400 ms-1">
+                                                                <span className="text-muted-foreground ms-1">
                                                                     ({t('admin.playground.bestScore')}: {Math.max(...msg.metadata.chunks.map(c => c.score)).toFixed(2)})
                                                                 </span>
                                                             )}
@@ -932,24 +932,24 @@ export default function AdminPlaygroundPage() {
                                                     </button>
 
                                                     {expandedChunks.has(msg.id) && (
-                                                        <div className="mt-1.5 border border-surface-200 rounded-lg overflow-hidden divide-y divide-surface-200">
+                                                        <div className="mt-1.5 border border-theme-border rounded-lg overflow-hidden divide-y divide-theme-border">
                                                             {msg.metadata.chunks.map((chunk, i) => (
-                                                                <div key={i} className="px-3 py-2 bg-white">
+                                                                <div key={i} className="px-3 py-2 bg-card">
                                                                     <div className="flex items-center gap-2 mb-1">
-                                                                        <Badge className="bg-surface-100 text-surface-600">{chunk.type}</Badge>
+                                                                        <Badge className="bg-muted text-muted-foreground">{chunk.type}</Badge>
                                                                         {chunk.title && (
-                                                                            <span className="text-xs font-medium text-surface-800 truncate">{chunk.title}</span>
+                                                                            <span className="text-xs font-medium text-foreground truncate">{chunk.title}</span>
                                                                         )}
                                                                         <div className="flex items-center gap-1.5 ms-auto flex-shrink-0">
                                                                             <div className="w-12 h-1.5 bg-surface-200 rounded-full overflow-hidden">
                                                                                 <div className="h-full bg-brand-500 rounded-full" style={{ width: `${Math.min(chunk.score * 100, 100)}%` }} />
                                                                             </div>
-                                                                            <span className="text-[10px] text-surface-400 tabular-nums">
+                                                                            <span className="text-[10px] text-muted-foreground tabular-nums">
                                                                                 {chunk.score.toFixed(3)}
                                                                             </span>
                                                                         </div>
                                                                     </div>
-                                                                    <p className="text-xs text-surface-600 whitespace-pre-wrap line-clamp-4">{chunk.content}</p>
+                                                                    <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-4">{chunk.content}</p>
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -957,7 +957,7 @@ export default function AdminPlaygroundPage() {
                                                 </div>
                                             )}
 
-                                            <span className="text-[10px] text-surface-400 mt-1">{formatTime(msg.timestamp)}</span>
+                                            <span className="text-[10px] text-muted-foreground mt-1">{formatTime(msg.timestamp)}</span>
                                         </div>
                                     )}
                                 </div>
@@ -966,10 +966,10 @@ export default function AdminPlaygroundPage() {
                             {/* Loading indicator */}
                             {loading && (
                                 <div className="flex flex-col items-start">
-                                    <div className="bg-white border border-surface-100 rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm">
+                                    <div className="bg-card border border-theme-border rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm">
                                         <div className="flex items-center gap-2">
                                             <div className="w-4 h-4 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" />
-                                            <span className="text-sm text-surface-500">{t('admin.playground.testing')}</span>
+                                            <span className="text-sm text-muted-foreground">{t('admin.playground.testing')}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -980,7 +980,7 @@ export default function AdminPlaygroundPage() {
                         </div>
 
                         {/* ── Input Row ── */}
-                        <div className="p-3 sm:p-4 border-t border-surface-100 bg-white flex-shrink-0 rounded-b-xl">
+                        <div className="p-3 sm:p-4 border-t border-theme-border bg-card flex-shrink-0 rounded-b-xl">
                             <div className="flex items-end gap-2 sm:gap-3">
                                 <div className="flex-1">
                                     <label htmlFor="playground-input" className="sr-only">{t('admin.playground.question')}</label>
@@ -1003,10 +1003,10 @@ export default function AdminPlaygroundPage() {
                                         rows={1}
                                         disabled={loading || !selectedPageId}
                                         className={clsx(
-                                            'w-full resize-none rounded-xl border border-surface-200 bg-surface-50',
-                                            'px-3 sm:px-4 py-2.5 text-sm text-surface-900',
-                                            'placeholder:text-surface-400',
-                                            'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-white',
+                                            'w-full resize-none rounded-xl border border-theme-border bg-background',
+                                            'px-3 sm:px-4 py-2.5 text-sm text-foreground',
+                                            'placeholder:text-muted-foreground',
+                                            'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card',
                                             'transition-all outline-none disabled:opacity-50',
                                             'max-h-[120px]'
                                         )}
@@ -1026,7 +1026,7 @@ export default function AdminPlaygroundPage() {
                                     )}
                                 </button>
                             </div>
-                            <p className="text-[10px] text-surface-400 mt-1.5 text-end">
+                            <p className="text-[10px] text-muted-foreground mt-1.5 text-end">
                                 {t('admin.playground.sendHintEnter')}
                             </p>
                         </div>
@@ -1042,17 +1042,17 @@ export default function AdminPlaygroundPage() {
                             />
 
                             <div className={clsx(
-                                'border-s border-surface-200 bg-white overflow-y-auto flex-shrink-0',
+                                'border-s border-theme-border bg-card overflow-y-auto flex-shrink-0',
                                 // Mobile: overlay panel
                                 'fixed inset-y-0 end-0 w-80 z-30 lg:relative lg:z-auto',
                             )}>
                                 {/* Mobile close header */}
-                                <div className="flex items-center justify-between p-4 border-b border-surface-100 lg:hidden">
-                                    <h3 className="text-sm font-display font-semibold text-surface-900">{t('admin.playground.kbStatus')}</h3>
+                                <div className="flex items-center justify-between p-4 border-b border-theme-border lg:hidden">
+                                    <h3 className="text-sm font-display font-semibold text-foreground">{t('admin.playground.kbStatus')}</h3>
                                     <button
                                         type="button"
                                         onClick={() => setSidebarOpen(false)}
-                                        className="p-1 text-surface-500 hover:text-surface-700"
+                                        className="p-1 text-muted-foreground hover:text-foreground/70"
                                         aria-label={t('admin.playground.toggleSidebar')}
                                     >
                                         <X className="w-4 h-4" aria-hidden="true" />
@@ -1065,7 +1065,7 @@ export default function AdminPlaygroundPage() {
                                         <div>
                                             <div className="flex items-center gap-2 mb-4">
                                                 <Database className="w-4 h-4 text-brand-600" aria-hidden="true" />
-                                                <h3 className="text-sm font-display font-semibold text-surface-900">
+                                                <h3 className="text-sm font-display font-semibold text-foreground">
                                                     {t('admin.playground.kbStatus')}
                                                 </h3>
                                             </div>
@@ -1078,26 +1078,26 @@ export default function AdminPlaygroundPage() {
 
                                             <dl className="space-y-2 text-sm">
                                                 <div className="flex justify-between">
-                                                    <dt className="text-surface-500">{t('admin.playground.kbVersion')}</dt>
-                                                    <dd className="font-medium text-surface-900">{kbStatus.kbVersion}</dd>
+                                                    <dt className="text-muted-foreground">{t('admin.playground.kbVersion')}</dt>
+                                                    <dd className="font-medium text-foreground">{kbStatus.kbVersion}</dd>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <dt className="text-surface-500">{t('admin.playground.activeVersion')}</dt>
-                                                    <dd className="font-medium text-surface-900">
+                                                    <dt className="text-muted-foreground">{t('admin.playground.activeVersion')}</dt>
+                                                    <dd className="font-medium text-foreground">
                                                         {kbStatus.kbActiveVersion ?? '—'}
                                                     </dd>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <dt className="text-surface-500">{t('admin.playground.chunksCount')}</dt>
-                                                    <dd className="font-medium text-surface-900">{kbStatus.chunksCount}</dd>
+                                                    <dt className="text-muted-foreground">{t('admin.playground.chunksCount')}</dt>
+                                                    <dd className="font-medium text-foreground">{kbStatus.chunksCount}</dd>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <dt className="text-surface-500">{t('admin.playground.gapsCount')}</dt>
-                                                    <dd className="font-medium text-surface-900">{kbStatus.gapsCount}</dd>
+                                                    <dt className="text-muted-foreground">{t('admin.playground.gapsCount')}</dt>
+                                                    <dd className="font-medium text-foreground">{kbStatus.gapsCount}</dd>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <dt className="text-surface-500">{t('admin.playground.kbLength')}</dt>
-                                                    <dd className="font-medium text-surface-900">
+                                                    <dt className="text-muted-foreground">{t('admin.playground.kbLength')}</dt>
+                                                    <dd className="font-medium text-foreground">
                                                         {kbStatus.kbLength.toLocaleString()} {t('admin.playground.chars')}
                                                     </dd>
                                                 </div>
@@ -1106,7 +1106,7 @@ export default function AdminPlaygroundPage() {
                                             {/* KB Content Editor */}
                                             <div className="mt-4">
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <h4 className="text-xs font-medium text-surface-600">
+                                                    <h4 className="text-xs font-medium text-muted-foreground">
                                                         {t('admin.playground.kbContent')}
                                                     </h4>
                                                     <div className="flex items-center gap-2">
@@ -1153,8 +1153,8 @@ export default function AdminPlaygroundPage() {
                                                                 setKbDirty(true);
                                                             }}
                                                             className={clsx(
-                                                                'w-full rounded-lg border border-surface-200 bg-white',
-                                                                'px-3 py-2 text-xs text-surface-800',
+                                                                'w-full rounded-lg border border-theme-border bg-card',
+                                                                'px-3 py-2 text-xs text-foreground',
                                                                 'focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20',
                                                                 'outline-none resize-y min-h-[200px] max-h-[50vh]'
                                                             )}
@@ -1163,10 +1163,10 @@ export default function AdminPlaygroundPage() {
                                                 ) : (
                                                     <div
                                                         className={clsx(
-                                                            'rounded-lg border border-surface-200 bg-surface-50 p-3',
-                                                            'text-xs text-surface-700 whitespace-pre-wrap',
+                                                            'rounded-lg border border-theme-border bg-background p-3',
+                                                            'text-xs text-foreground/70 whitespace-pre-wrap',
                                                             'max-h-[300px] overflow-y-auto',
-                                                            !kbText && 'italic text-surface-400'
+                                                            !kbText && 'italic text-muted-foreground'
                                                         )}
                                                     >
                                                         {kbText || t('admin.playground.kbEmpty')}
@@ -1175,9 +1175,9 @@ export default function AdminPlaygroundPage() {
                                             </div>
                                         </div>
                                     ) : selectedPageId ? (
-                                        <p className="text-sm text-surface-400 italic">{t('common.loading')}</p>
+                                        <p className="text-sm text-muted-foreground italic">{t('common.loading')}</p>
                                     ) : (
-                                        <p className="text-sm text-surface-400 italic">{t('admin.playground.selectPagePlaceholder')}</p>
+                                        <p className="text-sm text-muted-foreground italic">{t('admin.playground.selectPagePlaceholder')}</p>
                                     )}
 
                                     {/* KB Gaps */}
@@ -1185,25 +1185,25 @@ export default function AdminPlaygroundPage() {
                                         <div>
                                             <div className="flex items-center gap-2 mb-4">
                                                 <MessageSquare className="w-4 h-4 text-amber-600" aria-hidden="true" />
-                                                <h3 className="text-sm font-display font-semibold text-surface-900">
+                                                <h3 className="text-sm font-display font-semibold text-foreground">
                                                     {t('admin.playground.gaps')} {gaps.length > 0 && `(${gaps.length})`}
                                                 </h3>
                                             </div>
 
                                             {gaps.length === 0 ? (
-                                                <p className="text-sm text-surface-400 italic">{t('admin.playground.noGaps')}</p>
+                                                <p className="text-sm text-muted-foreground italic">{t('admin.playground.noGaps')}</p>
                                             ) : (
                                                 <div className="space-y-3 max-h-96 overflow-y-auto">
                                                     {gaps.map((gap) => (
-                                                        <div key={gap.id} className="p-3 bg-surface-50 rounded-lg border border-surface-200">
-                                                            <p className="text-sm text-surface-800 mb-2">{gap.queryText}</p>
+                                                        <div key={gap.id} className="p-3 bg-background rounded-lg border border-theme-border">
+                                                            <p className="text-sm text-foreground mb-2">{gap.queryText}</p>
                                                             <div className="flex flex-wrap gap-1.5">
                                                                 {gap.detectedIntent && (
-                                                                    <Badge className={INTENT_COLORS[gap.detectedIntent] || 'bg-surface-100 text-surface-600'}>
+                                                                    <Badge className={INTENT_COLORS[gap.detectedIntent] || 'bg-muted text-muted-foreground'}>
                                                                         {gap.detectedIntent}
                                                                     </Badge>
                                                                 )}
-                                                                <Badge className="bg-surface-100 text-surface-600">
+                                                                <Badge className="bg-muted text-muted-foreground">
                                                                     x{gap.occurrenceCount}
                                                                 </Badge>
                                                                 {gap.resolved && (

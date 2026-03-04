@@ -51,14 +51,14 @@ export function NotificationFilterPills({
                             'flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
                             isActive
                                 ? 'bg-brand-600 text-white shadow-sm'
-                                : 'bg-surface-100 text-surface-500 hover:bg-surface-200 hover:text-surface-700',
+                                : 'bg-muted text-muted-foreground hover:bg-muted hover:text-foreground/80',
                         )}
                     >
                         {t(labelKey as TranslationKey)}
                         {count !== undefined && count > 0 && (
                             <span className={clsx(
                                 'min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full',
-                                isActive ? 'bg-white/20 text-white' : 'bg-surface-200 text-surface-600',
+                                isActive ? 'bg-white/20 text-white' : 'bg-muted text-muted-foreground',
                             )}>
                                 {count > 99 ? '99+' : count}
                             </span>

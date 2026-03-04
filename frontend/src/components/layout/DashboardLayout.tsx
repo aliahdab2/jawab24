@@ -112,7 +112,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 
         {/* Public header - Matches landing page style */}
         {isCleanLayout ? (
-          <nav className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe px-safe-landscape">
+          <nav className="fixed w-full z-50 transition-all duration-300 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16">
                 {/* Logo - matches landing page */}
@@ -121,18 +121,18 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                     variant="main"
                     className="w-10 h-10 transition-transform group-hover:rotate-6 flex-shrink-0"
                   />
-                  <span className="font-display font-bold text-xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+                  <span className="font-display font-bold text-xl text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
                 </Link>
 
                 {/* Actions - matches landing page */}
                 <div className="flex items-center gap-1 sm:gap-4">
                   {/* Pricing link - hidden on mobile */}
-                  <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
+                  <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
                     {t('landing.nav.pricing' as TranslationKey)}
                   </Link>
                   <button
                     onClick={toggleLanguage}
-                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-surface-600 hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
                   >
                     {t('common.switchLanguage')}
                   </button>
@@ -220,7 +220,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           <>
             {/* Bottom navigation - sits ABOVE the safe area in portrait, at bottom in landscape */}
             <nav
-              className="lg:hidden fixed left-0 right-0 bg-white border-t border-surface-100/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] px-safe-landscape bottom-nav-position"
+              className="lg:hidden fixed left-0 right-0 bg-card border-t border-theme-border/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] px-safe-landscape bottom-nav-position"
             >
               <MobileNavButton
                 onClick={() => router.push('/dashboard')}
@@ -267,19 +267,19 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
         {/* Logout Confirmation Modal */}
         {showLogoutCheck && (
           <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
-              <div className="px-6 pt-6 pb-4 border-b border-surface-100">
-                <h3 className="text-lg font-bold text-surface-900 text-center">
+            <div className="bg-card rounded-2xl w-full max-w-sm shadow-xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 pt-6 pb-4 border-b border-theme-border">
+                <h3 className="text-lg font-bold text-foreground text-center">
                   {t('logout.confirmTitle')}
                 </h3>
               </div>
-              <p className="text-surface-600 text-center px-6 pt-4 pb-6">
+              <p className="text-muted-foreground text-center px-6 pt-4 pb-6">
                 {t('logout.confirmBody')}
               </p>
               <div className="flex gap-3 px-6 pb-6">
                 <button
                   onClick={() => setShowLogoutCheck(false)}
-                  className="flex-1 py-3 rounded-xl font-semibold text-surface-700 bg-surface-100 hover:bg-surface-200 transition-colors"
+                  className="flex-1 py-3 rounded-xl font-semibold text-foreground/80 bg-muted hover:bg-surface-200 transition-colors"
                 >
                   {t('common.cancel')}
                 </button>
@@ -402,7 +402,7 @@ function MobileMenuOverlay({
       {/* Menu Container - Different layouts for portrait/landscape */}
       <div
         className={clsx(
-          "absolute bg-white overflow-hidden",
+          "absolute bg-card overflow-hidden",
           isLandscape
             // Landscape: Centered modal (iOS/Android standard for landscape)
             ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl w-[90vw] max-w-[600px] max-h-[85vh] animate-in zoom-in-95 duration-200 px-safe"
@@ -425,18 +425,18 @@ function MobileMenuOverlay({
 
         {/* Header */}
         <div className={clsx(
-          "flex items-center justify-between border-b border-surface-100",
+          "flex items-center justify-between border-b border-theme-border",
           isLandscape ? "px-5 py-3" : "px-5 py-3"
         )}>
           <h3 className={clsx(
-            "font-semibold text-surface-900",
+            "font-semibold text-foreground",
             isLandscape ? "text-base" : "text-lg"
           )}>
             {t('nav.menu') || 'Menu'}
           </h3>
           <button
             onClick={onClose}
-            className="p-2 -m-2 rounded-full hover:bg-surface-100 text-surface-500 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="p-2 -m-2 rounded-full hover:bg-muted text-muted-foreground transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label="Close menu"
           >
             <X className="w-6 h-6" />
@@ -457,7 +457,7 @@ function MobileMenuOverlay({
                   onClick={() => handleNavigate(item.path)}
                   className={clsx(
                     "flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200",
-                    "bg-surface-50 hover:bg-brand-50 border border-surface-100 hover:border-brand-200",
+                    "bg-muted hover:bg-brand-50 border border-theme-border hover:border-brand-200",
                     "active:scale-95 min-h-[48px]",
                     router.pathname === item.path && "bg-brand-50 border-brand-200 text-brand-700"
                   )}
@@ -478,7 +478,7 @@ function MobileMenuOverlay({
                   onClick={() => handleNavigate(item.path)}
                   className={clsx(
                     "flex flex-col items-center justify-center p-4 rounded-2xl transition-all duration-200",
-                    "bg-white border border-surface-100/60",
+                    "bg-card border border-theme-border/60",
                     "shadow-[0_4px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
                     "active:scale-95 min-h-[90px]",
                     router.pathname === item.path && "border-brand-200 bg-brand-50/50"
@@ -487,7 +487,7 @@ function MobileMenuOverlay({
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-2 text-brand-600">
                     <item.icon className="w-6 h-6" />
                   </div>
-                  <span className="font-bold text-xs text-surface-900 text-center line-clamp-2">
+                  <span className="font-bold text-xs text-foreground text-center line-clamp-2">
                     {item.label}
                   </span>
                 </button>
@@ -500,7 +500,7 @@ function MobileMenuOverlay({
             onClick={onLogout}
             className={clsx(
               "w-full flex items-center justify-center gap-3 rounded-xl transition-all duration-200",
-              "bg-gradient-to-r from-red-50 to-white border border-red-100",
+              "bg-gradient-to-r from-red-50 to-card border border-red-100",
               "hover:border-red-200 hover:shadow-md active:scale-[0.98]",
               isLandscape ? "mt-4 py-3" : "mt-5 py-4"
             )}

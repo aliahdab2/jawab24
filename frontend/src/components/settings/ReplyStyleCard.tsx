@@ -16,8 +16,8 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
           <Sparkles className="w-5 h-5" />
         </div>
         <div className="text-start">
-          <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.replyStyle.title')}</h4>
-          <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.replyStyle.desc')}</p>
+          <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.replyStyle.title')}</h4>
+          <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('settings.replyStyle.desc')}</p>
         </div>
       </div>
 
@@ -31,7 +31,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
               'px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98] flex items-center gap-1.5',
               settings.replyStyle === style
                 ? 'bg-brand-500 text-white shadow-lg hover:bg-brand-600'
-                : 'bg-surface-100 text-surface-600 border border-surface-200 hover:bg-surface-200 hover:shadow-md',
+                : 'bg-muted text-muted-foreground border border-theme-border hover:bg-muted/80 hover:shadow-md',
             )}
           >
             {settings.replyStyle === style && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
@@ -41,7 +41,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
       </div>
 
       {/* Brand voice notes */}
-      <label htmlFor="brandVoiceNotes" className="block text-sm font-medium text-surface-700 mb-1">
+      <label htmlFor="brandVoiceNotes" className="block text-sm font-medium text-foreground/70 mb-1">
         {t('settings.replyStyle.brandVoice')}
       </label>
       <Textarea
@@ -52,17 +52,17 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
         placeholder={t('settings.replyStyle.brandVoicePlaceholder')}
         value={settings.brandVoiceNotes}
         onChange={(e) => setSettings({ ...settings, brandVoiceNotes: e.target.value })}
-        className="w-full text-sm border-surface-200 bg-surface-50 focus:ring-2 focus:ring-brand-500"
+        className="w-full text-sm border-theme-border bg-background focus:ring-2 focus:ring-brand-500"
       />
-      <p className="text-xs text-surface-400 mt-1 text-end">
+      <p className="text-xs text-muted-foreground mt-1 text-end">
         {settings.brandVoiceNotes.length}/500
       </p>
 
       {/* Hold low-confidence toggle */}
-      <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-surface-100">
+      <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-theme-border">
         <div className="text-start">
-          <p className="text-sm font-medium text-surface-700">{t('settings.replyStyle.holdLowConfidence')}</p>
-          <p className="text-xs text-surface-500">{t('settings.replyStyle.holdLowConfidenceDesc')}</p>
+          <p className="text-sm font-medium text-foreground/70">{t('settings.replyStyle.holdLowConfidence')}</p>
+          <p className="text-xs text-muted-foreground">{t('settings.replyStyle.holdLowConfidenceDesc')}</p>
         </div>
         <Toggle
           enabled={settings.holdLowConfidence}

@@ -40,7 +40,7 @@ export function NotificationGroupHeader({
                 'w-full px-5 py-3.5 transition-colors duration-200 cursor-pointer text-start',
                 hasUnread
                     ? 'bg-brand-50/40 hover:bg-brand-50/70'
-                    : 'hover:bg-surface-50',
+                    : 'hover:bg-background',
             )}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? t('notifications.collapse') : t('notifications.expand')}
@@ -61,8 +61,8 @@ export function NotificationGroupHeader({
                         <p className={clsx(
                             'text-[13px] leading-snug',
                             hasUnread
-                                ? 'font-semibold text-surface-900'
-                                : 'font-normal text-surface-500',
+                                ? 'font-semibold text-foreground'
+                                : 'font-normal text-muted-foreground',
                         )}>
                             {t('notifications.groupSummary', { count })} — {typeLabel}
                         </p>
@@ -75,8 +75,8 @@ export function NotificationGroupHeader({
 
                     {/* Timestamp */}
                     <div className="flex items-center gap-1 mt-1">
-                        <Clock className="w-3 h-3 text-surface-300" aria-hidden="true" />
-                        <p className="text-[11px] text-surface-400">
+                        <Clock className="w-3 h-3 text-muted-foreground" aria-hidden="true" />
+                        <p className="text-[11px] text-muted-foreground">
                             {getRelativeTime(latestTimestamp)}
                         </p>
                     </div>
@@ -85,7 +85,7 @@ export function NotificationGroupHeader({
                 {/* Expand/Collapse chevron */}
                 <ChevronDown
                     className={clsx(
-                        'w-4 h-4 text-surface-400 transition-transform duration-200 flex-shrink-0',
+                        'w-4 h-4 text-muted-foreground transition-transform duration-200 flex-shrink-0',
                         isExpanded && 'rotate-180',
                     )}
                     aria-hidden="true"

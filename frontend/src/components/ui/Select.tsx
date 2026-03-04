@@ -107,7 +107,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
       {isOpen && !disabled && (
         <div
           ref={dropdownRef}
-          className="absolute inset-x-0 z-[100] bg-white rounded-xl border border-surface-200 shadow-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150"
+          className="absolute inset-x-0 z-[100] bg-card rounded-xl border border-theme-border shadow-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150"
         >
           {options.length === 0 ? (
             <div className="px-4 py-3 text-sm text-surface-400 text-center">
@@ -123,7 +123,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
                   "w-full px-4 py-3 text-start text-sm flex items-center justify-between gap-2 transition-colors",
                   option.value === value
                     ? "bg-brand-50 text-brand-700 font-semibold"
-                    : "text-surface-700 hover:bg-surface-50"
+                    : "text-foreground/80 hover:bg-muted"
                 )}
               >
                 <span className="truncate">{option.label}</span>

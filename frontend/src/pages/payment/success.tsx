@@ -43,7 +43,7 @@ export default function PaymentSuccessPage() {
 
       <div className="min-h-[100dvh] bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4 pt-safe pb-safe">
         <div className="max-w-md w-full">
-          <div className="bg-white rounded-3xl shadow-xl p-8 text-center">
+          <div className="bg-card rounded-3xl shadow-xl p-8 text-center">
             {/* Success Icon */}
             <div className="mb-6 flex justify-center">
               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
@@ -52,10 +52,10 @@ export default function PaymentSuccessPage() {
             </div>
 
             {/* Success Message */}
-            <h1 className="text-3xl font-bold text-surface-900 mb-4">
+            <h1 className="text-3xl font-bold text-foreground mb-4">
               {t('payment.success.title')}
             </h1>
-            <p className="text-surface-600 mb-6">
+            <p className="text-muted-foreground mb-6">
               {t('payment.success.message')}
             </p>
 
@@ -83,8 +83,8 @@ export default function PaymentSuccessPage() {
         </div>
 
         {/* Fixed safe area backgrounds */}
-        <div className="fixed-safe-bg top-safe-bg bg-white" aria-hidden="true" />
-        <div className="fixed-safe-bg bottom-safe-bg bg-surface-100" aria-hidden="true" />
+        <div className="fixed-safe-bg top-safe-bg bg-card" aria-hidden="true" />
+        <div className="fixed-safe-bg bottom-safe-bg bg-muted" aria-hidden="true" />
       </div>
     </>
   );

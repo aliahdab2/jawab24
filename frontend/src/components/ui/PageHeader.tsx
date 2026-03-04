@@ -12,7 +12,7 @@ export function PageHeader({ title, description, action, className }: PageHeader
     <div className={`mb-5 landscape:mb-3 sm:mb-8 lg:mb-10 animate-slide-up ${className || ''}`}>
       <div className="flex items-start justify-between gap-3 sm:gap-6">
         <div className="flex-1 min-w-0 text-start">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-extrabold text-surface-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-extrabold text-foreground tracking-tight">
             {title}
           </h1>
         </div>

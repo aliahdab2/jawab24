@@ -119,13 +119,13 @@ export default function SallaOnboarding() {
               <div
                 key={i}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i <= step ? 'bg-teal-600 w-12' : 'bg-surface-200 w-8'
+                  i <= step ? 'bg-teal-600 w-12' : 'bg-muted w-8'
                 }`}
               />
             ))}
           </div>
 
-          <div className="bg-white rounded-3xl shadow-xl border border-surface-200 overflow-hidden">
+          <div className="bg-card rounded-3xl shadow-xl border border-theme-border overflow-hidden">
             <div className="p-8">
               {/* Step 0: Store Connected + Product Sync */}
               {step === 0 && (
@@ -135,11 +135,11 @@ export default function SallaOnboarding() {
                   </div>
 
                   <div>
-                    <h2 className="text-2xl font-bold text-surface-900 mb-2">
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
                       {(t as TFunc)('salla.onboarding.storeConnected')}
                     </h2>
                     {storeLoading ? (
-                      <div className="flex items-center justify-center gap-2 text-surface-500">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-sm">{(t as TFunc)('common.loading')}</span>
                       </div>
@@ -148,16 +148,16 @@ export default function SallaOnboarding() {
                         {(t as TFunc)('salla.onboarding.storeNotFound')}
                       </p>
                     ) : (
-                      <p className="text-surface-500 font-mono text-sm">
+                      <p className="text-muted-foreground font-mono text-sm">
                         {store?.storeName || store?.storeDomain}
                       </p>
                     )}
                   </div>
 
                   {/* Sync status */}
-                  <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100">
+                  <div className="p-4 rounded-2xl bg-background border border-theme-border">
                     {syncStatus === 'syncing' && (
-                      <div className="flex items-center justify-center gap-2 text-surface-600">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-sm font-medium">{(t as TFunc)('salla.onboarding.syncingProducts')}</span>
                       </div>
@@ -188,7 +188,7 @@ export default function SallaOnboarding() {
                       </div>
                     )}
                     {syncStatus === 'idle' && (
-                      <span className="text-sm text-surface-400">{(t as TFunc)('salla.onboarding.syncingProducts')}</span>
+                      <span className="text-sm text-muted-foreground">{(t as TFunc)('salla.onboarding.syncingProducts')}</span>
                     )}
                   </div>
 
@@ -213,21 +213,21 @@ export default function SallaOnboarding() {
                     <div className="w-16 h-16 mx-auto bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
                       <Globe className="w-8 h-8 text-blue-600" />
                     </div>
-                    <h2 className="text-2xl font-bold text-surface-900 mb-2">
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
                       {(t as TFunc)('salla.onboarding.connectPage')}
                     </h2>
-                    <p className="text-surface-500 text-sm">
+                    <p className="text-muted-foreground text-sm">
                       {(t as TFunc)('salla.onboarding.connectPageDesc')}
                     </p>
                   </div>
 
                   {pagesLoading ? (
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-surface-400" />
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : pages.length === 0 ? (
                     <div className="text-center py-8">
-                      <p className="text-surface-500 text-sm">
+                      <p className="text-muted-foreground text-sm">
                         {(t as TFunc)('salla.onboarding.noPages')}
                       </p>
                     </div>
@@ -240,7 +240,7 @@ export default function SallaOnboarding() {
                           className={`w-full p-4 rounded-xl border-2 transition-all text-start ${
                             selectedPageId === page.id
                               ? 'border-teal-600 bg-teal-50'
-                              : 'border-surface-200 hover:border-surface-300'
+                              : 'border-theme-border hover:border-surface-300'
                           }`}
                         >
                           <div className="flex items-center gap-3">
@@ -250,9 +250,9 @@ export default function SallaOnboarding() {
                                 : 'border-surface-300'
                             }`} />
                             <div>
-                              <p className="font-medium text-surface-900 text-sm">{page.name}</p>
+                              <p className="font-medium text-foreground text-sm">{page.name}</p>
                               {page.instagramUsername && (
-                                <p className="text-surface-400 text-xs">@{page.instagramUsername}</p>
+                                <p className="text-muted-foreground text-xs">@{page.instagramUsername}</p>
                               )}
                             </div>
                           </div>
@@ -285,7 +285,7 @@ export default function SallaOnboarding() {
 
                   <button
                     onClick={() => router.push('/dashboard')}
-                    className="w-full text-center text-sm text-surface-400 hover:text-surface-600 transition-colors"
+                    className="w-full text-center text-sm text-muted-foreground hover:text-muted-foreground transition-colors"
                   >
                     {(t as TFunc)('salla.onboarding.skipForNow')}
                   </button>
@@ -299,10 +299,10 @@ export default function SallaOnboarding() {
                     <CheckCircle2 className="w-8 h-8 text-teal-700" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-surface-900 mb-2">
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
                       {(t as TFunc)('salla.onboarding.done')}
                     </h2>
-                    <p className="text-surface-500 text-sm leading-relaxed">
+                    <p className="text-muted-foreground text-sm leading-relaxed">
                       {(t as TFunc)('salla.onboarding.doneDesc')}
                     </p>
                   </div>

@@ -109,7 +109,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
           >
             <div
               className={clsx(
-                "bg-white shadow-2xl border border-surface-100 overflow-hidden animate-slide-up pointer-events-auto",
+                "bg-card shadow-2xl border border-theme-border overflow-hidden animate-slide-up pointer-events-auto",
                 "rounded-3xl p-6 w-full max-w-sm"
               )}
             >
@@ -127,10 +127,10 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
                 <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto shadow-inner mb-3">
                   <MessageCircle className="w-7 h-7 text-emerald-600" />
                 </div>
-                <h3 className="text-lg font-display font-bold text-surface-900 tracking-tight">
+                <h3 className="text-lg font-display font-bold text-foreground tracking-tight">
                   {t('common.needHelp')}
                 </h3>
-                <p className="text-sm font-medium text-surface-500 leading-relaxed mt-1">
+                <p className="text-sm font-medium text-muted-foreground leading-relaxed mt-1">
                   {t('common.helpDescription')}
                 </p>
               </div>

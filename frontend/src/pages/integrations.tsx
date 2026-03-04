@@ -166,7 +166,7 @@ function ConnectedStoreCard({
     setDisconnecting(true);
     try {
       await platform.disconnectStore();
-      toast.success(t(platform.disconnectedKey));
+      toast.warning(t(platform.disconnectedKey));
       setShowDisconnectModal(false);
       onDisconnect();
     } catch {
@@ -182,7 +182,7 @@ function ConnectedStoreCard({
     try {
       if (alreadyLinked) {
         await platform.unlinkPage(pageId);
-        toast.success(t(platform.pageUnlinkedKey));
+        toast.warning(t(platform.pageUnlinkedKey));
       } else {
         await platform.linkPage(pageId);
         toast.success(t(platform.pageLinkedKey));
@@ -201,15 +201,15 @@ function ConnectedStoreCard({
         </div>
         <div className="text-start">
           <h3 className="font-bold text-lg landscape:text-base">{t(platform.nameKey)}</h3>
-          <p className="text-sm text-surface-500 landscape:text-xs">{t(platform.descKey)}</p>
+          <p className="text-sm text-muted-foreground landscape:text-xs">{t(platform.descKey)}</p>
         </div>
       </div>
 
       <div className="space-y-4">
         <div className={clsx('flex items-center justify-between p-3 rounded-xl', platform.accentLight)}>
           <div>
-            <p className="font-semibold text-surface-800">{store.storeName || store.storeDomain}</p>
-            <p className="text-xs text-surface-600">
+            <p className="font-semibold text-foreground">{store.storeName || store.storeDomain}</p>
+            <p className="text-xs text-muted-foreground">
               {t(platform.productsKey)}: {store.productCount} &middot;{' '}
               {t(platform.lastSyncKey)}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : t(platform.neverKey)}
             </p>
@@ -229,7 +229,7 @@ function ConnectedStoreCard({
         {pages.length > 0 && (
           <div>
             <p className="text-sm font-medium mb-2">{t(platform.linkPageKey)}</p>
-            <p className="text-xs text-surface-500 mb-2">{t(platform.linkPageDescKey)}</p>
+            <p className="text-xs text-muted-foreground mb-2">{t(platform.linkPageDescKey)}</p>
             <div className="flex flex-wrap gap-2">
               {pages.map((page) => (
                 <button
@@ -239,7 +239,7 @@ function ConnectedStoreCard({
                     'px-3 py-1.5 rounded-lg text-sm border transition-colors',
                     page.ecommerceStoreId === store.id
                       ? 'bg-green-100 border-green-300 text-green-800'
-                      : 'bg-white border-surface-200 text-surface-600 hover:border-green-300'
+                      : 'bg-card border-theme-border text-muted-foreground hover:border-green-300'
                   )}
                 >
                   {page.name}
@@ -284,13 +284,13 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
           {platform.icon}
         </div>
         <div className="text-start">
-          <h3 className="font-bold text-lg landscape:text-base text-surface-500">{t(platform.nameKey)}</h3>
-          <p className="text-sm text-surface-400 landscape:text-xs">{store.storeName || store.storeDomain}</p>
+          <h3 className="font-bold text-lg landscape:text-base text-muted-foreground">{t(platform.nameKey)}</h3>
+          <p className="text-sm text-muted-foreground landscape:text-xs">{store.storeName || store.storeDomain}</p>
         </div>
       </div>
 
-      <div className="flex items-center justify-between p-3 rounded-xl bg-surface-50 border border-surface-200">
-        <p className="text-sm text-surface-500">{t('integrations.disconnectedState' as TranslationKey)}</p>
+      <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-theme-border">
+        <p className="text-sm text-muted-foreground">{t('integrations.disconnectedState' as TranslationKey)}</p>
         <Button variant="primary" size="sm" onClick={handleReconnect}>
           <PlugZap className="w-4 h-4 me-1" aria-hidden="true" />
           {t('integrations.reconnect' as TranslationKey)}

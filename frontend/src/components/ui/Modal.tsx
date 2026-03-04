@@ -45,7 +45,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       <div className="fixed inset-0 flex items-end sm:items-center landscape:items-center justify-center p-0 sm:p-4 landscape:p-6">
         <div 
           className={clsx(
-            "relative w-full bg-white shadow-2xl overflow-hidden animate-slide-up flex flex-col",
+            "relative w-full bg-card shadow-2xl dark:shadow-black/30 overflow-hidden animate-slide-up flex flex-col",
             // Mobile portrait: bottom sheet with safe area
             "rounded-t-3xl sm:rounded-3xl landscape:rounded-3xl",
             "max-h-[85vh] sm:max-h-[85vh] landscape:max-h-[90vh]",
@@ -55,13 +55,13 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
           )}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-5 sm:p-6 border-b border-surface-100 flex-shrink-0">
-            <h3 className="text-xl font-bold text-surface-900 leading-tight">
+          <div className="flex items-center justify-between p-5 sm:p-6 border-b border-theme-border flex-shrink-0">
+            <h3 className="text-xl font-bold text-foreground leading-tight">
               {title}
             </h3>
             <button
               onClick={onClose}
-              className="p-2 -me-2 sm:me-0 rounded-xl text-surface-400 hover:bg-surface-50 hover:text-surface-600 transition-all flex-shrink-0"
+              className="p-2 -me-2 sm:me-0 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all flex-shrink-0"
             >
               <X className="w-5 h-5" />
             </button>

@@ -44,39 +44,71 @@
     --sai-side-landscape: 32px;
     
     /* ═══════════════════════════════════════════════════════════════════
-       COLOR TOKENS
+       COLOR TOKENS — Light Mode (default)
+       These CSS variables power all semantic Tailwind utilities
+       (bg-card, text-foreground, bg-muted, etc.)
     ═══════════════════════════════════════════════════════════════════ */
-    --background: 250 250 250;
-    --foreground: 9 9 11;
-    --card: 255 255 255;
-    --card-foreground: 9 9 11;
-    --primary: 13 148 136;
+    --background: 250 250 250;         /* surface-50: page background */
+    --foreground: 24 24 27;            /* surface-900: primary text */
+    --card: 255 255 255;               /* white: card/panel backgrounds */
+    --card-foreground: 24 24 27;       /* surface-900 */
+    --primary: 13 148 136;             /* brand-600 */
     --primary-foreground: 255 255 255;
-    --secondary: 244 244 245;
-    --secondary-foreground: 39 39 42;
-    --muted: 244 244 245;
-    --muted-foreground: 113 113 122;
-    --accent: 249 115 22;
+    --secondary: 244 244 245;          /* surface-100 */
+    --secondary-foreground: 39 39 42;  /* surface-800 */
+    --muted: 244 244 245;             /* surface-100: subtle sections */
+    --muted-foreground: 113 113 122;  /* surface-500: muted text */
+    --accent: 249 115 22;             /* accent-500 */
     --accent-foreground: 255 255 255;
-    --destructive: 239 68 68;
+    --destructive: 239 68 68;         /* red-500 */
     --destructive-foreground: 255 255 255;
-    --border: 228 228 231;
-    --ring: 13 148 136;
+    --border: 228 228 231;            /* surface-200: borders */
+    --ring: 13 148 136;               /* brand-600: focus rings */
   }
-  
+
+  /* ═══════════════════════════════════════════════════════════════════
+     COLOR TOKENS — Dark Mode
+     Applied when <html class="dark"> is set
+  ═══════════════════════════════════════════════════════════════════ */
+  .dark {
+    --background: 9 9 11;              /* surface-950 */
+    --foreground: 250 250 250;         /* surface-50 */
+    --card: 24 24 27;                  /* surface-900: card backgrounds */
+    --card-foreground: 244 244 245;    /* surface-100 */
+    --primary: 20 184 166;             /* brand-500 (lighter for dark bg) */
+    --primary-foreground: 255 255 255;
+    --secondary: 39 39 42;             /* surface-800 */
+    --secondary-foreground: 244 244 245;
+    --muted: 39 39 42;                /* surface-800 */
+    --muted-foreground: 161 161 170;  /* surface-400 */
+    --accent: 251 146 60;             /* accent-400 (lighter for dark bg) */
+    --accent-foreground: 255 255 255;
+    --destructive: 248 113 113;       /* red-400 */
+    --destructive-foreground: 255 255 255;
+    --border: 63 63 70;               /* surface-700 */
+    --ring: 20 184 166;               /* brand-500 */
+  }
+
   /* Safe area values are defined in --sai-* variables above.
      No need for @supports - env() with fallbacks handles this. */
 
   * {
-    @apply border-surface-200;
+    border-color: rgb(var(--border));
   }
 
   body {
-    @apply bg-surface-50 text-surface-900 font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     background-image:
       radial-gradient(ellipse at 0% 0%, rgba(20, 184, 166, 0.05) 0%, transparent 50%),
       radial-gradient(ellipse at 100% 100%, rgba(249, 115, 22, 0.03) 0%, transparent 50%);
+    transition: background-color 0.2s, color 0.2s;
     /* Height is set via html, body { height: 100% } in AppShell section */
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(ellipse at 0% 0%, rgba(20, 184, 166, 0.03) 0%, transparent 50%),
+      radial-gradient(ellipse at 100% 100%, rgba(249, 115, 22, 0.02) 0%, transparent 50%);
   }
 
   /* RTL Arabic font */
@@ -113,7 +145,7 @@
   }
 
   .btn-secondary {
-    @apply btn bg-white text-surface-700 border border-surface-200 hover:bg-surface-50 hover:border-surface-300 focus:ring-surface-400;
+    @apply btn bg-card text-foreground/80 border border-theme-border hover:bg-muted hover:border-theme-border focus:ring-surface-400;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
     font-size: 15px;
     font-weight: 600;
@@ -137,7 +169,7 @@
   }
 
   .btn-ghost {
-    @apply btn bg-transparent text-surface-600 hover:bg-surface-100 focus:ring-surface-400;
+    @apply btn bg-transparent text-muted-foreground hover:bg-muted focus:ring-surface-400;
   }
 
   .btn-danger {
@@ -153,7 +185,7 @@
   }
 
   .card {
-    @apply bg-white rounded-[1.5rem] border border-surface-100 shadow-lg shadow-surface-200/50;
+    @apply bg-card rounded-[1.5rem] border border-theme-border shadow-lg shadow-surface-200/50 dark:shadow-black/20;
   }
 
   .card-hover {
@@ -161,11 +193,11 @@
   }
 
   .input {
-    @apply w-full px-5 py-4 rounded-2xl border border-surface-200 bg-white text-surface-900 placeholder:text-surface-600 focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 transition-all duration-300 shadow-sm;
+    @apply w-full px-5 py-4 rounded-2xl border border-theme-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 transition-all duration-300 shadow-sm;
   }
 
   .label {
-    @apply block text-sm font-bold text-surface-700 mb-2 uppercase tracking-wide;
+    @apply block text-sm font-bold text-foreground/70 mb-2 uppercase tracking-wide;
   }
 
   .badge {
@@ -173,19 +205,19 @@
   }
 
   .badge-success {
-    @apply badge bg-emerald-100 text-emerald-700;
+    @apply badge bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
   }
 
   .badge-warning {
-    @apply badge bg-amber-100 text-amber-700;
+    @apply badge bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400;
   }
 
   .badge-error {
-    @apply badge bg-red-100 text-red-700;
+    @apply badge bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400;
   }
 
   .badge-info {
-    @apply badge bg-brand-100 text-brand-700;
+    @apply badge bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400;
   }
 
   .gradient-text {
@@ -196,12 +228,16 @@
   }
 
   .glass {
-    @apply bg-white/80 backdrop-blur-xl;
+    @apply bg-card/80 backdrop-blur-xl;
   }
 
   .bg-pattern {
     background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
     background-size: 24px 24px;
+  }
+
+  .dark .bg-pattern {
+    background-image: radial-gradient(#3f3f46 1px, transparent 1px);
   }
 
   .bg-gradient-mesh {
@@ -210,6 +246,14 @@
       radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.05) 0px, transparent 50%),
       radial-gradient(at 100% 100%, rgba(249, 115, 22, 0.03) 0px, transparent 50%),
       radial-gradient(at 0% 100%, rgba(20, 184, 166, 0.05) 0px, transparent 50%);
+  }
+
+  .dark .bg-gradient-mesh {
+    background:
+      radial-gradient(at 0% 0%, rgba(13, 148, 136, 0.03) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.03) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(249, 115, 22, 0.02) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(20, 184, 166, 0.03) 0px, transparent 50%);
   }
 
   /* RTL-aware page header */
@@ -222,11 +266,11 @@
   }
 
   .page-title {
-    @apply text-2xl lg:text-3xl font-display font-bold text-surface-900;
+    @apply text-2xl lg:text-3xl font-display font-bold text-foreground;
   }
 
   .page-description {
-    @apply text-surface-500 mt-1;
+    @apply text-muted-foreground mt-1;
   }
 
   /* Arabic text optimization - CSS-only, no JavaScript needed */
@@ -444,11 +488,11 @@
   }
 
 ::-webkit-scrollbar-track {
-  @apply bg-surface-100 rounded-full;
+  @apply bg-muted rounded-full;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-surface-300 rounded-full hover:bg-surface-400;
+  @apply bg-surface-300 rounded-full hover:bg-surface-400 dark:bg-surface-600 dark:hover:bg-surface-500;
 }
 
 /* Animations */

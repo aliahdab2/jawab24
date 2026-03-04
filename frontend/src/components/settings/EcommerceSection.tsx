@@ -83,7 +83,7 @@ export function EcommerceSection() {
       const storeApi = getApiForPlatform(store?.platform);
       await storeApi.disconnectStore();
       if (isMounted.current) setStore(null);
-      toast.success(t('shopify.disconnected' as TranslationKey));
+      toast.warning(t('shopify.disconnected' as TranslationKey));
     } catch {
       toast.error(t('shopify.disconnectError' as TranslationKey));
     }
@@ -149,7 +149,7 @@ export function EcommerceSection() {
                       'px-3 py-1.5 rounded-lg text-sm border transition-colors',
                       page.ecommerceStoreId === store.id
                         ? 'bg-green-100 border-green-300 text-green-800'
-                        : 'bg-white border-surface-200 text-surface-600 hover:border-green-300'
+                        : 'bg-card border-theme-border text-muted-foreground hover:border-green-300'
                     )}
                   >
                     {page.name}

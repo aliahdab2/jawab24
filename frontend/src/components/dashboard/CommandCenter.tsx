@@ -73,7 +73,7 @@ export function CommandCenter({
 
   if (hasError) {
     return (
-      <Card className="mb-8 border-none shadow-sm bg-white" padding="none">
+      <Card className="mb-8 border-none shadow-sm bg-card" padding="none">
         <div className="flex items-center justify-center gap-2 py-6 text-surface-500">
           <span className="text-sm">{t('dashboard.sectionLoadError')}</span>
           {onRetry && (
@@ -91,13 +91,13 @@ export function CommandCenter({
 
   return (
     <Card
-      className="mb-8 border-none shadow-2xl shadow-surface-200/50 bg-white overflow-hidden animate-slide-up"
+      className="mb-8 border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden animate-slide-up"
       padding="none"
       role="region"
       aria-label={t('dashboard.overview')}
     >
       {/* Period Label */}
-      <div className="px-4 py-2.5 sm:px-5 border-b border-surface-100">
+      <div className="px-4 py-2.5 sm:px-5 border-b border-theme-border">
         <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-surface-400">
           {t('dashboard.last30Days' as TranslationKey)}
         </span>
@@ -114,16 +114,16 @@ export function CommandCenter({
                 'border-s-4 px-4 py-4 sm:px-5 sm:py-5 transition-colors',
                 metric.borderColor,
                 // Dividers: bottom border on mobile top row, right border on desktop
-                i < 2 && 'border-b border-b-surface-100 md:border-b-0',
-                i < 3 && 'md:border-e md:border-e-surface-100',
+                i < 2 && 'border-b border-b-theme-border md:border-b-0',
+                i < 3 && 'md:border-e md:border-e-theme-border',
               )}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-2xl sm:text-3xl font-bold leading-none tracking-tight text-surface-900">
+                  <p className="text-2xl sm:text-3xl font-bold leading-none tracking-tight text-foreground">
                     {metric.value}
                   </p>
-                  <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-surface-500 mt-1.5">
+                  <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground mt-1.5">
                     {t(metric.labelKey)}
                   </p>
                 </div>

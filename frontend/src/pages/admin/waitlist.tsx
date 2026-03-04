@@ -108,14 +108,14 @@ export default function AdminWaitlistPage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-display font-bold text-surface-900">
+                        <h1 className="text-2xl font-display font-bold text-foreground">
                             {t('admin.waitlist.title')}
                         </h1>
-                        <p className="text-surface-500 mt-1">
+                        <p className="text-muted-foreground mt-1">
                             {t('admin.waitlist.subtitle')}
                         </p>
                     </div>
-                    <div className="text-sm text-surface-500">
+                    <div className="text-sm text-muted-foreground">
                         {pagination.total} {t('admin.waitlist.totalSignups')}
                     </div>
                 </div>
@@ -125,7 +125,7 @@ export default function AdminWaitlistPage() {
                     <div className="flex flex-col sm:flex-row gap-4">
                         {/* Search */}
                         <div className="relative flex-1">
-                            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+                            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <input
                                 type="text"
                                 placeholder={t('admin.waitlist.searchPlaceholder')}
@@ -133,7 +133,7 @@ export default function AdminWaitlistPage() {
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 dir="auto"
-                                className="w-full ps-10 pe-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
+                                className="w-full ps-10 pe-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
                             />
                         </div>
 
@@ -142,7 +142,7 @@ export default function AdminWaitlistPage() {
                             value={featureFilter}
                             onChange={(e) => setFeatureFilter(e.target.value)}
                             aria-label={t('admin.waitlist.allFeatures')}
-                            className="px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-white"
+                            className="px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card"
                         >
                             <option value="">{t('admin.waitlist.allFeatures')}</option>
                             {features.map((feature) => (
@@ -157,7 +157,7 @@ export default function AdminWaitlistPage() {
                 {/* Table */}
                 <Card padding="none">
                     {loading ? (
-                        <div className="p-8 text-center text-surface-400">
+                        <div className="p-8 text-center text-muted-foreground">
                             {t('common.loading')}
                         </div>
                     ) : error ? (
@@ -165,37 +165,37 @@ export default function AdminWaitlistPage() {
                             {error}
                         </div>
                     ) : entries.length === 0 ? (
-                        <div className="p-8 text-center text-surface-400">
+                        <div className="p-8 text-center text-muted-foreground">
                             {t('admin.waitlist.noSignups')}
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full">
-                                <thead className="bg-surface-50 border-b border-surface-200">
+                                <thead className="bg-background border-b border-theme-border">
                                     <tr>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('admin.waitlist.table.email')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('admin.waitlist.table.feature')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-surface-500 uppercase tracking-wider">
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('admin.waitlist.table.signedUp')}
                                         </th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-surface-100">
+                                <tbody className="divide-y divide-theme-border">
                                     {entries.map((entry) => (
                                         <tr
                                             key={entry.id}
-                                            className="hover:bg-surface-50 transition-colors"
+                                            className="hover:bg-background transition-colors"
                                         >
                                             <td className="px-4 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 bg-surface-200 rounded-full flex items-center justify-center">
-                                                        <Mail className="w-4 h-4 text-surface-500" />
+                                                    <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
+                                                        <Mail className="w-4 h-4 text-muted-foreground" />
                                                     </div>
-                                                    <span className="text-sm font-medium text-surface-900" dir="ltr">
+                                                    <span className="text-sm font-medium text-foreground" dir="ltr">
                                                         {entry.email}
                                                     </span>
                                                 </div>
@@ -205,7 +205,7 @@ export default function AdminWaitlistPage() {
                                                     {getFeatureLabel(entry.feature)}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-4 text-sm text-surface-600">
+                                            <td className="px-4 py-4 text-sm text-muted-foreground">
                                                 {formatDate(entry.createdAt)}
                                             </td>
                                         </tr>
@@ -217,8 +217,8 @@ export default function AdminWaitlistPage() {
 
                     {/* Pagination */}
                     {pagination.totalPages > 1 && (
-                        <div className="px-4 py-3 border-t border-surface-200 flex items-center justify-between">
-                            <div className="text-sm text-surface-500">
+                        <div className="px-4 py-3 border-t border-theme-border flex items-center justify-between">
+                            <div className="text-sm text-muted-foreground">
                                 {t('admin.waitlist.pagination.showing', {
                                     from: (pagination.page - 1) * pagination.limit + 1,
                                     to: Math.min(pagination.page * pagination.limit, pagination.total),
@@ -229,17 +229,17 @@ export default function AdminWaitlistPage() {
                                 <button
                                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                                     disabled={pagination.page <= 1}
-                                    className="p-2 rounded-lg border border-surface-200 hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <ChevronLeft className={clsx('w-4 h-4', isRTL && 'rotate-180')} />
                                 </button>
-                                <span className="text-sm text-surface-600">
+                                <span className="text-sm text-muted-foreground">
                                     {pagination.page} / {pagination.totalPages}
                                 </span>
                                 <button
                                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                                     disabled={pagination.page >= pagination.totalPages}
-                                    className="p-2 rounded-lg border border-surface-200 hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <ChevronRight className={clsx('w-4 h-4', isRTL && 'rotate-180')} />
                                 </button>

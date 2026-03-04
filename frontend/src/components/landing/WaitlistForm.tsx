@@ -65,8 +65,8 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
       className={clsx(
         'flex items-center rounded-full transition-all duration-200 w-full max-w-sm',
         isBanner
-          ? 'bg-white shadow-lg shadow-black/10'
-          : 'bg-white border border-surface-200 shadow-sm focus-within:shadow-md focus-within:border-brand-400',
+          ? 'bg-card shadow-lg shadow-black/10'
+          : 'bg-card border border-theme-border shadow-sm focus-within:shadow-md focus-within:border-brand-400',
       )}
     >
       <Mail
@@ -85,7 +85,7 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
             ? t('landing.comingSoon.placeholder')
             : t('landing.features.integrationsPlaceholder')
         }
-        className="flex-1 min-w-0 bg-transparent px-2 sm:px-3 py-2 sm:py-2.5 text-sm sm:text-base text-surface-900 placeholder:text-surface-400 focus:outline-none"
+        className="flex-1 min-w-0 bg-transparent px-2 sm:px-3 py-2 sm:py-2.5 text-sm sm:text-base text-foreground placeholder:text-surface-400 focus:outline-none"
         dir="auto"
         aria-label={
           isBanner

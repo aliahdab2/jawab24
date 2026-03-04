@@ -267,7 +267,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pb-safe landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pb-safe landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -275,20 +275,20 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-surface-400">
           <span className="font-medium">{t('comments.title')}</span>
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
-          <span className="font-semibold text-surface-600 truncate">{comment.fromName || t('common.unknownUser')}</span>
+          <span className="font-semibold text-muted-foreground truncate">{comment.fromName || t('common.unknownUser')}</span>
         </div>
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-surface-100">
+        <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsAttention ? 'bg-red-100' : 'bg-brand-100'}`}>
               <MessageSquare className={`w-5 h-5 ${needsAttention ? 'text-red-600' : 'text-brand-600'}`} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-surface-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 {mode === 'quick' ? t('comments.reply') : t('comments.commentDetails')}
               </h2>
-              <p className="text-sm text-surface-500">
+              <p className="text-sm text-muted-foreground">
                 {comment.fromName || t('common.unknownUser')}
               </p>
               {pageName && (
@@ -345,7 +345,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
           {/* Original Comment */}
           <div className="bg-surface-50 rounded-xl p-4">
-            <p className="text-surface-900 whitespace-pre-wrap">{comment.message}</p>
+            <p className="text-foreground whitespace-pre-wrap">{comment.message}</p>
             <div className="flex items-center gap-3 mt-3 text-xs text-surface-400">
               <span title={formatFullTime(comment.createdAt)}>{formatMessageTime(comment.createdAt)}</span>
             </div>
@@ -358,7 +358,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 {t('comments.reply')}
               </h3>
               <div className="bg-brand-50 rounded-xl p-4 border-s-4 border-brand-500">
-                <p className="text-surface-900 whitespace-pre-wrap">{comment.replyText}</p>
+                <p className="text-foreground whitespace-pre-wrap">{comment.replyText}</p>
                 <div className="flex items-center gap-3 mt-3 text-xs text-surface-500">
                   <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>
                   <Badge size="sm" variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>
@@ -418,7 +418,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <textarea
                 id="comment-reply-textarea"
                 ref={textareaRef}
-                className="w-full p-3 rounded-lg border border-surface-300 focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-surface-900 placeholder:text-surface-400 resize-y"
+                className="w-full p-3 rounded-lg border border-theme-border focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-foreground placeholder:text-muted-foreground resize-y"
                 placeholder={t('comments.typeReply')}
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
@@ -458,7 +458,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         {/* Modal Footer */}
         {mode === 'full' && (
           <div
-            className="p-4 md:p-6 pb-safe-content border-t border-surface-100 bg-white"
+            className="p-4 md:p-6 pb-safe-content border-t border-theme-border bg-card"
           >
             <div className="flex items-center justify-between">
               {comment.fromId && (

@@ -18,12 +18,12 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
   ];
 
   return (
-    <section className="py-12 sm:py-20 lg:py-32 bg-white">
+    <section className="py-12 sm:py-20 lg:py-32 bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-4 sm:gap-8 lg:gap-16 items-center">
           {/* Steps */}
           <div className="space-y-4 sm:space-y-8 col-span-1">
-            <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-4 sm:mb-8 leading-relaxed text-start">
+            <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-4 sm:mb-8 leading-relaxed text-start">
               {t('landing.howItWorks.title1')}
               <span className="block text-brand-600 mt-2">{t('landing.howItWorks.title2')}</span>
             </h2>
@@ -34,8 +34,8 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
                     {item.step}
                   </div>
                   <div className="text-start">
-                    <h3 className="text-sm sm:text-xl font-bold text-surface-900 mb-1 sm:mb-2">{item.title}</h3>
-                    <p className="text-[10px] sm:text-base text-surface-600 font-medium leading-relaxed">{item.description}</p>
+                    <h3 className="text-sm sm:text-xl font-bold text-foreground mb-1 sm:mb-2">{item.title}</h3>
+                    <p className="text-[10px] sm:text-base text-muted-foreground font-medium leading-relaxed">{item.description}</p>
                   </div>
                 </div>
               ))}

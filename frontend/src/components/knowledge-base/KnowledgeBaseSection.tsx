@@ -50,7 +50,7 @@ export function KnowledgeBaseSection({
           ? 'border-brand-400 bg-brand-50/20 shadow-sm'
           : hasContent
             ? 'border-brand-200 bg-brand-50/10'
-            : 'border-surface-200 bg-white hover:border-surface-300'
+            : 'border-theme-border bg-card hover:border-surface-300'
       }`}
     >
       {/* Header - always visible, clickable */}
@@ -64,7 +64,7 @@ export function KnowledgeBaseSection({
 
         {/* Title + preview */}
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-bold ${hasContent || isExpanded ? 'text-surface-900' : 'text-surface-600'}`}>
+          <p className={`text-sm font-bold ${hasContent || isExpanded ? 'text-foreground' : 'text-muted-foreground'}`}>
             {t(config.titleKey as TranslationKey)}
           </p>
           {!isExpanded && (
@@ -97,7 +97,7 @@ export function KnowledgeBaseSection({
           </p>
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed text-surface-900 placeholder:text-surface-300"
+            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed text-foreground placeholder:text-surface-300"
             placeholder={t(config.placeholderKey as TranslationKey)}
             aria-label={t(config.titleKey as TranslationKey)}
             value={section.content}

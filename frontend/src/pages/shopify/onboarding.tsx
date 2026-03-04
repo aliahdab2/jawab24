@@ -125,13 +125,13 @@ export default function ShopifyOnboarding() {
               <div
                 key={i}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i <= step ? 'bg-emerald-500 w-12' : 'bg-surface-200 w-8'
+                  i <= step ? 'bg-emerald-500 w-12' : 'bg-muted w-8'
                 }`}
               />
             ))}
           </div>
 
-          <div className="bg-white rounded-3xl shadow-xl border border-surface-200 overflow-hidden">
+          <div className="bg-card rounded-3xl shadow-xl border border-theme-border overflow-hidden">
             <div className="p-8">
               {/* Step 0: Store Connected + Product Sync */}
               {step === 0 && (
@@ -141,11 +141,11 @@ export default function ShopifyOnboarding() {
                   </div>
 
                   <div>
-                    <h2 className="text-2xl font-bold text-surface-900 mb-2">
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
                       {(t as TFunc)('shopify.onboarding.storeConnected')}
                     </h2>
                     {storeLoading ? (
-                      <div className="flex items-center justify-center gap-2 text-surface-500">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-sm">{(t as TFunc)('common.loading')}</span>
                       </div>
@@ -154,16 +154,16 @@ export default function ShopifyOnboarding() {
                         {(t as TFunc)('shopify.onboarding.storeNotFound')}
                       </p>
                     ) : (
-                      <p className="text-surface-500 font-mono text-sm">
+                      <p className="text-muted-foreground font-mono text-sm">
                         {store?.storeDomain}
                       </p>
                     )}
                   </div>
 
                   {/* Sync status */}
-                  <div className="p-4 rounded-2xl bg-surface-50 border border-surface-100">
+                  <div className="p-4 rounded-2xl bg-background border border-theme-border">
                     {syncStatus === 'syncing' && (
-                      <div className="flex items-center justify-center gap-2 text-surface-600">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-sm font-medium">{(t as TFunc)('shopify.onboarding.syncingProducts')}</span>
                       </div>
@@ -194,7 +194,7 @@ export default function ShopifyOnboarding() {
                       </div>
                     )}
                     {syncStatus === 'idle' && (
-                      <span className="text-sm text-surface-400">{(t as TFunc)('shopify.onboarding.syncingProducts')}</span>
+                      <span className="text-sm text-muted-foreground">{(t as TFunc)('shopify.onboarding.syncingProducts')}</span>
                     )}
                   </div>
 
@@ -219,21 +219,21 @@ export default function ShopifyOnboarding() {
                     <div className="w-16 h-16 mx-auto bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
                       <Globe className="w-8 h-8 text-blue-600" />
                     </div>
-                    <h2 className="text-2xl font-bold text-surface-900 mb-2">
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
                       {(t as TFunc)('shopify.onboarding.connectPage')}
                     </h2>
-                    <p className="text-surface-500 text-sm">
+                    <p className="text-muted-foreground text-sm">
                       {(t as TFunc)('shopify.onboarding.connectPageDesc')}
                     </p>
                   </div>
 
                   {pagesLoading ? (
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-surface-400" />
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : pages.length === 0 ? (
                     <div className="text-center py-8">
-                      <p className="text-surface-500 text-sm">
+                      <p className="text-muted-foreground text-sm">
                         {(t as TFunc)('shopify.onboarding.noPages')}
                       </p>
                     </div>
@@ -246,7 +246,7 @@ export default function ShopifyOnboarding() {
                           className={`w-full p-4 rounded-xl border-2 transition-all text-start ${
                             selectedPageId === page.id
                               ? 'border-emerald-500 bg-emerald-50'
-                              : 'border-surface-200 hover:border-surface-300'
+                              : 'border-theme-border hover:border-surface-300'
                           }`}
                         >
                           <div className="flex items-center gap-3">
@@ -256,9 +256,9 @@ export default function ShopifyOnboarding() {
                                 : 'border-surface-300'
                             }`} />
                             <div>
-                              <p className="font-medium text-surface-900 text-sm">{page.name}</p>
+                              <p className="font-medium text-foreground text-sm">{page.name}</p>
                               {page.instagramUsername && (
-                                <p className="text-surface-400 text-xs">@{page.instagramUsername}</p>
+                                <p className="text-muted-foreground text-xs">@{page.instagramUsername}</p>
                               )}
                             </div>
                           </div>
@@ -292,7 +292,7 @@ export default function ShopifyOnboarding() {
                   {/* Skip option */}
                   <button
                     onClick={() => router.push('/dashboard')}
-                    className="w-full text-center text-sm text-surface-400 hover:text-surface-600 transition-colors"
+                    className="w-full text-center text-sm text-muted-foreground hover:text-muted-foreground transition-colors"
                   >
                     {(t as TFunc)('shopify.onboarding.skipForNow')}
                   </button>
@@ -306,10 +306,10 @@ export default function ShopifyOnboarding() {
                     <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-surface-900 mb-2">
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
                       {(t as TFunc)('shopify.onboarding.done')}
                     </h2>
-                    <p className="text-surface-500 text-sm leading-relaxed">
+                    <p className="text-muted-foreground text-sm leading-relaxed">
                       {(t as TFunc)('shopify.onboarding.doneDesc')}
                     </p>
                   </div>

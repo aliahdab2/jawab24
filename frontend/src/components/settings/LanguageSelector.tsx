@@ -42,17 +42,17 @@ export function LanguageSelector({
             <Globe className="w-6 h-6 landscape:w-5 landscape:h-5" />
           </div>
           <div className="text-start">
-            <h3 className="font-bold text-surface-900 text-base landscape:text-sm">{t('settings.language')}</h3>
-            <p className="text-xs text-surface-500 mt-1">{t('settings.dashboardLanguage.desc')}</p>
+            <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('settings.language')}</h3>
+            <p className="text-xs text-muted-foreground mt-1">{t('settings.dashboardLanguage.desc')}</p>
           </div>
         </div>
 
-        <div className="flex gap-1 p-1 bg-surface-100 rounded-xl">
+        <div className="flex gap-1 p-1 bg-muted rounded-xl">
           <button
             onClick={() => handleLanguageChange('ar')}
             className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'ar'
-              ? 'bg-white text-brand-600 shadow-sm'
-              : 'text-surface-600 hover:text-surface-900'
+              ? 'bg-card text-brand-600 shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
               }`}
           >
             🇸🇦 {t('common.langArabic')}
@@ -60,8 +60,8 @@ export function LanguageSelector({
           <button
             onClick={() => handleLanguageChange('en')}
             className={`px-4 py-2 landscape:py-1.5 landscape:px-3 rounded-lg text-sm font-bold transition-all ${settings.dashboardLanguage === 'en'
-              ? 'bg-white text-brand-600 shadow-sm'
-              : 'text-surface-600 hover:text-surface-900'
+              ? 'bg-card text-brand-600 shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
               }`}
           >
             🇬🇧 {t('common.langEnglish')}

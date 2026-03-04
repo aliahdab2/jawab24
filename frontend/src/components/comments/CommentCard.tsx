@@ -131,7 +131,7 @@ export function CommentCard({
   return (
     <div
       className={clsx(
-        "relative rounded-3xl bg-white border border-surface-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group",
+        "relative rounded-3xl bg-card border border-theme-border shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group",
         needsAttention && 'ring-1 ring-red-100',
         className
       )}
@@ -170,7 +170,7 @@ export function CommentCard({
           <div className="flex flex-col items-start gap-1 min-w-0">
              {/* Name & Time */}
              <div className="flex flex-col px-1 mb-1">
-                <span className="text-sm font-bold text-surface-900 truncate">
+                <span className="text-sm font-bold text-foreground truncate">
                    {comment.fromName || t('common.unknownUser')}
                 </span>
                 <div className="flex items-center gap-2 mt-0.5">

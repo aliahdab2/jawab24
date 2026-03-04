@@ -25,8 +25,8 @@ const variantStyles: Record<EmptyStateVariant, { iconBg: string; iconColor: stri
     iconColor: 'text-emerald-500',
   },
   search: {
-    iconBg: 'bg-surface-100',
-    iconColor: 'text-surface-400',
+    iconBg: 'bg-muted',
+    iconColor: 'text-muted-foreground',
   },
 };
 
@@ -58,11 +58,11 @@ export function EmptyState({
         <Icon className={clsx('w-7 h-7 sm:w-9 sm:h-9', colorClass)} aria-hidden="true" />
       </div>
 
-      <h2 className="text-xl sm:text-2xl font-display font-bold text-surface-900 mb-2 sm:mb-3 tracking-tight">
+      <h2 className="text-xl sm:text-2xl font-display font-bold text-foreground mb-2 sm:mb-3 tracking-tight">
         {title}
       </h2>
 
-      <p className="text-sm sm:text-base text-surface-500 max-w-md mb-6 sm:mb-8 leading-relaxed">
+      <p className="text-sm sm:text-base text-muted-foreground max-w-md mb-6 sm:mb-8 leading-relaxed">
         {description}
       </p>
 
@@ -73,7 +73,7 @@ export function EmptyState({
       )}
 
       {secondaryAction && (
-        <div className="mt-3 sm:mt-4 text-sm text-surface-400">
+        <div className="mt-3 sm:mt-4 text-sm text-muted-foreground">
           {secondaryAction}
         </div>
       )}

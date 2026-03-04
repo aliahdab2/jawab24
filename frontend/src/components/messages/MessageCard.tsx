@@ -130,7 +130,7 @@ export function MessageCard({
   return (
     <div
       className={clsx(
-        'relative rounded-2xl sm:rounded-3xl bg-white border border-surface-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group',
+        'relative rounded-2xl sm:rounded-3xl bg-card border border-theme-border shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group',
         conv.needsHumanAttention && 'ring-1 ring-red-100',
         className
       )}
@@ -174,7 +174,7 @@ export function MessageCard({
 
           <div className="flex flex-col items-start min-w-0">
             <div className="flex flex-col px-1">
-              <span className="text-sm font-bold text-surface-900 truncate">
+              <span className="text-sm font-bold text-foreground truncate">
                 {conv.senderName || t('common.unknownUser')}
               </span>
               <div className="flex items-center gap-2 mt-0.5">

@@ -72,7 +72,7 @@ export function KnowledgeBaseCustomSection({
           ? 'border-brand-400 bg-brand-50/20 shadow-sm'
           : hasContent
             ? 'border-brand-200 bg-brand-50/10'
-            : 'border-surface-200 bg-white hover:border-surface-300'
+            : 'border-theme-border bg-card hover:border-surface-300'
       }`}
     >
       {/* Header */}
@@ -89,7 +89,7 @@ export function KnowledgeBaseCustomSection({
           {isExpanded ? (
             <input
               ref={titleRef}
-              className="text-sm font-bold text-surface-900 bg-transparent border-0 border-b border-transparent focus:border-brand-400 outline-none w-full p-0"
+              className="text-sm font-bold text-foreground bg-transparent border-0 border-b border-transparent focus:border-brand-400 outline-none w-full p-0"
               value={section.title || ''}
               onChange={handleTitleChange}
               onClick={(e) => e.stopPropagation()}
@@ -99,7 +99,7 @@ export function KnowledgeBaseCustomSection({
               dir="auto"
             />
           ) : (
-            <p className={`text-sm font-bold ${hasContent ? 'text-surface-900' : 'text-surface-600'}`}>
+            <p className={`text-sm font-bold ${hasContent ? 'text-foreground' : 'text-muted-foreground'}`}>
               {section.title || t('kb.customSection.titlePlaceholder' as TranslationKey)}
             </p>
           )}
@@ -142,7 +142,7 @@ export function KnowledgeBaseCustomSection({
           </p>
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-surface-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed text-surface-900 placeholder:text-surface-300"
+            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed text-foreground placeholder:text-surface-300"
             placeholder={t('kb.customSection.placeholder' as TranslationKey)}
             aria-label={t('kb.customSection.placeholder' as TranslationKey)}
             value={section.content}

@@ -155,10 +155,12 @@ export const useAuthStore = create<AuthState>()(
 );
 
 export type SSEStatus = 'connected' | 'reconnecting' | 'disconnected';
+export type Theme = 'light' | 'dark' | 'system';
 
 interface UIState {
   sidebarOpen: boolean;
   language: Language;
+  theme: Theme;
   _hasHydrated: boolean;
   isOnboardingVisible: boolean;
   // SSE live counters (ephemeral — not persisted, reset on page reload)
@@ -168,6 +170,7 @@ interface UIState {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setLanguage: (lang: Language) => void;
+  setTheme: (theme: Theme) => void;
   setHasHydrated: (state: boolean) => void;
   setOnboardingVisible: (visible: boolean) => void;
   incrementUnreadComments: () => void;
@@ -182,6 +185,7 @@ export const useUIStore = create<UIState>()(
     (set) => ({
       sidebarOpen: true,
       language: 'ar' as Language,
+      theme: 'system' as Theme,
       _hasHydrated: false,
       isOnboardingVisible: false,
       unreadComments: 0,
@@ -190,6 +194,7 @@ export const useUIStore = create<UIState>()(
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setLanguage: (lang) => set({ language: lang }),
+      setTheme: (theme) => set({ theme }),
       setHasHydrated: (state) => set({ _hasHydrated: state }),
       setOnboardingVisible: (visible) => set({ isOnboardingVisible: visible }),
       incrementUnreadComments: () => set((state) => ({ unreadComments: state.unreadComments + 1 })),
@@ -205,7 +210,7 @@ export const useUIStore = create<UIState>()(
         setItem: async (name, value) => (await getPersistStorage()).setItem(name, value),
         removeItem: async (name) => (await getPersistStorage()).removeItem(name),
       })),
-      partialize: (state) => ({ language: state.language }),
+      partialize: (state) => ({ language: state.language, theme: state.theme }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },

@@ -229,12 +229,12 @@ export default function AuthCallback() {
     return (
       <>
         <Head><meta name="robots" content="noindex, nofollow" /></Head>
-        <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50">
+        <div className="flex-1 overflow-y-auto flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4"><span className="text-red-500 text-2xl font-bold" aria-hidden="true">&times;</span></div>
-          <h1 className="text-xl font-semibold text-surface-900 mb-2">{t('auth.loginError')}</h1>
-          <p className="text-surface-500 mb-4">{error}</p>
-          <p className="text-sm text-surface-400">{t('auth.redirecting')}</p>
+          <h1 className="text-xl font-semibold text-foreground mb-2">{t('auth.loginError')}</h1>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <p className="text-sm text-muted-foreground">{t('auth.redirecting')}</p>
         </div>
       </div>
       </>

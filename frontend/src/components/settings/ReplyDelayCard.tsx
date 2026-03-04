@@ -21,8 +21,8 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
           <Clock className="w-5 h-5" />
         </div>
         <div className="text-start">
-          <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.replyDelay.title')}</h4>
-          <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.replyDelay.desc')}</p>
+          <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.replyDelay.title')}</h4>
+          <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('settings.replyDelay.desc')}</p>
         </div>
       </div>
       <div className="flex items-center gap-3 mb-2">
@@ -33,9 +33,9 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
           aria-label={t('settings.replyDelay.title')}
           value={settings.replyDelay}
           onChange={(e) => setSettings({ ...settings, replyDelay: Math.min(60, Math.max(0, parseInt(e.target.value) || 0)) })}
-          className="w-full py-4 landscape:py-2.5 text-center font-bold text-lg border-none bg-surface-50 focus:ring-2 focus:ring-brand-500"
+          className="w-full py-4 landscape:py-2.5 text-center font-bold text-lg border-none bg-background focus:ring-2 focus:ring-brand-500"
         />
-        <span className="text-sm font-bold text-surface-500 uppercase tracking-widest">{t('settings.seconds')}</span>
+        <span className="text-sm font-bold text-muted-foreground uppercase tracking-widest">{t('settings.seconds')}</span>
       </div>
       <div className="mt-2 flex gap-2 flex-wrap">
         {[
@@ -50,7 +50,7 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
               "px-4 py-3 text-sm font-medium rounded-lg transition-all min-h-[44px] active:scale-[0.98] flex items-center gap-1.5",
               settings.replyDelay === opt.value
                 ? "bg-brand-500 text-white shadow-lg hover:bg-brand-600"
-                : "bg-surface-100 text-surface-600 border border-surface-200 hover:bg-surface-200 hover:shadow-md"
+                : "bg-muted text-muted-foreground border border-theme-border hover:bg-muted/80 hover:shadow-md"
             )}
           >
             {settings.replyDelay === opt.value && <Check className="w-3.5 h-3.5" />}
@@ -58,7 +58,7 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
           </button>
         ))}
       </div>
-      <p className="text-xs text-surface-500 mt-3">
+      <p className="text-xs text-muted-foreground mt-3">
         {t('settings.replyDelay.example' as TranslationKey)}
       </p>
       <button
@@ -69,11 +69,11 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
         {showDelayInfo ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
       </button>
       {showDelayInfo && (
-        <div className="mt-2 p-3 rounded-lg bg-surface-50 border border-surface-200 animate-slide-up">
-          <p className="text-xs text-surface-500">
+        <div className="mt-2 p-3 rounded-lg bg-background border border-theme-border animate-slide-up">
+          <p className="text-xs text-muted-foreground">
             {t('settings.replyDelay.tip')}
           </p>
-          <p className="text-xs text-surface-400 mt-1 font-mono">
+          <p className="text-xs text-muted-foreground mt-1 font-mono">
             {t('settings.replyDelay.formula' as TranslationKey)}
           </p>
         </div>

@@ -84,12 +84,12 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
   if (showFollowUp) {
     return (
       <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-        <div className="bg-surface-50 rounded-xl p-4 border border-surface-200">
+        <div className="bg-background rounded-xl p-4 border border-theme-border">
           <div className="flex justify-between items-start mb-3">
-            <h4 className="text-sm font-semibold text-surface-900">
-              {t('feedback.whatWentWrong')} <span className="text-surface-400 font-normal">{t('feedback.optional')}</span>
+            <h4 className="text-sm font-semibold text-foreground">
+              {t('feedback.whatWentWrong')} <span className="text-muted-foreground font-normal">{t('feedback.optional')}</span>
             </h4>
-            <button onClick={() => setShowFollowUp(false)} className="text-surface-400 hover:text-surface-600">
+            <button onClick={() => setShowFollowUp(false)} className="text-muted-foreground hover:text-muted-foreground">
                <X className="w-4 h-4" />
             </button>
           </div>
@@ -99,11 +99,11 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
               <label key={r.id} className="flex items-center gap-2 cursor-pointer group">
                 <input 
                   type="checkbox" 
-                  className="rounded border-surface-300 text-brand-600 focus:ring-brand-500 transition-colors"
+                  className="rounded border-theme-border text-brand-600 focus:ring-brand-500 transition-colors"
                   checked={selectedReasons.includes(r.id)}
                   onChange={() => toggleReason(r.id)}
                 />
-                <span className="text-sm text-surface-700 group-hover:text-surface-900 transition-colors">{r.label}</span>
+                <span className="text-sm text-foreground/70 group-hover:text-foreground transition-colors">{r.label}</span>
               </label>
             ))}
           </div>
@@ -133,7 +133,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
 
   return (
     <div className="mt-4 flex flex-col items-start gap-2">
-      <span className="text-[13px] font-medium text-surface-400">
+      <span className="text-[13px] font-medium text-muted-foreground">
         {t('feedback.helpful' as TranslationKey) || 'Was this reply helpful?'}
       </span>
       <div className="flex items-center gap-2">
@@ -147,8 +147,8 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
             feedback === 'positive' 
               ? "bg-brand-100 text-brand-600 shadow-sm ring-1 ring-brand-200" 
               : feedback === 'negative'
-                ? "opacity-30 cursor-not-allowed text-surface-400"
-                : "text-surface-400 hover:bg-surface-100 hover:text-surface-600 bg-surface-50"
+                ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-muted-foreground bg-background"
           )}
         >
           <ThumbsUp className="w-[18px] h-[18px]" />
@@ -164,8 +164,8 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
             feedback === 'negative'
               ? "bg-red-100 text-red-600 shadow-sm ring-1 ring-red-200"
               : feedback === 'positive'
-                ? "opacity-30 cursor-not-allowed text-surface-400"
-                : "text-surface-400 hover:bg-red-50 hover:text-red-600 bg-surface-50"
+                ? "opacity-30 cursor-not-allowed text-muted-foreground"
+                : "text-muted-foreground hover:bg-red-50 hover:text-red-600 bg-background"
           )}
         >
           <ThumbsDown className="w-[18px] h-[18px]" />

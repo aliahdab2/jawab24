@@ -35,7 +35,7 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
       }`}
       dir={language === 'ar' ? 'rtl' : 'ltr'}
     >
-      <div className="relative bg-white rounded-3xl shadow-2xl border border-surface-100/60 overflow-hidden">
+      <div className="relative bg-card rounded-3xl shadow-2xl border border-theme-border/60 overflow-hidden">
         {/* Decorative gradient top bar */}
         <div className="h-1 bg-gradient-to-r from-brand-500 via-violet-500 to-brand-400" />
 
@@ -57,10 +57,10 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
               <span className="absolute -top-1 -end-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-white animate-pulse" />
             </div>
             <div className="flex-1 min-w-0 pe-6">
-              <p className="text-[15px] font-bold text-surface-900 mb-1">
+              <p className="text-[15px] font-bold text-foreground mb-1">
                 {t('notifications.prePrompt.title' as TranslationKey)}
               </p>
-              <p className="text-[13px] text-surface-500 leading-relaxed">
+              <p className="text-[13px] text-muted-foreground leading-relaxed">
                 {t('notifications.prePrompt.body' as TranslationKey)}
               </p>
             </div>
@@ -78,7 +78,7 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
             <button
               type="button"
               onClick={handleDismiss}
-              className="py-3 px-5 rounded-2xl text-surface-400 text-sm font-medium hover:text-surface-600 hover:bg-surface-50 active:scale-[0.97] transition-all duration-200"
+              className="py-3 px-5 rounded-2xl text-surface-400 text-sm font-medium hover:text-muted-foreground hover:bg-muted active:scale-[0.97] transition-all duration-200"
             >
               {t('notifications.prePrompt.later' as TranslationKey)}
             </button>

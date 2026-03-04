@@ -48,7 +48,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto flex flex-col bg-white">
+    <div className="flex-1 overflow-y-auto flex flex-col bg-card">
       <Head>
         <title>{BRAND_ASSETS.meta.appTitle}</title>
         <meta name="description" content={t('landing.seoDescription')} />
@@ -72,10 +72,10 @@ export default function LandingPage() {
         />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white overflow-x-hidden">
+      <div className="flex-1 overflow-y-auto bg-card overflow-x-hidden">
         {/* Navigation */}
         <nav
-          className="fixed w-full z-50 transition-all duration-300 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe px-safe-landscape"
+          className="fixed w-full z-50 transition-all duration-300 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape"
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16 sm:h-20">
@@ -84,16 +84,16 @@ export default function LandingPage() {
                   variant="main"
                   className="w-10 h-10 sm:w-12 sm:h-12 transition-transform group-hover:rotate-6 flex-shrink-0"
                 />
-                <span className="font-display font-bold text-xl sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+                <span className="font-display font-bold text-xl sm:text-2xl text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
               </Link>
 
               <div className="flex items-center gap-1 sm:gap-4">
-                <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
+                <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
                   {t('landing.nav.pricing')}
                 </Link>
                 <button
                   onClick={toggleLanguage}
-                  className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-surface-600 hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
                 >
                   {t('common.switchLanguage')}
                 </button>
@@ -105,7 +105,7 @@ export default function LandingPage() {
                   </Link>
                 ) : (
                   <Link href="/login?redirect=%2Fdashboard">
-                    <Button variant="secondary" size="sm" className="font-bold border-none bg-surface-100">
+                    <Button variant="secondary" size="sm" className="font-bold border-none bg-muted">
                       {t('landing.nav.login')}
                     </Button>
                   </Link>
@@ -145,9 +145,9 @@ export default function LandingPage() {
         </section>
 
         {/* Upcoming Integrations Section */}
-        <section className="py-10 sm:py-16 bg-gradient-to-br from-surface-50 via-white to-emerald-50/30">
+        <section className="py-10 sm:py-16 bg-gradient-to-br from-background via-card to-emerald-50/30">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="relative rounded-2xl sm:rounded-3xl bg-white border border-surface-100 shadow-xl shadow-surface-200/50 overflow-hidden">
+            <div className="relative rounded-2xl sm:rounded-3xl bg-card border border-theme-border shadow-xl shadow-surface-200/50 overflow-hidden">
               <div className="absolute top-0 start-0 end-0 h-1 bg-gradient-to-r from-[#96bf48] to-[#004956]" />
               <div className="p-6 sm:p-10 flex flex-col items-center text-center gap-5 sm:gap-6">
                 <div className="flex items-center gap-4">
@@ -159,10 +159,10 @@ export default function LandingPage() {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-lg sm:text-2xl font-display font-bold text-surface-900 mb-2">
+                  <h3 className="text-lg sm:text-2xl font-display font-bold text-foreground mb-2">
                     {t('landing.features.integrationsTitle')}
                   </h3>
-                  <p className="text-sm sm:text-base text-surface-500 font-medium max-w-md mx-auto">
+                  <p className="text-sm sm:text-base text-muted-foreground font-medium max-w-md mx-auto">
                     {t('landing.features.integrationsDesc')}
                   </p>
                 </div>

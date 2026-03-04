@@ -62,33 +62,33 @@ export function RuleCard({
       hover
       className={clsx(
         "animate-slide-up border-none transition-all duration-300 rounded-3xl overflow-hidden group flex flex-col h-full",
-        !rule.active ? 'opacity-75 grayscale-[0.5]' : 'bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
+        !rule.active ? 'opacity-75 grayscale-[0.5]' : 'bg-card shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
       )}
       padding="none"
       style={{ animationDelay: `${index * 0.05}s` } as React.CSSProperties}
     >
       <div className="flex flex-col lg:flex-row">
         {/* Priority & Reorder Controls */}
-        <div className="bg-surface-50 border-b lg:border-b-0 lg:border-e border-surface-100 p-4 lg:p-6 flex lg:flex-col items-center justify-between lg:justify-center gap-4">
+        <div className="bg-surface-50 border-b lg:border-b-0 lg:border-e border-theme-border p-4 lg:p-6 flex lg:flex-col items-center justify-between lg:justify-center gap-4">
           <div className="flex lg:flex-col items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onPriorityChange(rule.id, 'up')}
               disabled={index === 0}
-              className="text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm"
+              className="text-surface-400 hover:text-brand-600 hover:bg-card shadow-sm"
             >
               <ArrowUp className="w-4 h-4" />
             </Button>
-            <div className="w-10 h-10 rounded-xl bg-white border border-surface-200 shadow-sm flex items-center justify-center">
-              <span className="text-lg font-bold text-surface-900">{rule.priority}</span>
+            <div className="w-10 h-10 rounded-xl bg-card border border-theme-border shadow-sm flex items-center justify-center">
+              <span className="text-lg font-bold text-foreground">{rule.priority}</span>
             </div>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onPriorityChange(rule.id, 'down')}
               disabled={index === totalRules - 1}
-              className="text-surface-400 hover:text-brand-600 hover:bg-white shadow-sm"
+              className="text-surface-400 hover:text-brand-600 hover:bg-card shadow-sm"
             >
               <ArrowDown className="w-4 h-4" />
             </Button>
@@ -106,7 +106,7 @@ export function RuleCard({
         <div className="flex-1 p-6 text-start">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <h3 className="text-lg font-bold text-surface-900">{rule.name}</h3>
+              <h3 className="text-lg font-bold text-foreground">{rule.name}</h3>
               <div className={`w-2 h-2 rounded-full ${rule.active ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
             </div>
             <div className="hidden lg:block">
@@ -127,7 +127,7 @@ export function RuleCard({
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {(rule.keywords || []).map((keyword) => (
-                  <span key={keyword} className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 text-blue-800 text-xs font-bold shadow-sm">
+                  <span key={keyword} className="px-2.5 py-1 rounded-lg bg-card border border-blue-200 text-blue-800 text-xs font-bold shadow-sm">
                     {keyword}
                   </span>
                 ))}
@@ -167,7 +167,7 @@ export function RuleCard({
         </div>
 
         {/* Actions Footer / Side */}
-        <div className="bg-surface-50 lg:bg-white border-t lg:border-t-0 lg:border-s border-surface-100 p-4 lg:p-6 flex lg:flex-col items-center justify-end lg:justify-center gap-2">
+        <div className="bg-surface-50 lg:bg-card border-t lg:border-t-0 lg:border-s border-theme-border p-4 lg:p-6 flex lg:flex-col items-center justify-end lg:justify-center gap-2">
           <Button
             variant="ghost"
             size="sm"

@@ -50,7 +50,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           </div>
           <div className="text-start">
             <div className="flex items-center gap-2">
-              <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.businessHours')}</h4>
+              <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.businessHours')}</h4>
               {settings.businessHoursOnly && (() => {
                 const parts = new Intl.DateTimeFormat('en-US', {
                   timeZone: settings.timezone,
@@ -86,7 +86,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                 );
               })()}
             </div>
-            <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.businessHoursDesc')}</p>
+            <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('settings.businessHoursDesc')}</p>
           </div>
         </div>
         <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} aria-label={t('settings.businessHours')} />
@@ -154,7 +154,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                   options={timeSlots}
                   disabled={!settings.businessHoursOnly}
                   className={clsx(
-                    "!py-3 font-bold border-none bg-white shadow-sm",
+                    "!py-3 font-bold border-none bg-card shadow-sm",
                     hasError && settings.businessHoursOnly && "!border-2 !border-red-300"
                   )}
                 />
@@ -167,7 +167,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                   options={timeSlots}
                   disabled={!settings.businessHoursOnly}
                   className={clsx(
-                    "!py-3 font-bold border-none bg-white shadow-sm",
+                    "!py-3 font-bold border-none bg-card shadow-sm",
                     hasError && settings.businessHoursOnly && "!border-2 !border-red-300"
                   )}
                 />
@@ -210,7 +210,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                 <textarea
                   disabled={!settings.businessHoursOnly}
                   aria-label={t('settings.awayMessage.title')}
-                  className="input min-h-[56px] landscape:min-h-[44px] border-none bg-white focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-surface-400 placeholder:italic"
+                  className="input min-h-[56px] landscape:min-h-[44px] border-none bg-card focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-surface-400 placeholder:italic"
                   placeholder={placeholder}
                   dir={displayValue ? 'auto' : undefined}
                   value={displayValue}

@@ -371,10 +371,10 @@ const CommentsPage: NextPageWithLayout = () => {
         <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
           <AlertTriangle className="w-8 h-8 text-red-400" />
         </div>
-        <p className="text-base font-semibold text-surface-600 mb-2">
+        <p className="text-base font-semibold text-muted-foreground mb-2">
           {t('errors.somethingWentWrong')}
         </p>
-        <p className="text-sm text-surface-500 mb-5">
+        <p className="text-sm text-muted-foreground mb-5">
           {(error as Error)?.message || t('errors.tryAgain')}
         </p>
         <Button variant="primary" size="sm" onClick={() => refetch()}>
@@ -393,18 +393,18 @@ const CommentsPage: NextPageWithLayout = () => {
           <div ref={menuRef} className="relative">
             <button
               onClick={() => setMenuOpen(prev => !prev)}
-              className="p-2 rounded-xl text-surface-500 hover:text-surface-700 hover:bg-surface-100 transition-colors"
+              className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
               aria-label={t('common.export')}
               aria-expanded={menuOpen}
             >
               <MoreVertical className="w-5 h-5" />
             </button>
             {menuOpen && (
-              <div className="absolute end-0 top-full mt-1 w-44 sm:w-48 bg-white rounded-xl shadow-lg ring-1 ring-surface-200/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="absolute end-0 top-full mt-1 w-44 sm:w-48 bg-card rounded-xl shadow-lg ring-1 ring-theme-border/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
                 <button
                   onClick={() => { exportToCSV(); setMenuOpen(false); }}
                   disabled={exporting}
-                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 text-sm text-surface-700 hover:bg-surface-50 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 text-sm text-foreground/70 hover:bg-background transition-colors disabled:opacity-50"
                 >
                   <Download className="w-4 h-4 flex-shrink-0" />
                   {t('comments.exportCSV')}
@@ -431,13 +431,13 @@ const CommentsPage: NextPageWithLayout = () => {
                 "flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200",
                 filter === chip.key
                   ? "bg-brand-500 text-white shadow-sm shadow-brand-500/25"
-                  : "bg-surface-100 text-surface-600 hover:bg-surface-200"
+                  : "bg-muted text-muted-foreground hover:bg-surface-200"
               )}
             >
               {chip.label}
               <span className={clsx(
                 "text-xs tabular-nums",
-                filter === chip.key ? "text-white/80" : "text-surface-400"
+                filter === chip.key ? "text-white/80" : "text-muted-foreground"
               )}>
                 ({chip.count.toLocaleString()})
               </span>
@@ -447,7 +447,7 @@ const CommentsPage: NextPageWithLayout = () => {
 
         <div role="search" aria-label={t('common.search')} className="relative group w-full sm:w-[300px] sm:flex-none">
           <Search
-            className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4.5 h-4.5 text-surface-400 group-focus-within:text-brand-500 transition-colors z-10"
+            className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4.5 h-4.5 text-muted-foreground group-focus-within:text-brand-500 transition-colors z-10"
           />
           <Input
             type="search"
@@ -457,14 +457,14 @@ const CommentsPage: NextPageWithLayout = () => {
             placeholder={t('common.search') + '...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="py-2.5 ps-10 pe-10 rounded-full bg-surface-50 border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all text-sm"
+            className="py-2.5 ps-10 pe-10 rounded-full bg-background border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all text-sm"
           />
           {searchQuery.trim().length > 0 && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
               aria-label="Clear search"
-              className="absolute top-1/2 -translate-y-1/2 end-2.5 p-1 rounded-full text-surface-400 hover:text-surface-600 hover:bg-surface-100 transition-colors z-10"
+              className="absolute top-1/2 -translate-y-1/2 end-2.5 p-1 rounded-full text-muted-foreground hover:text-muted-foreground hover:bg-muted transition-colors z-10"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -504,7 +504,7 @@ const CommentsPage: NextPageWithLayout = () => {
             {isFetchingNextPage ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
-                <span className="ms-3 text-sm text-surface-500">{t('common.loading')}...</span>
+                <span className="ms-3 text-sm text-muted-foreground">{t('common.loading')}...</span>
               </div>
             ) : hasNextPage ? (
               <div className="flex justify-center py-8">
@@ -518,7 +518,7 @@ const CommentsPage: NextPageWithLayout = () => {
                 </Button>
               </div>
             ) : allComments.length > COMMENTS_PER_PAGE ? (
-              <div className="text-center py-8 text-sm text-surface-400">
+              <div className="text-center py-8 text-sm text-muted-foreground">
                 <Check className="w-3.5 h-3.5 inline-block" /> {t('common.allLoaded')}
               </div>
             ) : null}

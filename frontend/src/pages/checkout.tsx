@@ -151,22 +151,22 @@ export default function CheckoutPage() {
           <meta name="robots" content="noindex, follow" />
         </Head>
 
-        <div className="flex-1 flex flex-col overflow-y-auto bg-surface-50">
+        <div className="flex-1 flex flex-col overflow-y-auto bg-background">
           <div className="flex-1 pt-safe pb-safe px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
             <div className="max-w-md mx-auto w-full">
-              
+
               {/* Header: Back link on one side, Logo on other */}
               <div className="flex items-center justify-between mb-8 sm:mb-10">
-                <Link 
-                  href="/pricing" 
-                  className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors"
+                <Link
+                  href="/pricing"
+                  className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
                   {t('checkout.backToPricing')}
                 </Link>
-                
+
                 <Link href="/" className="inline-flex items-center gap-2 group">
-                  <span className="font-display font-bold text-lg text-surface-900 tracking-tight">
+                  <span className="font-display font-bold text-lg text-foreground tracking-tight">
                     {BRAND_ASSETS.meta.appName}
                   </span>
                   <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
@@ -175,7 +175,7 @@ export default function CheckoutPage() {
 
               {/* Title */}
               <div className="text-center mb-8 sm:mb-10">
-                <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2 tracking-tight font-display">
+                <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">
                   {t('checkout.title')}
                 </h1>
               </div>
@@ -208,23 +208,23 @@ export default function CheckoutPage() {
         <meta name="robots" content="noindex, follow" />
       </Head>
 
-      <div className="flex-1 flex flex-col overflow-y-auto bg-surface-50">
+      <div className="flex-1 flex flex-col overflow-y-auto bg-background">
         {/* Content container - fills space with consistent background */}
         <div className="flex-1 pt-safe pb-safe px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
           <div className="max-w-md mx-auto w-full">
-            
+
             {/* Header: Back link on one side, Logo on other */}
             <div className="flex items-center justify-between mb-8 sm:mb-10">
-              <Link 
-                href="/pricing" 
-                className="inline-flex items-center gap-2 text-surface-500 font-medium text-sm hover:text-brand-600 transition-colors"
+              <Link
+                href="/pricing"
+                className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
                 {t('checkout.backToPricing')}
               </Link>
-              
+
               <Link href="/" className="inline-flex items-center gap-2 group">
-                <span className="font-display font-bold text-lg text-surface-900 tracking-tight">
+                <span className="font-display font-bold text-lg text-foreground tracking-tight">
                   {BRAND_ASSETS.meta.appName}
                 </span>
                 <BrandLogo
@@ -236,10 +236,10 @@ export default function CheckoutPage() {
 
             {/* Title */}
             <div className="text-center mb-8 sm:mb-10">
-              <h1 className="text-3xl sm:text-4xl font-bold text-surface-900 mb-2 tracking-tight font-display">
+              <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">
                 {t('checkout.title')}
               </h1>
-              <p className="text-surface-500 text-base">
+              <p className="text-muted-foreground text-base">
                 {t('checkout.subtitle')}
               </p>
             </div>
@@ -251,15 +251,15 @@ export default function CheckoutPage() {
             )}
 
             {plan && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-surface-900/5 border border-surface-100">
+              <div className="bg-card rounded-3xl p-6 sm:p-8 shadow-xl shadow-surface-900/5 border border-theme-border">
                 {/* Plan Details */}
-                <div className="border-b border-surface-100 pb-6 mb-6 text-start">
-                  <h2 className="text-xl sm:text-2xl font-bold text-surface-900 mb-1">
+                <div className="border-b border-theme-border pb-6 mb-6 text-start">
+                  <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-1">
                     {t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
                       ? t(`pricing.${plan.slug}` as TranslationKey)
                       : (t(`plans.${plan.slug}.name` as TranslationKey) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name` as TranslationKey) : plan.name)}
                   </h2>
-                  <p className="text-surface-500 text-sm mb-5">
+                  <p className="text-muted-foreground text-sm mb-5">
                     {t(`pricing.${plan.slug}Desc` as TranslationKey) !== `pricing.${plan.slug}Desc`
                       ? t(`pricing.${plan.slug}Desc` as TranslationKey)
                       : (t(`plans.${plan.slug}.description` as TranslationKey) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description` as TranslationKey) : plan.description)}
@@ -269,7 +269,7 @@ export default function CheckoutPage() {
                       ${(plan.price / 100).toFixed(2).split('.')[0]}
                       <span className="text-2xl sm:text-3xl opacity-70">.{(plan.price / 100).toFixed(2).split('.')[1]}</span>
                     </span>
-                    <span className="text-surface-500 font-medium">
+                    <span className="text-muted-foreground font-medium">
                       / {t('plans.month')}
                     </span>
                   </div>
@@ -281,7 +281,7 @@ export default function CheckoutPage() {
                     <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                     </div>
-                    <span className="text-surface-700 font-medium text-start">
+                    <span className="text-foreground/70 font-medium text-start">
                       {plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages} {t('plans.pages')}
                     </span>
                   </div>
@@ -289,7 +289,7 @@ export default function CheckoutPage() {
                     <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                     </div>
-                    <span className="text-surface-700 font-medium text-start">
+                    <span className="text-foreground/70 font-medium text-start">
                       {plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {t('plans.aiReplies')}
                     </span>
                   </div>
@@ -298,7 +298,7 @@ export default function CheckoutPage() {
                       <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                         <CheckCircle2 className="w-4 h-4 text-green-600" />
                       </div>
-                      <span className="text-surface-700 font-medium text-start">
+                      <span className="text-foreground/70 font-medium text-start">
                         {t('pricing.trialDays', { days: plan.trialDays })}
                       </span>
                     </div>
@@ -324,7 +324,7 @@ export default function CheckoutPage() {
                   )}
                 </Button>
 
-                <p className="text-center text-xs text-surface-400 mt-5 font-medium">
+                <p className="text-center text-xs text-muted-foreground mt-5 font-medium">
                   {t('checkout.securePayment')}
                 </p>
               </div>

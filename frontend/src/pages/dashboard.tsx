@@ -28,7 +28,7 @@ import { useIsDemoUser } from '@/features/demo';
 function SectionError({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center justify-center gap-2 py-4 text-surface-500">
+    <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
       <AlertTriangle className="w-4 h-4 text-amber-500" aria-hidden="true" />
       <span className="text-sm">{t('dashboard.sectionLoadError')}</span>
       <button
@@ -46,27 +46,27 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-end text-xs">
-        <span className="font-bold text-surface-500 opacity-80 uppercase tracking-wider">
+        <span className="font-bold text-muted-foreground opacity-80 uppercase tracking-wider">
           {label}
         </span>
         <div className="flex items-baseline gap-1.5">
-          <span className="font-bold text-surface-900 text-lg leading-none">
+          <span className="font-bold text-foreground text-lg leading-none">
             {used.toLocaleString()}
           </span>
-          <span className="text-surface-400 font-medium text-xs">/ {limit ? limit.toLocaleString() : '∞'}</span>
+          <span className="text-muted-foreground font-medium text-xs">/ {limit ? limit.toLocaleString() : '∞'}</span>
           {limit && (
             <span className={clsx(
               'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
               roundedPercent > 90 ? 'text-red-600 bg-red-50' :
                 roundedPercent > 75 ? 'text-amber-600 bg-amber-50' :
-                  'text-surface-400'
+                  'text-muted-foreground'
             )}>
               {roundedPercent}%
             </span>
           )}
         </div>
       </div>
-      <div className="h-2.5 w-full bg-surface-100 rounded-full overflow-hidden shadow-inner p-0.5 relative">
+      <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden shadow-inner p-0.5 relative">
         <div
           className={clsx(
             "h-full rounded-full transition-all duration-1000 relative shadow-sm",
@@ -456,11 +456,11 @@ const DashboardPage: NextPageWithLayout = () => {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Comments */}
-        <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-white" padding="none">
-          <div className="p-4 sm:p-5 border-b border-surface-100 flex items-center justify-between gap-4 bg-surface-50/50">
+        <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-card" padding="none">
+          <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
             <div>
-              <h2 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.recentComments')}</h2>
-              <p className="text-sm text-surface-500 mt-0.5">{t('dashboard.latestCommentsDesc')}</p>
+              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{t('dashboard.recentComments')}</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">{t('dashboard.latestCommentsDesc')}</p>
             </div>
             {recentComments.length > 0 && (
               <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
@@ -470,7 +470,7 @@ const DashboardPage: NextPageWithLayout = () => {
             )}
           </div>
 
-          <div className="divide-y divide-surface-100">
+          <div className="divide-y divide-theme-border">
             {sectionErrors.recentComments ? (
               <SectionError onRetry={fetchDashboardData} />
             ) : recentComments.length > 0 ? (
@@ -495,10 +495,10 @@ const DashboardPage: NextPageWithLayout = () => {
               })()
             ) : (
               <div className="py-8 text-center">
-                <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
                   <MessageSquare className="w-6 h-6 text-surface-300" />
                 </div>
-                <p className="text-sm font-medium text-surface-500 mb-1">
+                <p className="text-sm font-medium text-muted-foreground mb-1">
                   {t('dashboard.noRecentComments')}
                 </p>
                 {pages.length === 0 && (
@@ -517,7 +517,7 @@ const DashboardPage: NextPageWithLayout = () => {
         <div className="space-y-8">
           {/* Usage Card — Split into Plan Info + Quota sections */}
           {usage && usage.subscription && (
-            <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-white relative group" padding="none">
+            <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-card relative group" padding="none">
               {(() => {
                 const isTrialing = usage.subscription.status === 'trialing';
                 const isPaidPlan = usage.subscription.status === 'active' && !isTrialing;
@@ -534,7 +534,7 @@ const DashboardPage: NextPageWithLayout = () => {
                         </div>
                         <div className="min-w-0 flex-1 text-start">
                           <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
-                          <h3 className="text-base sm:text-lg lg:text-xl font-display font-bold text-surface-900 tracking-tight flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <h3 className="text-base sm:text-lg lg:text-xl font-display font-bold text-foreground tracking-tight flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span>{PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}</span>
                             {isTrialing && (
                               <span className="inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
@@ -579,11 +579,11 @@ const DashboardPage: NextPageWithLayout = () => {
                     </div>
 
                     {/* Divider */}
-                    <div className="border-t border-surface-100" />
+                    <div className="border-t border-theme-border" />
 
                     {/* Section B: Quota Usage */}
                     <div className="p-6 sm:p-8">
-                      <p className="text-[10px] font-bold text-surface-500 uppercase tracking-[0.2em] mb-5">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] mb-5">
                         {t('subscription.usage')}
                       </p>
                       <div className="space-y-6">
@@ -616,13 +616,13 @@ const DashboardPage: NextPageWithLayout = () => {
           )}
 
           {/* Top Pages */}
-          <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-white overflow-hidden">
-            <div className="p-5 sm:p-6 border-b border-surface-100 bg-surface-50/50">
-              <h2 className="text-lg font-display font-bold text-surface-900 tracking-tight">{t('dashboard.topPages')}</h2>
-              <p className="text-sm font-medium text-surface-500 mt-1">{t('dashboard.topPagesDesc')}</p>
+          <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">
+            <div className="p-5 sm:p-6 border-b border-theme-border bg-background/50">
+              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{t('dashboard.topPages')}</h2>
+              <p className="text-sm font-medium text-muted-foreground mt-1">{t('dashboard.topPagesDesc')}</p>
             </div>
             <div className={clsx(
-              'divide-y divide-surface-100',
+              'divide-y divide-theme-border',
               pages.length >= 3 && 'max-h-[400px] overflow-y-auto'
             )}>
               {sectionErrors.pages ? (
@@ -645,10 +645,10 @@ const DashboardPage: NextPageWithLayout = () => {
                 );
               }) : (
                 <div className="py-10 text-center">
-                  <div className="w-12 h-12 rounded-xl bg-surface-100 flex items-center justify-center mx-auto mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
                     <FileText className="w-6 h-6 text-surface-300" aria-hidden="true" />
                   </div>
-                  <p className="text-sm text-surface-500 mb-3">{t('pages.noPagesDesc')}</p>
+                  <p className="text-sm text-muted-foreground mb-3">{t('pages.noPagesDesc')}</p>
                   <Link href="/pages">
                     <Button variant="primary" size="sm">
                       {t('pages.connectPage')}

@@ -22,6 +22,7 @@ import type { NextPageWithLayout } from './_app';
 import {
   SimpleToggle,
   LanguageSelector,
+  ThemeSelector,
   CommentsAutoReplyCard,
   BusinessHoursCard,
   ReplyDelayCard,
@@ -235,6 +236,8 @@ const SettingsPage: NextPageWithLayout = () => {
           setLanguage={setLanguage}
         />
 
+        <ThemeSelector />
+
         <CommentsAutoReplyCard settings={settings} setSettings={setSettings} />
 
         {/* Messages & AI Toggles */}
@@ -259,26 +262,26 @@ const SettingsPage: NextPageWithLayout = () => {
       {/* Advanced Settings Toggle */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className={`w-full flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all duration-300 mb-6 landscape:mb-4 ${showAdvanced ? 'bg-surface-50 border-surface-200 shadow-sm' : 'bg-white border-surface-200 hover:border-surface-300 hover:bg-surface-50'
+        className={`w-full flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all duration-300 mb-6 landscape:mb-4 ${showAdvanced ? 'bg-background border-theme-border shadow-sm' : 'bg-card border-theme-border hover:border-theme-border hover:bg-background'
           }`}
       >
         <div className="flex items-center gap-4">
-          <div className={`p-2 rounded-lg ${showAdvanced ? 'bg-surface-200 text-surface-600' : 'bg-surface-100 text-surface-500'}`}>
+          <div className={`p-2 rounded-lg ${showAdvanced ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground'}`}>
             <Settings2 className="w-6 h-6 landscape:w-5 landscape:h-5" />
           </div>
           <div className="text-start">
-            <span className={`block font-bold landscape:text-sm ${showAdvanced ? 'text-surface-900' : 'text-surface-700'}`}>
+            <span className={`block font-bold landscape:text-sm ${showAdvanced ? 'text-foreground' : 'text-foreground/70'}`}>
               {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
             </span>
-            <p className={`text-xs landscape:hidden ${showAdvanced ? 'text-surface-500' : 'text-surface-600'}`}>
+            <p className={`text-xs landscape:hidden ${showAdvanced ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
               {t('settings.advancedDescription')}
             </p>
           </div>
         </div>
         {showAdvanced ? (
-          <ChevronUp className="w-5 h-5 text-surface-600" />
+          <ChevronUp className="w-5 h-5 text-muted-foreground" />
         ) : (
-          <ChevronDown className="w-5 h-5 text-surface-500" />
+          <ChevronDown className="w-5 h-5 text-muted-foreground" />
         )}
       </button>
 

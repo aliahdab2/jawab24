@@ -243,7 +243,7 @@ const RulesPage: NextPageWithLayout = () => {
         description={
           <>
             {t('rules.description')}
-            <span className="block text-xs text-surface-400 mt-1">{t('rules.firstMatchHint' as TranslationKey)}</span>
+            <span className="block text-xs text-muted-foreground mt-1">{t('rules.firstMatchHint' as TranslationKey)}</span>
           </>
         }
         action={
@@ -359,8 +359,8 @@ const RulesPage: NextPageWithLayout = () => {
                 <span>{t('rules.newTemplate' as TranslationKey)}</span>
               </button>
             ) : (
-              <div className="mt-3 p-4 rounded-2xl bg-surface-50 border border-surface-200 space-y-3 animate-slide-up">
-                <div className="flex items-center gap-2 text-[10px] font-bold text-surface-400 uppercase tracking-wider">
+              <div className="mt-3 p-4 rounded-2xl bg-background border border-theme-border space-y-3 animate-slide-up">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   <BookTemplate className="w-3 h-3" />
                   <span>{t('rules.quickCreateTemplate' as TranslationKey)}</span>
                 </div>
@@ -400,7 +400,7 @@ const RulesPage: NextPageWithLayout = () => {
             )}
           </div>
 
-          <div className="flex justify-end gap-3 pt-6 border-t border-surface-100 mt-6 pb-2 sm:pb-0">
+          <div className="flex justify-end gap-3 pt-6 border-t border-theme-border mt-6 pb-2 sm:pb-0">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>

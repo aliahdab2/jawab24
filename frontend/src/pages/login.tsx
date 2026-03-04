@@ -247,7 +247,7 @@ export default function LoginPage() {
         <meta property="og:url" content={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/login' : '/login')} />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white flex flex-col lg:flex-row min-h-[100dvh]">
+      <div className="flex-1 overflow-y-auto bg-card flex flex-col lg:flex-row min-h-[100dvh]">
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
         <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}
@@ -306,23 +306,23 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="flex-1 flex flex-col bg-gradient-to-br from-white via-white to-brand-50/30 min-h-0 overflow-hidden relative">
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-card via-card to-brand-50/30 min-h-0 overflow-hidden relative">
           {/* Subtle background pattern for visual interest */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(13,148,136,0.03),transparent_50%)] pointer-events-none" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(13,148,136,0.02),transparent_50%)] pointer-events-none" />
           
           {/* Header - Sticky so it stays visible when content scrolls + pt-safe for safe area */}
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-white/80 backdrop-blur-sm flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content border-b border-surface-100/50">
+          <div className="sticky top-0 z-10 flex-shrink-0 bg-card/80 backdrop-blur-sm flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content border-b border-theme-border/50">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
                 className="w-9 h-9 sm:w-12 sm:h-12 group-hover:rotate-6 transition-transform"
               />
-              <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+              <span className="font-display font-bold text-lg sm:text-2xl text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
             <button
               onClick={toggleLanguage}
-              className="px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
+              className="px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
             >
               {t('common.switchLanguage')}
             </button>
@@ -335,10 +335,10 @@ export default function LoginPage() {
             {/* Main content wrapper */}
             <div className="w-full max-w-lg mx-auto pt-6 lg:pt-8">
               <div className="text-center lg:text-start mb-6">
-                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-surface-900 mb-3 tracking-tight">
+                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-3 tracking-tight">
                   {t('auth.welcome')}
                 </h2>
-                <p className="text-base sm:text-lg lg:text-xl text-surface-500 font-medium">
+                <p className="text-base sm:text-lg lg:text-xl text-muted-foreground font-medium">
                   {t('auth.welcomeBackDesc')}
                 </p>
 
@@ -346,17 +346,17 @@ export default function LoginPage() {
                 <div className="hidden lg:flex items-center gap-6 mt-5">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
-                    <span className="text-sm font-bold text-surface-600">{t('auth.stat1Label')}</span>
+                    <span className="text-sm font-bold text-muted-foreground">{t('auth.stat1Label')}</span>
                   </div>
-                  <div className="w-px h-4 bg-surface-200" aria-hidden="true" />
+                  <div className="w-px h-4 bg-theme-border" aria-hidden="true" />
                   <div className="flex items-center gap-2">
                     <Zap className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" />
-                    <span className="text-sm font-bold text-surface-600">{t('auth.stat2Label')}</span>
+                    <span className="text-sm font-bold text-muted-foreground">{t('auth.stat2Label')}</span>
                   </div>
-                  <div className="w-px h-4 bg-surface-200" aria-hidden="true" />
+                  <div className="w-px h-4 bg-theme-border" aria-hidden="true" />
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-brand-500" aria-hidden="true" />
-                    <span className="text-sm font-bold text-surface-600">{t('auth.stat3Label')}</span>
+                    <span className="text-sm font-bold text-muted-foreground">{t('auth.stat3Label')}</span>
                   </div>
                 </div>
               </div>
@@ -367,7 +367,7 @@ export default function LoginPage() {
                   <div
                     key={i}
                     className={clsx(
-                      'flex-1 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-surface-50 border border-surface-100',
+                      'flex-1 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-background border border-theme-border',
                       'animate-slide-up',
                       i === 0 && 'animation-delay-100',
                       i === 1 && 'animation-delay-200',
@@ -377,7 +377,7 @@ export default function LoginPage() {
                     <div className={`w-8 h-8 rounded-lg ${f.bg} flex items-center justify-center`}>
                       <f.icon className={`w-4 h-4 ${f.color}`} />
                     </div>
-                    <span className="text-[11px] font-bold text-surface-700 text-center leading-tight">{f.title}</span>
+                    <span className="text-[11px] font-bold text-foreground/70 text-center leading-tight">{f.title}</span>
                   </div>
                 ))}
               </div>
@@ -489,7 +489,7 @@ export default function LoginPage() {
 
             {/* Terms */}
             <div className="w-full max-w-lg mx-auto mt-6 py-4 lg:py-8 lg:mt-8 text-center lg:text-start">
-              <p className="text-sm text-surface-400 font-medium">
+              <p className="text-sm text-muted-foreground font-medium">
                 {t('auth.termsAgreement')}
                 <br className="sm:hidden" />
                 <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
@@ -503,13 +503,13 @@ export default function LoginPage() {
 
         {/* Fixed top safe area background - prevents content from showing through status bar when scrolling */}
         <div
-          className="lg:hidden fixed-safe-bg top-safe-bg bg-white"
+          className="lg:hidden fixed-safe-bg top-safe-bg bg-card"
           aria-hidden="true"
         />
 
         {/* Fixed bottom safe area background */}
         <div
-          className="lg:hidden fixed-safe-bg bottom-safe-bg bg-white"
+          className="lg:hidden fixed-safe-bg bottom-safe-bg bg-card"
           aria-hidden="true"
         />
       </div>

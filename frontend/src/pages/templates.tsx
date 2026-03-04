@@ -225,7 +225,7 @@ const TemplatesPage: NextPageWithLayout = () => {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-surface-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-theme-border">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
               {t('common.cancel')}
             </Button>

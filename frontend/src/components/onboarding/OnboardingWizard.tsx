@@ -50,10 +50,10 @@ function WelcomeStep({
         </div>
       </div>
       <div className={isLandscape ? 'flex-1 text-start' : ''}>
-        <h2 className={`font-bold text-surface-900 ${isLandscape ? 'text-xl mb-2' : 'text-2xl mb-4'}`}>
+        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-xl mb-2' : 'text-2xl mb-4'}`}>
           {t('onboarding.welcomeTitle')}
         </h2>
-        <p className={`text-surface-600 leading-relaxed ${isLandscape ? 'text-sm' : 'text-lg'}`}>
+        <p className={`text-muted-foreground leading-relaxed ${isLandscape ? 'text-sm' : 'text-lg'}`}>
           {t('onboarding.welcomeDesc')}
         </p>
       </div>
@@ -131,7 +131,7 @@ function PickPageStep({
         </div>
       </div>
       <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
-        <h2 className={`font-bold text-surface-900 ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
+        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
           {t('onboarding.pickPageTitle')}
         </h2>
         <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'mb-6'}`}>
@@ -149,8 +149,8 @@ function PickPageStep({
               key={page.id}
               className={`flex items-center justify-between gap-4 p-4 rounded-2xl border-2 transition-all ${
                 page.autoReplyEnabled 
-                  ? 'border-brand-500 bg-brand-50/50' 
-                  : 'border-surface-200 bg-white'
+                  ? 'border-brand-500 bg-brand-50/50'
+                  : 'border-theme-border bg-card'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -160,7 +160,7 @@ function PickPageStep({
                   <FileText className="w-5 h-5" />
                 </div>
                 <div className="min-w-0 text-start">
-                  <p className="font-semibold text-surface-900 truncate" title={page.name}>{page.name}</p>
+                  <p className="font-semibold text-foreground truncate" title={page.name}>{page.name}</p>
                   <p className="text-xs text-surface-400">
                     {page.autoReplyEnabled ? t('onboarding.autoReplyOn') : t('onboarding.autoReplyOff')}
                   </p>
@@ -220,7 +220,7 @@ function ReviewInfoStep({
         </div>
       </div>
       <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
-        <h2 className={`font-bold text-surface-900 ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
+        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
           {t('onboarding.reviewInfoTitle')}
         </h2>
         <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'text-sm mb-4'}`}>
@@ -243,7 +243,7 @@ function ReviewInfoStep({
             <textarea
               value={knowledgeBase}
               onChange={(e) => onKnowledgeBaseChange(e.target.value)}
-              className={`w-full p-4 border-2 border-surface-200 rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-surface-900 ${
+              className={`w-full p-4 border-2 border-theme-border rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-foreground ${
                 isLandscape ? 'h-[20vh]' : 'h-[30vh]'
               }`}
               placeholder={t('pages.writeBusinessInfo')}
@@ -259,7 +259,7 @@ function ReviewInfoStep({
           </div>
         ) : (
           <div 
-            className="text-start bg-surface-50 rounded-2xl p-4 border border-surface-200"
+            className="text-start bg-surface-50 rounded-2xl p-4 border border-theme-border"
             dir="auto"
           >
             {knowledgeBase ? (
@@ -481,7 +481,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
     >
       <div 
-        className={`bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up ${
+        className={`bg-card rounded-3xl shadow-2xl overflow-hidden animate-slide-up ${
           isLandscape ? 'max-w-2xl w-full max-h-[90vh]' : 'max-w-md w-full max-h-[85vh]'
         } flex flex-col`}
         {...swipeHandlers}
@@ -533,7 +533,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         </div>
 
         {/* Footer with progress and buttons */}
-        <div className={`flex-shrink-0 border-t border-surface-100 ${isLandscape ? 'px-6 py-3' : 'px-6 py-4'}`}>
+        <div className={`flex-shrink-0 border-t border-theme-border ${isLandscape ? 'px-6 py-3' : 'px-6 py-4'}`}>
           {/* Step label */}
           <p className="text-center text-xs text-surface-400 mb-2">
             {t('onboarding.stepOf' as TranslationKey, { step: currentStep + 1, total: totalSteps })}

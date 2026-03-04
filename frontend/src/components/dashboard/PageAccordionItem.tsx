@@ -95,7 +95,7 @@ export function PageAccordionItem({
           <p
             className={clsx(
               'font-bold line-clamp-2 transition-colors duration-300',
-              isExpanded ? 'text-brand-600' : 'text-surface-900'
+              isExpanded ? 'text-brand-600' : 'text-foreground'
             )}
             title={page.name}
           >
@@ -137,30 +137,30 @@ export function PageAccordionItem({
         )}
       >
         <div ref={contentRef}>
-          <div className="border-t border-surface-200 bg-gradient-to-br from-emerald-50/60 to-surface-50/50 px-4 sm:px-5 py-4">
+          <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 px-4 sm:px-5 py-4">
             {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                <p className="text-lg font-bold text-surface-900 leading-none">
+              <div className="bg-card rounded-xl p-3 text-center shadow-sm">
+                <p className="text-lg font-bold text-foreground leading-none">
                   {(page.commentsCount ?? 0).toLocaleString()}
                 </p>
-                <p className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide mt-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5">
                   {t('comments.title')}
                 </p>
               </div>
-              <div className="bg-white rounded-xl p-3 text-center shadow-sm">
-                <p className="text-lg font-bold text-surface-900 leading-none">
+              <div className="bg-card rounded-xl p-3 text-center shadow-sm">
+                <p className="text-lg font-bold text-foreground leading-none">
                   {(page.repliesCount ?? 0).toLocaleString()}
                 </p>
-                <p className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide mt-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5">
                   {t('dashboard.autoReplies')}
                 </p>
               </div>
-              <div className="bg-white rounded-xl p-3 text-center shadow-sm">
+              <div className="bg-card rounded-xl p-3 text-center shadow-sm">
                 <p className="text-lg font-bold text-emerald-600 leading-none">
                   {page.replyRate ?? 0}%
                 </p>
-                <p className="text-[10px] font-semibold text-surface-400 uppercase tracking-wide mt-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5">
                   {t('dashboard.replyRate')}
                 </p>
               </div>

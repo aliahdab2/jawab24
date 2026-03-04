@@ -98,10 +98,10 @@ export function SystemStatusBanner({
         variant="secondary" 
         size={isMobile ? "sm" : "sm"} 
         className={clsx(
-          "shadow-sm font-bold bg-white border-opacity-50 transition-all px-3 py-1.5 h-auto",
-          isWarning ? "border-amber-200 hover:bg-white text-amber-900" : 
-          isError ? "border-red-200 hover:bg-white text-red-900" :
-          "border-emerald-200 hover:bg-white text-emerald-700",
+          "shadow-sm font-bold bg-card border-opacity-50 transition-all px-3 py-1.5 h-auto",
+          isWarning ? "border-amber-200 hover:bg-card text-amber-900" :
+          isError ? "border-red-200 hover:bg-card text-red-900" :
+          "border-emerald-200 hover:bg-card text-emerald-700",
           isMobile ? "text-xs px-2 py-1" : "text-sm"
         )}
         onClick={cta.onClick}

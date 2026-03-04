@@ -69,7 +69,7 @@ export function FilterButtons<T extends string>({
                     ? 'bg-red-500 text-white' 
                     : isActive 
                       ? 'bg-white/20 text-white' 
-                      : 'bg-surface-200 text-surface-600'
+                      : 'bg-muted text-muted-foreground'
                 )}>
                   {option.badge}
                 </span>

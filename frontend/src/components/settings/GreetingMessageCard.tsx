@@ -20,13 +20,13 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
           <MessageCircle className="w-4 h-4" />
         </div>
         <div className="text-start">
-          <h4 className="font-bold text-surface-900 text-lg landscape:text-base">{t('settings.greetingMessage.title')}</h4>
-          <p className="text-xs text-surface-500 font-medium landscape:hidden">{t('settings.greetingMessage.desc')}</p>
+          <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.greetingMessage.title')}</h4>
+          <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('settings.greetingMessage.desc')}</p>
         </div>
       </div>
       <textarea
         aria-label={t('settings.greetingMessage.title')}
-        className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-surface-50 focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-surface-400 placeholder:italic ${currentLang === 'ar' ? 'italic italic-arabic' : ''}`}
+        className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic ${currentLang === 'ar' ? 'italic italic-arabic' : ''}`}
         placeholder={placeholder}
         dir={displayValue ? 'auto' : undefined}
         value={displayValue}

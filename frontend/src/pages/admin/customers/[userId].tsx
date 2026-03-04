@@ -161,7 +161,7 @@ export default function AdminCustomerDetailPage() {
         return (
             <AdminLayout title={t('admin.customer.title')}>
                 <div className="flex items-center justify-center py-16">
-                    <div className="animate-pulse text-surface-400">
+                    <div className="animate-pulse text-muted-foreground">
                         {t('common.loading')}
                     </div>
                 </div>
@@ -189,15 +189,15 @@ export default function AdminCustomerDetailPage() {
                 <div className="flex items-center gap-4">
                     <Link
                         href="/admin/customers"
-                        className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
+                        className="p-2 hover:bg-muted rounded-lg transition-colors"
                     >
-                        <ArrowLeft className={clsx('w-5 h-5 text-surface-500', isRTL && 'rotate-180')} />
+                        <ArrowLeft className={clsx('w-5 h-5 text-muted-foreground', isRTL && 'rotate-180')} />
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-display font-bold text-surface-900">
+                        <h1 className="text-2xl font-display font-bold text-foreground">
                             {customer.name || t('admin.customer.noName')}
                         </h1>
-                        <p className="text-surface-500">
+                        <p className="text-muted-foreground">
                             {customer.email || t('admin.customer.noEmail')}
                         </p>
                     </div>
@@ -215,35 +215,35 @@ export default function AdminCustomerDetailPage() {
                     <div className="lg:col-span-2 space-y-6">
                         {/* Profile Card */}
                         <Card>
-                            <h2 className="text-lg font-semibold text-surface-900 mb-4">
+                            <h2 className="text-lg font-semibold text-foreground mb-4">
                                 {t('admin.customer.profile')}
                             </h2>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="flex items-center gap-3">
-                                    <Mail className="w-5 h-5 text-surface-400" />
+                                    <Mail className="w-5 h-5 text-muted-foreground" />
                                     <div>
-                                        <div className="text-xs text-surface-500">{t('admin.customer.email')}</div>
+                                        <div className="text-xs text-muted-foreground">{t('admin.customer.email')}</div>
                                         <div className="font-medium">{customer.email || '-'}</div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <Facebook className="w-5 h-5 text-surface-400" />
+                                    <Facebook className="w-5 h-5 text-muted-foreground" />
                                     <div>
-                                        <div className="text-xs text-surface-500">{t('admin.customer.facebookId')}</div>
+                                        <div className="text-xs text-muted-foreground">{t('admin.customer.facebookId')}</div>
                                         <div className="font-medium font-mono text-sm">{customer.facebookId}</div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <Calendar className="w-5 h-5 text-surface-400" />
+                                    <Calendar className="w-5 h-5 text-muted-foreground" />
                                     <div>
-                                        <div className="text-xs text-surface-500">{t('admin.customer.signedUp')}</div>
+                                        <div className="text-xs text-muted-foreground">{t('admin.customer.signedUp')}</div>
                                         <div className="font-medium">{formatDate(customer.createdAt)}</div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <Globe className="w-5 h-5 text-surface-400" />
+                                    <Globe className="w-5 h-5 text-muted-foreground" />
                                     <div>
-                                        <div className="text-xs text-surface-500">{t('admin.customer.pagesCount')}</div>
+                                        <div className="text-xs text-muted-foreground">{t('admin.customer.pagesCount')}</div>
                                         <div className="font-medium">{customer.pagesCount}</div>
                                     </div>
                                 </div>
@@ -252,27 +252,27 @@ export default function AdminCustomerDetailPage() {
 
                         {/* Usage Card */}
                         <Card>
-                            <h2 className="text-lg font-semibold text-surface-900 mb-4">
+                            <h2 className="text-lg font-semibold text-foreground mb-4">
                                 {t('admin.customer.usage')}
                             </h2>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="bg-surface-50 rounded-lg p-4">
+                                <div className="bg-background rounded-lg p-4">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Zap className="w-4 h-4 text-brand-500" />
-                                        <span className="text-sm text-surface-500">
+                                        <span className="text-sm text-muted-foreground">
                                             {t('admin.customer.aiReplies')}
                                         </span>
                                     </div>
-                                    <div className="text-2xl font-bold text-surface-900">
+                                    <div className="text-2xl font-bold text-foreground">
                                         {customer.usage.aiRepliesCount}
                                         {customer.usage.limit !== null && (
-                                            <span className="text-sm font-normal text-surface-400">
+                                            <span className="text-sm font-normal text-muted-foreground">
                                                 {' '}/ {customer.usage.limit}
                                             </span>
                                         )}
                                     </div>
                                     {customer.usage.limit !== null && (
-                                        <div className="mt-2 h-2 bg-surface-200 rounded-full overflow-hidden">
+                                        <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
                                             <div
                                                 className="h-full bg-brand-500 rounded-full"
                                                 style={{
@@ -282,14 +282,14 @@ export default function AdminCustomerDetailPage() {
                                         </div>
                                     )}
                                 </div>
-                                <div className="bg-surface-50 rounded-lg p-4">
+                                <div className="bg-background rounded-lg p-4">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <FileText className="w-4 h-4 text-surface-500" />
-                                        <span className="text-sm text-surface-500">
+                                        <FileText className="w-4 h-4 text-muted-foreground" />
+                                        <span className="text-sm text-muted-foreground">
                                             {t('admin.customer.templateReplies')}
                                         </span>
                                     </div>
-                                    <div className="text-2xl font-bold text-surface-900">
+                                    <div className="text-2xl font-bold text-foreground">
                                         {customer.usage.templateRepliesCount}
                                     </div>
                                 </div>
@@ -301,19 +301,19 @@ export default function AdminCustomerDetailPage() {
                     <div className="space-y-6">
                         {/* Subscription Card */}
                         <Card>
-                            <h2 className="text-lg font-semibold text-surface-900 mb-4">
+                            <h2 className="text-lg font-semibold text-foreground mb-4">
                                 {t('admin.customer.subscription')}
                             </h2>
                             {customer.subscription ? (
                                 <div className="space-y-4">
                                     <div>
-                                        <div className="text-xs text-surface-500 mb-1">{t('admin.customer.plan')}</div>
+                                        <div className="text-xs text-muted-foreground mb-1">{t('admin.customer.plan')}</div>
                                         <div className="font-semibold text-lg">
                                             {customer.subscription.planName}
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="text-xs text-surface-500 mb-1">{t('admin.customer.status')}</div>
+                                        <div className="text-xs text-muted-foreground mb-1">{t('admin.customer.status')}</div>
                                         <span className={clsx(
                                             'inline-flex px-3 py-1 text-sm font-medium rounded-full border',
                                             STATUS_COLORS[customer.subscription.status] || 'bg-gray-100 text-gray-800 border-gray-200'
@@ -322,25 +322,25 @@ export default function AdminCustomerDetailPage() {
                                         </span>
                                     </div>
                                     <div>
-                                        <div className="text-xs text-surface-500 mb-1">{t('admin.customer.periodEnd')}</div>
+                                        <div className="text-xs text-muted-foreground mb-1">{t('admin.customer.periodEnd')}</div>
                                         <div className="font-medium">
                                             {formatDate(customer.subscription.currentPeriodEnd)}
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="text-xs text-surface-500 mb-1">{t('admin.customer.paymentMethod')}</div>
+                                        <div className="text-xs text-muted-foreground mb-1">{t('admin.customer.paymentMethod')}</div>
                                         <div className="font-medium capitalize">
                                             {customer.subscription.paymentMethod || '-'}
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <p className="text-surface-400">
+                                <p className="text-muted-foreground">
                                     {t('admin.customer.noSubscription')}
                                 </p>
                             )}
 
-                            <div className="mt-6 pt-4 border-t border-surface-200">
+                            <div className="mt-6 pt-4 border-t border-theme-border">
                                 <Button
                                     onClick={() => setShowUpgradeForm(!showUpgradeForm)}
                                     className="w-full"
@@ -356,7 +356,7 @@ export default function AdminCustomerDetailPage() {
                         {/* Upgrade Form */}
                         {showUpgradeForm && (
                             <Card>
-                                <h3 className="text-lg font-semibold text-surface-900 mb-4">
+                                <h3 className="text-lg font-semibold text-foreground mb-4">
                                     {t('admin.customer.upgradeForm.title')}
                                 </h3>
 
@@ -369,13 +369,13 @@ export default function AdminCustomerDetailPage() {
                                 <div className="space-y-4">
                                     {/* Plan Selection */}
                                     <div>
-                                        <label className="block text-sm font-medium text-surface-700 mb-1">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
                                             {t('admin.customer.upgradeForm.plan')} *
                                         </label>
                                         <select
                                             value={selectedPlan}
                                             onChange={(e) => setSelectedPlan(e.target.value)}
-                                            className="w-full px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                                         >
                                             <option value="">{t('admin.customer.upgradeForm.selectPlan')}</option>
                                             {plans.filter(p => p.isActive).map((plan) => (
@@ -388,13 +388,13 @@ export default function AdminCustomerDetailPage() {
 
                                     {/* Period */}
                                     <div>
-                                        <label className="block text-sm font-medium text-surface-700 mb-1">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
                                             {t('admin.customer.upgradeForm.period')} *
                                         </label>
                                         <select
                                             value={periodMonths}
                                             onChange={(e) => setPeriodMonths(Number(e.target.value) as 1 | 3 | 6 | 12)}
-                                            className="w-full px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                                         >
                                             <option value={1}>1 {t('admin.customer.upgradeForm.month')}</option>
                                             <option value={3}>3 {t('admin.customer.upgradeForm.months')}</option>
@@ -405,13 +405,13 @@ export default function AdminCustomerDetailPage() {
 
                                     {/* Payment Method */}
                                     <div>
-                                        <label className="block text-sm font-medium text-surface-700 mb-1">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
                                             {t('admin.customer.upgradeForm.paymentMethod')} *
                                         </label>
                                         <select
                                             value={paymentMethod}
                                             onChange={(e) => setPaymentMethod(e.target.value as 'manual' | 'bank_transfer' | 'syrian_bank')}
-                                            className="w-full px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                                         >
                                             <option value="manual">{t('admin.customer.upgradeForm.paymentMethods.manual')}</option>
                                             <option value="bank_transfer">{t('admin.customer.upgradeForm.paymentMethods.bankTransfer')}</option>
@@ -421,7 +421,7 @@ export default function AdminCustomerDetailPage() {
 
                                     {/* Payment Reference */}
                                     <div>
-                                        <label className="block text-sm font-medium text-surface-700 mb-1">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
                                             {t('admin.customer.upgradeForm.paymentReference')}
                                         </label>
                                         <input
@@ -429,13 +429,13 @@ export default function AdminCustomerDetailPage() {
                                             value={paymentReference}
                                             onChange={(e) => setPaymentReference(e.target.value)}
                                             placeholder={t('admin.customer.upgradeForm.paymentReferencePlaceholder')}
-                                            className="w-full px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                                         />
                                     </div>
 
                                     {/* Note */}
                                     <div>
-                                        <label className="block text-sm font-medium text-surface-700 mb-1">
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
                                             {t('admin.customer.upgradeForm.note')}
                                         </label>
                                         <textarea
@@ -443,7 +443,7 @@ export default function AdminCustomerDetailPage() {
                                             onChange={(e) => setNote(e.target.value)}
                                             placeholder={t('admin.customer.upgradeForm.notePlaceholder')}
                                             rows={3}
-                                            className="w-full px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
+                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
                                         />
                                     </div>
 

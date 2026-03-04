@@ -17,7 +17,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { useSSE } from '@/hooks';
+import { useSSE, useTheme } from '@/hooks';
 
 /**
  * Type for pages with persistent layouts
@@ -327,6 +327,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       ) : (
         <>
           <SSEManager />
+          <ThemeManager />
           <Head>
             <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
             <title>{BRAND_ASSETS.meta.appTitle}</title>
@@ -363,7 +364,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
             <ErrorBoundary name="root" resetKeys={router.asPath}>
               {getLayout(<Component {...pageProps} />)}
-              <Toaster richColors position="top-center" closeButton duration={4000} />
+              <Toaster richColors position="top-center" closeButton duration={4000} theme="system" />
               {showPushPrompt && (
                 <NotificationPrePrompt onEnable={handleEnablePush} onDismiss={handleDismissPush} />
               )}
@@ -378,5 +379,11 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 /** Renders nothing — mounts useSSE inside QueryClientProvider so it can access the QueryClient */
 function SSEManager() {
   useSSE();
+  return null;
+}
+
+/** Renders nothing — applies/removes .dark class on <html> based on theme preference */
+function ThemeManager() {
+  useTheme();
   return null;
 }

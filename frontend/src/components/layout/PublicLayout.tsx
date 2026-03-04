@@ -71,10 +71,10 @@ export function PublicLayout({
         {description && <meta name="description" content={description} />}
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-white">
+      <div className="flex-1 overflow-y-auto bg-background">
         {/* Header - Consistent across all public pages */}
         {variant === 'landing' && (
-          <nav className="fixed w-full z-50 bg-white/80 backdrop-blur-md border-b border-surface-100 pt-safe">
+          <nav className="fixed w-full z-50 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16 sm:h-20">
                 {/* Logo */}
@@ -83,7 +83,7 @@ export function PublicLayout({
                     variant="main"
                     className="w-10 h-10 sm:w-12 sm:h-12 transition-transform group-hover:rotate-6 flex-shrink-0"
                   />
-                  <span className="font-display font-bold text-xl sm:text-2xl text-surface-900 tracking-tight">
+                  <span className="font-display font-bold text-xl sm:text-2xl text-foreground tracking-tight">
                     {BRAND_ASSETS.meta.appName}
                   </span>
                 </Link>
@@ -92,13 +92,13 @@ export function PublicLayout({
                 <div className="flex items-center gap-1 sm:gap-4">
                   <Link
                     href="/pricing"
-                    className="hidden md:block px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
+                    className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
                   >
                     {t('landing.nav.pricing')}
                   </Link>
                   <button
                     onClick={toggleLanguage}
-                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-surface-600 hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
                   >
                     {t('common.switchLanguage')}
                   </button>
@@ -128,13 +128,13 @@ export function PublicLayout({
                 variant="main"
                 className="w-9 h-9 sm:w-12 sm:h-12 group-hover:rotate-6 transition-transform"
               />
-              <span className="font-display font-bold text-lg sm:text-2xl text-surface-900 tracking-tight">
+              <span className="font-display font-bold text-lg sm:text-2xl text-foreground tracking-tight">
                 {BRAND_ASSETS.meta.appName}
               </span>
             </Link>
             <button
               onClick={toggleLanguage}
-              className="px-4 py-2 text-sm font-bold text-surface-600 hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
+              className="px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
             >
               {t('common.switchLanguage')}
             </button>

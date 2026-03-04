@@ -28,9 +28,9 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
             <MessageSquare className="w-4 h-4" />
           </div>
           <div className="text-start">
-            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900' : 'text-surface-900'}`}>{t('settings.commentsAutoReply')}</h3>
-            <p className="text-sm text-surface-500 font-medium landscape:text-xs">{t('settings.commentsAutoReplyDesc')}</p>
-            <p className="text-xs text-surface-600 mt-1 landscape:hidden">{t('settings.commentsAutoReplyHelper')}</p>
+            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900' : 'text-foreground'}`}>{t('settings.commentsAutoReply')}</h3>
+            <p className="text-sm text-muted-foreground font-medium landscape:text-xs">{t('settings.commentsAutoReplyDesc')}</p>
+            <p className="text-xs text-muted-foreground mt-1 landscape:hidden">{t('settings.commentsAutoReplyHelper')}</p>
           </div>
         </div>
         <Toggle
@@ -43,7 +43,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
       {/* Nested Reply Mode Options */}
       <div
         className={clsx(
-          "mt-6 pt-6 landscape:mt-4 landscape:pt-4 border-t border-surface-100 transition-opacity duration-300",
+          "mt-6 pt-6 landscape:mt-4 landscape:pt-4 border-t border-theme-border transition-opacity duration-300",
           !settings.commentsAutoReply && "opacity-50 pointer-events-none"
         )}
       >
@@ -179,7 +179,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                   const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
                   return isAutoTranslated && value ? value : t('settings.publicReplyPlaceholder');
                 })()}
-                className="bg-white !py-2.5 placeholder:text-surface-400 placeholder:italic"
+                className="bg-card !py-2.5 placeholder:text-surface-400 placeholder:italic"
                 maxLength={80}
               />
 

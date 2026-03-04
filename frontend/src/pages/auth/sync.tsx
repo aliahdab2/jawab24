@@ -66,9 +66,9 @@ export default function AuthSync() {
   return (
     <>
       <Head><meta name="robots" content="noindex, nofollow" /></Head>
-      <div className="flex-1 overflow-y-auto flex items-center justify-center bg-surface-50">
+      <div className="flex-1 overflow-y-auto flex items-center justify-center bg-background">
         <div className="text-center">
-          <p className="text-surface-500 text-sm font-medium">{status}</p>
+          <p className="text-muted-foreground text-sm font-medium">{status}</p>
         </div>
       </div>
     </>

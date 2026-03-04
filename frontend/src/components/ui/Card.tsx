@@ -48,9 +48,9 @@ export function CardHeader({ title, description, action }: CardHeaderProps) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
       <div className="text-start">
-        <h3 className="text-xl font-bold text-surface-900 tracking-tight">{title}</h3>
+        <h3 className="text-xl font-bold text-foreground tracking-tight">{title}</h3>
         {description && (
-          <p className="text-sm font-medium text-surface-500 mt-1 leading-relaxed">{description}</p>
+          <p className="text-sm font-medium text-muted-foreground mt-1 leading-relaxed">{description}</p>
         )}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}

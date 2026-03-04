@@ -112,8 +112,8 @@ export default function CompleteProfilePage() {
   // Loading state while checking user status
   if (isLoading) {
     return (
-      <div className="flex-1 overflow-y-auto bg-surface-50 px-4 py-8 pt-safe pb-safe">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto animate-pulse">
+      <div className="flex-1 overflow-y-auto bg-background px-4 py-8 pt-safe pb-safe">
+        <div className="bg-card rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto animate-pulse">
           <div className="flex flex-col items-center">
             <div className="w-16 h-16 bg-surface-200 rounded-full mb-4" />
             <div className="h-8 w-48 bg-surface-200 rounded mb-2" />
@@ -130,21 +130,21 @@ export default function CompleteProfilePage() {
   if (success) {
     return (
       <div 
-        className="flex-1 overflow-y-auto bg-surface-50 px-4 py-8 pt-safe pb-safe"
+        className="flex-1 overflow-y-auto bg-background px-4 py-8 pt-safe pb-safe"
         role="main"
         aria-label={t('profile.complete')}
       >
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto text-center animate-fade-in">
+        <div className="bg-card rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto text-center animate-fade-in">
           {/* Animated success icon */}
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce-in">
             <CheckCircle2 className="w-10 h-10 text-green-600" />
           </div>
           
-          <h2 className="text-2xl font-bold text-surface-900 mb-2">
+          <h2 className="text-2xl font-bold text-foreground mb-2">
             {t('profile.complete')}
           </h2>
-          
-          <p className="text-surface-600 mb-6">
+
+          <p className="text-muted-foreground mb-6">
             {t('profile.redirecting')}
           </p>
           
@@ -165,19 +165,19 @@ export default function CompleteProfilePage() {
       </Head>
 
       <div 
-        className="flex-1 overflow-y-auto bg-surface-50 px-4 py-8 pt-safe pb-safe"
+        className="flex-1 overflow-y-auto bg-background px-4 py-8 pt-safe pb-safe"
         role="main"
       >
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto animate-fade-in">
+        <div className="bg-card rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto animate-fade-in">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4 transition-transform hover:scale-105">
               <Mail className="w-8 h-8 text-brand-600" aria-hidden="true" />
             </div>
-            <h1 className="text-3xl font-bold text-surface-900 mb-2">
+            <h1 className="text-3xl font-bold text-foreground mb-2">
               {t('profile.title')}
             </h1>
-            <p className="text-surface-600">
+            <p className="text-muted-foreground">
               {t('profile.emailRequired')}
             </p>
           </div>
@@ -187,7 +187,7 @@ export default function CompleteProfilePage() {
             <div>
               <label 
                 htmlFor="email" 
-                className="block text-sm font-medium text-surface-700 mb-2 text-start"
+                className="block text-sm font-medium text-foreground/70 mb-2 text-start"
               >
                 {t('profile.emailAddress')}
               </label>
@@ -273,13 +273,13 @@ export default function CompleteProfilePage() {
           </form>
 
           {/* Trust indicators */}
-          <div className="mt-8 pt-6 border-t border-surface-200">
-            <div className="flex items-center justify-center gap-2 text-surface-500 mb-3">
+          <div className="mt-8 pt-6 border-t border-theme-border">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground mb-3">
               <Shield className="w-4 h-4" aria-hidden="true" />
               <span className="text-xs font-medium">{t('profile.privacyNote')}</span>
             </div>
             
-            <div className="flex items-center justify-center gap-4 text-xs text-surface-400">
+            <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Lock className="w-3 h-3" aria-hidden="true" />
                 {t('profile.encrypted')}
@@ -323,8 +323,8 @@ export default function CompleteProfilePage() {
       `}</style>
 
       {/* Fixed safe area backgrounds */}
-      <div className="fixed-safe-bg top-safe-bg bg-white" aria-hidden="true" />
-      <div className="fixed-safe-bg bottom-safe-bg bg-surface-100" aria-hidden="true" />
+      <div className="fixed-safe-bg top-safe-bg bg-card" aria-hidden="true" />
+      <div className="fixed-safe-bg bottom-safe-bg bg-muted" aria-hidden="true" />
     </>
   );
 }

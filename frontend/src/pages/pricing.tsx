@@ -84,11 +84,11 @@ function PlanCard({
       ? 'ring-2 ring-blue-500 shadow-[0_20px_40px_rgba(59,130,246,0.18)] md:scale-105 z-10'
       : isPro
         ? 'ring-2 ring-amber-400 shadow-[0_20px_40px_rgba(217,161,12,0.15)] md:scale-[1.02] z-[5]'
-        : 'border-surface-200 shadow-[0_4px_6px_rgba(0,0,0,0.07)]';
+        : 'border-theme-border shadow-[0_4px_6px_rgba(0,0,0,0.07)]';
 
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${highlightClasses} ${isCurrentPlan ? 'bg-emerald-50/40' : isPro ? 'bg-amber-50/30' : 'bg-white'}`}
+      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${highlightClasses} ${isCurrentPlan ? 'bg-emerald-50/40' : isPro ? 'bg-amber-50/30' : 'bg-card'}`}
     >
       {/* Popular badge */}
       {isPopular && (
@@ -139,25 +139,25 @@ function PlanCard({
             <Sparkles className="w-5 h-5 md:w-6 md:h-6" />
           )}
         </div>
-        <h3 className="text-lg md:text-xl font-bold text-surface-900 tracking-tight mb-1">{planName}</h3>
+        <h3 className="text-lg md:text-xl font-bold text-foreground tracking-tight mb-1">{planName}</h3>
         {planDescription && (
-          <p className="text-xs md:text-sm text-surface-600 leading-relaxed min-h-[32px] px-2">{planDescription}</p>
+          <p className="text-xs md:text-sm text-muted-foreground leading-relaxed min-h-[32px] px-2">{planDescription}</p>
         )}
       </div>
 
       {/* Price */}
-      <div className="text-center mb-2 md:mb-4 py-1.5 md:py-3 bg-surface-50/50 rounded-xl mx-3">
+      <div className="text-center mb-2 md:mb-4 py-1.5 md:py-3 bg-background/50 rounded-xl mx-3">
         <div className="flex items-baseline justify-center gap-1">
-          <span className="text-3xl md:text-4xl font-extrabold text-surface-900">
+          <span className="text-3xl md:text-4xl font-extrabold text-foreground">
             {isFree ? '$0' : isAnnual ? formatPrice(monthlyEquivalent) : formatPrice(plan.price)}
           </span>
           {!isFree && (
-            <span className="text-surface-500 text-sm font-medium">{t('pricing.perMonth')}</span>
+            <span className="text-muted-foreground text-sm font-medium">{t('pricing.perMonth')}</span>
           )}
         </div>
         {isAnnual && !isFree && (
           <>
-            <p className="text-xs text-surface-400 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               {t('pricing.billedYearly' as TranslationKey, { amount: formatPrice(displayPrice) })}
             </p>
             <div className="mt-2">
@@ -168,7 +168,7 @@ function PlanCard({
           </>
         )}
         {!isFree && (
-          <p className="text-xs text-surface-400 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             {t('pricing.sarEquivalent' as TranslationKey).replace('{amount}', sarMonthly.toLocaleString())}
           </p>
         )}
@@ -288,7 +288,7 @@ function FeatureRow({
 }) {
   return (
     <div className={`flex items-start gap-2.5 py-0.5 md:py-1 px-1 rounded-lg transition-colors ${highlight ? 'bg-brand-50/30' : ''}`}>
-      <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${included ? 'bg-green-100 text-green-600' : 'bg-surface-100 text-surface-300'
+      <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${included ? 'bg-green-100 text-green-600' : 'bg-muted text-surface-300'
         }`}>
         {included ? (
           <Check className="w-3 h-3 stroke-[3]" />
@@ -297,12 +297,12 @@ function FeatureRow({
         )}
       </div>
       <div className="flex flex-col min-w-0 flex-1">
-        <span className={`text-xs md:text-sm font-semibold leading-snug text-start ${included ? 'text-surface-700' : 'text-surface-400 line-through decoration-surface-300'
+        <span className={`text-xs md:text-sm font-semibold leading-snug text-start ${included ? 'text-foreground/70' : 'text-muted-foreground line-through decoration-surface-300'
           }`}>
           {text}
         </span>
         {subtext && (
-          <span className="text-[10px] md:text-xs text-surface-400 font-medium mt-0.5 text-start">
+          <span className="text-[10px] md:text-xs text-muted-foreground font-medium mt-0.5 text-start">
             {subtext}
           </span>
         )}
@@ -451,14 +451,14 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         {/* Usage Summary if subscribed - Inline */}
         {usage?.subscription?.plan && (
           <div className="max-w-4xl mx-auto mt-1 lg:mt-2 mb-2 lg:mb-4">
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-8 py-2 sm:py-3.5 px-4 sm:px-6 bg-white rounded-2xl border border-brand-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-8 py-2 sm:py-3.5 px-4 sm:px-6 bg-card rounded-2xl border border-brand-100 shadow-sm">
               {/* Plan Info */}
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shadow-inner">
                   <Crown className="w-5 h-5" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-surface-900">
+                  <span className="text-base font-bold text-foreground">
                     {t(`pricing.${usage.subscription.plan.slug}` as TranslationKey) !== `pricing.${usage.subscription.plan.slug}`
                       ? t(`pricing.${usage.subscription.plan.slug}` as TranslationKey)
                       : (t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey) !== `plans.${usage.subscription.plan.slug}.name`
@@ -474,12 +474,12 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               </div>
 
               {/* Vertical Divider (desktop only) */}
-              <div className="hidden sm:block w-px h-6 bg-surface-200" />
+              <div className="hidden sm:block w-px h-6 bg-theme-border" />
 
               {/* Usage Stats */}
               <div className="flex items-center gap-3 sm:gap-6 text-sm">
                 <div className="flex flex-row items-center gap-1 sm:gap-2">
-                  <span className="text-surface-500 font-medium">{t('pricing.repliesUsed' as TranslationKey)}</span>
+                  <span className="text-muted-foreground font-medium">{t('pricing.repliesUsed' as TranslationKey)}</span>
                   <span className="font-bold text-brand-600">
                     {usage.aiReplies.used} / {usage.aiReplies.limit || '∞'}
                   </span>
@@ -487,7 +487,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
                 {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 ? (
                   <>
-                    <div className="w-px h-4 bg-surface-200" />
+                    <div className="w-px h-4 bg-theme-border" />
                     <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-100 font-bold">
                       <Zap className="w-3.5 h-3.5 fill-amber-500" />
                       {t('pricing.daysLeftCount', { count: usage.subscription.trialDaysRemaining })}
@@ -495,10 +495,10 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                   </>
                 ) : usage.subscription.renewsAt ? (
                   <>
-                    <div className="w-px h-4 bg-surface-200" />
-                    <div className="flex items-center gap-1.5 text-surface-500">
+                    <div className="w-px h-4 bg-theme-border" />
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
                       <span className="font-medium">{t('subscription.renewsOn')}</span>
-                      <span className="font-bold text-surface-700">
+                      <span className="font-bold text-foreground/70">
                         {new Date(usage.subscription.renewsAt).toLocaleDateString(locale === 'ar' ? 'ar-u-nu-latn' : 'en', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
@@ -511,7 +511,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
         {/* Page title */}
         <div className="text-center px-4 pt-2 sm:pt-5 md:pt-6 mb-4 sm:mb-6">
-          <h1 className="text-2xl sm:text-5xl font-display font-bold text-surface-900 leading-tight max-w-4xl mx-auto">
+          <h1 className="text-2xl sm:text-5xl font-display font-bold text-foreground leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
           {/* Social proof — desktop/tablet only, saves vertical space on mobile */}
@@ -521,20 +521,20 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
               ))}
             </div>
-            <span className="text-sm font-bold text-surface-700">{t('pricing.socialProofRating' as TranslationKey)}</span>
+            <span className="text-sm font-bold text-foreground/70">{t('pricing.socialProofRating' as TranslationKey)}</span>
             <span className="text-surface-300" aria-hidden="true">·</span>
-            <span className="text-sm text-surface-500">{t('pricing.socialProofReviews' as TranslationKey)}</span>
+            <span className="text-sm text-muted-foreground">{t('pricing.socialProofReviews' as TranslationKey)}</span>
           </div>
         </div>
 
         {/* Billing interval toggle */}
         <div className="flex justify-center mb-3 sm:mb-8 lg:mb-12">
-          <div className="inline-flex items-center p-1 bg-surface-100 rounded-xl border border-surface-200 shadow-inner">
+          <div className="inline-flex items-center p-1 bg-muted rounded-xl border border-theme-border shadow-inner">
             <button
               type="button"
               onClick={() => setBillingInterval('month')}
               aria-pressed={billingInterval === 'month'}
-              className={`min-h-[40px] px-5 py-2 text-sm font-semibold rounded-[10px] transition-all duration-200 ${billingInterval === 'month' ? 'bg-white text-surface-900 shadow-sm ring-1 ring-surface-200' : 'text-surface-600 hover:text-surface-800'}`}
+              className={`min-h-[40px] px-5 py-2 text-sm font-semibold rounded-[10px] transition-all duration-200 ${billingInterval === 'month' ? 'bg-card text-foreground shadow-sm ring-1 ring-theme-border' : 'text-muted-foreground hover:text-foreground'}`}
             >
               {t('pricing.monthly')}
             </button>
@@ -542,7 +542,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               type="button"
               onClick={() => setBillingInterval('year')}
               aria-pressed={billingInterval === 'year'}
-              className={`min-h-[40px] px-5 py-2 text-sm font-semibold rounded-[10px] transition-all duration-200 flex items-center gap-2 ${billingInterval === 'year' ? 'bg-white text-surface-900 shadow-sm ring-1 ring-surface-200' : 'text-surface-600 hover:text-surface-800'}`}
+              className={`min-h-[40px] px-5 py-2 text-sm font-semibold rounded-[10px] transition-all duration-200 flex items-center gap-2 ${billingInterval === 'year' ? 'bg-card text-foreground shadow-sm ring-1 ring-theme-border' : 'text-muted-foreground hover:text-foreground'}`}
             >
               {t('pricing.yearly')}
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-500 text-white whitespace-nowrap">
@@ -554,7 +554,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
         {/* Plan tabs — mobile only (Shopify-style segmented control) */}
         <div
-          className="grid mx-4 mb-8 border border-surface-200 rounded-lg overflow-hidden md:hidden"
+          className="grid mx-4 mb-8 border border-theme-border rounded-lg overflow-hidden md:hidden"
           style={{ gridTemplateColumns: `repeat(${activePlans.length}, 1fr)` }}
           role="tablist"
           aria-label={t('pricing.planTabs' as TranslationKey)}
@@ -576,11 +576,11 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 onClick={() => setActiveTab(index)}
                 className={clsx(
                   'py-3 text-sm font-semibold text-center transition-all duration-200 whitespace-nowrap',
-                  'border-surface-200',
+                  'border-theme-border',
                   index > 0 && 'border-s',
                   activeTab === index
-                    ? 'bg-white text-surface-900 shadow-sm'
-                    : 'bg-surface-50 text-surface-500 hover:text-surface-700 hover:bg-surface-100',
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'bg-background text-muted-foreground hover:text-foreground/70 hover:bg-muted',
                 )}
               >
                 {tabLabel}
@@ -629,7 +629,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         </div>
 
         {/* Trust bar */}
-        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 py-4 px-4 text-sm text-surface-500">
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 py-4 px-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" aria-hidden="true" />
             {t('pricing.noCreditCard')}
@@ -642,7 +642,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
         {/* FAQ Section */}
         <div className="max-w-3xl mx-auto px-4 pb-12 pt-10 sm:pt-12">
-          <h2 className="text-xl font-bold text-surface-900 text-center mb-6">
+          <h2 className="text-xl font-bold text-foreground text-center mb-6">
             {t('pricing.faqTitle' as TranslationKey)}
           </h2>
           <div className="space-y-3">
@@ -654,22 +654,22 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               // Skip if translation key is missing (returns the key itself)
               if (question === qKey) return null;
               return (
-                <div key={i} className="border border-surface-200 rounded-xl overflow-hidden">
+                <div key={i} className="border border-theme-border rounded-xl overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setOpenFaq(openFaq === i ? null : i)}
                     aria-expanded={openFaq === i}
                     aria-controls={faqPanelId}
-                    className="w-full flex items-center justify-between gap-3 px-5 py-4 text-start hover:bg-surface-50 transition-colors"
+                    className="w-full flex items-center justify-between gap-3 px-5 py-4 text-start hover:bg-background transition-colors"
                   >
-                    <span className="text-sm font-semibold text-surface-800">{question}</span>
-                    <ChevronDown className={`w-4 h-4 text-surface-400 flex-shrink-0 transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`} />
+                    <span className="text-sm font-semibold text-foreground">{question}</span>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`} />
                   </button>
                   <div
                     id={faqPanelId}
                     className={`overflow-hidden transition-all duration-300 ease-in-out ${openFaq === i ? 'max-h-96' : 'max-h-0'}`}
                   >
-                    <div className="px-5 pb-4 text-sm text-surface-600 leading-relaxed">
+                    <div className="px-5 pb-4 text-sm text-muted-foreground leading-relaxed">
                       {t(aKey)}
                     </div>
                   </div>

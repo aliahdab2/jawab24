@@ -3,7 +3,7 @@ import { Html, Head, Main, NextScript } from 'next/document';
 export default function Document() {
   return (
     // Default to LTR, client-side will update based on user preference
-    <Html lang="ar" dir="rtl">
+    <Html lang="ar" dir="rtl" suppressHydrationWarning>
       <Head>
         {/* Early detection of Capacitor native platform - runs BEFORE React hydrates
             Industry standard: Check Capacitor.isNativePlatform() first (most reliable) */}
@@ -13,19 +13,39 @@ export default function Document() {
               (function() {
                 // Primary check: Capacitor object (most reliable - works in Capacitor 3+)
                 var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-                
+
                 // Fallback: Protocol-based detection (for edge cases)
                 if (!isNative) {
                   var protocol = window.location.protocol;
                   // capacitor:// = iOS, file:// = older Android, https://localhost = Android WebView
-                  isNative = protocol === 'capacitor:' || 
-                             protocol === 'file:' || 
+                  isNative = protocol === 'capacitor:' ||
+                             protocol === 'file:' ||
                              (protocol === 'https:' && window.location.hostname === 'localhost');
                 }
-                
+
                 if (isNative) {
                   document.documentElement.classList.add('is-native');
                 }
+              })();
+            `
+          }}
+        />
+        {/* Dark mode flash prevention — reads persisted theme from Zustand localStorage
+            and applies .dark class BEFORE React hydrates to prevent white flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var stored = localStorage.getItem('ui-storage');
+                  var theme = stored ? JSON.parse(stored).state && JSON.parse(stored).state.theme : 'system';
+                  if (!theme) theme = 'system';
+                  var isDark = theme === 'dark' ||
+                    (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                  if (isDark) {
+                    document.documentElement.classList.add('dark');
+                  }
+                } catch (e) {}
               })();
             `
           }}

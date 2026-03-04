@@ -24,7 +24,7 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
 
   return (
     <>
-      <div className="mt-20 pt-10 landscape:mt-8 landscape:pt-6 border-t border-surface-100 mb-20 landscape:mb-10 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+      <div className="mt-20 pt-10 landscape:mt-8 landscape:pt-6 border-t border-theme-border mb-20 landscape:mb-10 animate-slide-up" style={{ animationDelay: '0.2s' }}>
         <Card className="border-none bg-red-50/30 p-6 landscape:p-4 flex flex-col sm:flex-row items-center justify-between gap-6 overflow-hidden">
           <div className="flex-1 text-start">
             <h4 className="font-bold text-red-900 text-lg landscape:text-base mb-2 flex items-center gap-2">
@@ -42,7 +42,7 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
               whitespace-nowrap
               rounded-lg
               border border-red-200
-              bg-white
+              bg-card
               px-3 py-1.5
               text-xs font-bold
               text-red-500
@@ -74,7 +74,7 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
               <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 animate-bounce-subtle">
                 <CheckCircle2 className="w-10 h-10" />
               </div>
-              <h3 className="text-2xl font-bold text-surface-900 mb-2">
+              <h3 className="text-2xl font-bold text-foreground mb-2">
                 {t('settings.deleteSuccess')}
               </h3>
             </div>

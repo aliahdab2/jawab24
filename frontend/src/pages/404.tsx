@@ -24,7 +24,7 @@ export default function Custom404() {
 
       <div
         dir={isRTL ? 'rtl' : 'ltr'}
-        className="min-h-dvh bg-surface-50 flex flex-col items-center justify-center px-4"
+        className="min-h-dvh bg-background flex flex-col items-center justify-center px-4"
       >
         {/* Brand header */}
         <Link href="/landing" className="flex items-center gap-3 mb-12 group">
@@ -32,7 +32,7 @@ export default function Custom404() {
             variant="main"
             className="w-10 h-10 group-hover:rotate-6 transition-transform"
           />
-          <span className="font-display font-bold text-xl text-surface-900 tracking-tight">
+          <span className="font-display font-bold text-xl text-foreground tracking-tight">
             {BRAND_ASSETS.meta.appName}
           </span>
         </Link>
@@ -58,16 +58,16 @@ export default function Custom404() {
           >
             404
           </p>
-          <h1 className="text-2xl font-bold text-surface-900 mb-2">
+          <h1 className="text-2xl font-bold text-foreground mb-2">
             {t('errors.notFoundTitle')}
           </h1>
-          <p className="text-surface-500 mb-4 leading-relaxed">
+          <p className="text-muted-foreground mb-4 leading-relaxed">
             {t('errors.notFoundDesc')}
           </p>
 
           {/* Broken path — gives the user context on what URL failed */}
           {attemptedPath && attemptedPath !== '/404' && (
-            <p className="text-xs text-surface-400 font-mono bg-surface-100 rounded-lg px-3 py-2 mb-4 break-all inline-block">
+            <p className="text-xs text-muted-foreground font-mono bg-muted rounded-lg px-3 py-2 mb-4 break-all inline-block">
               {attemptedPath}
             </p>
           )}
@@ -93,12 +93,12 @@ export default function Custom404() {
           </div>
 
           {/* Contact support — visible but doesn't compete with main actions */}
-          <div className="mt-8 pt-6 border-t border-surface-200">
+          <div className="mt-8 pt-6 border-t border-theme-border">
             <a
               href={`https://wa.me/${WHATSAPP_NUMBER}?text=${supportMessage}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-surface-500 hover:text-brand-600 transition-colors"
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-brand-600 transition-colors"
             >
               <MessageCircle className="w-4 h-4" aria-hidden="true" />
               {t('errors.contactSupport')}

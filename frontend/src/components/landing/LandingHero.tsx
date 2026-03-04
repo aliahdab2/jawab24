@@ -39,14 +39,14 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
         <div className="grid grid-cols-2 sm:grid-cols-2 items-center gap-3 sm:gap-8 lg:gap-12">
           {/* Text Content */}
           <div className="text-start order-1">
-            <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-surface-900 mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
+            <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-foreground mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
               {t('landing.hero.title1')}
               <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-1 sm:mt-2">
                 {t('landing.hero.title2')}
               </span>
             </h1>
 
-            <p className="text-xs min-[375px]:text-sm sm:text-lg lg:text-xl text-surface-600 mb-4 sm:mb-12 leading-relaxed animate-slide-up animation-delay-100">
+            <p className="text-xs min-[375px]:text-sm sm:text-lg lg:text-xl text-muted-foreground mb-4 sm:mb-12 leading-relaxed animate-slide-up animation-delay-100">
               {t('landing.hero.description')}
             </p>
 
@@ -64,7 +64,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               )}
               {!isAuthenticated && (
                 <Link href="/pricing" className="w-full sm:w-auto">
-                  <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-gray-300 hover:border-brand-500 bg-white hover:bg-white transition-all shadow-lg">
+                  <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-gray-300 hover:border-brand-500 bg-card hover:bg-card transition-all shadow-lg">
                     {t('landing.hero.cta2')}
                   </Button>
                 </Link>

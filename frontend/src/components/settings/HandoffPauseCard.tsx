@@ -24,11 +24,11 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
           <AlertTriangle className="w-6 h-6 landscape:w-5 landscape:h-5" />
         </div>
         <div className="text-start">
-          <h3 className="font-bold text-surface-900 text-base landscape:text-sm">{t('settings.handoffPause.title')}</h3>
+          <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('settings.handoffPause.title')}</h3>
           <p className="text-xs text-amber-700 font-bold">{t('settings.handoffPause.warning' as TranslationKey)}</p>
         </div>
       </div>
-      <p className="text-xs text-surface-600 font-medium mb-3">{t('settings.handoffPause.desc')}</p>
+      <p className="text-xs text-muted-foreground font-medium mb-3">{t('settings.handoffPause.desc')}</p>
       <div className="flex flex-wrap gap-2">
         {presets.map((opt) => (
           <button
@@ -39,7 +39,7 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
               'active:scale-[0.98] hover:shadow-md',
               settings.handoffPauseDurationMinutes === opt.value
                 ? 'bg-amber-500 text-white border-amber-600 shadow-lg hover:bg-amber-600'
-                : 'bg-white text-surface-600 border-surface-200 hover:bg-surface-50 hover:border-surface-300'
+                : 'bg-card text-muted-foreground border-theme-border hover:bg-muted hover:border-surface-300'
             )}
           >
             {settings.handoffPauseDurationMinutes === opt.value && <Check className="w-3.5 h-3.5" />}

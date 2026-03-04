@@ -31,14 +31,14 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
        color === 'emerald' ? 'text-emerald-700' :
        color === 'amber' ? 'text-amber-700' :
        color === 'violet' ? 'text-violet-700' : 'text-red-700')
-    : "text-surface-500 opacity-70";
+    : "text-muted-foreground opacity-70";
 
   const content = (
     <div className="relative z-10 px-3 py-3 sm:px-5 sm:py-4 pointer-events-none">
       {/* Desktop/tablet: side-by-side layout */}
       <div className="hidden sm:flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[32px] font-bold leading-none tracking-tight text-surface-900 mb-1.5">
+          <p className="text-[32px] font-bold leading-none tracking-tight text-foreground mb-1.5">
             {value}
           </p>
           <p className={clsx(
@@ -64,7 +64,7 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
         )}>
           <Icon className="w-4 h-4" />
         </div>
-        <p className="text-xl font-bold leading-none tracking-tight text-surface-900 mb-1">
+        <p className="text-xl font-bold leading-none tracking-tight text-foreground mb-1">
           {value}
         </p>
         <p className={clsx(
@@ -94,7 +94,7 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
           'bg-red-50/50 ring-red-500 border-red-200 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
         )
       : clsx(
-          "border-transparent bg-white shadow-sm",
+          "border-transparent bg-card shadow-sm",
           // Soft hover background tint
           color === 'brand' && "hover:bg-brand-50/30",
           color === 'emerald' && "hover:bg-emerald-50/30",
