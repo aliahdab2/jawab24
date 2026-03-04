@@ -17,6 +17,7 @@ function mockStatsQuery(stats: {
     replied: number;
     needsAttention: number;
     resolved: number;
+    actionRequired: number;
     repliedToday: number;
     ai: number;
     template: number;
@@ -48,6 +49,7 @@ describe('CommentsService', () => {
                     replied: 60,
                     needsAttention: 2,
                     resolved: 3,
+                    actionRequired: 39,  // (100 - 60 - 3 unreplied) + 2 needsAttention = 37 + 2
                     repliedToday: 3,
                     ai: 20,
                     template: 30,
@@ -59,6 +61,7 @@ describe('CommentsService', () => {
                     replied: 30,
                     needsAttention: 1,
                     resolved: 2,
+                    actionRequired: 19,  // (50 - 30 - 2 unreplied) + 1 needsAttention = 18 + 1
                     repliedToday: 2,
                     ai: 15,
                     template: 10,
@@ -72,6 +75,7 @@ describe('CommentsService', () => {
                 replied: 90,         // 60 + 30
                 unreplied: 55,       // total - replied - resolved = 150 - 90 - 5
                 needsAttention: 3,   // 2 + 1
+                actionRequired: 58,  // 39 + 19
                 resolved: 5,         // 3 + 2
                 repliedToday: 5,     // 3 + 2
                 replyRate: '60.0',
@@ -83,15 +87,44 @@ describe('CommentsService', () => {
             });
         });
 
+        it('should include flagged replies in actionRequired count', async () => {
+            // Scenario: 10 total, 8 replied (2 flagged), 0 resolved
+            // actionRequired = 2 unreplied + 2 flagged = 4
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockStatsQuery({
+                    total: 10,
+                    replied: 8,
+                    needsAttention: 2,   // 2 flagged (replied but need attention)
+                    resolved: 0,
+                    actionRequired: 4,   // 2 unreplied + 2 flagged
+                    repliedToday: 3,
+                    ai: 6,
+                    template: 2,
+                    manual: 0,
+                }) as any)
+                .mockReturnValueOnce(mockStatsQuery({
+                    total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
+                    repliedToday: 0, ai: 0, template: 0, manual: 0,
+                }) as any);
+
+            const stats = await commentsService.getStats('user-flagged');
+
+            expect(stats.actionRequired).toBe(4);
+            expect(stats.unreplied).toBe(2);      // only unreplied
+            expect(stats.needsAttention).toBe(2);  // only flagged
+            // actionRequired > unreplied because it includes flagged replies
+            expect(stats.actionRequired).toBeGreaterThan(stats.unreplied);
+        });
+
         it('should handle zero comments', async () => {
             // Both queries return zeros
             vi.mocked(db.select)
                 .mockReturnValueOnce(mockStatsQuery({
-                    total: 0, replied: 0, needsAttention: 0, resolved: 0,
+                    total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
                     repliedToday: 0, ai: 0, template: 0, manual: 0,
                 }) as any)
                 .mockReturnValueOnce(mockStatsQuery({
-                    total: 0, replied: 0, needsAttention: 0, resolved: 0,
+                    total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
                     repliedToday: 0, ai: 0, template: 0, manual: 0,
                 }) as any);
 
@@ -102,6 +135,7 @@ describe('CommentsService', () => {
                 replied: 0,
                 unreplied: 0,
                 needsAttention: 0,
+                actionRequired: 0,
                 resolved: 0,
                 repliedToday: 0,
                 replyRate: '0',

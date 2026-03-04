@@ -29,13 +29,14 @@ export class CommentsController {
             replyMethod?: 'ai' | 'template' | 'manual';
             needsAttention?: string;
             resolved?: string;
+            actionRequired?: string;
         }
     }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { cursor, limit, replied, replyMethod, needsAttention, resolved } = request.query;
+        const { cursor, limit, replied, replyMethod, needsAttention, resolved, actionRequired } = request.query;
 
         try {
             const options: {
@@ -45,6 +46,7 @@ export class CommentsController {
                 replyMethod?: 'ai' | 'template' | 'manual';
                 needsAttention?: boolean;
                 resolved?: boolean;
+                actionRequired?: boolean;
             } = {};
 
             // Parse cursor for pagination
@@ -76,6 +78,11 @@ export class CommentsController {
             // Parse resolved filter
             if (resolved !== undefined) {
                 options.resolved = resolved === 'true';
+            }
+
+            // Parse actionRequired composite filter
+            if (actionRequired !== undefined) {
+                options.actionRequired = actionRequired === 'true';
             }
 
             const result = await commentsService.getCommentsByWorkspace(req.workspaceId, options);

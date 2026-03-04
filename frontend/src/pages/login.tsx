@@ -268,7 +268,7 @@ export default function LoginPage() {
               <span className="block text-brand-500">{t('auth.smartGrowthJourney')}</span>
             </h1>
 
-            <p className="text-base text-surface-400 mb-8 leading-relaxed font-medium animate-slide-up animation-delay-200">
+            <p className="text-base text-white/60 mb-8 leading-relaxed font-medium animate-slide-up animation-delay-200">
               {t('auth.journeyDesc')}
             </p>
 
@@ -280,7 +280,7 @@ export default function LoginPage() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white mb-1">{f.title}</h3>
-                    <p className="text-sm text-surface-400 font-medium">{f.desc}</p>
+                    <p className="text-sm text-white/60 font-medium">{f.desc}</p>
                   </div>
                 </div>
               ))}
@@ -298,7 +298,7 @@ export default function LoginPage() {
                 <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center text-white font-bold text-xs">MA</div>
                 <div>
                   <div className="text-white font-bold text-xs">Mohammed A.</div>
-                  <div className="text-surface-500 text-[10px] font-bold uppercase tracking-widest">{t('auth.testimonialAuthor')}</div>
+                  <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">{t('auth.testimonialAuthor')}</div>
                 </div>
               </div>
             </div>

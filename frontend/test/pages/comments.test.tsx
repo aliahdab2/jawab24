@@ -21,6 +21,24 @@ describe('CommentsPage', () => {
     (pagesApi.getAll as any).mockResolvedValue({ data: [] });
   });
 
+  it('default filter (needs_action) uses actionRequired param', async () => {
+    (commentsApi.getAll as any).mockResolvedValue({
+      data: {
+        data: [],
+        pagination: { hasMore: false, nextCursor: null, limit: 50 },
+      },
+    });
+
+    render(<CommentsPage />);
+
+    // The default filter is needs_action which should use actionRequired: true
+    await vi.waitFor(() => {
+      expect(commentsApi.getAll).toHaveBeenCalledWith(
+        expect.objectContaining({ actionRequired: true }),
+      );
+    });
+  });
+
   it('renders loading skeleton initially', () => {
     (commentsApi.getAll as any).mockReturnValue(new Promise(() => {})); // Never resolves
     render(<CommentsPage />);

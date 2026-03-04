@@ -19,6 +19,25 @@ describe('MessagesPage', () => {
     });
   });
 
+  it('default filter (needs_action) uses actionRequired param', async () => {
+    (messagesApi.getStats as any).mockResolvedValue({ data: { total: 5, replied: 2, pending: 2, actionRequired: 3 } });
+    (messagesApi.getAll as any).mockResolvedValue({
+      data: {
+        data: [],
+        pagination: { hasMore: false, nextCursor: null, limit: 50 },
+      },
+    });
+    (pagesApi.getAll as any).mockResolvedValue({ data: [] });
+
+    render(<MessagesPage />);
+
+    await vi.waitFor(() => {
+      expect(messagesApi.getAll).toHaveBeenCalledWith(
+        expect.objectContaining({ actionRequired: true }),
+      );
+    });
+  });
+
   it('renders "no messages" when empty', async () => {
     // Mock fetchStats
     (messagesApi.getStats as any).mockResolvedValue({ data: { total: 0, replied: 0, pending: 0 } });

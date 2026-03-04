@@ -27,6 +27,7 @@ export class MessagesService {
         replied?: boolean;
         resolved?: boolean;
         needsAttention?: boolean;
+        actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
     }): Promise<{
         data: Message[];
         pagination: { hasMore: boolean; nextCursor: string | null; limit: number };
@@ -56,19 +57,25 @@ export class MessagesService {
             conditions.push(eq(messages.direction, options.direction));
         }
 
-        // Filter by replied status
-        if (options?.replied !== undefined) {
-            conditions.push(eq(messages.replied, options.replied));
-        }
+        // Composite actionRequired filter: (unreplied & unresolved) OR (needsAttention & unresolved)
+        if (options?.actionRequired) {
+            conditions.push(eq(messages.resolved, false));
+            conditions.push(sql`(${messages.replied} = false OR ${messages.needsAttention} = true)`);
+        } else {
+            // Filter by replied status
+            if (options?.replied !== undefined) {
+                conditions.push(eq(messages.replied, options.replied));
+            }
 
-        // Filter by resolved status
-        if (options?.resolved !== undefined) {
-            conditions.push(eq(messages.resolved, options.resolved));
-        }
+            // Filter by resolved status
+            if (options?.resolved !== undefined) {
+                conditions.push(eq(messages.resolved, options.resolved));
+            }
 
-        // Filter by needsAttention
-        if (options?.needsAttention !== undefined) {
-            conditions.push(eq(messages.needsAttention, options.needsAttention));
+            // Filter by needsAttention
+            if (options?.needsAttention !== undefined) {
+                conditions.push(eq(messages.needsAttention, options.needsAttention));
+            }
         }
 
         // Cursor-based pagination
@@ -508,6 +515,7 @@ export class MessagesService {
         pending: number;
         resolved: number;
         needsAttention: number;
+        actionRequired: number;
         autoReplied: number;
         byMethod: { template: number; ai: number; manual: number };
     }> {
@@ -517,6 +525,7 @@ export class MessagesService {
                 replied:        sql<number>`count(*) FILTER (WHERE ${messages.replied} = true)`,
                 resolved:       sql<number>`count(*) FILTER (WHERE ${messages.resolved} = true)`,
                 needsAttention: sql<number>`count(*) FILTER (WHERE ${messages.needsAttention} = true AND ${messages.resolved} = false)`,
+                actionRequired: sql<number>`count(*) FILTER (WHERE ${messages.resolved} = false AND (${messages.replied} = false OR ${messages.needsAttention} = true))`,
                 ai:             sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'manual')`,
@@ -532,7 +541,7 @@ export class MessagesService {
         const total = Number(row?.total || 0);
 
         if (total === 0) {
-            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, autoReplied: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
+            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, actionRequired: 0, autoReplied: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
         }
 
         const replied = Number(row?.replied || 0);
@@ -546,6 +555,7 @@ export class MessagesService {
             pending: total - replied - resolved,
             resolved,
             needsAttention: Number(row?.needsAttention || 0),
+            actionRequired: Number(row?.actionRequired || 0),
             autoReplied: ai + template,
             byMethod: {
                 template,

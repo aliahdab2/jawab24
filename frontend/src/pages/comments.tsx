@@ -53,7 +53,7 @@ function resolveFilter(value: string | undefined): FilterType {
 function getApiParams(filter: FilterType): CommentsQueryParams {
   switch (filter) {
     case 'needs_action':
-      return { replied: false, resolved: false };
+      return { actionRequired: true };
     case 'auto_replied':
       return { replied: true };
     case 'all':
@@ -162,14 +162,14 @@ const CommentsPage: NextPageWithLayout = () => {
     if (statsData) {
       return {
         total: statsData.total,
-        unreplied: statsData.unreplied,
+        actionRequired: statsData.actionRequired ?? statsData.unreplied,
         autoReplied: statsData.byMethod.ai + statsData.byMethod.template,
       };
     }
 
     return {
       total: 0,
-      unreplied: 0,
+      actionRequired: 0,
       autoReplied: 0,
     };
   }, [statsData]);
@@ -419,7 +419,7 @@ const CommentsPage: NextPageWithLayout = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
         <div className="w-full sm:flex-1 sm:min-w-0 flex flex-wrap items-center gap-2">
           {([
-            { key: 'needs_action' as FilterType, label: t('comments.needsAction'), count: stats.unreplied },
+            { key: 'needs_action' as FilterType, label: t('comments.needsAction'), count: stats.actionRequired },
             { key: 'all' as FilterType, label: t('comments.allComments'), count: stats.total },
             { key: 'auto_replied' as FilterType, label: t('comments.autoReplied'), count: stats.autoReplied },
           ]).map(chip => (

@@ -44,6 +44,7 @@ export class CommentsService {
         replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
         needsAttention?: boolean;  // Filter by needsAttention flag
         resolved?: boolean;  // Filter by resolved status
+        actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
         limit?: number;
         cursor?: string;  // Comment ID to start after (for pagination)
     }) {
@@ -65,10 +66,15 @@ export class CommentsService {
 
         // --- Facebook comments query ---
         const fbConditions = [eq(pages.workspaceId, workspaceId)];
-        if (options?.replied !== undefined) fbConditions.push(eq(comments.replied, options.replied));
-        if (options?.replyMethod) fbConditions.push(eq(comments.replyMethod, options.replyMethod));
-        if (options?.needsAttention !== undefined) fbConditions.push(eq(comments.needsAttention, options.needsAttention));
-        if (options?.resolved !== undefined) fbConditions.push(eq(comments.resolved, options.resolved));
+        if (options?.actionRequired) {
+            fbConditions.push(eq(comments.resolved, false));
+            fbConditions.push(sql`(${comments.replied} = false OR ${comments.needsAttention} = true)`);
+        } else {
+            if (options?.replied !== undefined) fbConditions.push(eq(comments.replied, options.replied));
+            if (options?.replyMethod) fbConditions.push(eq(comments.replyMethod, options.replyMethod));
+            if (options?.needsAttention !== undefined) fbConditions.push(eq(comments.needsAttention, options.needsAttention));
+            if (options?.resolved !== undefined) fbConditions.push(eq(comments.resolved, options.resolved));
+        }
         if (cursorDate) fbConditions.push(sql`${comments.createdAt} < ${cursorDate}`);
 
         const fbQuery = db.select({
@@ -103,10 +109,15 @@ export class CommentsService {
 
         // --- Instagram comments query ---
         const igConditions = [eq(pages.workspaceId, workspaceId)];
-        if (options?.replied !== undefined) igConditions.push(eq(instagramComments.replied, options.replied));
-        if (options?.replyMethod) igConditions.push(eq(instagramComments.replyMethod, options.replyMethod));
-        if (options?.needsAttention !== undefined) igConditions.push(eq(instagramComments.needsAttention, options.needsAttention));
-        if (options?.resolved !== undefined) igConditions.push(eq(instagramComments.resolved, options.resolved));
+        if (options?.actionRequired) {
+            igConditions.push(eq(instagramComments.resolved, false));
+            igConditions.push(sql`(${instagramComments.replied} = false OR ${instagramComments.needsAttention} = true)`);
+        } else {
+            if (options?.replied !== undefined) igConditions.push(eq(instagramComments.replied, options.replied));
+            if (options?.replyMethod) igConditions.push(eq(instagramComments.replyMethod, options.replyMethod));
+            if (options?.needsAttention !== undefined) igConditions.push(eq(instagramComments.needsAttention, options.needsAttention));
+            if (options?.resolved !== undefined) igConditions.push(eq(instagramComments.resolved, options.resolved));
+        }
         if (cursorDate) igConditions.push(sql`${instagramComments.createdAt} < ${cursorDate}`);
 
         const igQuery = db.select({
@@ -401,6 +412,7 @@ export class CommentsService {
                 replied:        sql<number>`count(*) FILTER (WHERE ${comments.replied} = true)`,
                 needsAttention: sql<number>`count(*) FILTER (WHERE ${comments.needsAttention} = true AND ${comments.resolved} = false)`,
                 resolved:       sql<number>`count(*) FILTER (WHERE ${comments.resolved} = true)`,
+                actionRequired: sql<number>`count(*) FILTER (WHERE ${comments.resolved} = false AND (${comments.replied} = false OR ${comments.needsAttention} = true))`,
                 repliedToday:   sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.repliedAt} >= ${todayStart})`,
                 ai:             sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'template')`,
@@ -417,6 +429,7 @@ export class CommentsService {
                 replied:        sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true)`,
                 needsAttention: sql<number>`count(*) FILTER (WHERE ${instagramComments.needsAttention} = true AND ${instagramComments.resolved} = false)`,
                 resolved:       sql<number>`count(*) FILTER (WHERE ${instagramComments.resolved} = true)`,
+                actionRequired: sql<number>`count(*) FILTER (WHERE ${instagramComments.resolved} = false AND (${instagramComments.replied} = false OR ${instagramComments.needsAttention} = true))`,
                 repliedToday:   sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.repliedAt} >= ${todayStart})`,
                 ai:             sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'template')`,
@@ -435,7 +448,7 @@ export class CommentsService {
 
         if (total === 0) {
             return {
-                total: 0, replied: 0, unreplied: 0, needsAttention: 0,
+                total: 0, replied: 0, unreplied: 0, needsAttention: 0, actionRequired: 0,
                 resolved: 0, repliedToday: 0, replyRate: '0',
                 byMethod: { template: 0, ai: 0, manual: 0 },
             };
@@ -443,6 +456,7 @@ export class CommentsService {
 
         const replied = Number(fb?.replied || 0) + Number(ig?.replied || 0);
         const needsAttention = Number(fb?.needsAttention || 0) + Number(ig?.needsAttention || 0);
+        const actionRequired = Number(fb?.actionRequired || 0) + Number(ig?.actionRequired || 0);
         const resolved = Number(fb?.resolved || 0) + Number(ig?.resolved || 0);
         const repliedToday = Number(fb?.repliedToday || 0) + Number(ig?.repliedToday || 0);
 
@@ -460,6 +474,7 @@ export class CommentsService {
             replied,
             unreplied: Math.max(0, unreplied),
             needsAttention,
+            actionRequired,
             resolved,
             repliedToday,
             replyRate: (replied / total * 100).toFixed(1),

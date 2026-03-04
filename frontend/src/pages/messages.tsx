@@ -51,7 +51,7 @@ function resolveFilter(value: string | undefined): FilterType {
 function getApiParams(filter: FilterType): MessagesQueryParams {
   switch (filter) {
     case 'needs_action':
-      return { replied: false, resolved: false };
+      return { actionRequired: true };
     case 'auto_replied':
       return { replied: true };
     case 'all':
@@ -227,7 +227,7 @@ const MessagesPage: NextPageWithLayout = () => {
         total: statsData.total,
         pending: statsData.pending,
         autoReplied: statsData.autoReplied ?? 0,
-        needsAction: statsData.pending,
+        needsAction: statsData.actionRequired ?? statsData.pending,
       };
     }
     return { total: 0, pending: 0, autoReplied: 0, needsAction: 0 };

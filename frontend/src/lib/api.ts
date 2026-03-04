@@ -177,6 +177,7 @@ export interface CommentsQueryParams {
   replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
   needsAttention?: boolean;  // Filter by needsAttention flag
   resolved?: boolean;        // Filter by resolved status
+  actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
 }
 
 // Comments Stats Interface
@@ -185,6 +186,7 @@ export interface CommentStats {
   replied: number;
   unreplied: number;
   needsAttention: number;
+  actionRequired: number;
   resolved: number;
   repliedToday: number;
   replyRate: string;
@@ -307,7 +309,7 @@ export const messagesApi = {
   getAll: (params?: MessagesQueryParams) =>
     api.get<MessagesPaginatedResponse>('/messages', { params }),
 
-  getStats: () => api.get<{ total: number; replied: number; pending: number; resolved: number; needsAttention: number; autoReplied: number; byMethod: { template: number; ai: number; manual: number } }>('/messages/stats'),
+  getStats: () => api.get<{ total: number; replied: number; pending: number; resolved: number; needsAttention: number; actionRequired: number; autoReplied: number; byMethod: { template: number; ai: number; manual: number } }>('/messages/stats'),
 
   getConversation: (senderId: string, params: { pageId: string; limit?: number }) =>
     api.get<Message[]>(`/messages/conversation/${senderId}`, { params }),
@@ -380,6 +382,7 @@ export interface MessagesQueryParams {
   replied?: boolean;
   resolved?: boolean;
   needsAttention?: boolean;
+  actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
 }
 
 // Admin API - Protected routes for admin users only

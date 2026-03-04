@@ -20,6 +20,7 @@ export class MessagesController {
             replied?: string;
             resolved?: string;
             needsAttention?: string;
+            actionRequired?: string;
         }
     }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
@@ -28,7 +29,7 @@ export class MessagesController {
         }
 
         try {
-            const { cursor, limit, direction, replied, resolved, needsAttention } = request.query;
+            const { cursor, limit, direction, replied, resolved, needsAttention, actionRequired } = request.query;
 
             const options: {
                 cursor?: string;
@@ -37,6 +38,7 @@ export class MessagesController {
                 replied?: boolean;
                 resolved?: boolean;
                 needsAttention?: boolean;
+                actionRequired?: boolean;
             } = {};
 
             if (cursor) {
@@ -62,6 +64,10 @@ export class MessagesController {
 
             if (needsAttention !== undefined) {
                 options.needsAttention = needsAttention === 'true';
+            }
+
+            if (actionRequired !== undefined) {
+                options.actionRequired = actionRequired === 'true';
             }
 
             const result = await messagesService.getMessages(req.workspaceId, options);

@@ -129,6 +129,18 @@ describe('MessagesController', () => {
             expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', {});
         });
 
+        it('should pass actionRequired=true filter to service', async () => {
+            vi.mocked(messagesService.getMessages).mockResolvedValue({
+                data: [],
+                pagination: { hasMore: false, nextCursor: null, limit: 50 },
+            });
+            (mockRequest as any).query = { actionRequired: 'true' };
+
+            await messagesController.getAll(mockRequest as any, mockReply as any);
+
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', expect.objectContaining({ actionRequired: true }));
+        });
+
         it('should clamp limit to max 100', async () => {
             vi.mocked(messagesService.getMessages).mockResolvedValue({
                 data: [],

@@ -295,6 +295,29 @@ describe('CommentsController', () => {
         });
     });
 
+    // ─── getAll with actionRequired filter ──────────────────────────
+
+    describe('getAll with actionRequired filter', () => {
+        it('should pass actionRequired=true filter to service', async () => {
+            mockRequest.query = { actionRequired: 'true' };
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
+
+            await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentsService.getCommentsByWorkspace).toHaveBeenCalledWith('test_workspace_id', expect.objectContaining({ actionRequired: true }));
+        });
+
+        it('should not set actionRequired when param is absent', async () => {
+            mockRequest.query = { replied: 'false' };
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
+
+            await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            const calledWith = vi.mocked(commentsService.getCommentsByWorkspace).mock.calls[0][1];
+            expect(calledWith).not.toHaveProperty('actionRequired');
+        });
+    });
+
     // ─── getAll with resolved filter ──────────────────────────────
 
     describe('getAll with resolved filter', () => {

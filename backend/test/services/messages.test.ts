@@ -539,6 +539,7 @@ describe('MessagesService', () => {
                             replied: 30,
                             needsAttention: 3,
                             resolved: 0,
+                            actionRequired: 23,  // 20 unreplied + 3 flagged
                             ai: 15,
                             template: 10,
                             manual: 5,
@@ -556,6 +557,7 @@ describe('MessagesService', () => {
                 replied: 30,
                 pending: 20,
                 needsAttention: 3,
+                actionRequired: 23,
                 resolved: 0,
                 autoReplied: 25,
                 byMethod: { template: 10, ai: 15, manual: 5 }
@@ -571,6 +573,7 @@ describe('MessagesService', () => {
                             replied: 0,
                             needsAttention: 0,
                             resolved: 0,
+                            actionRequired: 0,
                             ai: 0,
                             template: 0,
                             manual: 0,
@@ -588,6 +591,7 @@ describe('MessagesService', () => {
                 replied: 0,
                 pending: 0,
                 needsAttention: 0,
+                actionRequired: 0,
                 resolved: 0,
                 autoReplied: 0,
                 byMethod: { template: 0, ai: 0, manual: 0 }
