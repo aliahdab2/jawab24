@@ -21,8 +21,8 @@ const variantStyles: Record<EmptyStateVariant, { iconBg: string; iconColor: stri
     iconColor: 'text-brand-600',
   },
   success: {
-    iconBg: 'bg-emerald-50',
-    iconColor: 'text-emerald-500',
+    iconBg: 'bg-emerald-50 dark:bg-emerald-900/30',
+    iconColor: 'text-emerald-500 dark:text-emerald-400',
   },
   search: {
     iconBg: 'bg-muted',

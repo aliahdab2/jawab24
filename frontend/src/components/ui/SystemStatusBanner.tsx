@@ -52,13 +52,13 @@ export function SystemStatusBanner({
 
   const Icon = isSuccess ? Zap : isWarning ? AlertTriangle : AlertCircle;
 
-  const bgClass = isSuccess ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-                  isWarning ? 'bg-amber-50 border-amber-200 text-amber-900' :
-                  'bg-red-50 border-red-200 text-red-900';
+  const bgClass = isSuccess ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' :
+                  isWarning ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-700 text-amber-900 dark:text-amber-300' :
+                  'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-900 dark:text-red-300';
 
-  const iconBgClass = isSuccess ? 'bg-emerald-100 text-emerald-600' :
-                        isWarning ? 'bg-amber-100 text-amber-600' :
-                        'bg-red-100 text-red-600';
+  const iconBgClass = isSuccess ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400' :
+                        isWarning ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400' :
+                        'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400';
 
   const borderAccent = isSuccess ? 'border-s-4 border-s-emerald-500'
     : isWarning ? 'border-s-4 border-s-amber-500'
@@ -99,9 +99,9 @@ export function SystemStatusBanner({
         size={isMobile ? "sm" : "sm"} 
         className={clsx(
           "shadow-sm font-bold bg-card border-opacity-50 transition-all px-3 py-1.5 h-auto",
-          isWarning ? "border-amber-200 hover:bg-card text-amber-900" :
-          isError ? "border-red-200 hover:bg-card text-red-900" :
-          "border-emerald-200 hover:bg-card text-emerald-700",
+          isWarning ? "border-amber-200 dark:border-amber-700 hover:bg-card text-amber-900 dark:text-amber-300" :
+          isError ? "border-red-200 dark:border-red-700 hover:bg-card text-red-900 dark:text-red-300" :
+          "border-emerald-200 dark:border-emerald-700 hover:bg-card text-emerald-700 dark:text-emerald-300",
           isMobile ? "text-xs px-2 py-1" : "text-sm"
         )}
         onClick={cta.onClick}
@@ -156,9 +156,9 @@ export function SystemStatusBanner({
               {description && (
                 <p className={clsx(
                   "text-xs sm:text-sm leading-relaxed truncate sm:whitespace-normal transition-all hidden sm:block sm:mt-0.5",
-                  isSuccess ? "text-emerald-600/90" : 
-                  isWarning ? "text-amber-700/80" : 
-                  "text-red-700/80"
+                  isSuccess ? "text-emerald-600/90 dark:text-emerald-400/90" :
+                  isWarning ? "text-amber-700/80 dark:text-amber-300/80" :
+                  "text-red-700/80 dark:text-red-300/80"
                 )}>
                   {description}
                 </p>
@@ -205,9 +205,9 @@ export function SystemStatusBanner({
             {description && (
               <p className={clsx(
                 "text-xs sm:text-sm leading-relaxed",
-                isSuccess ? "text-emerald-600/90" : 
-                isWarning ? "text-amber-700/80" : 
-                "text-red-700/80"
+                isSuccess ? "text-emerald-600/90 dark:text-emerald-400/90" :
+                isWarning ? "text-amber-700/80 dark:text-amber-300/80" :
+                "text-red-700/80 dark:text-red-300/80"
               )}>
                 {description}
               </p>

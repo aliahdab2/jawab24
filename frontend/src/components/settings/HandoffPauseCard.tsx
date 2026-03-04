@@ -18,14 +18,14 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
   ];
 
   return (
-    <div className="rounded-2xl border-s-4 border-amber-400 bg-amber-50 p-5 landscape:p-3 shadow-md">
+    <div className="rounded-2xl border-s-4 border-amber-400 bg-amber-50 dark:bg-amber-900/30 p-5 landscape:p-3 shadow-md">
       <div className="flex items-center gap-4 mb-4 landscape:mb-3">
-        <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
+        <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
           <AlertTriangle className="w-6 h-6 landscape:w-5 landscape:h-5" />
         </div>
         <div className="text-start">
           <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('settings.handoffPause.title')}</h3>
-          <p className="text-xs text-amber-700 font-bold">{t('settings.handoffPause.warning' as TranslationKey)}</p>
+          <p className="text-xs text-amber-700 dark:text-amber-300 font-bold">{t('settings.handoffPause.warning' as TranslationKey)}</p>
         </div>
       </div>
       <p className="text-xs text-muted-foreground font-medium mb-3">{t('settings.handoffPause.desc')}</p>

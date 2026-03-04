@@ -57,8 +57,8 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
           {limit && (
             <span className={clsx(
               'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-              roundedPercent > 90 ? 'text-red-600 bg-red-50' :
-                roundedPercent > 75 ? 'text-amber-600 bg-amber-50' :
+              roundedPercent > 90 ? 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-900/30' :
+                roundedPercent > 75 ? 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/30' :
                   'text-muted-foreground'
             )}>
               {roundedPercent}%
@@ -537,7 +537,7 @@ const DashboardPage: NextPageWithLayout = () => {
                           <h3 className="text-base sm:text-lg lg:text-xl font-display font-bold text-foreground tracking-tight flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span>{PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}</span>
                             {isTrialing && (
-                              <span className="inline-flex items-center text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200">
+                              <span className="inline-flex items-center text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded text-[10px] font-extrabold border border-amber-200 dark:border-amber-700">
                                 {t('subscription.trialBadge' as TranslationKey)}
                               </span>
                             )}
@@ -546,8 +546,8 @@ const DashboardPage: NextPageWithLayout = () => {
                       </div>
 
                       {isTrialing && usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 && (
-                        <div className="mt-5 p-3 rounded-xl bg-amber-50 border border-amber-100 flex items-center gap-3 text-amber-700">
-                          <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                        <div className="mt-5 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/30 border border-amber-100 dark:border-amber-700 flex items-center gap-3 text-amber-700 dark:text-amber-300">
+                          <div className="w-8 h-8 rounded-xl bg-white dark:bg-card flex items-center justify-center shadow-sm">
                             <Zap className="w-4 h-4" />
                           </div>
                           <span className="text-xs font-bold leading-relaxed">

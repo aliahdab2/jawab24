@@ -21,16 +21,16 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
 
   const iconColorClasses =
     color === 'brand' ? 'bg-brand-50 text-brand-600 shadow-brand-500/10' :
-    color === 'emerald' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-500/10' :
-    color === 'amber' ? 'bg-amber-50 text-amber-600 shadow-amber-500/10' :
-    color === 'violet' ? 'bg-violet-50 text-violet-600 shadow-violet-500/10' :
-    'bg-red-50 text-red-600 shadow-red-500/10';
+    color === 'emerald' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 shadow-emerald-500/10' :
+    color === 'amber' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 shadow-amber-500/10' :
+    color === 'violet' ? 'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 shadow-violet-500/10' :
+    'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 shadow-red-500/10';
 
   const labelColorClasses = isActive
     ? (color === 'brand' ? 'text-brand-700' :
-       color === 'emerald' ? 'text-emerald-700' :
-       color === 'amber' ? 'text-amber-700' :
-       color === 'violet' ? 'text-violet-700' : 'text-red-700')
+       color === 'emerald' ? 'text-emerald-700 dark:text-emerald-400' :
+       color === 'amber' ? 'text-amber-700 dark:text-amber-400' :
+       color === 'violet' ? 'text-violet-700 dark:text-violet-400' : 'text-red-700 dark:text-red-400')
     : "text-muted-foreground opacity-70";
 
   const content = (
@@ -88,19 +88,19 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
       ? clsx(
           "ring-2 ring-offset-2",
           color === 'brand' ? 'bg-brand-50/50 ring-brand-500 border-brand-200 shadow-[0_0_15px_rgba(59,130,246,0.15)]' :
-          color === 'emerald' ? 'bg-emerald-50/50 ring-emerald-500 border-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.15)]' :
-          color === 'amber' ? 'bg-amber-50/50 ring-amber-500 border-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.15)]' :
-          color === 'violet' ? 'bg-violet-50/50 ring-violet-500 border-violet-200 shadow-[0_0_15px_rgba(139,92,246,0.15)]' :
-          'bg-red-50/50 ring-red-500 border-red-200 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
+          color === 'emerald' ? 'bg-emerald-50/50 dark:bg-emerald-900/20 ring-emerald-500 border-emerald-200 dark:border-emerald-700 shadow-[0_0_15px_rgba(16,185,129,0.15)]' :
+          color === 'amber' ? 'bg-amber-50/50 dark:bg-amber-900/20 ring-amber-500 border-amber-200 dark:border-amber-700 shadow-[0_0_15px_rgba(245,158,11,0.15)]' :
+          color === 'violet' ? 'bg-violet-50/50 dark:bg-violet-900/20 ring-violet-500 border-violet-200 dark:border-violet-700 shadow-[0_0_15px_rgba(139,92,246,0.15)]' :
+          'bg-red-50/50 dark:bg-red-900/20 ring-red-500 border-red-200 dark:border-red-700 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
         )
       : clsx(
           "border-transparent bg-card shadow-sm",
           // Soft hover background tint
           color === 'brand' && "hover:bg-brand-50/30",
-          color === 'emerald' && "hover:bg-emerald-50/30",
-          color === 'amber' && "hover:bg-amber-50/30",
-          color === 'violet' && "hover:bg-violet-50/30",
-          color === 'red' && "hover:bg-red-50/30"
+          color === 'emerald' && "hover:bg-emerald-50/30 dark:hover:bg-emerald-900/20",
+          color === 'amber' && "hover:bg-amber-50/30 dark:hover:bg-amber-900/20",
+          color === 'violet' && "hover:bg-violet-50/30 dark:hover:bg-violet-900/20",
+          color === 'red' && "hover:bg-red-50/30 dark:hover:bg-red-900/20"
         ),
     // Grid spanning
     index === 2 ? "col-span-2 sm:col-span-1" : "col-span-1"

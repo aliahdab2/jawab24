@@ -486,7 +486,7 @@ const MessagesPage: NextPageWithLayout = () => {
         icon: Sparkles,
         variant: 'empty',
         iconColorClass: 'text-violet-500',
-        iconBgClass: 'bg-violet-50',
+        iconBgClass: 'bg-violet-50 dark:bg-violet-900/30',
         title: t('messages.emptyAutoReplied' as TranslationKey),
         subtitle: t('messages.emptyAutoRepliedSub' as TranslationKey),
       },

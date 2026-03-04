@@ -122,7 +122,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
                 className={clsx(
                   "w-full px-4 py-3 text-start text-sm flex items-center justify-between gap-2 transition-colors",
                   option.value === value
-                    ? "bg-brand-50 text-brand-700 font-semibold"
+                    ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 font-semibold"
                     : "text-foreground/80 hover:bg-muted"
                 )}
               >

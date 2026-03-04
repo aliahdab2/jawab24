@@ -97,7 +97,7 @@ export function KnowledgeBaseSection({
           </p>
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed text-foreground placeholder:text-surface-300"
+            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-surface-300"
             placeholder={t(config.placeholderKey as TranslationKey)}
             aria-label={t(config.titleKey as TranslationKey)}
             value={section.content}

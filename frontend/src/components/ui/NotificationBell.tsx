@@ -47,16 +47,16 @@ interface NotificationStyle {
 }
 
 const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
-    stale_comment:         { icon: Bell,          iconColor: 'text-amber-600',   bgColor: 'bg-amber-50',   ringColor: 'ring-amber-200/60' },
-    new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600',    bgColor: 'bg-blue-50',    ringColor: 'ring-blue-200/60' },
-    flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600',     bgColor: 'bg-red-50',     ringColor: 'ring-red-200/60' },
-    skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600',   bgColor: 'bg-amber-50',   ringColor: 'ring-amber-200/60' },
-    payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600',     bgColor: 'bg-red-50',     ringColor: 'ring-red-200/60' },
-    subscription_expiring: { icon: Clock,         iconColor: 'text-orange-600',  bgColor: 'bg-orange-50',  ringColor: 'ring-orange-200/60' },
-    trial_ending:          { icon: Clock,         iconColor: 'text-orange-600',  bgColor: 'bg-orange-50',  ringColor: 'ring-orange-200/60' },
-    subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600', bgColor: 'bg-emerald-50', ringColor: 'ring-emerald-200/60' },
-    page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600',   bgColor: 'bg-slate-100',  ringColor: 'ring-slate-200/60' },
-    kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600',   bgColor: 'bg-amber-50',   ringColor: 'ring-amber-200/60' },
+    stale_comment:         { icon: Bell,          iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'ring-amber-200/60 dark:ring-amber-700/60' },
+    new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600 dark:text-blue-400',       bgColor: 'bg-blue-50 dark:bg-blue-900/30',       ringColor: 'ring-blue-200/60 dark:ring-blue-700/60' },
+    flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'ring-red-200/60 dark:ring-red-700/60' },
+    skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'ring-amber-200/60 dark:ring-amber-700/60' },
+    payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'ring-red-200/60 dark:ring-red-700/60' },
+    subscription_expiring: { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'ring-orange-200/60 dark:ring-orange-700/60' },
+    trial_ending:          { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'ring-orange-200/60 dark:ring-orange-700/60' },
+    subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'ring-emerald-200/60 dark:ring-emerald-700/60' },
+    page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600 dark:text-slate-400',     bgColor: 'bg-slate-100 dark:bg-slate-900/30',    ringColor: 'ring-slate-200/60 dark:ring-slate-700/60' },
+    kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'ring-amber-200/60 dark:ring-amber-700/60' },
 };
 
 const DEFAULT_STYLE: NotificationStyle = {
@@ -384,7 +384,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         'group relative px-5 py-3.5 transition-colors duration-200 cursor-pointer',
                         indented && 'ps-14',
                         isUnread
-                            ? 'bg-brand-50/40 hover:bg-brand-50/70'
+                            ? 'bg-brand-50/40 dark:bg-brand-900/20 hover:bg-brand-50/70 dark:hover:bg-brand-900/30'
                             : 'hover:bg-muted',
                     )}
                     onClick={() => handleNotificationClick(notification)}
@@ -443,7 +443,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                         e.stopPropagation();
                                         handleReplyNow(notification);
                                     }}
-                                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors"
+                                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors"
                                     aria-label={t('notifications.replyNow')}
                                 >
                                     <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
@@ -529,7 +529,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                             ? 'bg-white/20 text-white'
                             : 'hover:bg-white/10 text-white/90'
                         : isOpen
-                            ? 'bg-brand-100 text-brand-700'
+                            ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
                             : 'hover:bg-muted text-muted-foreground',
                 )}
                 aria-label={t('notifications.title')}
@@ -589,7 +589,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         <div className="px-5 pb-2">
                             <button
                                 onClick={handleMarkAllAsRead}
-                                className="text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                                className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
                             >
                                 <CheckCheck className="w-3.5 h-3.5" />
                                 {t('notifications.markAllRead')}

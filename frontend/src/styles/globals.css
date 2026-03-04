@@ -112,65 +112,65 @@
 
   /* ──────────────────────────────────────────────────────────────────
      DARK PALETTE REFERENCE (swap these 7 values to re-theme dark mode)
-     Background: #232940   rgb(35 41 64)
-     Cards:      #2B314A   rgb(43 49 74)
-     Borders:    #3A4160   rgb(58 65 96)
-     Primary:    #90F5AC   rgb(144 245 172)   — mint
-     Secondary:  #4C78C4   rgb(76 120 196)    — blue
-     Muted text: #A0A6A7   rgb(160 166 167)
-     Text:       #FFFFFF   rgb(255 255 255)
+     Background: #1a1f2e   rgb(26 31 46)
+     Cards:      #222838   rgb(34 40 56)
+     Borders:    #2e3548   rgb(46 53 72)
+     Primary:    #34d399   rgb(52 211 153)    — emerald
+     Secondary:  #6366f1   rgb(99 102 241)    — indigo
+     Muted text: #9ca3af   rgb(156 163 175)
+     Text:       #f0f2f5   rgb(240 242 245)
   ────────────────────────────────────────────────────────────────── */
   .dark {
     /* Semantic tokens */
-    --background: 35 41 64;           /* #232940 */
-    --foreground: 255 255 255;        /* #FFFFFF */
+    --background: 26 31 46;           /* #1a1f2e */
+    --foreground: 240 242 245;        /* #f0f2f5 */
 
-    --card: 43 49 74;                 /* #2B314A */
-    --card-foreground: 255 255 255;
+    --card: 34 40 56;                 /* #222838 */
+    --card-foreground: 240 242 245;
 
-    --secondary: 50 57 82;            /* #323952 (hover / elevated surface) */
-    --secondary-foreground: 255 255 255;
+    --secondary: 40 47 64;            /* #282f40 (hover / elevated surface) */
+    --secondary-foreground: 240 242 245;
 
-    --muted: 50 57 82;
-    --muted-foreground: 160 166 167;  /* #A0A6A7 */
+    --muted: 40 47 64;
+    --muted-foreground: 156 163 175;  /* #9ca3af */
 
-    --border: 58 65 96;               /* #3A4160 */
-    --ring: 76 120 196;               /* #4C78C4 */
+    --border: 46 53 72;               /* #2e3548 */
+    --ring: 99 102 241;               /* #6366f1 (indigo) */
 
-    --primary: 144 245 172;           /* #90F5AC (mint) */
-    --primary-foreground: 35 41 64;   /* #232940 */
+    --primary: 52 211 153;            /* #34d399 (emerald) */
+    --primary-foreground: 26 31 46;   /* #1a1f2e */
 
     /* Keep semantic colors */
     --accent: 249 115 22;             /* orange (warnings / highlights) */
     --accent-foreground: 255 255 255;
 
     --destructive: 248 113 113;       /* red */
-    --destructive-foreground: 35 41 64;
+    --destructive-foreground: 26 31 46;
 
     /* Surface scale (navy-based) */
-    --surface-50: 35 41 64;           /* #232940  page */
-    --surface-100: 39 45 68;          /* subtle elevation */
-    --surface-200: 43 49 74;          /* #2B314A  cards */
-    --surface-300: 50 57 82;          /* hover */
-    --surface-400: 58 65 96;          /* #3A4160  borders */
-    --surface-500: 100 108 135;       /* muted icons */
-    --surface-600: 160 166 167;       /* #A0A6A7  muted text */
+    --surface-50: 26 31 46;           /* #1a1f2e  page */
+    --surface-100: 30 36 51;          /* subtle elevation */
+    --surface-200: 34 40 56;          /* #222838  cards */
+    --surface-300: 40 47 64;          /* hover */
+    --surface-400: 46 53 72;          /* #2e3548  borders */
+    --surface-500: 85 92 110;         /* muted icons */
+    --surface-600: 156 163 175;       /* #9ca3af  muted text */
     --surface-700: 190 196 210;       /* secondary text */
     --surface-800: 220 225 235;       /* near-white */
-    --surface-900: 255 255 255;
+    --surface-900: 240 242 245;       /* #f0f2f5 */
 
-    /* Brand scale (mint-based) */
-    --brand-50: 12 28 18;
-    --brand-100: 18 48 32;
-    --brand-200: 28 78 50;
-    --brand-300: 55 150 88;
-    --brand-400: 144 245 172;         /* #90F5AC */
-    --brand-500: 120 215 148;
-    --brand-600: 90 180 118;
-    --brand-700: 60 130 82;
-    --brand-800: 35 85 52;
-    --brand-900: 20 55 32;
-    --brand-950: 10 32 18;
+    /* Brand scale (emerald-based) */
+    --brand-50: 8 24 18;
+    --brand-100: 14 42 32;
+    --brand-200: 22 72 52;
+    --brand-300: 36 140 100;
+    --brand-400: 52 211 153;          /* #34d399 */
+    --brand-500: 42 180 128;
+    --brand-600: 32 150 105;
+    --brand-700: 24 115 80;
+    --brand-800: 18 82 58;
+    --brand-900: 12 52 36;
+    --brand-950: 6 28 18;
 
     /* Accent scale (orange — unchanged) */
     --accent-50: 30 18 8;
@@ -358,7 +358,7 @@
 
   .dark .input:focus {
     border-color: rgb(var(--ring));
-    box-shadow: 0 0 0 4px rgba(76, 120, 196, 0.25);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
   }
 
   .label {

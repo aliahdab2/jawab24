@@ -88,7 +88,7 @@ function PlanCard({
 
   return (
     <Card
-      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${highlightClasses} ${isCurrentPlan ? 'bg-emerald-50/40' : isPro ? 'bg-amber-50/30' : 'bg-card'}`}
+      className={`relative flex flex-col h-full transition-all duration-300 hover:shadow-[0_12px_24px_rgba(0,0,0,0.12)] hover:-translate-y-1 ${highlightClasses} ${isCurrentPlan ? 'bg-emerald-50/40 dark:bg-emerald-950/40' : isPro ? 'bg-amber-50/30 dark:bg-amber-950/30' : 'bg-card'}`}
     >
       {/* Popular badge */}
       {isPopular && (
@@ -113,7 +113,7 @@ function PlanCard({
       {/* Current plan badge - centered at top */}
       {isCurrentPlan && (
         <div className="absolute top-4 start-0 end-0 flex justify-center">
-          <span className="inline-flex items-center gap-2 bg-green-50 text-green-700 text-[10px] font-bold px-3 py-1 rounded-full border border-green-200/50 shadow-sm">
+          <span className="inline-flex items-center gap-2 bg-green-50 dark:bg-emerald-900/50 text-green-700 dark:text-emerald-300 text-[10px] font-bold px-3 py-1 rounded-full border border-green-200/50 dark:border-emerald-700 shadow-sm">
             <Check className="w-2.5 h-2.5" />
             {t('pricing.currentPlan')}
             {subscriptionStatus === 'trialing' && (
@@ -126,10 +126,10 @@ function PlanCard({
       )}
 
       <div className="text-center mb-1 md:mb-3 pt-2 md:pt-4 px-3">
-        <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'bg-slate-100 text-slate-600' :
-          plan.slug === 'starter' ? 'bg-blue-100 text-blue-600' :
+        <div className={`w-10 h-10 md:w-12 md:h-12 mx-auto mb-2 md:mb-3 rounded-xl flex items-center justify-center transition-transform duration-500 hover:rotate-12 ${plan.slug === 'free' ? 'bg-slate-100 dark:bg-slate-900/30 text-slate-600 dark:text-slate-400' :
+          plan.slug === 'starter' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' :
             plan.slug === 'business' ? 'bg-brand-100 text-brand-600' :
-              'bg-amber-100 text-amber-600'
+              'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
           }`} style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
           {plan.slug === 'free' || plan.slug === 'starter' ? (
             <Zap className="w-5 h-5 md:w-6 md:h-6" />
@@ -247,7 +247,7 @@ function PlanCard({
             loading={loading}
             disabled={isCurrentPlan}
             variant={isPopular ? 'primary' : plan.slug === 'pro' ? 'primary' : 'secondary'}
-            className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold !bg-zinc-800 !text-white hover:!bg-zinc-700 shadow-lg shadow-zinc-300' : 'font-bold'
+            className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 dark:shadow-brand-900/30 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold !bg-zinc-800 dark:!bg-amber-600 !text-white hover:!bg-zinc-700 dark:hover:!bg-amber-500 shadow-lg shadow-zinc-300 dark:shadow-amber-900/30' : 'font-bold'
               }`}
           >
             {isCurrentPlan ? (
@@ -255,7 +255,7 @@ function PlanCard({
                 <Check className="w-4 h-4" />
                 <span className="font-bold">{t('pricing.currentPlan')}</span>
                 {(subscriptionStatus === 'trialing' || (isCurrentPlan && plan.price === 0 && plan.trialDays > 0)) && (
-                  <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-black border border-amber-200 uppercase tracking-tighter">
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded font-black border border-amber-200 dark:border-amber-700 uppercase tracking-tighter">
                     {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
                   </span>
                 )}
@@ -287,8 +287,8 @@ function FeatureRow({
   highlight?: boolean;
 }) {
   return (
-    <div className={`flex items-start gap-2.5 py-0.5 md:py-1 px-1 rounded-lg transition-colors ${highlight ? 'bg-brand-50/30' : ''}`}>
-      <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${included ? 'bg-green-100 text-green-600' : 'bg-muted text-surface-300'
+    <div className={`flex items-start gap-2.5 py-0.5 md:py-1 px-1 rounded-lg transition-colors ${highlight ? 'bg-brand-50/30 dark:bg-brand-900/20' : ''}`}>
+      <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${included ? 'bg-green-100 dark:bg-emerald-900/60 text-green-600 dark:text-emerald-400' : 'bg-muted text-surface-300'
         }`}>
         {included ? (
           <Check className="w-3 h-3 stroke-[3]" />
@@ -488,7 +488,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 {usage.subscription.trialDaysRemaining && usage.subscription.trialDaysRemaining > 0 ? (
                   <>
                     <div className="w-px h-4 bg-theme-border" />
-                    <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-100 font-bold">
+                    <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded-full border border-amber-100 dark:border-amber-700 font-bold">
                       <Zap className="w-3.5 h-3.5 fill-amber-500" />
                       {t('pricing.daysLeftCount', { count: usage.subscription.trialDaysRemaining })}
                     </div>

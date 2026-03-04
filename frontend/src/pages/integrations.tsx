@@ -238,7 +238,7 @@ function ConnectedStoreCard({
                   className={clsx(
                     'px-3 py-1.5 rounded-lg text-sm border transition-colors',
                     page.ecommerceStoreId === store.id
-                      ? 'bg-green-100 border-green-300 text-green-800'
+                      ? 'bg-green-100 border-green-300 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300'
                       : 'bg-card border-theme-border text-muted-foreground hover:border-green-300'
                   )}
                 >

@@ -126,8 +126,8 @@ function PickPageStep({
   return (
     <div className={isLandscape ? 'flex gap-6' : ''}>
       <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-6'}>
-        <div className={`${isLandscape ? 'w-16 h-16' : 'w-20 h-20 mx-auto'} bg-blue-100 rounded-2xl flex items-center justify-center`}>
-          <FileText className={`${isLandscape ? 'w-8 h-8' : 'w-10 h-10'} text-blue-600`} />
+        <div className={`${isLandscape ? 'w-16 h-16' : 'w-20 h-20 mx-auto'} bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center`}>
+          <FileText className={`${isLandscape ? 'w-8 h-8' : 'w-10 h-10'} text-blue-600 dark:text-blue-400`} />
         </div>
       </div>
       <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
@@ -272,17 +272,17 @@ function ReviewInfoStep({
                     </span>
                   )}
                   {hasPhone && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium">
                       <Phone className="w-3 h-3" /> {t('onboarding.hasPhone')}
                     </span>
                   )}
                   {hasWebsite && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-xs font-medium">
                       <Globe className="w-3 h-3" /> {t('onboarding.hasWebsite')}
                     </span>
                   )}
                   {hasHours && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-lg text-xs font-medium">
                       <Clock className="w-3 h-3" /> {t('onboarding.hasHours')}
                     </span>
                   )}

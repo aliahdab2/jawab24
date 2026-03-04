@@ -290,14 +290,14 @@ const PagesPage: NextPageWithLayout = () => {
                 {/* Platform Toggles */}
                 <div className="flex flex-col gap-3">
                   {/* Facebook row */}
-                  <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 border-blue-200' : 'bg-background border-theme-border'}`}>
+                  <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' : 'bg-background border-theme-border'}`}>
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 text-blue-600' : 'bg-surface-200 text-surface-400'}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-surface-200 text-surface-400'}`}>
                         <FileText className="w-4 h-4" />
                       </div>
                       <div className="min-w-0">
-                        <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900' : 'text-muted-foreground'}`}>Facebook</p>
-                        <p className={`text-xs font-medium ${page.autoReplyEnabled ? 'text-blue-500' : 'text-muted-foreground'}`}>
+                        <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900 dark:text-blue-300' : 'text-muted-foreground'}`}>Facebook</p>
+                        <p className={`text-xs font-medium ${page.autoReplyEnabled ? 'text-blue-500 dark:text-blue-400' : 'text-muted-foreground'}`}>
                           {page.autoReplyEnabled ? t('common.enabled') : t('common.disabled')}
                         </p>
                       </div>
@@ -314,7 +314,7 @@ const PagesPage: NextPageWithLayout = () => {
                     className={clsx(
                       'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
                       page.instagramUsername
-                        ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 border-pink-200' : 'bg-background border-theme-border')
+                        ? (page.instagramAutoReplyEnabled ? 'bg-pink-50/50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-800' : 'bg-background border-theme-border')
                         : 'bg-background border-theme-border border-dashed'
                     )}
                   >
@@ -331,13 +331,13 @@ const PagesPage: NextPageWithLayout = () => {
                         <p className={clsx(
                           'text-sm font-bold',
                           page.instagramUsername
-                            ? (page.instagramAutoReplyEnabled ? 'text-pink-900' : 'text-muted-foreground')
+                            ? (page.instagramAutoReplyEnabled ? 'text-pink-900 dark:text-pink-300' : 'text-muted-foreground')
                             : 'text-muted-foreground'
                         )}>Instagram</p>
                         <p className={clsx(
                           'text-xs font-medium',
                           page.instagramUsername
-                            ? (page.instagramAutoReplyEnabled ? 'text-pink-500' : 'text-muted-foreground')
+                            ? (page.instagramAutoReplyEnabled ? 'text-pink-500 dark:text-pink-400' : 'text-muted-foreground')
                             : 'text-muted-foreground'
                         )}>
                           {page.instagramUsername
