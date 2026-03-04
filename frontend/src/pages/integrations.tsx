@@ -26,9 +26,8 @@ interface PlatformConfig {
   nameKey: TranslationKey;
   descKey: TranslationKey;
   icon: React.ReactNode;
-  accentBg: string;
-  accentText: string;
-  accentLight: string;
+  iconClass: string;
+  storeMetaClass: string;
   /**
    * Returns the backend path to initiate reconnect OAuth.
    * Shopify needs ?shop=domain; Salla needs no param.
@@ -64,9 +63,8 @@ const PLATFORMS: PlatformConfig[] = [
     nameKey: 'shopify.title' as TranslationKey,
     descKey: 'integrations.shopifyDesc' as TranslationKey,
     icon: <ShoppingBag className="w-8 h-8" />,
-    accentBg: 'bg-emerald-100',
-    accentText: 'text-emerald-600',
-    accentLight: 'bg-emerald-50',
+    iconClass: 'icon-bg-emerald',
+    storeMetaClass: 'alert-success border',
     getReconnectPath: (domain) => `/shopify/auth?shop=${encodeURIComponent(domain)}`,
     getStore: ecommerceApi.getStore,
     syncProducts: ecommerceApi.syncProducts,
@@ -96,9 +94,8 @@ const PLATFORMS: PlatformConfig[] = [
     nameKey: 'salla.title' as TranslationKey,
     descKey: 'integrations.sallaDesc' as TranslationKey,
     icon: <Store className="w-8 h-8" />,
-    accentBg: 'bg-teal-100',
-    accentText: 'text-teal-600',
-    accentLight: 'bg-teal-50',
+    iconClass: 'icon-bg-brand',
+    storeMetaClass: 'status-brand border',
     getReconnectPath: () => '/salla/auth',
     getStore: sallaApi.getStore,
     syncProducts: sallaApi.syncProducts,
@@ -196,7 +193,7 @@ function ConnectedStoreCard({
   return (
     <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4">
       <div className="flex items-center gap-3 mb-4">
-        <div className={clsx('w-12 h-12 rounded-2xl flex items-center justify-center landscape:w-10 landscape:h-10', platform.accentBg, platform.accentText)}>
+        <div className={clsx('w-12 h-12 rounded-2xl flex items-center justify-center landscape:w-10 landscape:h-10', platform.iconClass)}>
           {platform.icon}
         </div>
         <div className="text-start">
@@ -206,7 +203,7 @@ function ConnectedStoreCard({
       </div>
 
       <div className="space-y-4">
-        <div className={clsx('flex items-center justify-between p-3 rounded-xl', platform.accentLight)}>
+        <div className={clsx('flex items-center justify-between p-3 rounded-xl', platform.storeMetaClass)}>
           <div>
             <p className="font-semibold text-foreground">{store.storeName || store.storeDomain}</p>
             <p className="text-xs text-muted-foreground">
@@ -239,7 +236,7 @@ function ConnectedStoreCard({
                     'px-3 py-1.5 rounded-lg text-sm border transition-colors',
                     page.ecommerceStoreId === store.id
                       ? 'status-success border'
-                      : 'bg-card border-theme-border text-muted-foreground hover:border-green-300'
+                      : 'bg-card border-theme-border text-muted-foreground hover:border-brand-400'
                   )}
                 >
                   {page.name}
@@ -280,7 +277,7 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
   return (
     <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4">
       <div className="flex items-center gap-3 mb-4">
-        <div className={clsx('w-12 h-12 rounded-2xl flex items-center justify-center landscape:w-10 landscape:h-10 opacity-50', platform.accentBg, platform.accentText)}>
+        <div className={clsx('w-12 h-12 rounded-2xl flex items-center justify-center landscape:w-10 landscape:h-10 opacity-60', platform.iconClass)}>
           {platform.icon}
         </div>
         <div className="text-start">
