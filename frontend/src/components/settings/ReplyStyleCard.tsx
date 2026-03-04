@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Card, Textarea, Toggle } from '@/components/ui';
+import { Card, Toggle } from '@/components/ui';
 import { Sparkles, Check } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import type { SettingsCardProps } from './types';
@@ -54,8 +54,14 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
             <label htmlFor="brandVoiceNotes" className="block text-sm font-medium text-foreground/70 mb-1">
               {t('settings.replyStyle.brandVoice')}
             </label>
-            <Textarea
+            <textarea
               id="brandVoiceNotes"
+              aria-label={t('settings.replyStyle.brandVoice')}
+              className={clsx(
+                'input min-h-[56px] landscape:min-h-[44px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic',
+                isAutoTranslated && 'placeholder:italic',
+                currentLang === 'ar' && 'italic italic-arabic',
+              )}
               dir={displayValue ? 'auto' : undefined}
               maxLength={500}
               rows={3}
@@ -72,10 +78,6 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
                   },
                 });
               }}
-              className={clsx(
-                'w-full text-sm border-theme-border bg-background focus:ring-2 focus:ring-brand-500',
-                isAutoTranslated && 'placeholder:italic',
-              )}
             />
             <p className="text-xs text-muted-foreground mt-1 text-end">
               {displayValue.length}/500

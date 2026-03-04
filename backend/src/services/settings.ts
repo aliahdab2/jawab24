@@ -313,6 +313,7 @@ export class SettingsService {
             handoffPauseDurationMinutes: record.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES,
             replyStyle: (record.replyStyle as 'professional' | 'casual' | 'enthusiastic') || 'professional',
             brandVoiceNotes: record.brandVoiceNotes || '',
+            brandVoiceNotesMulti: record.brandVoiceNotesMulti || {},
             holdLowConfidence: record.holdLowConfidence ?? false,
             notificationsEnabled: record.notificationsEnabled ?? true,
         };
