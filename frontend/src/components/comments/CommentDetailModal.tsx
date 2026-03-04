@@ -458,18 +458,19 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         {/* Modal Footer */}
         {mode === 'full' && (
           <div
-            className="p-4 md:p-6 pb-safe-content border-t border-theme-border bg-card"
+            className="px-4 md:px-6 pb-safe-modal pt-3 border-t border-theme-border bg-card"
           >
             <div className="flex items-center justify-between">
               {comment.fromId && (
                 <button
                   onClick={handleTogglePause}
                   disabled={pauseLoading}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${
+                  className={clsx(
+                    'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-50',
                     pauseStatus?.paused
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/50'
-                      : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800 dark:hover:bg-violet-900/50'
-                  }`}
+                      ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30'
+                      : 'text-muted-foreground hover:bg-muted dark:hover:bg-white/5'
+                  )}
                 >
                   {pauseStatus?.paused ? (
                     <>
