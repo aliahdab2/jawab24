@@ -216,22 +216,22 @@ export default function LoginPage() {
       icon: Zap,
       title: t('auth.instantSetup'),
       desc: t('auth.instantSetupDesc'),
-      color: 'text-amber-500',
-      bg: 'bg-amber-50'
+      color: 'text-amber-500 dark:text-brand-400',
+      bg: 'bg-amber-50 dark:bg-brand-400/10'
     },
     {
       icon: ShieldCheck,
       title: t('auth.secureOfficial'),
       desc: t('auth.secureOfficialDesc'),
-      color: 'text-brand-600',
-      bg: 'bg-brand-50'
+      color: 'text-brand-600 dark:text-[#4f74b2]',
+      bg: 'bg-brand-50 dark:bg-[rgba(79,116,178,0.12)]'
     },
     {
       icon: MessageSquare,
       title: t('auth.amazingAccuracy'),
       desc: t('auth.amazingAccuracyDesc'),
-      color: 'text-violet-600',
-      bg: 'bg-violet-50'
+      color: 'text-violet-600 dark:text-[#bfe1d4]',
+      bg: 'bg-violet-50 dark:bg-[rgba(191,225,212,0.08)]'
     }
   ];
 
@@ -250,9 +250,9 @@ export default function LoginPage() {
       <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] relative">
         {/* Dark mode decorative overlays — span both panels seamlessly */}
         <div className="hidden dark:block absolute inset-0 pointer-events-none z-0" aria-hidden="true">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(14,165,233,0.15),transparent_60%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(139,92,246,0.15),transparent_60%)]" />
-          <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.08]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(93,174,164,0.18),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(79,116,178,0.18),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.06]" />
         </div>
 
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
@@ -296,13 +296,13 @@ export default function LoginPage() {
             {/* Testimonial Snippet */}
             <div className="mt-8 p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm animate-slide-up animation-delay-500">
               <div className="flex gap-1 mb-2">
-                {[1, 2, 3, 4, 5].map(s => <Star key={s} className="w-3 h-3 text-amber-400 fill-amber-400" />)}
+                {[1, 2, 3, 4, 5].map(s => <Star key={s} className="w-3 h-3 text-amber-400 fill-amber-400 dark:text-[#bfe1d4] dark:fill-[#bfe1d4]" />)}
               </div>
               <p className="text-sm text-white font-medium italic mb-3">
                 "{t('auth.testimonialQuote')}"
               </p>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center text-white font-bold text-xs">MA</div>
+                <div className="w-8 h-8 rounded-full bg-brand-500 dark:bg-[#4f74b2] flex items-center justify-center text-white font-bold text-xs">MA</div>
                 <div>
                   <div className="text-white font-bold text-xs">Mohammed A.</div>
                   <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">{t('auth.testimonialAuthor')}</div>
@@ -329,7 +329,7 @@ export default function LoginPage() {
             </Link>
             <button
               onClick={toggleLanguage}
-              className="px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all"
+              className="px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 dark:hover:text-brand-400 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-400/10 transition-all"
             >
               {t('common.switchLanguage')}
             </button>
@@ -392,16 +392,16 @@ export default function LoginPage() {
               <div className="space-y-5">
                 {/* Shopify-first install banner */}
                 {urlParams?.get('shopify_pending') === 'true' && (
-                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+                  <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700">
                     <div className="flex gap-3 items-start">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                        <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-800/40 flex items-center justify-center flex-shrink-0">
+                        <ShoppingBag className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                       </div>
                       <div>
-                        <p className="font-bold text-emerald-900 text-sm">
+                        <p className="font-bold text-emerald-900 dark:text-emerald-300 text-sm">
                           {t('shopify.installDetected')}
                         </p>
-                        <p className="text-emerald-700 text-sm mt-1">
+                        <p className="text-emerald-700 dark:text-emerald-400 text-sm mt-1">
                           {t('shopify.loginToConnect')}
                         </p>
                       </div>
@@ -410,16 +410,16 @@ export default function LoginPage() {
                 )}
 
                 {urlParams?.get('shopify_error') === 'already_connected' && (
-                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
-                    <p className="font-bold text-red-900 text-sm">
+                  <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
+                    <p className="font-bold text-red-900 dark:text-red-300 text-sm">
                       {t('shopify.errorAlreadyConnected')}
                     </p>
                   </div>
                 )}
 
                 {urlParams?.get('shopify_error') === 'auth_failed' && (
-                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
-                    <p className="font-bold text-red-900 text-sm">
+                  <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
+                    <p className="font-bold text-red-900 dark:text-red-300 text-sm">
                       {t('shopify.errorAuthFailed')}
                     </p>
                   </div>
@@ -427,16 +427,16 @@ export default function LoginPage() {
 
                 {/* Salla-first install banner */}
                 {urlParams?.get('salla_pending') === 'true' && (
-                  <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200">
+                  <div className="p-4 rounded-2xl bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-700">
                     <div className="flex gap-3 items-start">
-                      <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center flex-shrink-0">
-                        <ShoppingBag className="w-5 h-5 text-teal-700" />
+                      <div className="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-800/40 flex items-center justify-center flex-shrink-0">
+                        <ShoppingBag className="w-5 h-5 text-teal-700 dark:text-teal-400" />
                       </div>
                       <div>
-                        <p className="font-bold text-teal-900 text-sm">
+                        <p className="font-bold text-teal-900 dark:text-teal-300 text-sm">
                           {t('salla.installDetected')}
                         </p>
-                        <p className="text-teal-700 text-sm mt-1">
+                        <p className="text-teal-700 dark:text-teal-400 text-sm mt-1">
                           {t('salla.loginToConnect')}
                         </p>
                       </div>
@@ -445,30 +445,30 @@ export default function LoginPage() {
                 )}
 
                 {urlParams?.get('salla_error') === 'already_connected' && (
-                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
-                    <p className="font-bold text-red-900 text-sm">
+                  <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
+                    <p className="font-bold text-red-900 dark:text-red-300 text-sm">
                       {t('salla.errorAlreadyConnected')}
                     </p>
                   </div>
                 )}
 
                 {urlParams?.get('salla_error') === 'auth_failed' && (
-                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
-                    <p className="font-bold text-red-900 text-sm">
+                  <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
+                    <p className="font-bold text-red-900 dark:text-red-300 text-sm">
                       {t('salla.errorAuthFailed')}
                     </p>
                   </div>
                 )}
 
                 {/* Social proof card — motivates before the CTA */}
-                <div className="p-4 rounded-2xl bg-brand-50 border border-brand-100">
+                <div className="p-4 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20">
                   <div className="flex gap-3 items-start">
-                    <div className="w-10 h-10 rounded-xl bg-brand-100 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-5 h-5 text-brand-600" aria-hidden="true" />
+                    <div className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-400/15 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 text-brand-600 dark:text-brand-400" aria-hidden="true" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-brand-900 text-sm mb-0.5">{t('auth.didYouKnow')}</h3>
-                      <p className="text-brand-700 text-sm font-medium leading-relaxed">
+                      <h3 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-0.5">{t('auth.didYouKnow')}</h3>
+                      <p className="text-brand-700 dark:text-brand-400/80 text-sm font-medium leading-relaxed">
                         {t('auth.didYouKnowDesc')}
                       </p>
                     </div>
@@ -476,11 +476,11 @@ export default function LoginPage() {
                 </div>
 
                 {/* CTA zone */}
-                <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 to-transparent p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
+                <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 dark:from-transparent to-transparent p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
                   <Button
                     onClick={handleFacebookLogin}
                     size="lg"
-                    className="w-full bg-[#166FE5] hover:bg-[#1565D8] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl group transition-all active:scale-95"
+                    className="w-full bg-[#166FE5] hover:bg-[#1565D8] dark:bg-brand-400 dark:hover:bg-brand-500 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 dark:shadow-brand-400/25 ring-4 ring-blue-400/15 dark:ring-brand-400/15 font-bold text-lg lg:text-xl group transition-all active:scale-95"
                   >
                     <div className="flex items-center justify-center gap-3 text-white">
                       <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />

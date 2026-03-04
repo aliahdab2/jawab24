@@ -112,65 +112,65 @@
 
   /* ──────────────────────────────────────────────────────────────────
      DARK PALETTE REFERENCE (swap these 7 values to re-theme dark mode)
-     Background: #18181b   rgb(24 24 27)     — zinc-900
-     Cards:      #1c1c20   rgb(28 28 32)     — subtle elevation
-     Borders:    #2a2a32   rgb(42 42 50)
-     Primary:    #34d399   rgb(52 211 153)    — emerald
-     Secondary:  #6366f1   rgb(99 102 241)    — indigo
-     Muted text: #9ca3af   rgb(156 163 175)
-     Text:       #f0f2f5   rgb(240 242 245)
+     Background: #060d18   rgb(6 13 24)      — deep navy-black
+     Cards:      #0a1220   rgb(10 18 32)     — subtle elevation
+     Borders:    #141e30   rgb(20 30 48)
+     Primary:    #5daea4   rgb(93 174 164)   — teal
+     Secondary:  #4f74b2   rgb(79 116 178)   — blue
+     Muted text: #788da0   rgb(120 135 160)
+     Text:       #ebf0f5   rgb(235 240 245)
   ────────────────────────────────────────────────────────────────── */
   .dark {
     /* Semantic tokens */
-    --background: 24 24 27;           /* #18181b (zinc-900) */
-    --foreground: 240 242 245;        /* #f0f2f5 */
+    --background: 6 13 24;            /* #060d18 (deep navy-black) */
+    --foreground: 235 240 245;        /* #ebf0f5 */
 
-    --card: 28 28 32;                 /* #1c1c20 */
-    --card-foreground: 240 242 245;
+    --card: 10 18 32;                 /* #0a1220 */
+    --card-foreground: 235 240 245;
 
-    --secondary: 32 32 38;            /* #202026 (hover / elevated surface) */
-    --secondary-foreground: 240 242 245;
+    --secondary: 14 22 38;            /* #0e1626 (hover / elevated surface) */
+    --secondary-foreground: 235 240 245;
 
-    --muted: 32 32 38;
-    --muted-foreground: 156 163 175;  /* #9ca3af */
+    --muted: 14 22 38;
+    --muted-foreground: 120 135 160;  /* #788da0 */
 
-    --border: 42 42 50;               /* #2a2a32 */
-    --ring: 99 102 241;               /* #6366f1 (indigo) */
+    --border: 20 30 48;               /* #141e30 */
+    --ring: 79 116 178;               /* #4f74b2 (blue) */
 
-    --primary: 52 211 153;            /* #34d399 (emerald) */
-    --primary-foreground: 24 24 27;   /* #18181b */
+    --primary: 93 174 164;            /* #5daea4 (teal) */
+    --primary-foreground: 6 13 24;    /* #060d18 */
 
     /* Keep semantic colors */
     --accent: 249 115 22;             /* orange (warnings / highlights) */
     --accent-foreground: 255 255 255;
 
     --destructive: 248 113 113;       /* red */
-    --destructive-foreground: 24 24 27;
+    --destructive-foreground: 6 13 24;
 
-    /* Surface scale (zinc-based) */
-    --surface-50: 24 24 27;           /* #18181b  page */
-    --surface-100: 28 28 32;          /* subtle elevation */
-    --surface-200: 32 32 38;          /* #202026  cards */
-    --surface-300: 40 40 48;          /* hover */
-    --surface-400: 48 48 56;          /* borders */
-    --surface-500: 85 85 96;          /* muted icons */
-    --surface-600: 156 163 175;       /* #9ca3af  muted text */
-    --surface-700: 190 196 210;       /* secondary text */
-    --surface-800: 220 225 235;       /* near-white */
-    --surface-900: 240 242 245;       /* #f0f2f5 */
+    /* Surface scale (navy-based) */
+    --surface-50: 6 13 24;            /* #060d18  page */
+    --surface-100: 10 18 32;          /* subtle elevation */
+    --surface-200: 14 22 38;          /* #0e1626  cards */
+    --surface-300: 20 30 48;          /* hover */
+    --surface-400: 30 42 62;          /* borders */
+    --surface-500: 60 75 100;         /* muted icons */
+    --surface-600: 120 135 160;       /* #788da0  muted text */
+    --surface-700: 170 182 200;       /* secondary text */
+    --surface-800: 210 218 230;       /* near-white */
+    --surface-900: 235 240 245;       /* #ebf0f5 */
 
-    /* Brand scale (emerald-based) */
-    --brand-50: 8 24 18;
-    --brand-100: 14 42 32;
-    --brand-200: 22 72 52;
-    --brand-300: 36 140 100;
-    --brand-400: 52 211 153;          /* #34d399 */
-    --brand-500: 42 180 128;
-    --brand-600: 32 150 105;
-    --brand-700: 24 115 80;
-    --brand-800: 18 82 58;
-    --brand-900: 12 52 36;
-    --brand-950: 6 28 18;
+    /* Brand scale (teal-based — #5daea4) */
+    --brand-50: 8 24 22;
+    --brand-100: 14 42 38;
+    --brand-200: 28 72 66;
+    --brand-300: 55 130 120;
+    --brand-400: 93 174 164;          /* #5daea4 */
+    --brand-500: 78 155 145;
+    --brand-600: 62 135 126;
+    --brand-700: 48 110 102;
+    --brand-800: 35 82 76;
+    --brand-900: 22 52 48;
+    --brand-950: 10 28 24;
 
     /* Accent scale (orange — unchanged) */
     --accent-50: 30 18 8;

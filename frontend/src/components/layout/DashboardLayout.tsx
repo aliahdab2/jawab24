@@ -103,11 +103,11 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
       </Head>
 
       <div className="dashboard-scroll-root flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh">
-        {/* Dark mode decorative background — blue/purple glows + cubes pattern */}
+        {/* Dark mode decorative background — teal/blue glows + cubes pattern */}
         <div className="hidden dark:block fixed inset-0 pointer-events-none z-0" aria-hidden="true">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(14,165,233,0.15),transparent_60%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(139,92,246,0.15),transparent_60%)]" />
-          <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.08]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(93,174,164,0.18),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(79,116,178,0.18),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.06]" />
         </div>
 
         {/* Sidebar - hidden on mobile and on clean layouts */}

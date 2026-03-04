@@ -199,7 +199,7 @@ export const Sidebar = memo(function Sidebar() {
       )}
       style={{
         insetInlineStart: 0,
-        background: 'linear-gradient(180deg, rgb(24,24,27) 0%, rgb(32,32,38) 100%)',
+        background: 'linear-gradient(180deg, rgb(6,13,24) 0%, rgb(14,22,38) 100%)',
         paddingTop: 'var(--sai-top)'
       }}
     >
@@ -279,14 +279,14 @@ export const Sidebar = memo(function Sidebar() {
                     className={clsx(
                       'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group/nav relative',
                       isActive
-                        ? 'bg-brand-600 text-white shadow-xl shadow-brand-600/20'
+                        ? 'bg-brand-400/10 text-brand-400 shadow-xl shadow-brand-400/20'
                         : 'text-zinc-400 hover:bg-white/5 hover:text-white',
                       !sidebarOpen && 'justify-center'
                     )}
                   >
                     <item.icon className={clsx(
                       "w-6 h-6 flex-shrink-0 transition-transform group-hover/nav:scale-110",
-                      isActive ? "text-white" : "text-surface-500 group-hover/nav:text-brand-400"
+                      isActive ? "text-brand-400" : "text-surface-500 group-hover/nav:text-brand-400"
                     )} />
                     {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
 

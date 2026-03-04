@@ -1,11 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
 import compress from '@fastify/compress';
-import { promisify } from 'util';
-import { gzip, brotliCompress } from 'zlib';
-
-const _gzipAsync = promisify(gzip);
-const _brotliAsync = promisify(brotliCompress);
 
 describe('Compression Middleware', () => {
     let server: FastifyInstance;
@@ -39,7 +34,7 @@ describe('Compression Middleware', () => {
             return largeData;
         });
 
-        await server.listen({ port: 0 }); // Random port
+        await server.ready();
     });
 
     afterAll(async () => {
