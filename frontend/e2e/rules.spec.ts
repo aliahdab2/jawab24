@@ -387,9 +387,12 @@ test.describe('Rules Page', () => {
     });
 
     await page.goto('/en/rules');
+    await page.waitForLoadState('domcontentloaded');
 
     await expect(page.locator('text=Something went wrong')).not.toBeVisible({ timeout: 10000 });
 
+    // Wait for page to render some content despite API failures
+    await expect(page.locator('body')).not.toBeEmpty({ timeout: 5000 });
     const bodyText = await page.locator('body').innerText();
     expect(bodyText.length).toBeGreaterThan(20);
   });
