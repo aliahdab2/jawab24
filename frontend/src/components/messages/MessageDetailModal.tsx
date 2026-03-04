@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
-import { Button, Badge } from '@/components/ui';
+import { Badge } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -20,6 +20,7 @@ import {
   ExternalLink,
   ChevronRight,
   ArrowDown,
+  Loader2,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Locale } from 'date-fns';
@@ -300,7 +301,7 @@ export function MessageDetailModal({
 
         {/* Footer — Reply + Actions */}
         <div
-          className="p-4 sm:p-6 pb-safe-content border-t border-theme-border bg-card flex-shrink-0"
+          className="p-4 sm:p-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
         >
           {sendError && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-xs font-medium">
@@ -309,7 +310,7 @@ export function MessageDetailModal({
           )}
 
           {/* Compose row: textarea + send button */}
-          <div className="flex items-end gap-2 sm:gap-3">
+          <div className="flex items-end gap-2">
             <div className="flex-1 min-w-0">
               <textarea
                 value={replyText}
@@ -323,27 +324,27 @@ export function MessageDetailModal({
                 dir="auto"
                 placeholder={t('messages.typeReply' as TranslationKey)}
                 aria-label={t('messages.typeReply' as TranslationKey)}
-                rows={2}
-                className="w-full resize-none rounded-2xl border border-theme-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
-                style={{ minHeight: '64px', maxHeight: '160px' }}
+                rows={1}
+                className="w-full resize-none rounded-full border border-theme-border bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+                style={{ minHeight: '40px', maxHeight: '120px' }}
                 disabled={isReplying}
               />
             </div>
-            <Button
-              variant="primary"
-              size="sm"
+            <button
               onClick={handleSend}
-              loading={isReplying}
               disabled={!replyText.trim() || isReplying}
-              className="rounded-2xl px-4 h-16 flex-shrink-0"
-              icon={<Send className="w-4 h-4" />}
+              aria-label={t('comments.reply' as TranslationKey)}
+              className="flex-shrink-0 w-10 h-10 rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
             >
-              <span className="hidden sm:inline">{t('comments.reply')}</span>
-            </Button>
+              {isReplying
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Send className="w-4 h-4" />
+              }
+            </button>
           </div>
 
           {/* Actions row: pause/resume + resolve */}
-          <div className="flex items-center justify-between mt-2.5">
+          <div className="flex items-center justify-between mt-4">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
@@ -356,10 +357,10 @@ export function MessageDetailModal({
                 disabled={isPausing || isResuming}
                 aria-label={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
                 className={clsx(
-                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border disabled:opacity-50',
+                  'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-50',
                   isPaused
-                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/50'
-                    : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800 dark:hover:bg-violet-900/50'
+                    ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30'
+                    : 'text-muted-foreground hover:bg-muted dark:hover:bg-white/5'
                 )}
               >
                 {isPaused ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
@@ -376,13 +377,13 @@ export function MessageDetailModal({
             {hasUnresolvedUnreplied ? (
               <button
                 onClick={() => onResolve(conversation.senderId, pageId)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-muted text-muted-foreground border-theme-border hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 dark:hover:bg-emerald-900/30 dark:hover:text-emerald-400 dark:hover:border-emerald-800"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30"
               >
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 {t('comments.resolve' as TranslationKey)}
               </button>
             ) : hasResolvedIncoming ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-emerald-600 dark:text-emerald-400">
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 {t('messages.resolved' as TranslationKey)}
               </span>

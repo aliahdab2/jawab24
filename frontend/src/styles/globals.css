@@ -974,6 +974,21 @@
   }
 }
 
+/* Modal footer with extra breathing room from system buttons on mobile */
+.pb-safe-modal {
+  padding-bottom: 32px;
+}
+
+.is-native .pb-safe-modal {
+  padding-bottom: calc(var(--sai-bottom) + 32px);
+}
+
+@media (orientation: landscape) {
+  .is-native .pb-safe-modal {
+    padding-bottom: 32px;
+  }
+}
+
 .px-safe {
   padding-left: var(--sai-left);
   padding-right: var(--sai-right);

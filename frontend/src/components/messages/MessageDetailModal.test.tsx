@@ -125,7 +125,7 @@ describe('MessageDetailModal', () => {
     );
 
     expect(screen.getByPlaceholderText('messages.typeReply')).toBeInTheDocument();
-    expect(screen.getByText('comments.reply')).toBeInTheDocument();
+    expect(screen.getByLabelText('comments.reply')).toBeInTheDocument();
   });
 
   it('calls onReply when send button is clicked', () => {
@@ -142,7 +142,7 @@ describe('MessageDetailModal', () => {
     const textarea = screen.getByPlaceholderText('messages.typeReply');
     fireEvent.change(textarea, { target: { value: 'My reply' } });
 
-    const sendButton = screen.getByText('comments.reply');
+    const sendButton = screen.getByLabelText('comments.reply');
     fireEvent.click(sendButton);
 
     expect(onReply).toHaveBeenCalledWith('1', 'My reply');
