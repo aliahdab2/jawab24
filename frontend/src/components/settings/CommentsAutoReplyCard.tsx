@@ -20,15 +20,15 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
   return (
     <Card className={clsx(
       "border-none transition-all duration-300 p-4 landscape:p-3",
-      settings.commentsAutoReply ? 'ring-1 ring-brand-200/50 dark:ring-brand-800/50 shadow-[0_10px_30px_rgba(16,185,129,0.12)] dark:shadow-[0_10px_30px_rgba(16,185,129,0.08)]' : 'shadow-[0_10px_30px_rgba(0,0,0,0.04)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.3)]'
+      settings.commentsAutoReply ? 'ring-1 ring-brand-200/50 shadow-[0_10px_30px_rgba(16,185,129,0.12)]' : 'shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
     )}>
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors landscape:w-10 landscape:h-10 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400' : 'bg-muted text-muted-foreground'}`}>
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors landscape:w-10 landscape:h-10 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-muted text-muted-foreground'}`}>
             <MessageSquare className="w-4 h-4" />
           </div>
           <div className="text-start">
-            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900 dark:text-brand-300' : 'text-foreground'}`}>{t('settings.commentsAutoReply')}</h3>
+            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900' : 'text-foreground'}`}>{t('settings.commentsAutoReply')}</h3>
             <p className="text-sm text-muted-foreground font-medium landscape:text-xs">{t('settings.commentsAutoReplyDesc')}</p>
             <p className="text-xs text-muted-foreground mt-1 landscape:hidden">{t('settings.commentsAutoReplyHelper')}</p>
           </div>
@@ -144,9 +144,9 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
 
           {/* Dual Reply Configuration */}
           {settings.commentReplyMode === 'dual' && (
-            <div className="mt-4 p-4 landscape:p-3 rounded-xl bg-brand-50/20 dark:bg-brand-900/20 border border-brand-200/50 dark:border-brand-800/50 animate-slide-up">
-              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
-              <p className="text-xs text-brand-700 dark:text-brand-400 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
+            <div className="mt-4 p-4 landscape:p-3 rounded-xl bg-brand-50/20 border border-brand-200/50 animate-slide-up">
+              <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
+              <p className="text-xs text-brand-700 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
               <Input
                 aria-label={t('settings.dualReplyConfigTitle.improved')}
                 value={(() => {
@@ -181,7 +181,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
               />
 
               <div className="flex items-center justify-between text-xs mt-1.5">
-                <span className="text-brand-700 dark:text-brand-400 font-medium">{t('settings.dualReplyConfigHelper')}</span>
+                <span className="text-brand-700 font-medium">{t('settings.dualReplyConfigHelper')}</span>
                 <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-500'}`}>
                   {dualNudgeInput.length}/80
                 </span>

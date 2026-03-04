@@ -42,10 +42,10 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
   const hasError = settings.businessHoursEnd <= settings.businessHoursStart;
 
   return (
-    <Card className="border-none shadow-md shadow-surface-200/30 dark:shadow-black/20 p-4 landscape:p-3 overflow-hidden">
+    <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 overflow-hidden">
       <div className="flex items-center justify-between mb-6 landscape:mb-3">
         <div className="flex items-center gap-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400' : 'bg-muted text-muted-foreground'}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600' : 'bg-muted text-muted-foreground'}`}>
             <Clock className="w-4 h-4" />
           </div>
           <div className="text-start">
@@ -112,7 +112,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               </div>
               <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-2xl bg-brand-100 flex items-center justify-center">
                   <Zap className="w-7 h-7 text-brand-600" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">

@@ -132,7 +132,7 @@ export default function LandingPage() {
         <LandingHero isAuthenticated={isAuthenticated} />
 
         {/* Stats Section */}
-        <section className="py-8 sm:py-16 bg-surface-900 relative">
+        <section className="py-8 sm:py-16 bg-zinc-900 relative">
           <div className="absolute top-0 start-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent"></div>
           <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
             {statsList.map((stat, i) => (
@@ -181,7 +181,7 @@ export default function LandingPage() {
 
         {/* Fixed bottom safe area background (native/PWA only via --min-safe-bottom) */}
         <div
-          className="fixed-safe-bg bottom-safe-bg bg-surface-900"
+          className="fixed-safe-bg bottom-safe-bg bg-zinc-900"
           aria-hidden="true"
         />
       </div>

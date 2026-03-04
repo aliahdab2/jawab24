@@ -249,7 +249,7 @@ export default function LoginPage() {
 
       <div className="flex-1 overflow-y-auto bg-card flex flex-col lg:flex-row min-h-[100dvh]">
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
-        <div className="hidden lg:flex lg:w-[55%] relative bg-surface-900 overflow-hidden items-center justify-center p-10 xl:p-16">
+        <div className="hidden lg:flex lg:w-[55%] relative bg-zinc-900 overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background */}
           <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.15),transparent)]"></div>
           <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.15),transparent)]"></div>

@@ -247,7 +247,7 @@ function PlanCard({
             loading={loading}
             disabled={isCurrentPlan}
             variant={isPopular ? 'primary' : plan.slug === 'pro' ? 'primary' : 'secondary'}
-            className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold !bg-surface-800 !text-white hover:!bg-surface-700 shadow-lg shadow-surface-300' : 'font-bold'
+            className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold !bg-zinc-800 !text-white hover:!bg-zinc-700 shadow-lg shadow-zinc-300' : 'font-bold'
               }`}
           >
             {isCurrentPlan ? (

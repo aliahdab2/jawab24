@@ -166,7 +166,7 @@ export function MessageDetailModal({
 
   return (
     <div
-      className="fixed inset-0 bg-surface-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 pt-safe"
+      className="fixed inset-0 bg-zinc-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 pt-safe"
       onTouchMove={(e) => e.preventDefault()}
       onWheel={(e) => e.preventDefault()}
     >
@@ -187,7 +187,7 @@ export function MessageDetailModal({
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className={clsx(
               "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner flex-shrink-0",
-              conversation.needsHumanAttention ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400'
+              conversation.needsHumanAttention ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-brand-100 text-brand-600'
             )}>
               <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>

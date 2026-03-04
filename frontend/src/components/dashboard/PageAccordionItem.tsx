@@ -80,7 +80,7 @@ export function PageAccordionItem({
           {/* Auto-reply status indicator */}
           <div className={clsx(
             'absolute -bottom-1 -end-1 w-5 h-5 rounded-full border-2 border-card flex items-center justify-center',
-            page.autoReplyEnabled ? 'bg-emerald-500' : 'bg-surface-300 dark:bg-surface-600'
+            page.autoReplyEnabled ? 'bg-emerald-500' : 'bg-surface-300'
           )}>
             {page.autoReplyEnabled ? (
               <Bot className="w-3 h-3 text-white" aria-hidden="true" />
@@ -137,7 +137,7 @@ export function PageAccordionItem({
         )}
       >
         <div ref={contentRef}>
-          <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 dark:from-emerald-900/10 dark:to-surface-900/50 px-4 sm:px-5 py-4">
+          <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 px-4 sm:px-5 py-4">
             {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-card rounded-xl p-3 text-center shadow-sm">
@@ -210,7 +210,7 @@ export function PageAccordionItem({
               <div className="flex items-center gap-2">
                 <div className={clsx(
                   'w-2 h-2 rounded-full',
-                  isActive ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300 dark:bg-surface-600'
+                  isActive ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'
                 )} />
                 <span className="text-xs font-bold text-muted-foreground">
                   {t('dashboard.pageAccordion.status' as TranslationKey)}:{' '}

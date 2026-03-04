@@ -281,8 +281,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsAttention ? 'bg-red-100 dark:bg-red-900/30' : 'bg-brand-100 dark:bg-brand-900/30'}`}>
-              <MessageSquare className={`w-5 h-5 ${needsAttention ? 'text-red-600 dark:text-red-400' : 'text-brand-600 dark:text-brand-400'}`} />
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsAttention ? 'bg-red-100 dark:bg-red-900/30' : 'bg-brand-100'}`}>
+              <MessageSquare className={`w-5 h-5 ${needsAttention ? 'text-red-600 dark:text-red-400' : 'text-brand-600'}`} />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">
@@ -357,7 +357,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <h3 className="text-sm font-medium text-muted-foreground mb-2">
                 {t('comments.reply')}
               </h3>
-              <div className="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-4 border-s-4 border-brand-500">
+              <div className="bg-brand-50 rounded-xl p-4 border-s-4 border-brand-500">
                 <p className="text-foreground whitespace-pre-wrap">{comment.replyText}</p>
                 <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
                   <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>

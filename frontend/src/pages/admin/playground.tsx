@@ -1037,7 +1037,7 @@ export default function AdminPlaygroundPage() {
                         <>
                             {/* Mobile backdrop */}
                             <div
-                                className="fixed inset-0 bg-surface-900/40 z-20 lg:hidden"
+                                className="fixed inset-0 bg-zinc-900/40 z-20 lg:hidden"
                                 onClick={() => setSidebarOpen(false)}
                             />
 

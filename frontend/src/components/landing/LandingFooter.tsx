@@ -12,7 +12,7 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
   const { t } = useTranslation();
 
   return (
-    <footer className="bg-surface-900 text-white pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
+    <footer className="bg-zinc-900 text-white pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
       <div className="absolute bottom-0 end-0 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-500/5 rounded-full blur-[80px] sm:blur-[120px] pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">

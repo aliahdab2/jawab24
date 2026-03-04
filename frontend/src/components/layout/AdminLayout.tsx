@@ -66,14 +66,14 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                 className="min-h-screen bg-surface-50"
             >
                 {/* Admin Header */}
-                <header className="sticky top-0 z-40 bg-surface-900 text-white shadow-lg">
+                <header className="sticky top-0 z-40 bg-zinc-900 text-white shadow-lg">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="flex items-center justify-between h-16">
                             {/* Left: Back + Title */}
                             <div className="flex items-center gap-4">
                                 <Link
                                     href="/dashboard"
-                                    className="p-2 hover:bg-surface-800 rounded-lg transition-colors"
+                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
                                     title={t('admin.backToDashboard')}
                                 >
                                     <ArrowLeft className={clsx('w-5 h-5', isRTL && 'rotate-180')} />
@@ -98,7 +98,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                                                 'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                                                 isActive
                                                     ? 'bg-brand-600 text-white'
-                                                    : 'text-surface-300 hover:bg-surface-800 hover:text-white'
+                                                    : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                                             )}
                                         >
                                             <item.icon className="w-4 h-4" />
