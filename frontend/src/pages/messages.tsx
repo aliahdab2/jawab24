@@ -144,13 +144,11 @@ const MessagesPage: NextPageWithLayout = () => {
       return res.data;
     },
     onSuccess: (outgoingMessage) => {
-      if (selectedConversation) {
-        setSelectedConversation({
-          ...selectedConversation,
-          messages: [...selectedConversation.messages, outgoingMessage],
-          lastMessage: outgoingMessage,
-        });
-      }
+      setSelectedConversation(prev => prev ? {
+        ...prev,
+        messages: [...prev.messages, outgoingMessage],
+        lastMessage: outgoingMessage,
+      } : null);
       queryClient.invalidateQueries({ queryKey: ['messages'] });
       queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
       toast.success(t('messages.replySent' as TranslationKey));
@@ -351,11 +349,12 @@ const MessagesPage: NextPageWithLayout = () => {
     pendingDeepLinkRef.current = null;
   }, [conversations, allMessages, isLoading, filter, t]);
 
-  // Live sync: when SSE invalidates the messages query, update the open conversation thread
+  // Live sync: when SSE invalidates the messages query, update the open conversation thread.
+  // Only sync when server has MORE messages to avoid reverting optimistic updates from manual replies.
   useEffect(() => {
     if (!selectedConversation) return;
     const updated = conversations.find(c => c.senderId === selectedConversation.senderId);
-    if (updated && updated.messages.length !== selectedConversation.messages.length) {
+    if (updated && updated.messages.length > selectedConversation.messages.length) {
       setSelectedConversation(updated);
     }
   }, [conversations, selectedConversation]);
@@ -665,6 +664,7 @@ const MessagesPage: NextPageWithLayout = () => {
       {/* Conversation Detail Modal */}
       {selectedConversation && (
         <MessageDetailModal
+          key={selectedConversation.senderId}
           conversation={selectedConversation}
           onClose={() => setSelectedConversation(null)}
           onReply={handleReply}

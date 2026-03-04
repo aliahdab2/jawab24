@@ -80,9 +80,11 @@ export function MessageDetailModal({
 
   // Auto-scroll to bottom on mount (instant)
   useEffect(() => {
-    // Use requestAnimationFrame to ensure DOM is painted
+    // Double rAF ensures layout is fully computed before scrolling
     requestAnimationFrame(() => {
-      scrollToBottom('instant');
+      requestAnimationFrame(() => {
+        scrollToBottom('instant');
+      });
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -305,29 +307,10 @@ export function MessageDetailModal({
               {sendError}
             </div>
           )}
+
+          {/* Compose row: textarea + send button */}
           <div className="flex items-end gap-2 sm:gap-3">
-            {/* Pause/Resume — icon button in input row to avoid accidental keyboard taps */}
-            <button
-              onClick={() => {
-                if (isPaused) {
-                  onResume(conversation.senderId, pageId);
-                } else {
-                  onPause(conversation.senderId, pageId);
-                }
-              }}
-              disabled={isPausing || isResuming}
-              aria-label={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
-              title={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
-              className={clsx(
-                'flex-shrink-0 p-2 rounded-xl border transition-all h-[40px] sm:h-[44px] w-[40px] sm:w-[44px] flex items-center justify-center disabled:opacity-50',
-                isPaused
-                  ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                  : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'
-              )}
-            >
-              {isPaused ? <PlayCircle className="w-5 h-5" /> : <PauseCircle className="w-5 h-5" />}
-            </button>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <textarea
                 value={replyText}
                 onChange={(e) => { setReplyText(e.target.value); setSendError(null); }}
@@ -337,10 +320,11 @@ export function MessageDetailModal({
                     handleSend();
                   }
                 }}
+                dir="auto"
                 placeholder={t('messages.typeReply' as TranslationKey)}
                 aria-label={t('messages.typeReply' as TranslationKey)}
                 rows={2}
-                className="w-full resize-none rounded-xl sm:rounded-2xl border border-surface-200 bg-surface-50 px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all outline-none"
+                className="w-full resize-none rounded-2xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-white transition-all outline-none"
                 style={{ minHeight: '64px', maxHeight: '160px' }}
                 disabled={isReplying}
               />
@@ -351,34 +335,58 @@ export function MessageDetailModal({
               onClick={handleSend}
               loading={isReplying}
               disabled={!replyText.trim() || isReplying}
-              className="rounded-xl px-3 sm:px-4 h-[40px] sm:h-[44px] flex-shrink-0"
+              className="rounded-2xl px-4 h-16 flex-shrink-0"
               icon={<Send className="w-4 h-4" />}
             >
               <span className="hidden sm:inline">{t('comments.reply')}</span>
             </Button>
           </div>
-          <div className="flex items-center justify-between mt-2">
-            {conversation.pauseStatus?.paused && conversation.pauseStatus.remainingMinutes != null ? (
-              <span className="text-[9px] sm:text-[10px] font-medium text-violet-500">
-                {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: conversation.pauseStatus.remainingMinutes })}
-              </span>
-            ) : <span />}
 
-            {/* Resolve button — end-aligned, near the compose workflow */}
+          {/* Actions row: pause/resume + resolve */}
+          <div className="flex items-center justify-between mt-2.5">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (isPaused) {
+                    onResume(conversation.senderId, pageId);
+                  } else {
+                    onPause(conversation.senderId, pageId);
+                  }
+                }}
+                disabled={isPausing || isResuming}
+                aria-label={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
+                className={clsx(
+                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border disabled:opacity-50',
+                  isPaused
+                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'
+                )}
+              >
+                {isPaused ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
+                <span>{isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}</span>
+              </button>
+              {conversation.pauseStatus?.paused && conversation.pauseStatus.remainingMinutes != null && (
+                <span className="text-[10px] font-medium text-violet-500">
+                  {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: conversation.pauseStatus.remainingMinutes })}
+                </span>
+              )}
+            </div>
+
+            {/* Resolve — end-aligned */}
             {hasUnresolvedUnreplied ? (
               <button
                 onClick={() => onResolve(conversation.senderId, pageId)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border bg-surface-50 text-surface-600 border-surface-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-surface-50 text-surface-600 border-surface-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
               >
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 {t('comments.resolve' as TranslationKey)}
               </button>
             ) : hasResolvedIncoming ? (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
+              <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 {t('messages.resolved' as TranslationKey)}
               </span>
-            ) : <span />}
+            ) : null}
           </div>
         </div>
       </div>

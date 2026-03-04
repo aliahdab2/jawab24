@@ -546,6 +546,7 @@ const CommentsPage: NextPageWithLayout = () => {
 
       {selectedComment && (
         <CommentDetailModal
+          key={selectedComment.id}
           comment={selectedComment}
           onClose={() => setSelectedComment(null)}
           onReplySuccess={() => refetch()}
