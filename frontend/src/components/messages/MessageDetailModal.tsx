@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -19,6 +19,7 @@ import {
   Globe,
   ExternalLink,
   ChevronRight,
+  ArrowDown,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Locale } from 'date-fns';
@@ -55,9 +56,55 @@ export function MessageDetailModal({
   const { t } = useTranslation();
   const [replyText, setReplyText] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [hasNewMessage, setHasNewMessage] = useState(false);
+  const prevMessageCountRef = useRef(conversation.messages.length);
 
   useEscapeKey(() => onClose(), true);
   useBodyScrollLock(true);
+
+  // Check if user is scrolled near the bottom (within 100px)
+  const checkIfNearBottom = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+  }, []);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'instant') => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    setHasNewMessage(false);
+  }, []);
+
+  // Auto-scroll to bottom on mount (instant)
+  useEffect(() => {
+    // Use requestAnimationFrame to ensure DOM is painted
+    requestAnimationFrame(() => {
+      scrollToBottom('instant');
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When new messages arrive: auto-scroll if near bottom, otherwise show indicator
+  useEffect(() => {
+    const currentCount = conversation.messages.length;
+    if (currentCount > prevMessageCountRef.current) {
+      if (isNearBottom) {
+        requestAnimationFrame(() => scrollToBottom('smooth'));
+      } else {
+        setHasNewMessage(true);
+      }
+    }
+    prevMessageCountRef.current = currentCount;
+  }, [conversation.messages.length, isNearBottom, scrollToBottom]);
+
+  // Track scroll position
+  const handleScroll = useCallback(() => {
+    const nearBottom = checkIfNearBottom();
+    setIsNearBottom(nearBottom);
+    if (nearBottom) setHasNewMessage(false);
+  }, [checkIfNearBottom]);
 
   const sortedMessages = useMemo(() => {
     return [...conversation.messages].sort((a, b) => {
@@ -122,7 +169,7 @@ export function MessageDetailModal({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="bg-white rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
+        className="relative bg-white rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -186,7 +233,11 @@ export function MessageDetailModal({
         </div>
 
         {/* Message Thread */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-surface-50/50">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-4 sm:p-6 bg-surface-50/50"
+        >
           <div className="min-h-full flex flex-col justify-end gap-4 sm:gap-6">
             {sortedMessages.map((msg) => (
               <div
@@ -231,6 +282,19 @@ export function MessageDetailModal({
             ))}
           </div>
         </div>
+
+        {/* New message indicator — shown when user scrolled up and new messages arrived */}
+        {hasNewMessage && (
+          <div className="absolute bottom-[140px] sm:bottom-[160px] inset-x-0 flex justify-center z-10 pointer-events-none">
+            <button
+              onClick={() => scrollToBottom('smooth')}
+              className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-500 text-white text-xs font-semibold shadow-lg shadow-brand-500/30 hover:bg-brand-600 transition-all animate-in fade-in slide-in-from-bottom-2 duration-200"
+            >
+              <ArrowDown className="w-3.5 h-3.5" />
+              {t('messages.newMessage' as TranslationKey)}
+            </button>
+          </div>
+        )}
 
         {/* Footer — Reply + Actions */}
         <div

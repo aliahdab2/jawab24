@@ -390,6 +390,7 @@
   "messages.resolveSuccess": "Conversation resolved",
   "messages.unresolveSuccess": "Conversation unresolved",
   "messages.resolved": "Resolved",
+  "messages.newMessage": "New message",
   "templates.title": "Reply Templates",
   "templates.description": "Create and manage reply templates",
   "templates.addTemplate": "Add Template",

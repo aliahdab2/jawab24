@@ -390,6 +390,7 @@
   "messages.resolveSuccess": "تمت معالجة المحادثة",
   "messages.unresolveSuccess": "تم إلغاء معالجة المحادثة",
   "messages.resolved": "تمت المعالجة",
+  "messages.newMessage": "رسالة جديدة",
   "templates.title": "قوالب الرد",
   "templates.description": "أنشئ وأدر قوالب الردود السريعة الخاصة بك",
   "templates.addTemplate": "إضافة قالب جديد",
