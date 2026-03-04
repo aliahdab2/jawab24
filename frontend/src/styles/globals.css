@@ -112,9 +112,9 @@
 
   /* ──────────────────────────────────────────────────────────────────
      DARK PALETTE REFERENCE (swap these 7 values to re-theme dark mode)
-     Background: #1a1f2e   rgb(26 31 46)
-     Cards:      #222838   rgb(34 40 56)
-     Borders:    #2e3548   rgb(46 53 72)
+     Background: #18181b   rgb(24 24 27)     — zinc-900
+     Cards:      #1c1c20   rgb(28 28 32)     — subtle elevation
+     Borders:    #2a2a32   rgb(42 42 50)
      Primary:    #34d399   rgb(52 211 153)    — emerald
      Secondary:  #6366f1   rgb(99 102 241)    — indigo
      Muted text: #9ca3af   rgb(156 163 175)
@@ -122,38 +122,38 @@
   ────────────────────────────────────────────────────────────────── */
   .dark {
     /* Semantic tokens */
-    --background: 26 31 46;           /* #1a1f2e */
+    --background: 24 24 27;           /* #18181b (zinc-900) */
     --foreground: 240 242 245;        /* #f0f2f5 */
 
-    --card: 34 40 56;                 /* #222838 */
+    --card: 28 28 32;                 /* #1c1c20 */
     --card-foreground: 240 242 245;
 
-    --secondary: 40 47 64;            /* #282f40 (hover / elevated surface) */
+    --secondary: 32 32 38;            /* #202026 (hover / elevated surface) */
     --secondary-foreground: 240 242 245;
 
-    --muted: 40 47 64;
+    --muted: 32 32 38;
     --muted-foreground: 156 163 175;  /* #9ca3af */
 
-    --border: 46 53 72;               /* #2e3548 */
+    --border: 42 42 50;               /* #2a2a32 */
     --ring: 99 102 241;               /* #6366f1 (indigo) */
 
     --primary: 52 211 153;            /* #34d399 (emerald) */
-    --primary-foreground: 26 31 46;   /* #1a1f2e */
+    --primary-foreground: 24 24 27;   /* #18181b */
 
     /* Keep semantic colors */
     --accent: 249 115 22;             /* orange (warnings / highlights) */
     --accent-foreground: 255 255 255;
 
     --destructive: 248 113 113;       /* red */
-    --destructive-foreground: 26 31 46;
+    --destructive-foreground: 24 24 27;
 
-    /* Surface scale (navy-based) */
-    --surface-50: 26 31 46;           /* #1a1f2e  page */
-    --surface-100: 30 36 51;          /* subtle elevation */
-    --surface-200: 34 40 56;          /* #222838  cards */
-    --surface-300: 40 47 64;          /* hover */
-    --surface-400: 46 53 72;          /* #2e3548  borders */
-    --surface-500: 85 92 110;         /* muted icons */
+    /* Surface scale (zinc-based) */
+    --surface-50: 24 24 27;           /* #18181b  page */
+    --surface-100: 28 28 32;          /* subtle elevation */
+    --surface-200: 32 32 38;          /* #202026  cards */
+    --surface-300: 40 40 48;          /* hover */
+    --surface-400: 48 48 56;          /* borders */
+    --surface-500: 85 85 96;          /* muted icons */
     --surface-600: 156 163 175;       /* #9ca3af  muted text */
     --surface-700: 190 196 210;       /* secondary text */
     --surface-800: 220 225 235;       /* near-white */

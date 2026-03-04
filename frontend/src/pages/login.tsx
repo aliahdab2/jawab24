@@ -247,13 +247,20 @@ export default function LoginPage() {
         <meta property="og:url" content={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/login' : '/login')} />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-card flex flex-col lg:flex-row min-h-[100dvh]">
+      <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] relative">
+        {/* Dark mode decorative overlays — span both panels seamlessly */}
+        <div className="hidden dark:block absolute inset-0 pointer-events-none z-0" aria-hidden="true">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(14,165,233,0.15),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(139,92,246,0.15),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.08]" />
+        </div>
+
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
-        <div className="hidden lg:flex lg:w-[55%] relative bg-zinc-900 overflow-hidden items-center justify-center p-10 xl:p-16">
-          {/* Animated Background */}
-          <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.15),transparent)]"></div>
-          <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.15),transparent)]"></div>
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+        <div className="hidden lg:flex lg:w-[55%] relative bg-zinc-900 dark:bg-transparent overflow-hidden items-center justify-center p-10 xl:p-16">
+          {/* Animated Background (light mode only — dark mode uses parent overlays) */}
+          <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.15),transparent)] dark:hidden"></div>
+          <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.15),transparent)] dark:hidden"></div>
+          <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-10 dark:hidden"></div>
 
           <div className="relative z-10 w-full max-w-xl">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/10 mb-6 animate-slide-up">
@@ -306,13 +313,13 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="flex-1 flex flex-col bg-gradient-to-br from-card via-card to-brand-50/30 min-h-0 overflow-hidden relative">
-          {/* Subtle background pattern for visual interest */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(13,148,136,0.03),transparent_50%)] pointer-events-none" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(13,148,136,0.02),transparent_50%)] pointer-events-none" />
-          
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-card via-card to-brand-50/30 dark:bg-none dark:from-transparent dark:via-transparent dark:to-transparent min-h-0 overflow-hidden relative z-[1]">
+          {/* Subtle background pattern for visual interest (light mode only) */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(13,148,136,0.03),transparent_50%)] pointer-events-none dark:hidden" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(13,148,136,0.02),transparent_50%)] pointer-events-none dark:hidden" />
+
           {/* Header - Sticky so it stays visible when content scrolls + pt-safe for safe area */}
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-card/80 backdrop-blur-sm flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content border-b border-theme-border/50">
+          <div className="sticky top-0 z-10 flex-shrink-0 bg-card/80 backdrop-blur-sm dark:bg-transparent dark:backdrop-blur-none flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 pt-safe box-content border-b border-theme-border/50 dark:border-transparent">
             <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
@@ -503,13 +510,13 @@ export default function LoginPage() {
 
         {/* Fixed top safe area background - prevents content from showing through status bar when scrolling */}
         <div
-          className="lg:hidden fixed-safe-bg top-safe-bg bg-card"
+          className="lg:hidden fixed-safe-bg top-safe-bg bg-card dark:bg-background"
           aria-hidden="true"
         />
 
         {/* Fixed bottom safe area background */}
         <div
-          className="lg:hidden fixed-safe-bg bottom-safe-bg bg-card"
+          className="lg:hidden fixed-safe-bg bottom-safe-bg bg-card dark:bg-background"
           aria-hidden="true"
         />
       </div>

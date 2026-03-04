@@ -199,7 +199,7 @@ export const Sidebar = memo(function Sidebar() {
       )}
       style={{
         insetInlineStart: 0,
-        background: 'linear-gradient(180deg, #0F172A 0%, #1E293B 100%)',
+        background: 'linear-gradient(180deg, rgb(24,24,27) 0%, rgb(32,32,38) 100%)',
         paddingTop: 'var(--sai-top)'
       }}
     >
