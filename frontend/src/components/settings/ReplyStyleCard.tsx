@@ -40,23 +40,49 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
         ))}
       </div>
 
-      {/* Brand voice notes */}
-      <label htmlFor="brandVoiceNotes" className="block text-sm font-medium text-foreground/70 mb-1">
-        {t('settings.replyStyle.brandVoice')}
-      </label>
-      <Textarea
-        id="brandVoiceNotes"
-        dir="auto"
-        maxLength={500}
-        rows={3}
-        placeholder={t('settings.replyStyle.brandVoicePlaceholder')}
-        value={settings.brandVoiceNotes}
-        onChange={(e) => setSettings({ ...settings, brandVoiceNotes: e.target.value })}
-        className="w-full text-sm border-theme-border bg-background focus:ring-2 focus:ring-brand-500"
-      />
-      <p className="text-xs text-muted-foreground mt-1 text-end">
-        {settings.brandVoiceNotes.length}/500
-      </p>
+      {/* Brand voice notes (multi-language) */}
+      {(() => {
+        const currentLang = settings.dashboardLanguage;
+        const value = settings.brandVoiceNotesMulti?.[currentLang] || '';
+        const sourceLang = settings.brandVoiceNotesMulti?.sourceLang;
+        const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+        const displayValue = isAutoTranslated ? '' : value;
+        const placeholder = isAutoTranslated && value ? value : t('settings.replyStyle.brandVoicePlaceholder');
+
+        return (
+          <>
+            <label htmlFor="brandVoiceNotes" className="block text-sm font-medium text-foreground/70 mb-1">
+              {t('settings.replyStyle.brandVoice')}
+            </label>
+            <Textarea
+              id="brandVoiceNotes"
+              dir={displayValue ? 'auto' : undefined}
+              maxLength={500}
+              rows={3}
+              placeholder={placeholder}
+              value={displayValue}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                setSettings({
+                  ...settings,
+                  brandVoiceNotesMulti: {
+                    ...settings.brandVoiceNotesMulti,
+                    [currentLang]: newValue,
+                    sourceLang: currentLang,
+                  },
+                });
+              }}
+              className={clsx(
+                'w-full text-sm border-theme-border bg-background focus:ring-2 focus:ring-brand-500',
+                isAutoTranslated && 'placeholder:italic',
+              )}
+            />
+            <p className="text-xs text-muted-foreground mt-1 text-end">
+              {displayValue.length}/500
+            </p>
+          </>
+        );
+      })()}
 
       {/* Hold low-confidence toggle */}
       <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-theme-border">

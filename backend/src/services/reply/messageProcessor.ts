@@ -273,6 +273,14 @@ export class MessageProcessor {
                     ? `${knowledgeBase}\n\n--- Business Info ---\n${profileText}`
                     : profileText;
             }
+            // Pick language-appropriate brand voice notes
+            const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
+            const msgLang = detectLanguageCode(messageText);
+            const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
+            const brandVoiceNotes = bvMulti[msgLang]
+                || supportedLangs.map(l => bvMulti[l]).find(Boolean)
+                || userSettings.brandVoiceNotes || undefined;
+
             let { replyText, replyMethod, needsAttention, flagReason, aiIntent, confidence } =
                 await replyGenerator.generateForMessage(
                     {
@@ -289,7 +297,7 @@ export class MessageProcessor {
                         senderId,
                         senderName,
                         replyStyle: userSettings.replyStyle,
-                        brandVoiceNotes: userSettings.brandVoiceNotes || undefined,
+                        brandVoiceNotes,
                     },
                     userSettings.aiEnabled ?? false,
                 );

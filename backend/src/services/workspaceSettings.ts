@@ -33,6 +33,7 @@ const DEFAULTS: WorkspaceSettings = {
     handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,
     replyStyle: 'professional',
     brandVoiceNotes: '',
+    brandVoiceNotesMulti: {},
     holdLowConfidence: false,
 };
 

@@ -70,6 +70,7 @@ export const UpdateSettingsSchema = z.object({
     notificationsEnabled: z.boolean().optional(),
     replyStyle: z.enum(['professional', 'casual', 'enthusiastic']).optional(),
     brandVoiceNotes: z.string().max(500, 'Brand voice notes must be less than 500 characters').optional(),
+    brandVoiceNotesMulti: z.record(z.string()).optional(),
     holdLowConfidence: z.boolean().optional(),
 });
 

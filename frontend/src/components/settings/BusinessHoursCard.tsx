@@ -42,10 +42,10 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
   const hasError = settings.businessHoursEnd <= settings.businessHoursStart;
 
   return (
-    <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 overflow-hidden">
+    <Card className="border-none shadow-md shadow-surface-200/30 dark:shadow-black/20 p-4 landscape:p-3 overflow-hidden">
       <div className="flex items-center justify-between mb-6 landscape:mb-3">
         <div className="flex items-center gap-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.businessHoursOnly ? 'bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400' : 'bg-muted text-muted-foreground'}`}>
             <Clock className="w-4 h-4" />
           </div>
           <div className="text-start">
@@ -77,8 +77,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                     className={clsx(
                       'px-2 py-0.5 rounded-full text-[10px] font-bold transition-all animate-in fade-in',
                       isActive
-                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                        : 'bg-red-100 text-red-700 hover:bg-red-200'
+                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50'
+                        : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
                     )}
                   >
                     {isActive ? '🟢' : '🔴'} {isActive ? t('settings.businessHours.statusActive' as TranslationKey) : t('settings.businessHours.statusInactive' as TranslationKey)}
@@ -99,23 +99,23 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
         )}
       >
           {/* Visual Flow */}
-          <div className="mt-3 mb-4 space-y-3 p-4 rounded-xl bg-surface-50 border border-surface-100">
+          <div className="mt-3 mb-4 space-y-3 p-4 rounded-xl bg-muted border border-theme-border">
             {/* During Hours */}
             <div className="flex items-center justify-center gap-3">
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-2xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                   <Clock className="w-7 h-7 text-green-600" />
                 </div>
-                <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[80px]">
+                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
                   {t('settings.businessHours.duringLabel')}
                 </span>
               </div>
-              <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
+              <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl bg-brand-100 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-2xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
                   <Zap className="w-7 h-7 text-brand-600" />
                 </div>
-                <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[80px]">
+                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
                   {t('settings.businessHours.autoReplyActive')}
                 </span>
               </div>
@@ -124,19 +124,19 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
             {/* Outside Hours */}
             <div className="flex items-center justify-center gap-3">
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl bg-purple-100 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
                   <Clock className="w-7 h-7 text-purple-600" />
                 </div>
-                <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[80px]">
+                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
                   {t('settings.businessHours.outsideLabel')}
                 </span>
               </div>
-              <ArrowRight className="w-5 h-5 text-surface-400 flex-shrink-0 rtl:rotate-180" />
+              <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl bg-orange-100 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-2xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
                   <Mail className="w-7 h-7 text-orange-600" />
                 </div>
-                <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[80px]">
+                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
                   {t('settings.businessHours.awayMessage')}
                 </span>
               </div>
@@ -145,9 +145,9 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
 
           {/* Time pickers */}
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
+            <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-muted border border-theme-border">
               <div>
-                <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
+                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
                 <Select
                   value={settings.businessHoursStart}
                   onChange={(val) => setSettings({ ...settings, businessHoursStart: val })}
@@ -160,7 +160,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
+                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
                 <Select
                   value={settings.businessHoursEnd}
                   onChange={(val) => setSettings({ ...settings, businessHoursEnd: val })}
@@ -176,7 +176,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
 
             {/* Error Message */}
             {hasError && settings.businessHoursOnly && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200 animate-in fade-in slide-in-from-top-1">
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 animate-in fade-in slide-in-from-top-1">
                 <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-bold text-red-700">{t('settings.businessHoursError' as TranslationKey)}</p>
@@ -187,14 +187,14 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           </div>
 
           {/* Away Message */}
-          <div className="p-5 landscape:p-3 rounded-2xl bg-surface-50 border border-surface-100">
+          <div className="p-5 landscape:p-3 rounded-2xl bg-muted border border-theme-border">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-surface-200 text-surface-500 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
                 <MessageCircle className="w-4 h-4" />
               </div>
               <div className="text-start">
-                  <h5 className="font-bold text-surface-800 text-sm">{t('settings.awayMessage.title')}</h5>
-                <p className="text-[11px] text-surface-600 font-medium">{t('settings.awayMessage.desc')}</p>
+                  <h5 className="font-bold text-foreground text-sm">{t('settings.awayMessage.title')}</h5>
+                <p className="text-[11px] text-muted-foreground font-medium">{t('settings.awayMessage.desc')}</p>
               </div>
             </div>
 

@@ -105,8 +105,8 @@ export function CommentCard({
 
     return (
       <div className={clsx(
-        "w-8 h-8 rounded-full flex items-center justify-center shadow-sm border-2 border-white",
-        isAI ? "bg-violet-100 text-violet-600" : "bg-emerald-100 text-emerald-600"
+        "w-8 h-8 rounded-full flex items-center justify-center shadow-sm border-2 border-card",
+        isAI ? "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
       )}>
         {isAI ? <Sparkles className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
       </div>
@@ -132,7 +132,7 @@ export function CommentCard({
     <div
       className={clsx(
         "relative rounded-3xl bg-card border border-theme-border shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group",
-        needsAttention && 'ring-1 ring-red-100',
+        needsAttention && 'ring-1 ring-red-100 dark:ring-red-900/50',
         className
       )}
       onClick={onClick}
@@ -142,14 +142,14 @@ export function CommentCard({
       {/* Needs Attention Badge */}
       {needsAttention ? (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
-           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100">
+           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[10px] font-bold uppercase tracking-wider animate-pulse-soft border border-red-100 dark:border-red-800">
              <AlertTriangle className="w-3 h-3" />
              {t('comments.needsAttention')}
            </div>
         </div>
       ) : !comment.replied && (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
-           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider border border-amber-100">
+           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider border border-amber-100 dark:border-amber-800">
               <Clock className="w-3 h-3" />
               {t('comments.pending')}
            </div>
@@ -162,7 +162,7 @@ export function CommentCard({
         <div className="flex items-start gap-3 me-4 sm:me-8 lg:me-12">
           {/* Avatar */}
           <div className="flex-shrink-0">
-             <div className="w-10 h-10 rounded-full bg-surface-100 flex items-center justify-center text-surface-400 border-2 border-white shadow-sm">
+             <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground border-2 border-card shadow-sm">
                 <User className="w-5 h-5" />
              </div>
           </div>
@@ -174,12 +174,12 @@ export function CommentCard({
                    {comment.fromName || t('common.unknownUser')}
                 </span>
                 <div className="flex items-center gap-2 mt-0.5">
-                   <span className="text-[10px] text-surface-400">
+                   <span className="text-[10px] text-muted-foreground">
                       {formatTime(comment.createdAt)}
                    </span>
                    {showPlatformIcon && getPlatformIcon()}
                    {pageName && (
-                     <span className="text-xs font-medium text-surface-600 px-1.5 py-0.5 bg-surface-200/60 rounded">
+                     <span className="text-xs font-medium text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
                        {pageName}
                      </span>
                    )}
@@ -188,7 +188,7 @@ export function CommentCard({
 
              {/* Post Context */}
              {comment.postMessage && (
-               <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-surface-400 max-w-full">
+               <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground max-w-full">
                  <FileText className="w-3 h-3 flex-shrink-0" />
                  <span className="truncate max-w-[250px]">{comment.postMessage}</span>
                </div>
@@ -197,8 +197,8 @@ export function CommentCard({
              {/* Message Bubble */}
              <div className="relative group/bubble">
                <div className={clsx(
-                  "px-4 py-3 bg-surface-50 rounded-2xl rounded-ss-sm text-surface-700 text-sm leading-relaxed border border-surface-100",
-                  "group-hover:bg-surface-100/50 transition-colors"
+                  "px-4 py-3 bg-muted rounded-2xl rounded-ss-sm text-foreground text-sm leading-relaxed border border-theme-border",
+                  "group-hover:bg-muted/80 transition-colors"
                )}>
                  <p className={clsx(variant === 'compact' ? "line-clamp-3" : "whitespace-pre-wrap")}>
                     {comment.message}
@@ -215,7 +215,7 @@ export function CommentCard({
 
                  {/* Bubble */}
                  <div className="relative">
-                    <div className="px-4 py-3 bg-emerald-50 rounded-2xl rounded-se-sm text-surface-800 text-sm leading-relaxed border border-emerald-100 shadow-sm">
+                    <div className="px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl rounded-se-sm text-foreground dark:text-emerald-200 text-sm leading-relaxed border border-emerald-100 dark:border-emerald-800 shadow-sm">
                        <p className={clsx(variant === 'compact' ? "line-clamp-2 italic" : "whitespace-pre-wrap")}>
                           {comment.replyText}
                        </p>

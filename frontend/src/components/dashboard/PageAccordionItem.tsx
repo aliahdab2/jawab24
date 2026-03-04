@@ -79,8 +79,8 @@ export function PageAccordionItem({
           </div>
           {/* Auto-reply status indicator */}
           <div className={clsx(
-            'absolute -bottom-1 -end-1 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center',
-            page.autoReplyEnabled ? 'bg-emerald-500' : 'bg-surface-300'
+            'absolute -bottom-1 -end-1 w-5 h-5 rounded-full border-2 border-card flex items-center justify-center',
+            page.autoReplyEnabled ? 'bg-emerald-500' : 'bg-surface-300 dark:bg-surface-600'
           )}>
             {page.autoReplyEnabled ? (
               <Bot className="w-3 h-3 text-white" aria-hidden="true" />
@@ -102,11 +102,11 @@ export function PageAccordionItem({
             {page.name}
           </p>
           <div className="flex items-center gap-3 mt-1.5">
-            <span className="text-xs text-surface-500">
+            <span className="text-xs text-muted-foreground">
               {page.commentsCount || 0} {t('dashboard.comments')}
             </span>
             {pendingCount > 0 && (
-              <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">
                 {pendingCount} {t('dashboard.pending')}
               </span>
             )}
@@ -137,7 +137,7 @@ export function PageAccordionItem({
         )}
       >
         <div ref={contentRef}>
-          <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 px-4 sm:px-5 py-4">
+          <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 dark:from-emerald-900/10 dark:to-surface-900/50 px-4 sm:px-5 py-4">
             {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-card rounded-xl p-3 text-center shadow-sm">
@@ -172,14 +172,14 @@ export function PageAccordionItem({
               <div className="flex items-center justify-between py-2">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-blue-500" aria-hidden="true" />
-                  <span className="text-[13px] font-medium text-surface-600">Facebook</span>
+                  <span className="text-[13px] font-medium text-muted-foreground">Facebook</span>
                 </div>
                 <span
                   className={clsx(
                     'text-[11px] font-semibold px-2.5 py-0.5 rounded-full',
                     page.autoReplyEnabled
                       ? 'bg-emerald-500 text-white'
-                      : 'bg-surface-200 text-surface-500'
+                      : 'bg-muted text-muted-foreground'
                   )}
                 >
                   {page.autoReplyEnabled ? t('common.active') : t('common.inactive')}
@@ -190,14 +190,14 @@ export function PageAccordionItem({
               <div className="flex items-center justify-between py-2">
                 <div className="flex items-center gap-2">
                   <Instagram className="w-4 h-4 text-pink-500" aria-hidden="true" />
-                  <span className="text-[13px] font-medium text-surface-600">Instagram</span>
+                  <span className="text-[13px] font-medium text-muted-foreground">Instagram</span>
                 </div>
                 <span
                   className={clsx(
                     'text-[11px] font-semibold px-2.5 py-0.5 rounded-full',
                     page.instagramAutoReplyEnabled
                       ? 'bg-emerald-500 text-white'
-                      : 'bg-surface-200 text-surface-500'
+                      : 'bg-muted text-muted-foreground'
                   )}
                 >
                   {page.instagramAutoReplyEnabled ? t('common.active') : t('common.inactive')}
@@ -210,14 +210,14 @@ export function PageAccordionItem({
               <div className="flex items-center gap-2">
                 <div className={clsx(
                   'w-2 h-2 rounded-full',
-                  isActive ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'
+                  isActive ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300 dark:bg-surface-600'
                 )} />
-                <span className="text-xs font-bold text-surface-600">
+                <span className="text-xs font-bold text-muted-foreground">
                   {t('dashboard.pageAccordion.status' as TranslationKey)}:{' '}
                   {isActive ? t('common.active') : t('common.inactive')}
                 </span>
               </div>
-              <span className="text-xs text-surface-400">
+              <span className="text-xs text-muted-foreground">
                 {formatConnectedDate(page.createdAt as string, t)}
               </span>
             </div>

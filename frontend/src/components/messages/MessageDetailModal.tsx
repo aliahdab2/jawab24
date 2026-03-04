@@ -187,7 +187,7 @@ export function MessageDetailModal({
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className={clsx(
               "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner flex-shrink-0",
-              conversation.needsHumanAttention ? 'bg-red-100 text-red-600' : 'bg-brand-100 text-brand-600'
+              conversation.needsHumanAttention ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400'
             )}>
               <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
@@ -196,7 +196,7 @@ export function MessageDetailModal({
                 {conversation.senderName || t('common.user' as TranslationKey)}
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[10px] font-bold text-surface-400 uppercase tracking-widest text-start">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-start">
                   {t('messages.msgCount' as TranslationKey, { count: conversation.messages.length })}
                 </span>
                 {conversation.needsHumanAttention && (
@@ -210,14 +210,14 @@ export function MessageDetailModal({
                 pageUrl ? (
                   <button
                     onClick={() => openExternalUrl(pageUrl)}
-                    className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5 hover:text-brand-500 transition-colors py-1 -my-1 cursor-pointer"
+                    className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground mt-0.5 hover:text-brand-500 transition-colors py-1 -my-1 cursor-pointer"
                   >
                     <Globe className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">{pageName}</span>
                     <ExternalLink className="w-3 h-3 flex-shrink-0" />
                   </button>
                 ) : (
-                  <span className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5">
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground mt-0.5">
                     <Globe className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">{pageName}</span>
                   </span>
@@ -228,7 +228,7 @@ export function MessageDetailModal({
           <button
             onClick={onClose}
             aria-label={t('comments.close' as TranslationKey)}
-            className="p-2 sm:p-2.5 rounded-xl hover:bg-surface-100 text-surface-400 transition-colors flex-shrink-0"
+            className="p-2 sm:p-2.5 rounded-xl hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
           >
             <X className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
@@ -238,7 +238,7 @@ export function MessageDetailModal({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4 sm:p-6 bg-surface-50/50"
+          className="flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/50"
         >
           <div className="min-h-full flex flex-col justify-end gap-4 sm:gap-6">
             {sortedMessages.map((msg) => (
@@ -260,7 +260,7 @@ export function MessageDetailModal({
                 )}>
                   <span title={formatFullTime(msg.createdAt)}>{formatMessageTime(msg.createdAt)}</span>
                   {msg.direction === 'outgoing' && msg.replyMethod && (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-100 text-surface-600">
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
                       {msg.replyMethod === 'ai' ? (
                         <>
                           <Sparkles className="w-2.5 h-2.5" />
@@ -303,7 +303,7 @@ export function MessageDetailModal({
           className="p-4 sm:p-6 pb-safe-content border-t border-theme-border bg-card flex-shrink-0"
         >
           {sendError && (
-            <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium">
+            <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-xs font-medium">
               {sendError}
             </div>
           )}
@@ -358,8 +358,8 @@ export function MessageDetailModal({
                 className={clsx(
                   'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border disabled:opacity-50',
                   isPaused
-                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                    : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'
+                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/50'
+                    : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800 dark:hover:bg-violet-900/50'
                 )}
               >
                 {isPaused ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
@@ -376,13 +376,13 @@ export function MessageDetailModal({
             {hasUnresolvedUnreplied ? (
               <button
                 onClick={() => onResolve(conversation.senderId, pageId)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-surface-50 text-surface-600 border-surface-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border bg-muted text-muted-foreground border-theme-border hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 dark:hover:bg-emerald-900/30 dark:hover:text-emerald-400 dark:hover:border-emerald-800"
               >
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 {t('comments.resolve' as TranslationKey)}
               </button>
             ) : hasResolvedIncoming ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
+              <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 {t('messages.resolved' as TranslationKey)}
               </span>

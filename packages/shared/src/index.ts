@@ -504,5 +504,6 @@ export interface WorkspaceSettings {
   handoffPauseDurationMinutes: number;
   replyStyle: 'professional' | 'casual' | 'enthusiastic';
   brandVoiceNotes: string;
+  brandVoiceNotesMulti: Record<string, string>;
   holdLowConfidence: boolean;
 }

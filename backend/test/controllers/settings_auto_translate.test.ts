@@ -28,15 +28,20 @@ describe('SettingsController Auto-Translation Logic', () => {
             userId: 'user-123',
             dashboardLanguage: 'en',
             supportedLanguages: ['ar', 'en'],
-            greetingMessageMulti: { 
-                ar: 'مرحبا', 
-                en: 'Hello', 
-                sourceLang: 'ar' 
+            greetingMessageMulti: {
+                ar: 'مرحبا',
+                en: 'Hello',
+                sourceLang: 'ar'
             },
-            awayMessageMulti: { 
-                ar: '', 
-                en: '', 
-                sourceLang: null 
+            awayMessageMulti: {
+                ar: '',
+                en: '',
+                sourceLang: null
+            },
+            brandVoiceNotesMulti: {
+                ar: '',
+                en: '',
+                sourceLang: null
             }
         };
 
@@ -212,6 +217,95 @@ describe('SettingsController Auto-Translation Logic', () => {
     });
 
     // =========================================================
+    // Brand Voice Notes auto-translation
+    // =========================================================
+
+    describe('Brand Voice Notes multi-language', () => {
+        it('should auto-translate EN when AR brand voice notes are updated', async () => {
+            mockRequest.body = {
+                brandVoiceNotesMulti: {
+                    ar: 'اذكر التوصيل المجاني',
+                    en: '' // Empty, should be auto-translated
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                brandVoiceNotesMulti: expect.objectContaining({
+                    ar: 'اذكر التوصيل المجاني',
+                    en: 'اذكر التوصيل المجاني [translated to en]',
+                    sourceLang: 'ar'
+                })
+            }));
+        });
+
+        it('should auto-translate AR when EN brand voice notes are updated', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                brandVoiceNotesMulti: {
+                    ar: '',
+                    en: 'Always mention free delivery',
+                    sourceLang: 'en'
+                }
+            });
+
+            mockRequest.body = {
+                brandVoiceNotesMulti: {
+                    ar: '', // Unchanged
+                    en: 'Always mention free delivery and Ramadan Kareem'
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                brandVoiceNotesMulti: expect.objectContaining({
+                    ar: 'Always mention free delivery and Ramadan Kareem [translated to ar]',
+                    en: 'Always mention free delivery and Ramadan Kareem',
+                    sourceLang: 'en'
+                })
+            }));
+        });
+
+        it('should backfill legacy brandVoiceNotes from multi', async () => {
+            mockRequest.body = {
+                brandVoiceNotesMulti: {
+                    ar: 'اذكر التوصيل المجاني',
+                    en: ''
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            // Legacy field should be backfilled (prefers EN, then AR)
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                brandVoiceNotes: 'اذكر التوصيل المجاني [translated to en]'
+            }));
+        });
+
+        it('should set sourceLang to manual when both languages changed', async () => {
+            mockRequest.body = {
+                brandVoiceNotesMulti: {
+                    ar: 'ملاحظة عربية',
+                    en: 'English note'
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                brandVoiceNotesMulti: expect.objectContaining({
+                    ar: 'ملاحظة عربية',
+                    en: 'English note',
+                    sourceLang: 'manual'
+                })
+            }));
+            expect(translationService.translateText).not.toHaveBeenCalled();
+        });
+    });
+
+    // =========================================================
     // Clear-field scenarios (user removes message text)
     // =========================================================
 
@@ -342,6 +436,37 @@ describe('SettingsController Auto-Translation Logic', () => {
                     sourceLang: 'ar'
                 })
             }));
+        });
+
+        it('should reset brandVoiceNotes to empty defaults when source is cleared', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                brandVoiceNotesMulti: {
+                    ar: 'اذكر التوصيل المجاني',
+                    en: 'Mention free delivery',
+                    sourceLang: 'ar'
+                }
+            });
+
+            // User clears AR (the source)
+            mockRequest.body = {
+                brandVoiceNotesMulti: {
+                    ar: '',
+                    en: 'Mention free delivery' // Unchanged
+                }
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            // Both reset to empty defaults (brandVoiceNotes has no default messages)
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                brandVoiceNotesMulti: expect.objectContaining({
+                    ar: '',
+                    en: '',
+                    sourceLang: 'default'
+                })
+            }));
+            expect(translationService.translateText).not.toHaveBeenCalled();
         });
 
         it('should not call translation API when clearing source (resets to defaults)', async () => {

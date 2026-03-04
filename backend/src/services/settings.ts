@@ -17,7 +17,7 @@ const PIPELINE_FIELDS = [
     'handoffPauseDurationMinutes', 'commentEscalationMinutes',
     'messageEscalationMinutes', 'defaultReplyLanguage',
     'supportedLanguages', 'autoDetectLanguage',
-    'replyStyle', 'brandVoiceNotes', 'holdLowConfidence',
+    'replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti', 'holdLowConfidence',
 ] as const;
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */

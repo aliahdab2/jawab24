@@ -20,6 +20,10 @@ const DEFAULT_MESSAGES: Record<string, Record<string, string>> = {
         ar: 'تم إرسال التفاصيل برسالة خاصة 📩',
         en: 'Details sent in a private message 📩',
     },
+    brandVoiceNotes: {
+        ar: '',
+        en: '',
+    },
 };
 
 export class SettingsController {
@@ -184,7 +188,16 @@ export class SettingsController {
                 );
             }
 
-            // If specific fields are provided but legacy `awayMessage` is missing/empty, 
+            // Apply logic for Brand Voice Notes
+            if (updates.brandVoiceNotesMulti) {
+                updates.brandVoiceNotesMulti = await handleSmartTranslation(
+                    updates.brandVoiceNotesMulti,
+                    currentSettings.brandVoiceNotesMulti,
+                    'brandVoiceNotes'
+                );
+            }
+
+            // If specific fields are provided but legacy `awayMessage` is missing/empty,
             // backfill it for compatibility (prefer EN, then AR from Multi)
             if (!updates.awayMessage && updates.awayMessageMulti) {
                 updates.awayMessage = updates.awayMessageMulti['en'] || updates.awayMessageMulti['ar'];
@@ -196,6 +209,10 @@ export class SettingsController {
             // Legacy dualReplyNudge compatibility
             if (!updates.dualReplyNudge && updates.dualReplyNudgeMulti) {
                 updates.dualReplyNudge = updates.dualReplyNudgeMulti['en'] || updates.dualReplyNudgeMulti['ar'];
+            }
+            // Legacy brandVoiceNotes compatibility
+            if (!updates.brandVoiceNotes && updates.brandVoiceNotesMulti) {
+                updates.brandVoiceNotes = updates.brandVoiceNotesMulti['en'] || updates.brandVoiceNotesMulti['ar'];
             }
 
             const settings = await settingsService.updateSettings(userId, updates);

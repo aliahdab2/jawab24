@@ -16,6 +16,7 @@ export interface SettingsState {
   awayMessageMulti: Record<string, string>;
   greetingMessageMulti: Record<string, string>;
   dualReplyNudgeMulti: Record<string, string>;
+  brandVoiceNotesMulti: Record<string, string>;
   awayMessage: string;
   greetingMessage: string;
   replyDelay: number;

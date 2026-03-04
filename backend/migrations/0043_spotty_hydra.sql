@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "brand_voice_notes_multi" jsonb DEFAULT '{}'::jsonb;

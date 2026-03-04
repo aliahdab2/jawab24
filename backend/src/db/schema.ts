@@ -311,6 +311,7 @@ export const settings = pgTable('settings', {
     // Reply style & confidence routing
     replyStyle: varchar('reply_style', { length: 20 }).default('professional'),
     brandVoiceNotes: text('brand_voice_notes').default(''),
+    brandVoiceNotesMulti: jsonb('brand_voice_notes_multi').$type<Record<string, string>>().default({}),
     holdLowConfidence: boolean('hold_low_confidence').default(false),
     // Push notification preferences
     notificationsEnabled: boolean('notifications_enabled').default(true).notNull(),

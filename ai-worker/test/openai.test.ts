@@ -1960,3 +1960,77 @@ describe('Price Detection — Golden Fixture', () => {
     }
 });
 
+describe('Brand Voice Notes — DM prompt differentiation', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    it('should use "incorporate naturally" wording for DMs with conversation history', async () => {
+        const mockCreate = vi.fn().mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ reply: 'Thanks!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+            usage: { total_tokens: 50 },
+        });
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: { completions: { create: mockCreate } },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({
+            comment: 'Hello',
+            context: {
+                channel: 'dm',
+                brandVoiceNotes: 'Always mention free delivery',
+                conversationHistory: [
+                    { role: 'user', content: 'Hi' },
+                    { role: 'assistant', content: 'Hello! We offer free delivery.' },
+                ],
+            },
+        });
+
+        const systemPrompt = mockCreate.mock.calls[0][0].messages[0].content;
+        expect(systemPrompt).toContain('incorporate naturally');
+        expect(systemPrompt).toContain('Do NOT repeat promotional points');
+    });
+
+    it('should use standard wording for comments (no conversation history)', async () => {
+        const mockCreate = vi.fn().mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ reply: 'Thanks!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+            usage: { total_tokens: 50 },
+        });
+
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: { completions: { create: mockCreate } },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({
+            comment: 'Nice product!',
+            context: {
+                channel: 'comment',
+                brandVoiceNotes: 'Always mention free delivery',
+            },
+        });
+
+        const systemPrompt = mockCreate.mock.calls[0][0].messages[0].content;
+        expect(systemPrompt).toContain('follow these additional guidelines');
+        expect(systemPrompt).not.toContain('Do NOT repeat promotional points');
+    });
+});
+

@@ -187,7 +187,13 @@ export class CommentProcessor {
             }
             // Pass reply style settings to generator context
             generatorContext.replyStyle = userSettings.replyStyle;
-            generatorContext.brandVoiceNotes = userSettings.brandVoiceNotes || undefined;
+            // Pick language-appropriate brand voice notes
+            const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
+            const commentLang = detectLanguageCode(commentMessage);
+            const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
+            generatorContext.brandVoiceNotes = bvMulti[commentLang]
+                || supportedLangs.map(l => bvMulti[l]).find(Boolean)
+                || userSettings.brandVoiceNotes || undefined;
 
             const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
             let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent, confidence } =

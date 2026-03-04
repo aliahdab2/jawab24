@@ -272,7 +272,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         onWheel={(e) => e.stopPropagation()}
       >
         {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-surface-400">
+        <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-muted-foreground">
           <span className="font-medium">{t('comments.title')}</span>
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
           <span className="font-semibold text-muted-foreground truncate">{comment.fromName || t('common.unknownUser')}</span>
@@ -281,8 +281,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsAttention ? 'bg-red-100' : 'bg-brand-100'}`}>
-              <MessageSquare className={`w-5 h-5 ${needsAttention ? 'text-red-600' : 'text-brand-600'}`} />
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsAttention ? 'bg-red-100 dark:bg-red-900/30' : 'bg-brand-100 dark:bg-brand-900/30'}`}>
+              <MessageSquare className={`w-5 h-5 ${needsAttention ? 'text-red-600 dark:text-red-400' : 'text-brand-600 dark:text-brand-400'}`} />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">
@@ -295,14 +295,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 externalUrl ? (
                   <button
                     onClick={() => openExternalUrl(externalUrl)}
-                    className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5 hover:text-brand-500 transition-colors py-1 -my-1 cursor-pointer"
+                    className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground mt-0.5 hover:text-brand-500 transition-colors py-1 -my-1 cursor-pointer"
                   >
                     <Globe className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">{pageName}</span>
                     <ExternalLink className="w-3 h-3 flex-shrink-0" />
                   </button>
                 ) : (
-                  <span className="flex items-center gap-1 text-[10px] font-medium text-surface-400 mt-0.5">
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground mt-0.5">
                     <Globe className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">{pageName}</span>
                   </span>
@@ -325,7 +325,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             )}
             <button
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-surface-100 text-surface-500 transition-colors"
+              className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
               aria-label={t('comments.close')}
             >
               <X className="w-5 h-5" />
@@ -337,16 +337,16 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
           {/* Post Context */}
           {comment.postMessage && (
-            <div className="flex items-start gap-2 px-3 py-2 bg-surface-50 rounded-lg text-sm text-surface-500">
+            <div className="flex items-start gap-2 px-3 py-2 bg-muted rounded-lg text-sm text-muted-foreground">
               <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span className="line-clamp-2">{comment.postMessage}</span>
             </div>
           )}
 
           {/* Original Comment */}
-          <div className="bg-surface-50 rounded-xl p-4">
+          <div className="bg-muted rounded-xl p-4">
             <p className="text-foreground whitespace-pre-wrap">{comment.message}</p>
-            <div className="flex items-center gap-3 mt-3 text-xs text-surface-400">
+            <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
               <span title={formatFullTime(comment.createdAt)}>{formatMessageTime(comment.createdAt)}</span>
             </div>
           </div>
@@ -354,12 +354,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           {/* Reply */}
           {mode === 'full' && comment.replied && comment.replyText && (
             <div>
-              <h3 className="text-sm font-medium text-surface-500 mb-2">
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">
                 {t('comments.reply')}
               </h3>
-              <div className="bg-brand-50 rounded-xl p-4 border-s-4 border-brand-500">
+              <div className="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-4 border-s-4 border-brand-500">
                 <p className="text-foreground whitespace-pre-wrap">{comment.replyText}</p>
-                <div className="flex items-center gap-3 mt-3 text-xs text-surface-500">
+                <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
                   <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>
                   <Badge size="sm" variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>
                     {comment.replyMethod === 'ai' ? (
@@ -380,9 +380,9 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
           {/* Reply Input Section */}
           {!comment.replied && (
-            <div className="bg-surface-50 rounded-xl p-4 border border-surface-200">
+            <div className="bg-muted rounded-xl p-4 border border-theme-border">
               <div className="flex justify-between items-center mb-2">
-                <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-surface-700">{t('comments.reply')}</label>
+                <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground">{t('comments.reply')}</label>
                 
                 {mode === 'full' && (
                   <div className="relative group/tooltip inline-block">
@@ -392,7 +392,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                       onClick={handleGenerateAi}
                       disabled={isGenerating || !aiLimit.allowed}
                       className={clsx(
-                        isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50',
+                        isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20',
                         !aiLimit.allowed && 'opacity-50 cursor-not-allowed'
                       )}
                       icon={<Bot className="w-4 h-4" />}
@@ -467,8 +467,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   disabled={pauseLoading}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${
                     pauseStatus?.paused
-                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
-                      : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100'
+                      ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/50'
+                      : 'bg-violet-50 text-violet-600 border-violet-200 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800 dark:hover:bg-violet-900/50'
                   }`}
                 >
                   {pauseStatus?.paused ? (

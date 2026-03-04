@@ -20,15 +20,15 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
   return (
     <Card className={clsx(
       "border-none transition-all duration-300 p-4 landscape:p-3",
-      settings.commentsAutoReply ? 'ring-1 ring-brand-200/50 shadow-[0_10px_30px_rgba(16,185,129,0.12)]' : 'shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
+      settings.commentsAutoReply ? 'ring-1 ring-brand-200/50 dark:ring-brand-800/50 shadow-[0_10px_30px_rgba(16,185,129,0.12)] dark:shadow-[0_10px_30px_rgba(16,185,129,0.08)]' : 'shadow-[0_10px_30px_rgba(0,0,0,0.04)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.3)]'
     )}>
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors landscape:w-10 landscape:h-10 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'}`}>
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors landscape:w-10 landscape:h-10 ${settings.commentsAutoReply ? 'bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400' : 'bg-muted text-muted-foreground'}`}>
             <MessageSquare className="w-4 h-4" />
           </div>
           <div className="text-start">
-            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900' : 'text-foreground'}`}>{t('settings.commentsAutoReply')}</h3>
+            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900 dark:text-brand-300' : 'text-foreground'}`}>{t('settings.commentsAutoReply')}</h3>
             <p className="text-sm text-muted-foreground font-medium landscape:text-xs">{t('settings.commentsAutoReplyDesc')}</p>
             <p className="text-xs text-muted-foreground mt-1 landscape:hidden">{t('settings.commentsAutoReplyHelper')}</p>
           </div>
@@ -47,7 +47,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
           !settings.commentsAutoReply && "opacity-50 pointer-events-none"
         )}
       >
-          <h4 id="comment-reply-mode-label" className="text-sm font-bold text-surface-700 uppercase tracking-wider mb-3 landscape:mb-2 flex items-center gap-2">
+          <h4 id="comment-reply-mode-label" className="text-sm font-bold text-foreground uppercase tracking-wider mb-3 landscape:mb-2 flex items-center gap-2">
             <Settings2 className="w-4 h-4" />
             {t('settings.commentReplyMode.question')}
           </h4>
@@ -68,7 +68,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
           />
 
           {/* Dynamic description */}
-          <p className="mt-2 text-sm text-surface-600 animate-in fade-in">
+          <p className="mt-2 text-sm text-muted-foreground animate-in fade-in">
             {settings.commentReplyMode === 'dual' && t('settings.commentReplyMode.dualDesc')}
             {settings.commentReplyMode === 'public' && t('settings.commentReplyMode.publicDesc')}
             {settings.commentReplyMode === 'private' && t('settings.commentReplyMode.privateDesc')}
@@ -77,10 +77,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
           {/* Flow Diagram */}
           <div
             key={diagramKey}
-            className="mt-3 flex items-center justify-center gap-3 py-6 px-4 rounded-2xl bg-gradient-to-br from-surface-50 to-surface-100/50 backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300 landscape:py-4 landscape:gap-2"
-            style={{
-              boxShadow: '8px 8px 16px rgba(0, 0, 0, 0.06), -8px -8px 16px rgba(255, 255, 255, 0.8)'
-            }}
+            className="mt-3 flex items-center justify-center gap-3 py-6 px-4 rounded-2xl bg-gradient-to-br from-muted to-muted/50 backdrop-blur-sm shadow-lg dark:shadow-black/20 animate-in fade-in slide-in-from-top-2 duration-300 landscape:py-4 landscape:gap-2"
           >
             {/* New Comment */}
             <div className="flex flex-col items-center gap-2 landscape:gap-1">
@@ -94,7 +91,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                 <MessageSquare className="w-6 h-6 landscape:w-5 landscape:h-5 text-white relative z-10" />
                 <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
               </div>
-              <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[75px]">
+              <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[75px]">
                 {t('settings.flowNewComment')}
               </span>
             </div>
@@ -115,7 +112,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                     <MessageCircle className="w-6 h-6 landscape:w-5 landscape:h-5 text-white relative z-10" />
                     <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
                   </div>
-                  <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[75px]">
+                  <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[75px]">
                     {t('settings.flowPublicReply')}
                   </span>
                 </div>
@@ -138,7 +135,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                   <Mail className="w-6 h-6 landscape:w-5 landscape:h-5 text-white relative z-10" />
                   <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
                 </div>
-                <span className="text-xs font-bold text-surface-700 text-center leading-tight max-w-[75px]">
+                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[75px]">
                   {t('settings.flowPrivateMessage')}
                 </span>
               </div>
@@ -147,9 +144,9 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
 
           {/* Dual Reply Configuration */}
           {settings.commentReplyMode === 'dual' && (
-            <div className="mt-4 p-4 landscape:p-3 rounded-xl bg-brand-50/20 border border-brand-200/50 animate-slide-up">
-              <h4 className="font-bold text-brand-900 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
-              <p className="text-xs text-brand-700 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
+            <div className="mt-4 p-4 landscape:p-3 rounded-xl bg-brand-50/20 dark:bg-brand-900/20 border border-brand-200/50 dark:border-brand-800/50 animate-slide-up">
+              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
+              <p className="text-xs text-brand-700 dark:text-brand-400 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
               <Input
                 aria-label={t('settings.dualReplyConfigTitle.improved')}
                 value={(() => {
@@ -184,7 +181,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
               />
 
               <div className="flex items-center justify-between text-xs mt-1.5">
-                <span className="text-brand-700 font-medium">{t('settings.dualReplyConfigHelper')}</span>
+                <span className="text-brand-700 dark:text-brand-400 font-medium">{t('settings.dualReplyConfigHelper')}</span>
                 <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-500'}`}>
                   {dualNudgeInput.length}/80
                 </span>
