@@ -1,35 +1,23 @@
 Fix dark mode, theming, or color/contrast issues in the Jawab24 codebase.
 
 Arguments: $ARGUMENTS
-- Describe the component or page with the styling issue
-- Example: "danger zone dark mode", "pricing card contrast", "modal background"
+- Describe the component, page, or CSS issue (e.g., "danger zone dark mode", "pricing card contrast")
 
 ## Workflow
 
-### Step 1 — Read the source of truth
-Read `frontend/src/styles/globals.css` and scan the `@layer components` block for ALL existing semantic classes. Group them by category (status-*, icon-bg-*, alert-*, danger-*, notif-ring-*, reply-*, pricing-*, landing-*).
+### 1. Discover existing semantic classes
+Read `frontend/src/styles/globals.css` — scan the `@layer components` block. List every semantic class grouped by prefix (status-*, icon-bg-*, alert-*, danger-zone-*, notif-ring-*, reply-*, pricing-*, landing-*). This is the live source of truth — never rely on a cached list.
 
-### Step 2 — Identify the component
-Find the file(s) mentioned in the arguments. Read them to understand current styling.
+### 2. Read the affected component
+Find and read the file(s) from the arguments. Identify every hardcoded color class that lacks a `dark:` counterpart.
 
-### Step 3 — Check for existing semantic classes
-Before adding any `dark:` overrides, check if an existing semantic class already covers the need:
-- Red backgrounds/text → `alert-error`, `status-error`, `icon-bg-red`, `danger-zone-*`
-- Amber/warning → `alert-warning`, `status-warning`, `icon-bg-amber`
-- Green/success → `alert-success`, `status-success`, `icon-bg-emerald`
-- Blue/info → `status-info`, `icon-bg-blue`
-- Violet/purple → `status-violet`, `icon-bg-violet`, `icon-bg-purple`
+### 3. Apply fixes (in priority order)
 
-### Step 4 — Fix the issue
+**Priority A — Use an existing semantic class** if one matches the intent. Replace the inline colors entirely.
 
-**If an existing class fits** → Replace inline colors with the semantic class.
+**Priority B — Create a new semantic class** in `globals.css` `@layer components` if the pattern will appear in more than one place (or is likely to). Follow the existing naming convention (`{category}-{variant}`). Always include both light AND dark values in one `@apply`. Add `:hover` / `:focus-visible` as separate selectors when needed.
 
-**If no class fits but the pattern will be reused** → Create a NEW semantic class in `globals.css` inside `@layer components`, following this naming convention:
-- `{category}-{variant}` (e.g., `status-warning`, `icon-bg-amber`, `danger-zone-btn`)
-- Include both light AND dark values in the `@apply` directive
-- Add hover/focus states as separate selectors if needed
-
-**If it's truly one-off** → Use inline `dark:` overrides with these mappings:
+**Priority C — Inline `dark:` overrides** only for truly one-off cases. Use these mappings:
 
 | Light | Dark |
 |-------|------|
@@ -39,20 +27,17 @@ Before adding any `dark:` overrides, check if an existing semantic class already
 | `text-{color}-600` | `dark:text-{color}-400` |
 | `border-{color}-100` to `-200` | `dark:border-{color}-700` to `-800` |
 
-Also prefer semantic tokens:
-- `bg-card` instead of `bg-white`
-- `bg-background` instead of no `bg-*` on inputs/textareas
-- `text-foreground` instead of `text-gray-900`
-- `border-theme-border` instead of `border-gray-200`
+Prefer semantic tokens over raw colors:
+- `bg-card` not `bg-white`
+- `bg-background` not bare inputs/textareas
+- `text-foreground` not `text-gray-900`
+- `border-theme-border` not `border-gray-200`
 
-### Step 5 — Update docs if new classes were created
-If you added new semantic classes to `globals.css`, update the table in `AI_INSTRUCTIONS.md` (section 13, "Available semantic classes") so they're discoverable.
+### 4. Verify
+Run `npm run lint` — zero errors AND zero warnings required.
 
-### Step 6 — Verify
-Run `npm run lint` to ensure no warnings or errors.
+## Exceptions
+- Landing page (`/landing`, `components/landing/*`) is light-only — skip `dark:` overrides.
 
-## Exception
-The landing page (`/landing`, `components/landing/*`) is light-only — no `dark:` overrides needed there.
-
-## Key principle
-Every color value should be changeable from ONE place. If you're about to write the same `dark:` override in multiple components, create a semantic class instead.
+## Principle
+Every color must be changeable from ONE place. Same `dark:` override in 2+ components = create a semantic class.
