@@ -541,6 +541,13 @@
   /* --- Landing page theme classes --- */
   .landing-section-dark {
     @apply bg-zinc-900 dark:bg-zinc-900 text-white;
+
+    /* Override surface/brand tokens so text is readable on dark bg in dark mode.
+       Without this, .dark theme sets --surface-* to near-black blues → invisible. */
+    --surface-300: 185 195 210; /* labels: ~10:1 contrast on zinc-900 */
+    --surface-400: 155 165 185; /* body text, links: ~7:1 contrast */
+    --surface-500: 120 132 155; /* muted text, copyright: ~4.5:1 (WCAG AA) */
+    --brand-300: 110 210 195;   /* stat labels (24/7, <1s): ~8:1 contrast */
   }
 
   .landing-icon-shell {

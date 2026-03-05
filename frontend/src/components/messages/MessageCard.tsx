@@ -9,7 +9,6 @@ import {
   CheckCircle,
   User,
   MessageCircle,
-  Send,
   PauseCircle,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -85,7 +84,7 @@ export const MessageCard = React.memo(function MessageCard({
 
   // Check if the last message in the conversation has an outgoing reply
   const hasOutgoingInLastTwo = lastTwoMessages.some(
-    (m) => m.direction === 'outgoing' && !conv.needsHumanAttention
+    (m) => m.direction === 'outgoing'
   );
 
   // Render a single message bubble based on direction
@@ -104,9 +103,6 @@ export const MessageCard = React.memo(function MessageCard({
         </div>
       );
     }
-
-    // Outgoing bubble — skip if needsHumanAttention
-    if (conv.needsHumanAttention) return null;
 
     return (
       <div key={msg.id} className="flex items-end justify-end gap-2 sm:gap-3 ms-6 sm:ms-12">
@@ -205,12 +201,7 @@ export const MessageCard = React.memo(function MessageCard({
             </button>
           ) : <div />}
 
-          {conv.needsHumanAttention ? (
-            <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl status-error border text-[10px] sm:text-xs font-bold uppercase tracking-wider group-hover:bg-red-100 dark:group-hover:bg-red-900/50 transition-colors animate-fade-in">
-              <Send className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              <span>{t('comments.reply')}</span>
-            </div>
-          ) : !hasOutgoingInLastTwo && (
+          {!hasOutgoingInLastTwo && (
             <div className="flex items-center gap-1.5 text-xs font-bold text-brand-600 opacity-60 group-hover:opacity-100 transition-opacity animate-fade-in">
               <MessageCircle className="w-3.5 h-3.5" />
               <span>{t('comments.reply')}</span>

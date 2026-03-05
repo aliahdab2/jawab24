@@ -148,7 +148,7 @@ describe('MessageCard', () => {
       expect(screen.getByText('comments.reply')).toBeInTheDocument();
     });
 
-    it('hides outgoing bubble when needsHumanAttention is true', () => {
+    it('shows outgoing bubble even when needsHumanAttention is true', () => {
       const incoming = makeMessage({
         id: '1',
         message: 'Angry message',
@@ -175,7 +175,7 @@ describe('MessageCard', () => {
       );
 
       expect(screen.getByText('Angry message')).toBeInTheDocument();
-      expect(screen.queryByText('Auto reply')).not.toBeInTheDocument();
+      expect(screen.getByText('Auto reply')).toBeInTheDocument();
     });
 
     it('shows both incoming messages when last 2 messages are from the customer', () => {

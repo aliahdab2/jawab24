@@ -100,9 +100,7 @@ export function WaitlistForm({ feature, variant }: WaitlistFormProps) {
         className={clsx(
           'flex-shrink-0 flex items-center justify-center rounded-full font-bold text-sm sm:text-base transition-all duration-200',
           'me-1 sm:me-1.5 px-4 sm:px-5 py-1.5 sm:py-2',
-          isBanner
-            ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-sm shadow-amber-500/25'
-            : 'bg-brand-600 text-white hover:bg-brand-700 dark:bg-brand-500 dark:hover:bg-brand-400 shadow-sm shadow-brand-900/20',
+          'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-sm shadow-amber-500/25',
           'disabled:opacity-60 disabled:cursor-not-allowed',
         )}
       >

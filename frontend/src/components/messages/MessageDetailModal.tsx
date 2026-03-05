@@ -168,33 +168,33 @@ export function MessageDetailModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-zinc-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 pt-safe"
+      className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center pt-safe animate-in fade-in duration-200"
       onTouchMove={(e) => e.preventDefault()}
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="relative bg-card rounded-t-2xl sm:rounded-3xl shadow-2xl w-full sm:max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] landscape:max-h-[95vh] overflow-hidden flex flex-col animate-scale-in"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pb-safe landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
         {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 px-4 sm:px-6 pt-3 pb-0 text-xs text-surface-400">
+        <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-muted-foreground">
           <span className="font-medium">{t('messages.title')}</span>
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
           <span className="font-semibold text-muted-foreground truncate">{conversation.senderName || t('common.user' as TranslationKey)}</span>
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-6 pt-2 sm:pt-3 border-b border-theme-border flex-shrink-0">
+        <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border flex-shrink-0">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className={clsx(
-              "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-inner flex-shrink-0",
+              "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
               conversation.needsHumanAttention ? 'icon-bg-red' : 'icon-bg-brand'
             )}>
               <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="text-start min-w-0">
-              <h2 className="text-base sm:text-xl font-bold text-foreground leading-tight truncate">
+              <h2 className="text-lg font-semibold text-foreground leading-tight truncate">
                 {conversation.senderName || t('common.user' as TranslationKey)}
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
@@ -230,9 +230,9 @@ export function MessageDetailModal({
           <button
             onClick={onClose}
             aria-label={t('comments.close' as TranslationKey)}
-            className="p-2 sm:p-2.5 rounded-xl hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
+            className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
           >
-            <X className="w-5 h-5 sm:w-6 sm:h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
@@ -240,7 +240,7 @@ export function MessageDetailModal({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/50"
+          className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/50"
         >
           <div className="min-h-full flex flex-col justify-end gap-4 sm:gap-6">
             {sortedMessages.map((msg) => (
@@ -302,7 +302,7 @@ export function MessageDetailModal({
 
         {/* Footer — Reply + Actions */}
         <div
-          className="p-4 sm:p-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
+          className="p-4 md:p-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
         >
           {sendError && (
             <div className="mb-3 px-3 py-2 rounded-lg alert-error text-xs font-medium">
