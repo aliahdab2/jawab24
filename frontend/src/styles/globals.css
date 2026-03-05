@@ -125,7 +125,7 @@
     --background: 6 13 24;            /* #060d18 (deep navy-black) */
     --foreground: 235 240 245;        /* #ebf0f5 */
 
-    --card: 10 18 32;                 /* #0a1220 */
+    --card: 14 24 42;                 /* #0e182a — more contrast vs background */
     --card-foreground: 235 240 245;
 
     --secondary: 14 22 38;            /* #0e1626 (hover / elevated surface) */
@@ -134,7 +134,7 @@
     --muted: 14 22 38;
     --muted-foreground: 120 135 160;  /* #788da0 */
 
-    --border: 20 30 48;               /* #141e30 */
+    --border: 28 40 60;               /* #1c283c — visible card edges */
     --ring: 79 116 178;               /* #4f74b2 (blue) */
 
     --primary: 93 174 164;            /* #5daea4 (teal) */
@@ -149,7 +149,7 @@
 
     /* Surface scale (navy-based) */
     --surface-50: 6 13 24;            /* #060d18  page */
-    --surface-100: 10 18 32;          /* subtle elevation */
+    --surface-100: 14 24 42;          /* synced with --card */
     --surface-200: 14 22 38;          /* #0e1626  cards */
     --surface-300: 20 30 48;          /* hover */
     --surface-400: 30 42 62;          /* borders */

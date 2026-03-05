@@ -261,7 +261,7 @@ export const Sidebar = memo(function Sidebar() {
           <div key={group.labelKey} className={groupIndex > 0 ? 'mt-5' : ''}>
             {/* Group label — visible only when sidebar is expanded */}
             {sidebarOpen && (
-              <p className="px-3 mb-2 text-[11px] font-bold text-surface-500 uppercase tracking-[0.15em]">
+              <p className="px-3 mb-2 text-[11px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
                 {t(group.labelKey as TranslationKey)}
               </p>
             )}

@@ -67,7 +67,7 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
           )}
         </div>
       </div>
-      <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden shadow-inner p-0.5 relative">
+      <div className="h-2.5 w-full bg-surface-300 dark:bg-white/10 rounded-full overflow-hidden shadow-inner p-0.5 relative">
         <div
           className={clsx(
             "h-full rounded-full transition-all duration-1000 relative shadow-sm",
@@ -533,7 +533,7 @@ const DashboardPage: NextPageWithLayout = () => {
                         <Link href="/pricing" className="block mt-5">
                           <Button
                             variant="secondary"
-                            className="w-full py-3.5 text-sm"
+                            className="w-full py-3.5 text-sm border-surface-400 dark:border-surface-400 hover:border-brand-500 dark:hover:border-brand-500"
                           >
                             {t('subscription.managePlan')}
                           </Button>
