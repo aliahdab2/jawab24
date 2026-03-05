@@ -613,7 +613,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               className={clsx(
                 // Mobile: all cards in same cell, only active one visible
                 'col-start-1 row-start-1 md:col-auto md:row-auto',
-                index !== activeTab && 'invisible md:visible',
+                index !== activeTab && 'hidden md:block',
               )}
             >
               <PlanCard

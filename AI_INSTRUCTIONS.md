@@ -510,45 +510,14 @@ className="bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 b
 className="status-warning border"
 ```
 
-**Available semantic classes** (defined in `globals.css` `@layer components`):
+**Available semantic classes** are defined in `globals.css` `@layer components` — read that file to discover the full list (status-*, icon-bg-*, alert-*, danger-zone-*, notif-ring-*, reply-*).
 
-| Category | Classes |
-|----------|---------|
-| **Status badges** | `status-success`, `status-warning`, `status-error`, `status-info`, `status-violet`, `status-brand` |
-| **Icon backgrounds** | `icon-bg-emerald`, `icon-bg-amber`, `icon-bg-violet`, `icon-bg-red`, `icon-bg-brand`, `icon-bg-blue`, `icon-bg-slate`, `icon-bg-orange`, `icon-bg-purple`, `icon-bg-green` |
-| **Icon backgrounds (light)** | `icon-bg-emerald-light`, `icon-bg-amber-light`, `icon-bg-violet-light`, `icon-bg-red-light`, `icon-bg-brand-light` |
-| **Alert boxes** | `alert-success`, `alert-warning`, `alert-error` |
-| **Notification rings** | `notif-ring-amber`, `notif-ring-blue`, `notif-ring-red`, `notif-ring-orange`, `notif-ring-emerald`, `notif-ring-slate` |
-| **Reply indicators** | `reply-source-ai`, `reply-source-template`, `reply-bubble` |
-
-**Notes:**
+**Key notes:**
 - Status and alert classes set `border-color` but you must add `border` yourself
-- Icon-bg classes set both `background` and `text` color — don't add a separate text color on the icon
-- Check `globals.css` for the full list before creating new inline `dark:` overrides
+- Icon-bg classes set both `background` and `text` color
+- Landing page (`/landing`, `components/landing/*`) is light-only — no `dark:` overrides needed
 
-**When no semantic class exists**, fall back to manual `dark:` overrides:
-
-| Light | Dark |
-|-------|------|
-| `bg-{color}-50` | `dark:bg-{color}-900/30` |
-| `bg-{color}-100` | `dark:bg-{color}-900/50` |
-| `text-{color}-700` through `-900` | `dark:text-{color}-300` |
-| `text-{color}-600` | `dark:text-{color}-400` |
-| `border-{color}-100` through `-200` | `dark:border-{color}-700` through `-800` |
-
-**Also prefer semantic tokens when possible:**
-- `bg-card` instead of `bg-white`
-- `bg-background` instead of no `bg-*` on inputs/textareas
-- `text-foreground` instead of `text-gray-900`
-- `border-theme-border` instead of `border-gray-200`
-
-**Exception — Landing page is light-only:**
-The landing page (`/landing`) and its components (`components/landing/*`) use a fixed light design. They do NOT need `dark:` overrides. Landing-specific classes (e.g. `landing-section-dark`, `landing-phone-frame`) are defined in `globals.css` and handle any needed dark adjustments internally.
-
-**Before committing, check:**
-- Search for `bg-{color}-50`, `bg-{color}-100`, `text-{color}-700`, `text-{color}-800`, `text-{color}-900` in your changes
-- Use a semantic class if one exists — don't duplicate the `dark:` overrides inline
-- If no semantic class fits and you're outside the landing page, add `dark:` overrides manually
+**For dark mode / theming fixes, use `/style`** — it has the full workflow, color mapping tables, and class creation conventions.
 
 ---
 

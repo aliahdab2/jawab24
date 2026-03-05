@@ -502,6 +502,35 @@
            dark:bg-red-900/30 dark:text-red-300 dark:border-red-700;
   }
 
+  /* --- Danger zone (destructive action sections) --- */
+  .danger-zone {
+    @apply bg-red-50/30 dark:bg-red-900/20;
+  }
+  .danger-zone-title {
+    @apply text-red-900 dark:text-red-300;
+  }
+  .danger-zone-icon {
+    @apply text-red-500 dark:text-red-400;
+  }
+  .danger-zone-text {
+    @apply text-red-700/70 dark:text-red-400/90;
+  }
+  .danger-zone-btn {
+    @apply border-red-200 bg-card text-red-500 shadow-sm transition-all active:scale-95
+           dark:border-red-800 dark:text-red-400;
+  }
+  .danger-zone-btn:hover {
+    @apply bg-red-50 border-red-300 text-red-600
+           dark:bg-red-900/40 dark:border-red-700 dark:text-red-300;
+  }
+  .danger-zone-btn:focus-visible {
+    @apply outline-none ring-2 ring-red-100 dark:ring-red-900/50;
+  }
+  .danger-input {
+    @apply border-red-200 focus:border-red-500 focus:ring-red-500
+           dark:border-red-800 dark:focus:border-red-400 dark:focus:ring-red-400;
+  }
+
   /* --- Notification ring colors --- */
   .notif-ring-amber {
     @apply ring-amber-200/60 dark:ring-amber-700/60;

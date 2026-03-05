@@ -69,14 +69,14 @@ export function RuleCard({
     >
       <div className="flex flex-col lg:flex-row">
         {/* Priority & Reorder Controls */}
-        <div className="bg-surface-50 border-b lg:border-b-0 lg:border-e border-theme-border p-4 lg:p-6 flex lg:flex-col items-center justify-between lg:justify-center gap-4">
+        <div className="bg-surface-50 dark:bg-surface-800/50 border-b lg:border-b-0 lg:border-e border-theme-border p-4 lg:p-6 flex lg:flex-col items-center justify-between lg:justify-center gap-4">
           <div className="flex lg:flex-col items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onPriorityChange(rule.id, 'up')}
               disabled={index === 0}
-              className="text-surface-400 hover:text-brand-600 hover:bg-card shadow-sm"
+              className="text-surface-400 dark:text-surface-300 hover:text-brand-600 hover:bg-card shadow-sm"
             >
               <ArrowUp className="w-4 h-4" />
             </Button>
@@ -88,7 +88,7 @@ export function RuleCard({
               size="sm"
               onClick={() => onPriorityChange(rule.id, 'down')}
               disabled={index === totalRules - 1}
-              className="text-surface-400 hover:text-brand-600 hover:bg-card shadow-sm"
+              className="text-surface-400 dark:text-surface-300 hover:text-brand-600 hover:bg-card shadow-sm"
             >
               <ArrowDown className="w-4 h-4" />
             </Button>
@@ -120,8 +120,8 @@ export function RuleCard({
 
           <div className="space-y-4">
             {/* Condition Box */}
-            <div className="p-4 rounded-2xl bg-blue-50/30 border border-blue-100/50 relative group/condition">
-              <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-blue-600">
+            <div className="p-4 rounded-2xl bg-blue-50/30 dark:bg-blue-900/30 border border-blue-100/50 dark:border-blue-700/50 relative group/condition">
+              <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-blue-600 dark:text-blue-300">
                 <Tag className="w-3 h-3" />
                 <span>{t('rules.condition')}</span>
               </div>
@@ -133,7 +133,7 @@ export function RuleCard({
                 ))}
               </div>
               {duplicateKeywords.length > 0 && (
-                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600">
+                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
                   <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                   <span>{t('rules.duplicateKeywordsWarning' as TranslationKey, { count: duplicateKeywords.length })}</span>
                 </div>
@@ -141,14 +141,14 @@ export function RuleCard({
             </div>
 
             {/* Action Box */}
-            <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative group/action">
-              <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-brand-600">
+            <div className="p-4 rounded-2xl bg-brand-50/30 dark:bg-brand-900/30 border border-brand-100/50 dark:border-brand-700/50 relative group/action">
+              <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-brand-600 dark:text-brand-300">
                 <BookTemplate className="w-3 h-3" />
                 <span>{t('rules.action')}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-surface-500">{t('rules.actions.replyWithTemplate')}:</span>
-                <span className="text-sm font-bold text-brand-900">{getTemplateName(rule.templateId)}</span>
+                <span className="text-sm font-medium text-surface-500 dark:text-surface-300">{t('rules.actions.replyWithTemplate')}:</span>
+                <span className="text-sm font-bold text-brand-900 dark:text-brand-200">{getTemplateName(rule.templateId)}</span>
                 {getTemplateStatus(rule.templateId) === 'missing' && (
                   <Badge variant="error" size="sm" className="ms-2">
                     <AlertTriangle className="w-3 h-3 me-1" />
@@ -167,12 +167,12 @@ export function RuleCard({
         </div>
 
         {/* Actions Footer / Side */}
-        <div className="bg-surface-50 lg:bg-card border-t lg:border-t-0 lg:border-s border-theme-border p-4 lg:p-6 flex lg:flex-col items-center justify-end lg:justify-center gap-2">
+        <div className="bg-surface-50 dark:bg-surface-800/50 lg:bg-card border-t lg:border-t-0 lg:border-s border-theme-border p-4 lg:p-6 flex lg:flex-col items-center justify-end lg:justify-center gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onEdit(rule)}
-            className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
+            className="text-surface-400 dark:text-surface-300 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 flex items-center gap-2"
             aria-label={t('common.edit')}
             title={t('common.edit')}
           >
@@ -183,7 +183,7 @@ export function RuleCard({
             variant="ghost"
             size="sm"
             onClick={() => onDuplicate(rule)}
-            className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 flex items-center gap-2"
+            className="text-surface-400 dark:text-surface-300 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 flex items-center gap-2"
             aria-label={t('common.duplicate')}
             title={t('common.duplicate')}
           >
@@ -194,12 +194,12 @@ export function RuleCard({
             variant="ghost"
             size="sm"
             onClick={() => onDelete(rule.id)}
-            className="text-surface-400 hover:text-red-600 hover:bg-red-50 flex items-center gap-2"
+            className="text-surface-400 dark:text-surface-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2"
             aria-label={t('common.delete')}
             title={t('common.delete')}
           >
             <Trash2 className="w-4 h-4" />
-            <span className="lg:hidden text-xs font-bold uppercase tracking-wider text-red-600">{t('common.delete')}</span>
+            <span className="lg:hidden text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">{t('common.delete')}</span>
           </Button>
           {rule.matchCount !== undefined && (
             <div className="mt-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
