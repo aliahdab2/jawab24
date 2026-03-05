@@ -114,7 +114,7 @@ export function KnowledgeBaseCustomSection({
         <button
           type="button"
           onClick={handleDelete}
-          className="p-1.5 rounded-lg hover:bg-red-50 text-surface-300 hover:text-red-500 transition-colors flex-shrink-0"
+          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-surface-300 hover:text-red-500 transition-colors flex-shrink-0"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>

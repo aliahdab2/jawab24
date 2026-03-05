@@ -23,7 +23,7 @@ export function NotificationsCard({ settings, setSettings }: SettingsCardProps) 
     <Card className="border-none shadow-md shadow-theme-border/30 p-4 landscape:p-3">
       <div className="flex items-center justify-between mb-4 landscape:mb-3">
         <div className="flex items-center gap-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.notificationsEnabled ? 'bg-brand-100 text-brand-600' : 'bg-muted text-muted-foreground'}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.notificationsEnabled ? 'icon-bg-brand' : 'bg-muted text-muted-foreground'}`}>
             <Bell className="w-4 h-4" />
           </div>
           <div className="text-start">

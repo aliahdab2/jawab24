@@ -17,7 +17,7 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
   return (
     <Card className="border-none shadow-md shadow-theme-border/30 p-4 landscape:p-3">
       <div className="flex items-center gap-4 mb-4 landscape:mb-3">
-        <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
+        <div className="w-12 h-12 rounded-xl icon-bg-brand flex items-center justify-center landscape:w-10 landscape:h-10">
           <Clock className="w-5 h-5" />
         </div>
         <div className="text-start">

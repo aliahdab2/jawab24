@@ -387,17 +387,17 @@ const PagesPage: NextPageWithLayout = () => {
                 <button
                   onClick={() => openKnowledgeBase(page)}
                   className={`group relative overflow-hidden w-full p-4 rounded-2xl border-2 transition-all duration-300 ${page.knowledgeBase
-                    ? 'border-brand-500 bg-brand-50/30'
-                    : 'border-dashed border-surface-300 bg-card hover:border-brand-400 hover:bg-brand-50/10'
+                    ? 'border-brand-500 bg-brand-50/30 dark:bg-brand-950/20'
+                    : 'border-dashed border-surface-300 bg-card hover:border-brand-400 hover:bg-brand-50/10 dark:hover:bg-brand-950/10'
                     }`}
                 >
                   <div className="relative z-10 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${page.knowledgeBase ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600'}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${page.knowledgeBase ? 'bg-brand-500 text-white shadow-lg shadow-brand-100' : 'bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400'}`}>
                         <BookOpen className="w-5 h-5" />
                       </div>
                       <div className="text-start">
-                        <p className={`text-sm font-bold ${page.knowledgeBase ? 'text-brand-900' : 'text-foreground/70'}`}>
+                        <p className={`text-sm font-bold ${page.knowledgeBase ? 'text-brand-900 dark:text-brand-300' : 'text-foreground/70'}`}>
                           {page.knowledgeBase
                             ? t('pages.businessInfoActive')
                             : t('pages.addBusinessInfo')

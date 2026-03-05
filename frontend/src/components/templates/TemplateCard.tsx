@@ -68,7 +68,7 @@ export function TemplateCard({
       {/* Message */}
       <div className="p-5 space-y-4 flex-1">
         {template.message && (
-          <div className="p-4 rounded-2xl bg-brand-50/30 border border-brand-100/50 relative overflow-hidden">
+          <div className="p-4 rounded-2xl bg-brand-50/30 dark:bg-brand-950/20 border border-brand-100/50 dark:border-brand-800/30 relative overflow-hidden">
             <p className="text-sm text-surface-700 leading-relaxed text-start" dir="auto">
               &ldquo;{template.message}&rdquo;
             </p>
@@ -101,20 +101,20 @@ export function TemplateCard({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => onEdit(template)} className="text-surface-400 hover:text-brand-600 hover:bg-brand-50" aria-label={t('common.edit')} title={t('common.edit')}>
+          <Button variant="ghost" size="sm" onClick={() => onEdit(template)} className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30" aria-label={t('common.edit')} title={t('common.edit')}>
             <Edit className="w-4 h-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onDuplicate(template)}
-            className="text-surface-400 hover:text-brand-600 hover:bg-brand-50"
+            className="text-surface-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30"
             aria-label={t('common.duplicate')}
             title={t('common.duplicate')}
           >
             <Copy className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onDelete(template.id)} className="text-surface-400 hover:text-red-600 hover:bg-red-50" aria-label={t('common.delete')} title={t('common.delete')}>
+          <Button variant="ghost" size="sm" onClick={() => onDelete(template.id)} className="text-surface-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" aria-label={t('common.delete')} title={t('common.delete')}>
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>

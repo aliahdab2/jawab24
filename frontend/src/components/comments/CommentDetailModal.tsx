@@ -358,7 +358,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <h3 className="text-sm font-medium text-muted-foreground mb-2">
                 {t('comments.reply')}
               </h3>
-              <div className="bg-brand-50 rounded-xl p-4 border-s-4 border-brand-500">
+              <div className="bg-brand-50 dark:bg-brand-950/30 rounded-xl p-4 border-s-4 border-brand-500">
                 <p className="text-foreground whitespace-pre-wrap">{comment.replyText}</p>
                 <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
                   <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>

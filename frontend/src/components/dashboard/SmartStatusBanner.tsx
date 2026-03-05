@@ -198,7 +198,7 @@ export function SmartStatusBanner({
                     <li key={`${item.type}-${item.id}`}>
                       <Link
                         href={item.href}
-                        className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-amber-100/50 transition-colors group"
+                        className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors group"
                       >
                         {/* Type icon */}
                         <div className="shrink-0 mt-0.5">

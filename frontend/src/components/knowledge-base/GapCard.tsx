@@ -38,14 +38,14 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
   };
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden transition-all duration-200">
+    <div className="rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 overflow-hidden transition-all duration-200">
       {/* Collapsed header — always visible */}
       <button
         type="button"
         onClick={onToggle}
         className="w-full flex items-center gap-2 p-3 text-start"
       >
-        <span className="flex-1 min-w-0 text-xs text-amber-900 leading-relaxed truncate">
+        <span className="flex-1 min-w-0 text-xs text-amber-900 dark:text-amber-200 leading-relaxed truncate">
           {gap.queryText}
         </span>
         <span className="flex-shrink-0 text-xs font-medium text-amber-600">
@@ -76,7 +76,7 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
             <button
               type="button"
               onClick={onSkip}
-              className="px-3 py-1.5 text-xs font-medium text-amber-700 hover:text-amber-900 hover:bg-amber-100 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
             >
               {t('kb.gaps.skip' as TranslationKey)}
             </button>

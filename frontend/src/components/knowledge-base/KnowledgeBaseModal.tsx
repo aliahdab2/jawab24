@@ -157,8 +157,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-theme-border flex-shrink-0">
           <div className="flex items-center gap-3 landscape:gap-2">
-            <div className="w-9 h-9 landscape:w-8 landscape:h-8 sm:w-10 sm:h-10 rounded-xl bg-brand-100 flex items-center justify-center">
-              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-brand-600" />
+            <div className="w-9 h-9 landscape:w-8 landscape:h-8 sm:w-10 sm:h-10 rounded-xl icon-bg-brand flex items-center justify-center">
+              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-semibold text-foreground">
@@ -184,7 +184,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
 
           {/* Facebook import banner */}
           {showFacebookBanner && (
-            <div className="flex items-center gap-2 p-3 mb-3 rounded-xl bg-blue-50 border border-blue-100">
+            <div className="flex items-center gap-2 p-3 mb-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800/40">
               <span className="text-blue-600 text-xs font-medium">
                 {t('kb.importedFromFacebook' as TranslationKey)}
               </span>

@@ -465,7 +465,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                         e.stopPropagation();
                                         handleMarkAsRead(notification.id);
                                     }}
-                                    className="p-1.5 rounded-lg hover:bg-brand-100 text-surface-400 hover:text-brand-600 transition-colors"
+                                    className="p-1.5 rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/30 text-surface-400 hover:text-brand-600 transition-colors"
                                     title={t('notifications.markAsRead')}
                                 >
                                     <Check className="w-4 h-4" />
@@ -570,7 +570,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 {t('notifications.title')}
                             </h3>
                             {unreadCount > 0 && (
-                                <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-[11px] font-bold text-brand-700 bg-brand-100 rounded-full">
+                                <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-[11px] font-bold text-brand-700 dark:text-brand-300 bg-brand-100 dark:bg-brand-900/50 rounded-full">
                                     {unreadCount > 99 ? '99+' : unreadCount}
                                 </span>
                             )}

@@ -16,7 +16,7 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
   return (
     <Card className="border-none shadow-lg shadow-theme-border/50 p-5 landscape:p-3">
       <div className="flex items-center gap-4 mb-4 landscape:mb-2">
-        <div className="w-12 h-12 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10">
+        <div className="w-12 h-12 rounded-xl icon-bg-brand flex items-center justify-center landscape:w-10 landscape:h-10">
           <MessageCircle className="w-4 h-4" />
         </div>
         <div className="text-start">

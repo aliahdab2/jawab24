@@ -134,12 +134,12 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 {/* Actions - matches landing page */}
                 <div className="flex items-center gap-1 sm:gap-4">
                   {/* Pricing link - hidden on mobile */}
-                  <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 transition-all">
+                  <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
                     {t('landing.nav.pricing' as TranslationKey)}
                   </Link>
                   <button
                     onClick={toggleLanguage}
-                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 transition-all"
+                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
                   >
                     {t('common.switchLanguage')}
                   </button>
@@ -151,7 +151,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                     </Link>
                   ) : (
                     <Link href="/login?redirect=%2Fdashboard">
-                      <button className="font-bold border-none px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 text-brand-600 rounded-lg hover:bg-brand-50 transition-all">
+                      <button className="font-bold border-none px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 text-brand-600 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
                         {t('landing.nav.login' as TranslationKey)}
                       </button>
                     </Link>
@@ -292,7 +292,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 </button>
                 <button
                   onClick={() => { logout(); router.push('/login'); }}
-                  className="flex-1 py-3 rounded-xl font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                  className="flex-1 py-3 rounded-xl font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors"
                 >
                   {t('nav.logout')}
                 </button>
@@ -464,9 +464,9 @@ function MobileMenuOverlay({
                   onClick={() => handleNavigate(item.path)}
                   className={clsx(
                     "flex items-center gap-3 px-5 py-3 rounded-xl transition-all duration-200",
-                    "bg-muted hover:bg-brand-50 border border-theme-border hover:border-brand-200",
+                    "bg-muted hover:bg-brand-50 dark:hover:bg-brand-950/30 border border-theme-border hover:border-brand-200 dark:hover:border-brand-800",
                     "active:scale-95 min-h-[48px]",
-                    router.pathname === item.path && "bg-brand-50 border-brand-200 text-brand-700"
+                    router.pathname === item.path && "bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300"
                   )}
                 >
                   <item.icon className="w-6 h-6 text-brand-600 flex-shrink-0" />
