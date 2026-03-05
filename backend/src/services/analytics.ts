@@ -102,8 +102,8 @@ export class AnalyticsService {
             }
         }
 
-        // Response times
-        const { avg, p50, p95 } = this.computePercentiles(responseTimes);
+        // Response times (computed in SQL via percentile_cont)
+        const { avg, p50, p95 } = responseTimes;
 
         return {
             period: {
@@ -211,46 +211,54 @@ export class AnalyticsService {
         return rows as (GroupedRow & { platform?: string | null })[];
     }
 
-    private async queryResponseTimes(workspaceId: string, since: Date, pageId?: string): Promise<number[]> {
-        // Collect response times from all three tables in parallel
-        const conditions = (table: typeof comments | typeof instagramComments | typeof messages) => {
-            const conds = [
-                eq(pages.workspaceId, workspaceId),
-                eq(table.replied, true),
-                gte(table.createdTime, since),
-            ];
-            if (pageId) conds.push(eq(pages.id, pageId));
-            return conds;
+    private async queryResponseTimes(workspaceId: string, since: Date, pageId?: string): Promise<{ avg: number | null; p50: number | null; p95: number | null }> {
+        // Compute avg, p50, p95 in SQL using percentile_cont — avoids fetching thousands of rows into JS.
+        // Uses a CTE to UNION ALL response times from all three tables, then aggregates once.
+        const pageFilter = pageId ? sql` AND ${pages.id} = ${pageId}` : sql``;
+
+        const result = await db.execute(sql`
+            WITH all_times AS (
+                SELECT extract(epoch from (${comments.repliedAt} - ${comments.createdTime})) AS seconds
+                FROM ${comments}
+                INNER JOIN ${posts} ON ${comments.postId} = ${posts.id}
+                INNER JOIN ${pages} ON ${posts.pageId} = ${pages.id}
+                WHERE ${pages.workspaceId} = ${workspaceId}
+                  AND ${comments.replied} = true
+                  AND ${comments.createdTime} >= ${since}
+                  ${pageFilter}
+                UNION ALL
+                SELECT extract(epoch from (${instagramComments.repliedAt} - ${instagramComments.createdTime})) AS seconds
+                FROM ${instagramComments}
+                INNER JOIN ${instagramMedia} ON ${instagramComments.mediaId} = ${instagramMedia.id}
+                INNER JOIN ${pages} ON ${instagramMedia.pageId} = ${pages.id}
+                WHERE ${pages.workspaceId} = ${workspaceId}
+                  AND ${instagramComments.replied} = true
+                  AND ${instagramComments.createdTime} >= ${since}
+                  ${pageFilter}
+                UNION ALL
+                SELECT extract(epoch from (${messages.repliedAt} - ${messages.createdTime})) AS seconds
+                FROM ${messages}
+                INNER JOIN ${pages} ON ${messages.pageId} = ${pages.id}
+                WHERE ${pages.workspaceId} = ${workspaceId}
+                  AND ${messages.replied} = true
+                  AND ${messages.direction} = 'incoming'
+                  AND ${messages.createdTime} >= ${since}
+                  ${pageFilter}
+            )
+            SELECT
+                ROUND(AVG(seconds)::numeric, 1) AS avg,
+                ROUND((percentile_cont(0.5) WITHIN GROUP (ORDER BY seconds))::numeric, 1) AS p50,
+                ROUND((percentile_cont(0.95) WITHIN GROUP (ORDER BY seconds))::numeric, 1) AS p95
+            FROM all_times
+            WHERE seconds > 0 AND seconds IS NOT NULL
+        `);
+
+        const row = result[0] as { avg: string | null; p50: string | null; p95: string | null } | undefined;
+        return {
+            avg: row?.avg ? Number(row.avg) : null,
+            p50: row?.p50 ? Number(row.p50) : null,
+            p95: row?.p95 ? Number(row.p95) : null,
         };
-
-        const [fbTimes, igTimes, msgTimes] = await Promise.all([
-            db.select({
-                seconds: sql<number>`extract(epoch from (${comments.repliedAt} - ${comments.createdTime}))`,
-            })
-                .from(comments)
-                .innerJoin(posts, eq(comments.postId, posts.id))
-                .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(and(...conditions(comments))),
-
-            db.select({
-                seconds: sql<number>`extract(epoch from (${instagramComments.repliedAt} - ${instagramComments.createdTime}))`,
-            })
-                .from(instagramComments)
-                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
-                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(and(...conditions(instagramComments))),
-
-            db.select({
-                seconds: sql<number>`extract(epoch from (${messages.repliedAt} - ${messages.createdTime}))`,
-            })
-                .from(messages)
-                .innerJoin(pages, eq(messages.pageId, pages.id))
-                .where(and(...conditions(messages), eq(messages.direction, 'incoming'))),
-        ]);
-
-        return [...fbTimes, ...igTimes, ...msgTimes]
-            .map(r => Number(r.seconds))
-            .filter(s => s > 0 && isFinite(s));
     }
 
     async getAiUsage(userId: string, days: number = 30): Promise<AiUsageReport> {
@@ -339,18 +347,6 @@ export class AnalyticsService {
         };
     }
 
-    private computePercentiles(times: number[]): { avg: number | null; p50: number | null; p95: number | null } {
-        if (times.length === 0) {
-            return { avg: null, p50: null, p95: null };
-        }
-
-        const sorted = [...times].sort((a, b) => a - b);
-        const avg = Math.round((sorted.reduce((s, v) => s + v, 0) / sorted.length) * 10) / 10;
-        const p50 = Math.round(sorted[Math.floor(sorted.length * 0.5)] * 10) / 10;
-        const p95 = Math.round(sorted[Math.floor(sorted.length * 0.95)] * 10) / 10;
-
-        return { avg, p50, p95 };
-    }
 }
 
 interface AiUsageModelStats {

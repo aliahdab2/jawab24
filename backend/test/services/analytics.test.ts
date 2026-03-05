@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../../src/db', () => ({
     db: {
         select: vi.fn(),
+        execute: vi.fn(),
     },
 }));
 
@@ -34,16 +35,24 @@ describe('AnalyticsService', () => {
         service = new AnalyticsService();
     });
 
-    function setupDbMock(fbRows: any[], igRows: any[], msgRows: any[], fbTimes: any[] = [], igTimes: any[] = [], msgTimes: any[] = []) {
+    /**
+     * Setup DB mocks for getOverview.
+     *
+     * After the percentile_cont optimization, getOverview uses:
+     *   - 3x db.select() for grouped rows (fbComments, igComments, messages)
+     *   - 1x db.execute() for response time percentiles (SQL CTE with percentile_cont)
+     */
+    function setupDbMock(
+        fbRows: any[], igRows: any[], msgRows: any[],
+        responseTimeResult: { avg: string | null; p50: string | null; p95: string | null } = { avg: null, p50: null, p95: null },
+    ) {
         let callCount = 0;
         const mockFrom = vi.fn();
         const mockInnerJoin = vi.fn();
         const mockWhere = vi.fn();
         const mockGroupBy = vi.fn();
 
-        // Each call to db.select() triggers a new query chain
-        // Order: fbComments, igComments, messages, fbTimes, igTimes, msgTimes
-        const results = [fbRows, igRows, msgRows, fbTimes, igTimes, msgTimes];
+        const results = [fbRows, igRows, msgRows];
 
         mockGroupBy.mockImplementation(() => {
             const idx = callCount - 1;
@@ -51,11 +60,6 @@ describe('AnalyticsService', () => {
         });
 
         mockWhere.mockImplementation(() => {
-            const idx = callCount - 1;
-            // Response time queries don't have groupBy — they resolve directly
-            if (idx >= 3) {
-                return Promise.resolve(results[idx] || []);
-            }
             return { groupBy: mockGroupBy };
         });
 
@@ -71,6 +75,9 @@ describe('AnalyticsService', () => {
             callCount++;
             return { from: mockFrom } as any;
         });
+
+        // Mock db.execute for the response time SQL CTE query
+        vi.mocked((db as any).execute).mockResolvedValue([responseTimeResult]);
     }
 
     describe('getOverview', () => {
@@ -164,19 +171,26 @@ describe('AnalyticsService', () => {
             expect(result.flags.low_confidence).toBe(2);
         });
 
-        it('should compute response time percentiles', async () => {
-            const times = [
-                { seconds: 1 }, { seconds: 2 }, { seconds: 3 }, { seconds: 4 }, { seconds: 5 },
-                { seconds: 6 }, { seconds: 7 }, { seconds: 8 }, { seconds: 9 }, { seconds: 10 },
-            ];
-
-            setupDbMock([], [], [], times, [], []);
+        it('should return response time percentiles from SQL', async () => {
+            // After the percentile_cont optimization, response times come from
+            // a single db.execute() SQL CTE — not from fetching all rows into JS.
+            setupDbMock([], [], [], { avg: '5.5', p50: '5.5', p95: '9.6' });
 
             const result = await service.getOverview('user-1', 30);
 
             expect(result.responseTime.avgSeconds).toBe(5.5);
-            expect(result.responseTime.p50Seconds).toBe(6);
-            expect(result.responseTime.p95Seconds).toBe(10);
+            expect(result.responseTime.p50Seconds).toBe(5.5);
+            expect(result.responseTime.p95Seconds).toBe(9.6);
+        });
+
+        it('should return null response times when no data', async () => {
+            setupDbMock([], [], [], { avg: null, p50: null, p95: null });
+
+            const result = await service.getOverview('user-1', 30);
+
+            expect(result.responseTime.avgSeconds).toBeNull();
+            expect(result.responseTime.p50Seconds).toBeNull();
+            expect(result.responseTime.p95Seconds).toBeNull();
         });
 
         it('should set correct period dates', async () => {

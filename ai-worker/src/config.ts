@@ -28,7 +28,7 @@ export const config = {
     // Queue settings
     queue: {
         name: process.env.QUEUE_NAME || 'ai:pending',
-        concurrency: parseInt(process.env.QUEUE_CONCURRENCY || '5', 10),
+        concurrency: parseInt(process.env.QUEUE_CONCURRENCY || '10', 10),
     },
 };
 

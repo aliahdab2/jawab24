@@ -32,7 +32,7 @@ export interface MessageCardProps {
   className?: string;
 }
 
-export function MessageCard({
+export const MessageCard = React.memo(function MessageCard({
   conversation: conv,
   onClick,
   onResolve,
@@ -220,4 +220,4 @@ export function MessageCard({
       </div>
     </div>
   );
-}
+});

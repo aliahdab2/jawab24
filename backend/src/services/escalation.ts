@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { comments, messages, pages, posts, settings } from '../db/schema';
-import { eq, and, lte, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 
@@ -53,59 +53,60 @@ export async function runEscalationSweep(): Promise<void> {
 
 /**
  * Escalate stale comments: unreplied + not already flagged + past SLA.
- * Groups by user to send one notification per user.
+ * Uses a single batch query to find all stale comments across all users,
+ * then groups by user for bulk updates and one notification per user.
  */
 async function escalateComments(): Promise<void> {
-    // Find all users with their escalation settings
-    const userSettings = await db
+    // Single query: find all stale comments grouped by user, respecting per-user SLA thresholds.
+    // Uses COALESCE to fall back to the default escalation threshold.
+    const staleRows = await db
         .select({
-            userId: settings.userId,
-            commentEscalationMinutes: settings.commentEscalationMinutes,
+            userId: pages.userId,
+            commentId: comments.id,
+            thresholdMinutes: sql<number>`COALESCE(${settings.commentEscalationMinutes}, ${DEFAULT_COMMENT_ESCALATION_MINUTES})`,
         })
-        .from(settings);
+        .from(comments)
+        .innerJoin(posts, eq(comments.postId, posts.id))
+        .innerJoin(pages, eq(posts.pageId, pages.id))
+        .leftJoin(settings, eq(pages.userId, settings.userId))
+        .where(and(
+            eq(comments.replied, false),
+            eq(comments.needsAttention, false),
+            sql`${comments.createdTime} < NOW() - MAKE_INTERVAL(mins => COALESCE(${settings.commentEscalationMinutes}, ${DEFAULT_COMMENT_ESCALATION_MINUTES}))`,
+        ));
 
-    for (const us of userSettings) {
-        if (!us.userId) continue;
+    if (staleRows.length === 0) return;
 
-        const thresholdMinutes = us.commentEscalationMinutes ?? DEFAULT_COMMENT_ESCALATION_MINUTES;
-        const cutoff = new Date(Date.now() - thresholdMinutes * 60 * 1000);
+    // Group by user
+    const byUser = new Map<string, { ids: string[]; threshold: number }>();
+    for (const row of staleRows) {
+        if (!row.userId) continue;
+        let entry = byUser.get(row.userId);
+        if (!entry) {
+            entry = { ids: [], threshold: Number(row.thresholdMinutes) };
+            byUser.set(row.userId, entry);
+        }
+        entry.ids.push(row.commentId);
+    }
 
-        // Find stale comments for this user's pages
-        const staleComments = await db
-            .select({
-                commentId: comments.id,
-            })
-            .from(comments)
-            .innerJoin(posts, eq(comments.postId, posts.id))
-            .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(and(
-                eq(pages.userId, us.userId),
-                eq(comments.replied, false),
-                eq(comments.needsAttention, false),
-                lte(comments.createdTime, cutoff),
-            ));
-
-        if (staleComments.length === 0) continue;
-
-        // Batch update: flag all stale comments for this user
-        const staleIds = staleComments.map(c => c.commentId);
+    // Batch update + notify per user
+    for (const [userId, { ids, threshold }] of byUser) {
         await db
             .update(comments)
             .set({
                 needsAttention: true,
-                flagReason: `sla_no_reply:${thresholdMinutes}`,
+                flagReason: `sla_no_reply:${threshold}`,
                 updatedAt: new Date(),
             })
-            .where(sql`${comments.id} IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})`);
+            .where(sql`${comments.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 
-        // Send one notification per user (not per comment)
-        const count = staleComments.length;
-        notificationService.sendNotification(us.userId, {
+        const count = ids.length;
+        notificationService.sendNotification(userId, {
             type: 'stale_comment',
             titleEn: 'Unreplied Comments Need Attention',
             titleAr: 'تعليقات بدون رد تحتاج انتباهك',
-            bodyEn: `${formatCommentCountEn(count)} waiting for your reply for over ${thresholdMinutes} minutes.`,
-            bodyAr: `${formatCommentCountAr(count)} بانتظار ردك منذ أكثر من ${thresholdMinutes} دقيقة.`,
+            bodyEn: `${formatCommentCountEn(count)} waiting for your reply for over ${threshold} minutes.`,
+            bodyAr: `${formatCommentCountAr(count)} بانتظار ردك منذ أكثر من ${threshold} دقيقة.`,
             data: { deepLink: '/comments?filter=flagged' },
         }).catch(err => captureError(err, 'Escalation comment notification failed', { tags: { service: 'escalation', type: 'comment' } }));
     }
@@ -113,54 +114,56 @@ async function escalateComments(): Promise<void> {
 
 /**
  * Escalate stale messages: unreplied incoming + not already flagged + past SLA.
+ * Uses a single batch query instead of per-user loops.
  */
 async function escalateMessages(): Promise<void> {
-    const userSettings = await db
+    const staleRows = await db
         .select({
-            userId: settings.userId,
-            messageEscalationMinutes: settings.messageEscalationMinutes,
+            userId: pages.userId,
+            messageId: messages.id,
+            thresholdMinutes: sql<number>`COALESCE(${settings.messageEscalationMinutes}, ${DEFAULT_MESSAGE_ESCALATION_MINUTES})`,
         })
-        .from(settings);
+        .from(messages)
+        .innerJoin(pages, eq(messages.pageId, pages.id))
+        .leftJoin(settings, eq(pages.userId, settings.userId))
+        .where(and(
+            eq(messages.replied, false),
+            eq(messages.needsAttention, false),
+            eq(messages.direction, 'incoming'),
+            sql`${messages.createdTime} < NOW() - MAKE_INTERVAL(mins => COALESCE(${settings.messageEscalationMinutes}, ${DEFAULT_MESSAGE_ESCALATION_MINUTES}))`,
+        ));
 
-    for (const us of userSettings) {
-        if (!us.userId) continue;
+    if (staleRows.length === 0) return;
 
-        const thresholdMinutes = us.messageEscalationMinutes ?? DEFAULT_MESSAGE_ESCALATION_MINUTES;
-        const cutoff = new Date(Date.now() - thresholdMinutes * 60 * 1000);
+    // Group by user
+    const byUser = new Map<string, { ids: string[]; threshold: number }>();
+    for (const row of staleRows) {
+        if (!row.userId) continue;
+        let entry = byUser.get(row.userId);
+        if (!entry) {
+            entry = { ids: [], threshold: Number(row.thresholdMinutes) };
+            byUser.set(row.userId, entry);
+        }
+        entry.ids.push(row.messageId);
+    }
 
-        const staleMessages = await db
-            .select({
-                messageId: messages.id,
-            })
-            .from(messages)
-            .innerJoin(pages, eq(messages.pageId, pages.id))
-            .where(and(
-                eq(pages.userId, us.userId),
-                eq(messages.replied, false),
-                eq(messages.needsAttention, false),
-                eq(messages.direction, 'incoming'),
-                lte(messages.createdTime, cutoff),
-            ));
-
-        if (staleMessages.length === 0) continue;
-
-        const staleIds = staleMessages.map(m => m.messageId);
+    for (const [userId, { ids, threshold }] of byUser) {
         await db
             .update(messages)
             .set({
                 needsAttention: true,
-                flagReason: `sla_no_reply:${thresholdMinutes}`,
+                flagReason: `sla_no_reply:${threshold}`,
                 updatedAt: new Date(),
             })
-            .where(sql`${messages.id} IN (${sql.join(staleIds.map(id => sql`${id}`), sql`, `)})`);
+            .where(sql`${messages.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 
-        const msgCount = staleMessages.length;
-        notificationService.sendNotification(us.userId, {
+        const msgCount = ids.length;
+        notificationService.sendNotification(userId, {
             type: 'stale_comment',
             titleEn: 'Unreplied Messages Need Attention',
             titleAr: 'رسائل بدون رد تحتاج انتباهك',
-            bodyEn: `${formatMessageCountEn(msgCount)} waiting for your reply for over ${thresholdMinutes} minutes.`,
-            bodyAr: `${formatMessageCountAr(msgCount)} بانتظار ردك منذ أكثر من ${thresholdMinutes} دقيقة.`,
+            bodyEn: `${formatMessageCountEn(msgCount)} waiting for your reply for over ${threshold} minutes.`,
+            bodyAr: `${formatMessageCountAr(msgCount)} بانتظار ردك منذ أكثر من ${threshold} دقيقة.`,
             data: { deepLink: '/messages?filter=flagged' },
         }).catch(err => captureError(err, 'Escalation message notification failed', { tags: { service: 'escalation', type: 'message' } }));
     }

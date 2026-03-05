@@ -21,6 +21,9 @@ COPY backend ./backend
 RUN npm run build --workspace=@jawab24/shared
 RUN npm run build --workspace=jawab24-backend
 
+# Remove dev dependencies to reduce image size (~200-300MB savings)
+RUN npm prune --omit=dev
+
 # Production Stage
 FROM node:22-alpine AS production
 WORKDIR /app

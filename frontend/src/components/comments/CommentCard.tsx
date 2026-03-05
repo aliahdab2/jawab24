@@ -76,7 +76,7 @@ export function translateFlagReason(
     .join(separator);
 }
 
-export function CommentCard({
+export const CommentCard = React.memo(function CommentCard({
   comment,
   onClick,
   onQuickReply,
@@ -270,4 +270,4 @@ export function CommentCard({
       
     </div>
   );
-}
+});

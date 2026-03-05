@@ -28,7 +28,6 @@ vi.mock('../../src/db/schema', () => ({
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...args: unknown[]) => ({ args, op: 'and' })),
-    lte: vi.fn((field, value) => ({ field, value, op: 'lte' })),
     sql: Object.assign(
         vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values, type: 'sql' })),
         { join: vi.fn(() => ({ type: 'sql_join' })) }
@@ -39,12 +38,44 @@ import { runEscalationSweep, startEscalationCron, stopEscalationCron } from '../
 import { db } from '../../src/db';
 import { notificationService } from '../../src/services/notifications';
 
+/**
+ * Helper: mock the new batch-query pattern used by escalateComments / escalateMessages.
+ *
+ * After the N+1 fix, each function issues:
+ *   1. ONE db.select() batch query (comments join pages join settings) → staleRows
+ *   2. Per-user db.update() calls (still needed for different flag reasons per threshold)
+ *
+ * So a full runEscalationSweep() calls db.select() exactly TWICE:
+ *   - Once for comments batch
+ *   - Once for messages batch
+ */
+function mockBatchSelect(commentRows: any[], messageRows: any[]) {
+    let callIdx = 0;
+    const results = [commentRows, messageRows];
+
+    (db.select as any).mockImplementation(() => {
+        const idx = callIdx++;
+        return {
+            from: vi.fn().mockReturnValue({
+                innerJoin: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        leftJoin: vi.fn().mockReturnValue({
+                            where: vi.fn().mockResolvedValue(results[idx] || []),
+                        }),
+                    }),
+                    leftJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue(results[idx] || []),
+                    }),
+                }),
+            }),
+        };
+    });
+}
+
 describe('Escalation Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.useFakeTimers();
-        // Re-establish mock return value after clearAllMocks
-        (notificationService.sendNotification as any).mockResolvedValue('notif-123');
         (notificationService.sendNotification as any).mockResolvedValue('notif-123');
     });
 
@@ -55,100 +86,36 @@ describe('Escalation Service', () => {
     });
 
     describe('runEscalationSweep', () => {
-        it('should skip users with no stale comments', async () => {
-            // Mock settings query - one user with default escalation
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-1', commentEscalationMinutes: 60 },
-                ]),
-            });
-
-            // Mock stale comments query - none found
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        innerJoin: vi.fn().mockReturnValue({
-                            where: vi.fn().mockResolvedValue([]),
-                        }),
-                    }),
-                }),
-            });
-
-            // Mock settings query for messages
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-1', messageEscalationMinutes: 30 },
-                ]),
-            });
-
-            // Mock stale messages query - none found
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            });
+        it('should skip when no stale items found', async () => {
+            mockBatchSelect([], []);
 
             await runEscalationSweep();
 
-            // Should not have tried to update or notify
             expect(db.update).not.toHaveBeenCalled();
             expect(notificationService.sendNotification).not.toHaveBeenCalled();
         });
 
-        it('should escalate stale comments and send notification', async () => {
-            // Mock settings query for comments
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-1', commentEscalationMinutes: 60 },
-                ]),
-            });
+        it('should escalate stale comments and send one notification per user', async () => {
+            // Batch query returns 3 stale comments for user-1
+            mockBatchSelect(
+                [
+                    { userId: 'user-1', commentId: 'c-1', thresholdMinutes: 60 },
+                    { userId: 'user-1', commentId: 'c-2', thresholdMinutes: 60 },
+                    { userId: 'user-1', commentId: 'c-3', thresholdMinutes: 60 },
+                ],
+                [] // no stale messages
+            );
 
-            // Mock stale comments query - 3 stale comments found
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        innerJoin: vi.fn().mockReturnValue({
-                            where: vi.fn().mockResolvedValue([
-                                { commentId: 'c-1' },
-                                { commentId: 'c-2' },
-                                { commentId: 'c-3' },
-                            ]),
-                        }),
-                    }),
-                }),
-            });
-
-            // Mock batch update
             (db.update as any).mockReturnValue({
                 set: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue(undefined),
                 }),
             });
 
-            // Mock settings query for messages
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-1', messageEscalationMinutes: 30 },
-                ]),
-            });
-
-            // Mock stale messages query - none
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            });
-
             await runEscalationSweep();
 
-            // Should have updated the comments
             expect(db.update).toHaveBeenCalled();
-
-            // Should have sent exactly one notification for the user
+            expect(notificationService.sendNotification).toHaveBeenCalledTimes(1);
             expect(notificationService.sendNotification).toHaveBeenCalledWith(
                 'user-1',
                 expect.objectContaining({
@@ -159,31 +126,14 @@ describe('Escalation Service', () => {
         });
 
         it('should escalate stale messages and send notification', async () => {
-            // Mock settings query for comments - no users
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([]),
-            });
+            mockBatchSelect(
+                [], // no stale comments
+                [
+                    { userId: 'user-2', messageId: 'm-1', thresholdMinutes: 15 },
+                    { userId: 'user-2', messageId: 'm-2', thresholdMinutes: 15 },
+                ]
+            );
 
-            // Mock settings query for messages
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-2', messageEscalationMinutes: 15 },
-                ]),
-            });
-
-            // Mock stale messages query - 2 stale messages
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([
-                            { messageId: 'm-1' },
-                            { messageId: 'm-2' },
-                        ]),
-                    }),
-                }),
-            });
-
-            // Mock batch update
             (db.update as any).mockReturnValue({
                 set: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue(undefined),
@@ -202,96 +152,42 @@ describe('Escalation Service', () => {
             );
         });
 
-        it('should handle multiple users independently', async () => {
-            // Mock settings query for comments - two users
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-a', commentEscalationMinutes: 60 },
-                    { userId: 'user-b', commentEscalationMinutes: 120 },
-                ]),
-            });
+        it('should handle multiple users independently from single batch', async () => {
+            // Single batch returns stale items for two different users
+            mockBatchSelect(
+                [
+                    { userId: 'user-a', commentId: 'c-a1', thresholdMinutes: 60 },
+                    { userId: 'user-b', commentId: 'c-b1', thresholdMinutes: 120 },
+                    { userId: 'user-b', commentId: 'c-b2', thresholdMinutes: 120 },
+                ],
+                []
+            );
 
-            // Mock stale comments for user-a (1 stale)
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        innerJoin: vi.fn().mockReturnValue({
-                            where: vi.fn().mockResolvedValue([{ commentId: 'c-a1' }]),
-                        }),
-                    }),
-                }),
-            });
-
-            // Mock update for user-a
             (db.update as any).mockReturnValue({
                 set: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue(undefined),
                 }),
             });
 
-            // Mock stale comments for user-b (0 stale)
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        innerJoin: vi.fn().mockReturnValue({
-                            where: vi.fn().mockResolvedValue([]),
-                        }),
-                    }),
-                }),
-            });
-
-            // Mock settings query for messages - same two users
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-a', messageEscalationMinutes: 30 },
-                    { userId: 'user-b', messageEscalationMinutes: 30 },
-                ]),
-            });
-
-            // Mock stale messages for user-a (0)
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            });
-
-            // Mock stale messages for user-b (0)
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            });
-
             await runEscalationSweep();
 
-            // Only user-a should get a notification (user-b had no stale items)
-            expect(notificationService.sendNotification).toHaveBeenCalledTimes(1);
+            // Both users should get separate notifications
+            expect(notificationService.sendNotification).toHaveBeenCalledTimes(2);
             expect(notificationService.sendNotification).toHaveBeenCalledWith(
                 'user-a',
-                expect.objectContaining({
-                    type: 'stale_comment',
-                    data: { deepLink: '/comments?filter=flagged' },
-                })
+                expect.objectContaining({ data: { deepLink: '/comments?filter=flagged' } })
+            );
+            expect(notificationService.sendNotification).toHaveBeenCalledWith(
+                'user-b',
+                expect.objectContaining({ data: { deepLink: '/comments?filter=flagged' } })
             );
         });
 
-        it('should skip users with null userId', async () => {
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: null, commentEscalationMinutes: 60 },
-                ]),
-            });
-
-            // Mock settings for messages
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: null, messageEscalationMinutes: 30 },
-                ]),
-            });
+        it('should skip rows with null userId', async () => {
+            mockBatchSelect(
+                [{ userId: null, commentId: 'c-1', thresholdMinutes: 60 }],
+                [{ userId: null, messageId: 'm-1', thresholdMinutes: 30 }]
+            );
 
             await runEscalationSweep();
 
@@ -299,79 +195,64 @@ describe('Escalation Service', () => {
             expect(notificationService.sendNotification).not.toHaveBeenCalled();
         });
 
-        it('should use default thresholds when settings value is null', async () => {
-            // User with null escalation minutes (defaults: 60 for comments, 30 for messages)
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-1', commentEscalationMinutes: null },
-                ]),
-            });
-
-            // Mock stale comments query
-            (db.select as any).mockReturnValueOnce({
+        it('should not throw on database error', async () => {
+            (db.select as any).mockImplementation(() => ({
                 from: vi.fn().mockReturnValue({
                     innerJoin: vi.fn().mockReturnValue({
                         innerJoin: vi.fn().mockReturnValue({
-                            where: vi.fn().mockResolvedValue([{ commentId: 'c-1' }]),
+                            leftJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockRejectedValue(new Error('DB connection lost')),
+                            }),
                         }),
                     }),
                 }),
-            });
+            }));
 
-            // Mock update
+            await expect(runEscalationSweep()).resolves.not.toThrow();
+        });
+
+        /**
+         * REGRESSION TEST: Guard against N+1 query reintroduction.
+         *
+         * The old implementation called db.select() once per user (O(N) queries).
+         * The new batch implementation calls db.select() exactly TWICE total
+         * (once for comments, once for messages) regardless of user count.
+         */
+        it('should use exactly 2 SELECT queries regardless of user count (no N+1)', async () => {
+            // 5 users × multiple stale items each — should still be only 2 SELECT calls
+            mockBatchSelect(
+                [
+                    { userId: 'u1', commentId: 'c1', thresholdMinutes: 60 },
+                    { userId: 'u2', commentId: 'c2', thresholdMinutes: 60 },
+                    { userId: 'u3', commentId: 'c3', thresholdMinutes: 90 },
+                    { userId: 'u4', commentId: 'c4', thresholdMinutes: 120 },
+                    { userId: 'u5', commentId: 'c5', thresholdMinutes: 30 },
+                ],
+                [
+                    { userId: 'u1', messageId: 'm1', thresholdMinutes: 30 },
+                    { userId: 'u3', messageId: 'm3', thresholdMinutes: 15 },
+                ]
+            );
+
             (db.update as any).mockReturnValue({
                 set: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue(undefined),
                 }),
             });
 
-            // Mock settings for messages
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockResolvedValue([
-                    { userId: 'user-1', messageEscalationMinutes: null },
-                ]),
-            });
-
-            // Mock stale messages - none
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            });
-
             await runEscalationSweep();
 
-            // Should use default 60 min for comments
-            expect(notificationService.sendNotification).toHaveBeenCalledWith(
-                'user-1',
-                expect.objectContaining({
-                    type: 'stale_comment',
-                    data: { deepLink: '/comments?filter=flagged' },
-                })
-            );
-        });
-
-        it('should not throw on database error', async () => {
-            (db.select as any).mockReturnValueOnce({
-                from: vi.fn().mockRejectedValue(new Error('DB connection lost')),
-            });
-
-            // Should not throw
-            await expect(runEscalationSweep()).resolves.not.toThrow();
+            // Key assertion: exactly 2 db.select() calls (1 comments batch + 1 messages batch)
+            // NOT 5+ calls (which would indicate per-user querying)
+            expect(db.select).toHaveBeenCalledTimes(2);
         });
     });
 
     describe('startEscalationCron / stopEscalationCron', () => {
         it('should start and stop the cron interval', () => {
-            // Start
             startEscalationCron();
-
-            // Should have set an interval (setInterval called once internally + immediate run)
             expect(vi.getTimerCount()).toBe(1);
 
-            // Stop
             stopEscalationCron();
             expect(vi.getTimerCount()).toBe(0);
         });
@@ -379,7 +260,6 @@ describe('Escalation Service', () => {
         it('should not start multiple crons', () => {
             startEscalationCron();
             startEscalationCron(); // Second call should be a no-op
-
             expect(vi.getTimerCount()).toBe(1);
 
             stopEscalationCron();

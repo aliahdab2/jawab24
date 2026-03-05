@@ -12,7 +12,7 @@ const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgr
 const isProduction = process.env.NODE_ENV === 'production';
 export const client = postgres(connectionString, { 
     prepare: false, // Required for "Transaction" pool mode
-    max: isProduction ? 20 : 5, // Connection pool size
+    max: isProduction ? 30 : 5, // Connection pool size (30 for production to handle concurrent reply workers)
     idle_timeout: 20, // Close idle connections after 20 seconds
     connect_timeout: 10, // Timeout for new connections
 });
