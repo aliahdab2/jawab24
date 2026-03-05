@@ -480,7 +480,7 @@ export default function LoginPage() {
                   <Button
                     onClick={handleFacebookLogin}
                     size="lg"
-                    className="w-full bg-[#166FE5] hover:bg-[#1565D8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all active:scale-95"
+                    className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all hover:scale-[1.02] active:scale-95"
                   >
                     <div className="flex items-center justify-center gap-3 text-white">
                       <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />

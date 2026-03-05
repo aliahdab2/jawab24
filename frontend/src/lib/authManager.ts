@@ -191,10 +191,14 @@ class AuthManager {
   }
 
   /**
-   * Setup the 401 interceptor on an Axios instance
-   * 
-   * Industry Standard Pattern:
-   * 1. On 401, check if already refreshing
+   * Setup the auth error interceptor on an Axios instance
+   *
+   * Handles:
+   * - 401 (expired/invalid token) → refresh token → retry
+   * - 403 WORKSPACE_ACCESS_DENIED → clear stale workspace → retry (auto-resolves)
+   *
+   * Pattern:
+   * 1. On auth error, check if already refreshing
    * 2. If refreshing, queue the request
    * 3. If not refreshing, attempt refresh
    * 4. On success, retry all queued requests
@@ -212,8 +216,26 @@ class AuthManager {
           return Promise.reject(error);
         }
 
-        // Only handle 401 errors
-        if (error.response?.status !== 401) {
+        const status = error.response?.status;
+        const errorCode = (error.response?.data as { code?: string })?.code;
+
+        // 403 WORKSPACE_ACCESS_DENIED: stale workspace ID in store — clear it and retry
+        // The backend auto-resolves workspace for users with a single workspace
+        if (status === 403 && errorCode === 'WORKSPACE_ACCESS_DENIED' && !originalRequest._retry) {
+          originalRequest._retry = true;
+          try {
+            const { useAuthStore } = await import('./store');
+            useAuthStore.setState({ activeWorkspaceId: null });
+            // Remove stale header so backend can auto-resolve
+            delete originalRequest.headers['X-Workspace-Id'];
+            return axiosInstance(originalRequest);
+          } catch {
+            return Promise.reject(error);
+          }
+        }
+
+        // Only handle 401 (expired token) from here on
+        if (status !== 401) {
           return Promise.reject(error);
         }
 

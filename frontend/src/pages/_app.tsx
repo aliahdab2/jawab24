@@ -56,7 +56,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       queries: {
         staleTime: 5 * 60 * 1000,
         gcTime: 10 * 60 * 1000,
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: true,
         refetchOnReconnect: true,
         retry: 2,
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),

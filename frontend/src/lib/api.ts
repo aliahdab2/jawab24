@@ -87,12 +87,10 @@ api.interceptors.request.use((config) => {
 });
 
 /**
- * Response Interceptor - Centralized 401 handling via AuthManager
- * 
- * This uses the AuthManager singleton which handles:
- * - Token refresh with request queuing (prevents race conditions)
- * - Centralized logout on refresh failure
- * - Auth state notifications
+ * Response Interceptor - Centralized auth error handling via AuthManager
+ *
+ * Handles 401 (expired token) and session-related 403s (stale CSRF/workspace).
+ * Token refresh with request queuing, centralized logout on failure.
  */
 authManager.setupAuthInterceptor(api);
 
