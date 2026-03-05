@@ -246,9 +246,14 @@ function PlanCard({
             onClick={onSelect}
             loading={loading}
             disabled={isCurrentPlan}
-            variant={isPopular ? 'primary' : plan.slug === 'pro' ? 'primary' : 'secondary'}
-            className={`w-full py-3 text-sm rounded-xl transition-all duration-300 ${isPopular ? 'font-bold shadow-lg shadow-brand-200 dark:shadow-brand-900/30 hover:shadow-brand-300' : plan.slug === 'pro' ? 'font-extrabold !bg-zinc-800 dark:!bg-amber-600 !text-white hover:!bg-zinc-700 dark:hover:!bg-amber-500 shadow-lg shadow-zinc-300 dark:shadow-amber-900/30' : 'font-bold'
-              }`}
+            variant={isPro || isPopular || plan.slug === 'starter' ? 'primary' : 'secondary'}
+            className={clsx(
+              'w-full py-3 text-sm rounded-xl transition-all duration-300',
+              isPro && 'pricing-btn-pro',
+              isPopular && 'pricing-btn-business',
+              plan.slug === 'starter' && 'pricing-btn-starter',
+              !isPro && !isPopular && plan.slug !== 'starter' && 'font-bold',
+            )}
           >
             {isCurrentPlan ? (
               <div className="flex items-center justify-center gap-2">

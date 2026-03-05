@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { Badge } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -165,7 +166,7 @@ export function MessageDetailModal({
     m => m.direction === 'incoming' && !!m.resolved
   );
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 bg-zinc-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 pt-safe"
       onTouchMove={(e) => e.preventDefault()}
@@ -389,6 +390,7 @@ export function MessageDetailModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

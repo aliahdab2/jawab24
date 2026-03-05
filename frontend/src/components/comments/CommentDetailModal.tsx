@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
@@ -260,7 +261,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     ? `https://facebook.com/${comment.facebookCommentId}`
     : pageUrl;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center pt-safe animate-in fade-in duration-200"
       onTouchMove={(e) => e.preventDefault()}
@@ -489,6 +490,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

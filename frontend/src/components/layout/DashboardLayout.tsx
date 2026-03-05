@@ -507,18 +507,15 @@ function MobileMenuOverlay({
             onClick={onLogout}
             className={clsx(
               "w-full flex items-center justify-center gap-3 rounded-xl transition-all duration-200",
-              "bg-gradient-to-r from-red-50 to-card border border-red-100",
-              "hover:border-red-200 hover:shadow-md active:scale-[0.98]",
+              "btn-logout font-semibold active:scale-[0.98]",
               isLandscape ? "mt-4 py-3" : "mt-5 py-4"
             )}
           >
             <LogOut className={clsx(
-              "text-red-500",
               isRTL && "rotate-180",
               isLandscape ? "w-6 h-6" : "w-7 h-7"
             )} />
       <span className={clsx(
-              "font-semibold text-red-600",
               isLandscape ? "text-sm" : "text-base"
       )}>
               {t('nav.logout')}
