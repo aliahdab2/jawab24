@@ -501,6 +501,10 @@
     @apply bg-red-50 text-red-900 border-red-200
            dark:bg-red-900/30 dark:text-red-300 dark:border-red-700;
   }
+  .alert-violet {
+    @apply bg-violet-50 text-violet-700 border-violet-200
+           dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700;
+  }
 
   /* --- Danger zone (destructive action sections) --- */
   .danger-zone {

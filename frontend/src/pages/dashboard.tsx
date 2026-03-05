@@ -403,6 +403,7 @@ const DashboardPage: NextPageWithLayout = () => {
       {userSettings && (
         <AutoReplyStatusCard
           activePages={statsData.activePages}
+          totalPages={pages.length}
           commentsAutoReply={userSettings.commentsAutoReply}
           messagesAutoReply={userSettings.messagesAutoReply}
         />

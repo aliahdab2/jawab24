@@ -4,6 +4,7 @@ import { SystemStatusBanner } from '@/components/ui';
 
 interface AutoReplyStatusCardProps {
   activePages: number;
+  totalPages: number;
   commentsAutoReply: boolean;
   messagesAutoReply: boolean;
 }
@@ -12,7 +13,7 @@ interface AutoReplyStatusCardProps {
  * AutoReplyStatusCard - High-level indicator for Dashboard
  * Uses the shared SystemStatusBanner UI component.
  */
-export function AutoReplyStatusCard({ activePages, commentsAutoReply, messagesAutoReply }: AutoReplyStatusCardProps) {
+export function AutoReplyStatusCard({ activePages, totalPages, commentsAutoReply, messagesAutoReply }: AutoReplyStatusCardProps) {
   const { t } = useTranslation();
   const [isDismissed, setIsDismissed] = useState(false);
 
@@ -24,11 +25,11 @@ export function AutoReplyStatusCard({ activePages, commentsAutoReply, messagesAu
     }
   }, []);
 
-  if (activePages === 0) {
+  if (totalPages === 0) {
     return null;
   }
 
-  const isActive = commentsAutoReply || messagesAutoReply;
+  const isActive = (commentsAutoReply || messagesAutoReply) && activePages > 0;
 
   // Handle dismissal for success banner
   const handleDismiss = () => {
@@ -43,6 +44,7 @@ export function AutoReplyStatusCard({ activePages, commentsAutoReply, messagesAu
     return (
       <SystemStatusBanner
         type="success"
+        colorScheme="violet"
         title={t('dashboard.activeRepliesOn')}
         description={t('dashboard.autoReplyNote')}
         onDismiss={handleDismiss}
