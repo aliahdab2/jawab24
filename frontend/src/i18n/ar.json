@@ -443,7 +443,7 @@
   "rules.deleteRule": "حذف القاعدة",
   "rules.deleteRuleConfirm": "هل أنت متأكد أنك تريد حذف هذه القاعدة؟",
   "rules.duplicateRule": "نسخ القاعدة",
-  "rules.keywordsPlaceholder": "price, cost, how much, سعر",
+  "rules.keywordsPlaceholder": "كم السعر, بكم المنتج, how much, what's the price",
   "rules.keywordsHelper": "افصل بين الكلمات بفواصل",
   "rules.newTemplate": "قالب جديد",
   "rules.quickCreateTemplate": "إنشاء قالب سريع",

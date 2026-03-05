@@ -443,7 +443,7 @@
   "rules.deleteRule": "Delete Rule",
   "rules.deleteRuleConfirm": "Are you sure you want to delete this rule?",
   "rules.duplicateRule": "Duplicate Rule",
-  "rules.keywordsPlaceholder": "price, cost, how much, سعر",
+  "rules.keywordsPlaceholder": "how much, what's the price, كم السعر, بكم",
   "rules.keywordsHelper": "Separate keywords with commas",
   "rules.newTemplate": "New Template",
   "rules.quickCreateTemplate": "Quick create a template",
