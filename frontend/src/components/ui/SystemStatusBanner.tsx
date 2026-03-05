@@ -108,7 +108,7 @@ export function SystemStatusBanner({
           "shadow-sm font-bold bg-card border-opacity-50 transition-all px-3 py-1.5 h-auto",
           isWarning ? "border-amber-200 dark:border-amber-700 hover:bg-card text-amber-900 dark:text-amber-300" :
           isError ? "border-red-200 dark:border-red-700 hover:bg-card text-red-900 dark:text-red-300" :
-          isViolet ? "border-violet-200 dark:border-violet-700 hover:bg-card text-violet-700 dark:text-violet-300" :
+          isViolet ? "border-violet-200 dark:border-violet-800/60 hover:bg-card text-violet-800 dark:text-violet-200" :
           "border-emerald-200 dark:border-emerald-700 hover:bg-card text-emerald-700 dark:text-emerald-300",
           isMobile ? "text-xs px-2 py-1" : "text-sm"
         )}
@@ -164,7 +164,7 @@ export function SystemStatusBanner({
               {description && (
                 <p className={clsx(
                   "text-xs sm:text-sm leading-relaxed truncate sm:whitespace-normal transition-all hidden sm:block sm:mt-0.5",
-                  isViolet ? "text-violet-600/90 dark:text-violet-400/90" :
+                  isViolet ? "text-violet-700/90 dark:text-violet-300/90" :
                   isSuccess ? "text-emerald-600/90 dark:text-emerald-400/90" :
                   isWarning ? "text-amber-700/80 dark:text-amber-300/80" :
                   "text-red-700/80 dark:text-red-300/80"
@@ -214,7 +214,7 @@ export function SystemStatusBanner({
             {description && (
               <p className={clsx(
                 "text-xs sm:text-sm leading-relaxed",
-                isViolet ? "text-violet-600/90 dark:text-violet-400/90" :
+                isViolet ? "text-violet-700/90 dark:text-violet-300/90" :
                 isSuccess ? "text-emerald-600/90 dark:text-emerald-400/90" :
                 isWarning ? "text-amber-700/80 dark:text-amber-300/80" :
                 "text-red-700/80 dark:text-red-300/80"

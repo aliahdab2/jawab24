@@ -52,15 +52,32 @@ export function AutoReplyStatusCard({ activePages, totalPages, commentsAutoReply
     );
   }
 
-  // Warning Banner (Amber) - Configured but disabled
+  const settingsOff = !commentsAutoReply && !messagesAutoReply;
+
+  // Warning Banner - Settings toggles are OFF
+  if (settingsOff) {
+    return (
+      <SystemStatusBanner
+        type="warning"
+        title={t('dashboard.autoReplyConfiguredButDisabled')}
+        description={t('dashboard.autoReplyConfiguredNote')}
+        cta={{
+          label: t('dashboard.goToSettings'),
+          href: '/settings'
+        }}
+      />
+    );
+  }
+
+  // Warning Banner - Settings ON but no page has auto-reply enabled
   return (
     <SystemStatusBanner
       type="warning"
       title={t('dashboard.autoReplyConfiguredButDisabled')}
-      description={t('dashboard.autoReplyConfiguredNote')}
+      description={t('dashboard.autoReplyNoPagesActive')}
       cta={{
-        label: t('dashboard.goToSettings'),
-        href: '/settings'
+        label: t('dashboard.goToPages'),
+        href: '/pages'
       }}
     />
   );
