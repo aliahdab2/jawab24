@@ -224,6 +224,7 @@ export class AnalyticsService {
                 INNER JOIN ${pages} ON ${posts.pageId} = ${pages.id}
                 WHERE ${pages.workspaceId} = ${workspaceId}
                   AND ${comments.replied} = true
+                  AND (${comments.needsAttention} = false OR ${comments.needsAttention} IS NULL)
                   AND ${comments.createdTime} >= ${since}
                   ${pageFilter}
                 UNION ALL
@@ -233,6 +234,7 @@ export class AnalyticsService {
                 INNER JOIN ${pages} ON ${instagramMedia.pageId} = ${pages.id}
                 WHERE ${pages.workspaceId} = ${workspaceId}
                   AND ${instagramComments.replied} = true
+                  AND (${instagramComments.needsAttention} = false OR ${instagramComments.needsAttention} IS NULL)
                   AND ${instagramComments.createdTime} >= ${since}
                   ${pageFilter}
                 UNION ALL
@@ -241,6 +243,7 @@ export class AnalyticsService {
                 INNER JOIN ${pages} ON ${messages.pageId} = ${pages.id}
                 WHERE ${pages.workspaceId} = ${workspaceId}
                   AND ${messages.replied} = true
+                  AND (${messages.needsAttention} = false OR ${messages.needsAttention} IS NULL)
                   AND ${messages.direction} = 'incoming'
                   AND ${messages.createdTime} >= ${since}
                   ${pageFilter}
