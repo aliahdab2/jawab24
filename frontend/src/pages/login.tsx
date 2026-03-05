@@ -223,8 +223,8 @@ export default function LoginPage() {
       icon: ShieldCheck,
       title: t('auth.secureOfficial'),
       desc: t('auth.secureOfficialDesc'),
-      color: 'text-brand-600 dark:text-[#4f74b2]',
-      bg: 'bg-brand-50 dark:bg-[rgba(79,116,178,0.12)]'
+      color: 'text-brand-600 dark:text-brand-400',
+      bg: 'bg-brand-50 dark:bg-brand-400/10'
     },
     {
       icon: MessageSquare,
@@ -250,8 +250,8 @@ export default function LoginPage() {
       <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] relative">
         {/* Dark mode decorative overlays — span both panels seamlessly */}
         <div className="hidden dark:block absolute inset-0 pointer-events-none z-0" aria-hidden="true">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(79,116,178,0.15),transparent_60%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(79,116,178,0.10),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(93,174,164,0.15),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(93,174,164,0.10),transparent_60%)]" />
           <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.06]" />
         </div>
 
@@ -302,7 +302,7 @@ export default function LoginPage() {
                 "{t('auth.testimonialQuote')}"
               </p>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-brand-500 dark:bg-[#4f74b2] flex items-center justify-center text-white font-bold text-xs">MA</div>
+                <div className="w-8 h-8 rounded-full bg-brand-500 dark:bg-brand-400 flex items-center justify-center text-white font-bold text-xs">MA</div>
                 <div>
                   <div className="text-white font-bold text-xs">Mohammed A.</div>
                   <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">{t('auth.testimonialAuthor')}</div>

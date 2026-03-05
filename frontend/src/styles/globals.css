@@ -112,68 +112,68 @@
 
   /* ──────────────────────────────────────────────────────────────────
      DARK PALETTE REFERENCE (swap these 7 values to re-theme dark mode)
-     Background: #0d1827   rgb(13 24 39)     — dark navy (lightened)
-     Cards:      #152035   rgb(21 32 53)     — clear elevation
-     Borders:    #1e2f4a   rgb(30 47 74)     — more visible
-     Primary:    #4f74b2   rgb(79 116 178)   — blue (was teal)
-     Secondary:  #1b2840   rgb(27 40 64)     — elevated surface
-     Muted text: #96aabf   rgb(150 170 191)  — improved contrast
-     Text:       #e8edf3   rgb(232 237 243)
+     Background: #060d18   rgb(6 13 24)
+     Cards:      #0a1220   rgb(10 18 32)
+     Borders:    #141e30   rgb(20 30 48)
+     Primary:    #5daea4   rgb(93 174 164)    — teal
+     Secondary:  #4f74b2   rgb(79 116 178)    — blue
+     Muted text: #788da0   rgb(120 135 160)
+     Text:       #ebf0f5   rgb(235 240 245)
   ────────────────────────────────────────────────────────────────── */
   .dark {
     /* Semantic tokens */
-    --background: 13 24 39;           /* #0d1827 (dark navy, lightened) */
-    --foreground: 232 237 243;        /* #e8edf3 */
+    --background: 6 13 24;            /* #060d18 (deep navy-black) */
+    --foreground: 235 240 245;        /* #ebf0f5 */
 
-    --card: 21 32 53;                 /* #152035 (visible elevation) */
-    --card-foreground: 232 237 243;
+    --card: 10 18 32;                 /* #0a1220 */
+    --card-foreground: 235 240 245;
 
-    --secondary: 27 40 64;            /* #1b2840 (hover / elevated surface) */
-    --secondary-foreground: 232 237 243;
+    --secondary: 14 22 38;            /* #0e1626 (hover / elevated surface) */
+    --secondary-foreground: 235 240 245;
 
-    --muted: 27 40 64;               /* #1b2840 */
-    --muted-foreground: 150 170 191;  /* #96aabf (WCAG AA ~5.3:1) */
+    --muted: 14 22 38;
+    --muted-foreground: 120 135 160;  /* #788da0 */
 
-    --border: 30 47 74;               /* #1e2f4a (more visible) */
+    --border: 20 30 48;               /* #141e30 */
     --ring: 79 116 178;               /* #4f74b2 (blue) */
 
-    --primary: 79 116 178;            /* #4f74b2 (blue — was teal) */
-    --primary-foreground: 232 237 243; /* light text on blue */
+    --primary: 93 174 164;            /* #5daea4 (teal) */
+    --primary-foreground: 6 13 24;    /* #060d18 */
 
     /* Keep semantic colors */
     --accent: 249 115 22;             /* orange (warnings / highlights) */
     --accent-foreground: 255 255 255;
 
     --destructive: 248 113 113;       /* red */
-    --destructive-foreground: 13 24 39;
+    --destructive-foreground: 6 13 24;
 
-    /* Surface scale (navy-blue based) */
-    --surface-50: 13 24 39;           /* #0d1827  page bg */
-    --surface-100: 21 32 53;          /* #152035  subtle elevation */
-    --surface-200: 27 40 64;          /* #1b2840  cards */
-    --surface-300: 34 52 84;          /* #223454  hover */
-    --surface-400: 44 66 104;         /* #2c4268  borders */
-    --surface-500: 70 90 124;         /* #465a7c  muted icons */
-    --surface-600: 150 170 191;       /* #96aabf  muted text */
-    --surface-700: 185 198 215;       /* #b9c6d7  secondary text */
-    --surface-800: 214 222 233;       /* #d6dee9  near-white */
-    --surface-900: 232 237 243;       /* #e8edf3  foreground */
+    /* Surface scale (navy-based) */
+    --surface-50: 6 13 24;            /* #060d18  page */
+    --surface-100: 10 18 32;          /* subtle elevation */
+    --surface-200: 14 22 38;          /* #0e1626  cards */
+    --surface-300: 20 30 48;          /* hover */
+    --surface-400: 30 42 62;          /* borders */
+    --surface-500: 60 75 100;         /* muted icons */
+    --surface-600: 120 135 160;       /* #788da0  muted text */
+    --surface-700: 170 182 200;       /* secondary text */
+    --surface-800: 210 218 230;       /* near-white */
+    --surface-900: 235 240 245;       /* #ebf0f5 */
 
-    /* Brand scale (blue-based — #4f74b2) */
-    --brand-50: 10 18 40;
-    --brand-100: 18 30 64;
-    --brand-200: 30 50 100;
-    --brand-300: 50 80 148;
-    --brand-400: 79 116 178;          /* #4f74b2 */
-    --brand-500: 66 100 160;
-    --brand-600: 52 84 140;
-    --brand-700: 40 66 116;
-    --brand-800: 28 48 90;
-    --brand-900: 18 32 64;
-    --brand-950: 10 18 42;
+    /* Brand scale (teal-based — #5daea4) */
+    --brand-50: 8 24 22;
+    --brand-100: 14 42 38;
+    --brand-200: 28 72 66;
+    --brand-300: 55 130 120;
+    --brand-400: 93 174 164;          /* #5daea4 */
+    --brand-500: 78 155 145;
+    --brand-600: 62 135 126;
+    --brand-700: 48 110 102;
+    --brand-800: 35 82 76;
+    --brand-900: 22 52 48;
+    --brand-950: 10 28 24;
 
-    /* Accent scale (orange — warmer tints) */
-    --accent-50: 35 18 6;
+    /* Accent scale (orange — unchanged) */
+    --accent-50: 30 18 8;
     --accent-100: 55 28 8;
     --accent-200: 90 45 12;
     --accent-300: 145 70 20;
@@ -360,7 +360,7 @@
 
   .dark .input:focus {
     border-color: rgb(var(--ring));
-    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 0 0 4px rgba(79, 116, 178, 0.25);
   }
 
   .label {
