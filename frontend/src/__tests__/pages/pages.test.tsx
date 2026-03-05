@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PagesPage from '@/pages/pages';
 import type { Language } from '@/i18n';
 import { pagesApi, api } from '@/lib/api';
@@ -104,6 +105,17 @@ const MOCK_PAGES = [
     },
 ];
 
+const createWrapper = () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    Wrapper.displayName = 'TestQueryWrapper';
+    return Wrapper;
+};
+
+const renderPage = (ui: React.ReactElement) => render(ui, { wrapper: createWrapper() });
+
 describe('PagesPage - Toggle Error Handling', () => {
     beforeEach(() => {
         mockT.mockClear();
@@ -123,7 +135,7 @@ describe('PagesPage - Toggle Error Handling', () => {
     });
 
     it('should render pages with toggles', async () => {
-        render(<PagesPage />);
+        renderPage(<PagesPage />);
 
         await waitFor(() => {
             expect(screen.getAllByText('My Business Page')[0]).toBeInTheDocument();
@@ -141,7 +153,7 @@ describe('PagesPage - Toggle Error Handling', () => {
             },
         });
 
-        render(<PagesPage />);
+        renderPage(<PagesPage />);
 
         await waitFor(() => {
             expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
@@ -172,7 +184,7 @@ describe('PagesPage - Toggle Error Handling', () => {
             response: { status: 500, data: {} },
         });
 
-        render(<PagesPage />);
+        renderPage(<PagesPage />);
 
         await waitFor(() => {
             expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
@@ -190,7 +202,7 @@ describe('PagesPage - Toggle Error Handling', () => {
     });
 
     it('should toggle Facebook OFF successfully without toast', async () => {
-        render(<PagesPage />);
+        renderPage(<PagesPage />);
 
         await waitFor(() => {
             expect(screen.getAllByText('My Business Page')[0]).toBeInTheDocument();
@@ -217,7 +229,7 @@ describe('PagesPage - Toggle Error Handling', () => {
             },
         });
 
-        render(<PagesPage />);
+        renderPage(<PagesPage />);
 
         await waitFor(() => {
             expect(screen.getAllByText('My Business Page')[0]).toBeInTheDocument();

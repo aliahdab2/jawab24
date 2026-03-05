@@ -263,19 +263,29 @@ const MessagesPage: NextPageWithLayout = () => {
     return data.pages.flatMap(page => page.data);
   }, [data]);
 
-  // Check if a conversation needs human attention
+  // Check if a conversation needs human attention (single-pass, no copy/sort)
   const checkConversationNeedsAttention = useCallback((msgs: Message[]): boolean => {
-    // Check backend flags first
-    if (msgs.some(m => m.needsAttention && !m.replied)) return true;
+    let latestIncoming: Message | null = null;
+    let latestIncomingTime = 0;
+
+    for (const m of msgs) {
+      // Check backend flags first
+      if (m.needsAttention && !m.replied) return true;
+
+      // Track latest incoming message in the same pass
+      if (m.direction === 'incoming') {
+        const time = m.createdAt ? new Date(m.createdAt).getTime() : 0;
+        if (time > latestIncomingTime) {
+          latestIncomingTime = time;
+          latestIncoming = m;
+        }
+      }
+    }
 
     // Fallback: client-side keyword check for messages predating the flagging system
-    const lastIncoming = [...msgs].filter(m => m.direction === 'incoming').sort((a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )[0];
-
-    if (lastIncoming && !lastIncoming.replied) {
+    if (latestIncoming && !latestIncoming.replied) {
       const helpKeywords = ['human', 'agent', 'help', 'support', 'talk to someone', 'مساعدة', 'بشري', 'شخص', 'موظف'];
-      const messageText = lastIncoming.message.toLowerCase();
+      const messageText = latestIncoming.message.toLowerCase();
       if (helpKeywords.some(kw => messageText.includes(kw))) {
         return true;
       }
@@ -374,18 +384,25 @@ const MessagesPage: NextPageWithLayout = () => {
     return `https://facebook.com/${page.facebookPageId}`;
   }, [selectedConversation, pages]);
 
-  // Fetch pause status when a conversation is selected
+  // Fetch pause status when a conversation is selected (cached by senderId)
+  const { data: pauseStatusData } = useQuery({
+    queryKey: ['pause-status', selectedConversation?.senderId],
+    queryFn: async () => {
+      const pageId = selectedConversation!.lastMessage.pageId;
+      const res = await messagesApi.getPauseStatus(selectedConversation!.senderId, pageId);
+      return res.data;
+    },
+    enabled: !!selectedConversation?.senderId && !!selectedConversation?.lastMessage.pageId,
+    staleTime: 60_000, // 1 minute — pause status doesn't change often
+  });
+
+  // Sync pause status from query into selectedConversation
   useEffect(() => {
-    if (!selectedConversation) return;
-    const pageId = selectedConversation.lastMessage.pageId;
-    if (!pageId) return;
-    messagesApi.getPauseStatus(selectedConversation.senderId, pageId)
-      .then(res => {
-        setSelectedConversation(prev => prev ? { ...prev, pauseStatus: res.data } : null);
-      })
-      .catch(() => { /* ignore — pause status is optional */ });
+    if (pauseStatusData && selectedConversation) {
+      setSelectedConversation(prev => prev ? { ...prev, pauseStatus: pauseStatusData } : null);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConversation?.senderId]);
+  }, [pauseStatusData]);
 
   // Intersection Observer
   useEffect(() => {

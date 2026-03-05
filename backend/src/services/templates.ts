@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { templates } from '../db/schema';
+import { templates, rules } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { CreateTemplateDTO, UpdateTemplateDTO } from '../types';
 
@@ -65,6 +65,12 @@ export class TemplatesService {
      * Delete a template
      */
     async deleteTemplate(workspaceId: string, templateId: string) {
+        // Deactivate rules that reference this template before deleting
+        await db
+            .update(rules)
+            .set({ active: false, updatedAt: new Date() })
+            .where(and(eq(rules.templateId, templateId), eq(rules.workspaceId, workspaceId)));
+
         await db
             .delete(templates)
             .where(and(eq(templates.id, templateId), eq(templates.workspaceId, workspaceId)));

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, type ReactElement } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -27,8 +28,7 @@ import type { NextPageWithLayout } from './_app';
 const PagesPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { isAuthenticated, fbToken } = useAuthStore();
-  const [pages, setPages] = useState<Page[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [editingPage, setEditingPage] = useState<Page | null>(null);
   const [saving, setSaving] = useState(false);
@@ -38,27 +38,30 @@ const PagesPage: NextPageWithLayout = () => {
 
   // ESC key handled inside KnowledgeBaseModal
 
-  const fetchPages = useCallback(async () => {
-    try {
-      setLoading(true);
+  const { data: pagesRaw, isLoading: loading } = useQuery({
+    queryKey: ['pages'],
+    queryFn: async () => {
       const response = await pagesApi.getAll();
       const data = Array.isArray(response.data)
         ? response.data
         : (Array.isArray(response.data?.data) ? response.data.data : []);
-      setPages(data);
-    } catch (error) {
-      captureError(error, 'Failed to fetch pages', { tags: { page: 'pages' } });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return data as Page[];
+    },
+    enabled: isAuthenticated,
+  });
 
-  // Fetch pages on load - use isAuthenticated instead of token (web uses cookies)
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchPages();
-    }
-  }, [isAuthenticated, fetchPages]);
+  const pages = useMemo(() => pagesRaw ?? [], [pagesRaw]);
+
+  const setPages = useCallback((updater: Page[] | ((prev: Page[]) => Page[])) => {
+    queryClient.setQueryData<Page[]>(['pages'], (old) => {
+      const prev = old ?? [];
+      return typeof updater === 'function' ? updater(prev) : updater;
+    });
+  }, [queryClient]);
+
+  const fetchPages = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['pages'] });
+  }, [queryClient]);
 
   // Auto-sync if no pages found after initial load (only once)
   const syncAttemptedRef = useRef(false);
@@ -68,7 +71,6 @@ const PagesPage: NextPageWithLayout = () => {
 
   const handleSync = useCallback(async () => {
     if (!fbToken) {
-      console.error('No FB token available for sync');
       return;
     }
 
@@ -78,7 +80,7 @@ const PagesPage: NextPageWithLayout = () => {
       await api.post('/pages/sync', { accessToken: fbToken });
 
       // Refresh list
-      await fetchPages();
+      fetchPages();
 
     } catch (error) {
       captureError(error, 'Page sync failed', { tags: { page: 'pages', action: 'sync' } });
@@ -113,7 +115,7 @@ const PagesPage: NextPageWithLayout = () => {
         }
 
         await api.post('/pages/sync', { accessToken: result.accessToken.token });
-        await fetchPages();
+        fetchPages();
       } catch (error) {
         captureError(error, 'Reconnect failed', { tags: { page: 'pages', action: 'reconnect-android' } });
       } finally {

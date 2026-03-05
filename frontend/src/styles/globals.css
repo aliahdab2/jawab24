@@ -716,6 +716,22 @@
     margin-inline-end: 1rem;
   }
 
+  .me-6 {
+    margin-inline-end: 1.5rem;
+  }
+
+  .me-8 {
+    margin-inline-end: 2rem;
+  }
+
+  .me-12 {
+    margin-inline-end: 3rem;
+  }
+
+  .me-16 {
+    margin-inline-end: 4rem;
+  }
+
   .me-auto {
     margin-inline-end: auto;
   }
@@ -740,8 +756,16 @@
     padding-inline-start: 1rem;
   }
 
+  .ps-6 {
+    padding-inline-start: 1.5rem;
+  }
+
   .ps-10 {
     padding-inline-start: 2.5rem;
+  }
+
+  .ps-14 {
+    padding-inline-start: 3.5rem;
   }
 
   .pe-0 {
@@ -762,6 +786,18 @@
 
   .pe-4 {
     padding-inline-end: 1rem;
+  }
+
+  .pe-6 {
+    padding-inline-end: 1.5rem;
+  }
+
+  .pe-10 {
+    padding-inline-end: 2.5rem;
+  }
+
+  .pe-12 {
+    padding-inline-end: 3rem;
   }
 
   .start-0 {

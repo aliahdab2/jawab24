@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PagesPage from '@/pages/pages';
 
 // Mock @/lib/api
@@ -72,6 +73,17 @@ vi.mock('@/lib/store', () => ({
   })),
 }));
 
+const createWrapper = () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  Wrapper.displayName = 'TestQueryWrapper';
+  return Wrapper;
+};
+
+const renderPage = (ui: React.ReactElement) => render(ui, { wrapper: createWrapper() });
+
 describe('PagesPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -89,7 +101,7 @@ describe('PagesPage', () => {
 
   describe('Empty State', () => {
     it('should show empty state when no pages', async () => {
-      render(<PagesPage />);
+      renderPage(<PagesPage />);
 
       await waitFor(() => {
         expect(screen.getByText('pages.noPages')).toBeInTheDocument();
@@ -97,7 +109,7 @@ describe('PagesPage', () => {
     });
 
     it('should show connect button in empty state', async () => {
-      render(<PagesPage />);
+      renderPage(<PagesPage />);
 
       await waitFor(() => {
         // The empty state should have a connect button
@@ -121,7 +133,7 @@ describe('PagesPage', () => {
         ],
       });
 
-      render(<PagesPage />);
+      renderPage(<PagesPage />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();
@@ -143,7 +155,7 @@ describe('PagesPage', () => {
         ],
       });
 
-      render(<PagesPage />);
+      renderPage(<PagesPage />);
 
       // Wait for page to load first
       await waitFor(() => {
@@ -159,7 +171,7 @@ describe('PagesPage', () => {
     it('should show confirmation dialog when connect button is clicked', async () => {
       mockPagesApiGetAll.mockResolvedValue({ data: [] });
 
-      render(<PagesPage />);
+      renderPage(<PagesPage />);
 
       await waitFor(() => {
         expect(screen.getByText('pages.noPages')).toBeInTheDocument();
@@ -180,7 +192,7 @@ describe('PagesPage', () => {
     it('should close dialog when cancel is clicked', async () => {
       mockPagesApiGetAll.mockResolvedValue({ data: [] });
 
-      render(<PagesPage />);
+      renderPage(<PagesPage />);
 
       await waitFor(() => {
         expect(screen.getByText('pages.noPages')).toBeInTheDocument();
@@ -216,7 +228,7 @@ describe('PagesPage', () => {
         ],
       });
 
-      render(<PagesPage />);
+      renderPage(<PagesPage />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();
@@ -248,7 +260,7 @@ describe('PagesPage', () => {
         ],
       });
 
-      render(<PagesPage />);
+      renderPage(<PagesPage />);
 
       await waitFor(() => {
         expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();

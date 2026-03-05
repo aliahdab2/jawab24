@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type ReactElement } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
@@ -103,241 +104,207 @@ const DashboardPage: NextPageWithLayout = () => {
   const { isAuthenticated, fbToken, user } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
-  
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [recentComments, setRecentComments] = useState<Comment[]>([]);
-  
+
   // Selected Comment State
   const [selectedCommentData, setSelectedCommentData] = useState<{ comment: Comment, mode: 'full' | 'quick' } | null>(null);
-  
-  const [pages, setPages] = useState<Page[]>([]);
+
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
   const [expandedPageId, setExpandedPageId] = useState<string | null>(null);
-  const [needsAttentionItems, setNeedsAttentionItems] = useState<NeedsAttentionItem[]>([]);
-  const [statsData, setStatsData] = useState({
-    // Comment stats
-    totalComments: 0,
-    repliedToday: 0,
-    pendingReplies: 0,
-    needsAttention: 0,
-    commentsNeedsAction: 0,
-    activePages: 0,
-    aiReplies: 0,
-    templateReplies: 0,
-    manualReplies: 0,
-    // Message stats
-    totalMessages: 0,
-    messagesPending: 0,
-    messagesNeedsAttention: 0,
-    messagesNeedsAction: 0,
-    messagesAiReplies: 0,
-    messagesTemplateReplies: 0,
-    messagesManualReplies: 0
+
+  // --- React Query hooks (cached, auto-refetched via SSE invalidation) ---
+
+  const { data: commentStats, isError: commentStatsError } = useQuery({
+    queryKey: ['comments-stats'],
+    queryFn: async () => {
+      const res = await commentsApi.getStats();
+      return res.data || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0 } };
+    },
+    enabled: isAuthenticated,
   });
-  const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [userSettings, setUserSettings] = useState<{ commentsAutoReply: boolean; messagesAutoReply: boolean } | null>(null);
-  const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
-  const [sectionErrors, setSectionErrors] = useState({
-    comments: false,
-    messages: false,
-    recentComments: false,
-    pages: false,
+
+  const { data: messageStats, isError: messageStatsError } = useQuery({
+    queryKey: ['messages-stats'],
+    queryFn: async () => {
+      const res = await messagesApi.getStats();
+      return res.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: recentComments = [], isError: recentCommentsError } = useQuery({
+    queryKey: ['dashboard-recent-comments'],
+    queryFn: async () => {
+      const res = await commentsApi.getAll({ limit: 5 });
+      if (Array.isArray(res.data)) return res.data as unknown as Comment[];
+      if (Array.isArray(res.data?.data)) return res.data.data as unknown as Comment[];
+      return [];
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: pages = [], isError: pagesError } = useQuery({
+    queryKey: ['pages'],
+    queryFn: async () => {
+      const res = await pagesApi.getAll();
+      if (Array.isArray(res.data)) return res.data as Page[];
+      if (Array.isArray(res.data?.data)) return res.data.data as Page[];
+      return [];
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: usage } = useQuery({
+    queryKey: ['dashboard-usage'],
+    queryFn: async () => {
+      const res = await subscriptionApi.getUsage();
+      const usageData = res.data?.data ?? res.data;
+      if (usageData?.subscription !== undefined || usageData?.aiReplies !== undefined) {
+        return usageData as UsageSummary;
+      }
+      return null;
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: userSettings } = useQuery({
+    queryKey: ['dashboard-settings'],
+    queryFn: async () => {
+      const res = await settingsApi.get();
+      return {
+        commentsAutoReply: res.data?.commentsAutoReply ?? true,
+        messagesAutoReply: res.data?.messagesAutoReply ?? true,
+      };
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: analytics, isError: analyticsError } = useQuery({
+    queryKey: ['dashboard-analytics'],
+    queryFn: async () => {
+      const res = await analyticsApi.getOverview(30);
+      return (res.data ?? null) as AnalyticsOverview | null;
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: needsActionComments } = useQuery({
+    queryKey: ['dashboard-needs-action-comments'],
+    queryFn: async () => {
+      const res = await commentsApi.getAll({ replied: false, resolved: false, limit: 5 });
+      if (Array.isArray(res.data)) return res.data;
+      return res.data?.data ?? [];
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: needsActionMessages } = useQuery({
+    queryKey: ['dashboard-needs-action-messages'],
+    queryFn: async () => {
+      const res = await messagesApi.getAll({ replied: false, resolved: false, limit: 5 });
+      if (Array.isArray(res.data)) return res.data;
+      return res.data?.data ?? [];
+    },
+    enabled: isAuthenticated,
+  });
+
+  // Derive loading state from individual queries
+  const loading = isAuthenticated && (
+    commentStats === undefined && !commentStatsError
+  );
+
+  // Refetch all dashboard data (for retry buttons and after actions)
+  const refetchAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-recent-comments'] });
+    queryClient.invalidateQueries({ queryKey: ['pages'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-usage'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-settings'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-comments'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-messages'] });
+  }, [queryClient]);
+
+  // --- Derived state (computed from query data) ---
+
+  const statsData = useMemo(() => {
+    const stats = commentStats || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0 } };
+    const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
+    const activePages = pages.filter(p => p.autoReplyEnabled).length;
+
+    return {
+      totalComments: stats.total,
+      repliedToday: stats.repliedToday,
+      pendingReplies: stats.unreplied,
+      needsAttention: stats.needsAttention,
+      commentsNeedsAction: stats.unreplied ?? 0,
+      activePages,
+      aiReplies: stats.byMethod.ai,
+      templateReplies: stats.byMethod.template,
+      manualReplies: stats.byMethod.manual,
+      totalMessages: msgStats.total,
+      messagesPending: msgStats.pending,
+      messagesNeedsAttention: msgStats.needsAttention ?? 0,
+      messagesNeedsAction: msgStats.pending ?? 0,
+      messagesAiReplies: msgStats.byMethod?.ai ?? 0,
+      messagesTemplateReplies: msgStats.byMethod?.template ?? 0,
+      messagesManualReplies: msgStats.byMethod?.manual ?? 0,
+    };
+  }, [commentStats, messageStats, pages]);
+
+  const sectionErrors = useMemo(() => ({
+    comments: commentStatsError,
+    messages: messageStatsError,
+    recentComments: recentCommentsError,
+    pages: pagesError,
     usage: false,
     settings: false,
-    analytics: false,
-  });
+    analytics: analyticsError,
+  }), [commentStatsError, messageStatsError, recentCommentsError, pagesError, analyticsError]);
 
-  const fetchDashboardData = useCallback(async () => {
-    try {
-      setLoading(true);
-      // Track which sections failed to load
-      const errors = {
-        comments: false,
-        messages: false,
-        recentComments: false,
-        pages: false,
-        usage: false,
-        settings: false,
-        analytics: false,
-      };
+  const needsAttentionItems = useMemo(() => {
+    const bannerItems: NeedsAttentionItem[] = [];
 
-      // Use API instances that handle auth via cookies (web) or Bearer token (mobile)
-      const [statsRes, messagesStatsRes, commentsListRes, pagesRes, usageRes, settingsRes, analyticsRes, needsActionCommentsRes, needsActionMessagesRes] = await Promise.all([
-        commentsApi.getStats().catch(() => { errors.comments = true; return null; }),
-        messagesApi.getStats().catch(() => { errors.messages = true; return null; }),
-        commentsApi.getAll({ limit: 5 }).catch(() => { errors.recentComments = true; return null; }),
-        pagesApi.getAll().catch(() => { errors.pages = true; return null; }),
-        subscriptionApi.getUsage().catch(() => { errors.usage = true; return null; }),
-        settingsApi.get().catch(() => { errors.settings = true; return null; }),
-        analyticsApi.getOverview(30).catch(() => { errors.analytics = true; return null; }),
-        // Fetch items for the needs-attention banner (unreplied + unresolved)
-        commentsApi.getAll({ replied: false, resolved: false, limit: 5 }).catch(() => null),
-        messagesApi.getAll({ replied: false, resolved: false, limit: 5 }).catch(() => null),
-      ]);
-
-      // Set usage data if available (handle both nested and flat response shapes)
-      if (usageRes?.data) {
-        const usageData = usageRes.data.data ?? usageRes.data;
-        if (usageData?.subscription !== undefined || usageData?.aiReplies !== undefined) {
-          setUsage(usageData);
-        }
-      }
-
-      // Set analytics data if available
-      if (analyticsRes?.data) {
-        setAnalytics(analyticsRes.data);
-      }
-
-      // Set user settings if available
-      if (settingsRes?.data) {
-        setUserSettings({
-          commentsAutoReply: settingsRes.data.commentsAutoReply ?? true,
-          messagesAutoReply: settingsRes.data.messagesAutoReply ?? true
+    if (needsActionComments) {
+      for (const c of needsActionComments) {
+        bannerItems.push({
+          id: c.id,
+          type: 'comment',
+          senderName: c.fromName ?? null,
+          text: c.message || '',
+          createdAt: c.createdTime || c.createdAt || null,
+          flagReason: c.flagReason ?? null,
+          href: '/comments?filter=needs_action',
         });
       }
-
-      const recentCommentsList: Comment[] = commentsListRes
-        ? (Array.isArray(commentsListRes.data)
-          ? commentsListRes.data as unknown as Comment[]
-          : (Array.isArray(commentsListRes.data?.data) ? commentsListRes.data.data : []) as unknown as Comment[])
-        : [];
-
-      const fetchedPages: Page[] = pagesRes
-        ? (Array.isArray(pagesRes.data)
-          ? pagesRes.data
-          : (Array.isArray(pagesRes.data?.data) ? pagesRes.data.data : []))
-        : [];
-
-      setPages(fetchedPages);
-
-      // Show onboarding for new users
-      const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
-      if (fetchedPages.length === 0 && !onboardingComplete) {
-        setShowOnboarding(true);
-        setOnboardingVisible(true); 
-      }
-
-      // Set Recent Comments
-      setRecentComments(recentCommentsList);
-
-      // --- Process Stats from Server ---
-      
-      // Comments Stats
-      const stats = statsRes?.data || {
-        total: 0,
-        replied: 0,
-        unreplied: 0,
-        needsAttention: 0,
-        repliedToday: 0,
-        replyRate: '0.0',
-        byMethod: { ai: 0, template: 0, manual: 0 }
-      };
-
-      // Messages Stats
-      const msgStats = messagesStatsRes?.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
-
-      // Calculate active pages
-      const activePages = fetchedPages.filter(p => p.autoReplyEnabled).length;
-
-      // "Needs Action" counts — match the Comments/Messages page filter tabs exactly
-      // Comments page uses stats.unreplied (replied=false, resolved=false)
-      // Messages page uses statsData.pending (replied=false, resolved=false)
-      const commentsNeedsAction = stats.unreplied ?? 0;
-      const messagesNeedsAction = msgStats.pending ?? 0;
-
-      setStatsData({
-        totalComments: stats.total,
-        repliedToday: stats.repliedToday,
-        pendingReplies: stats.unreplied,
-        needsAttention: stats.needsAttention,
-        commentsNeedsAction,
-        activePages,
-        aiReplies: stats.byMethod.ai,
-        templateReplies: stats.byMethod.template,
-        manualReplies: stats.byMethod.manual,
-        // Message stats
-        totalMessages: msgStats.total,
-        messagesPending: msgStats.pending,
-        messagesNeedsAttention: msgStats.needsAttention ?? 0,
-        messagesNeedsAction,
-        messagesAiReplies: msgStats.byMethod?.ai ?? 0,
-        messagesTemplateReplies: msgStats.byMethod?.template ?? 0,
-        messagesManualReplies: msgStats.byMethod?.manual ?? 0,
-      });
-
-      // Build needs-attention items for the expandable banner
-      const bannerItems: NeedsAttentionItem[] = [];
-
-      // Add unreplied comments
-      if (needsActionCommentsRes?.data) {
-        const commentsList = Array.isArray(needsActionCommentsRes.data)
-          ? needsActionCommentsRes.data
-          : (needsActionCommentsRes.data?.data ?? []);
-        for (const c of commentsList) {
-          bannerItems.push({
-            id: c.id,
-            type: 'comment',
-            senderName: c.fromName ?? null,
-            text: c.message || '',
-            createdAt: c.createdTime || c.createdAt || null,
-            flagReason: c.flagReason ?? null,
-            href: '/comments?filter=needs_action',
-          });
-        }
-      }
-
-      // Add unreplied messages
-      if (needsActionMessagesRes?.data) {
-        const messagesList = Array.isArray(needsActionMessagesRes.data)
-          ? needsActionMessagesRes.data
-          : (needsActionMessagesRes.data?.data ?? []);
-        for (const m of messagesList) {
-          bannerItems.push({
-            id: m.id,
-            type: 'message',
-            senderName: m.senderName ?? null,
-            text: m.message || '',
-            createdAt: m.createdTime || m.createdAt || null,
-            flagReason: m.flagReason ?? null,
-            href: '/messages?filter=needs_action',
-          });
-        }
-      }
-
-      // Sort by newest first, take max 5
-      bannerItems.sort((a, b) => {
-        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return db - da;
-      });
-      setNeedsAttentionItems(bannerItems.slice(0, 5));
-
-      // Update section error state
-      setSectionErrors(errors);
-
-      // Only show toast for total failure (likely network issue)
-      const failedCount = Object.values(errors).filter(Boolean).length;
-      if (failedCount === 7) {
-        toast.error(t('dashboard.fetchError'));
-      } else if (failedCount > 0) {
-        captureError(
-          new Error(`Dashboard partial load: ${failedCount}/7 sections failed`),
-          'Partial dashboard load failure',
-          { tags: { page: 'dashboard' } }
-        );
-      }
-
-    } catch (error) {
-      captureError(error, 'Failed to fetch dashboard data', { tags: { page: 'dashboard' } });
-      toast.error(t('dashboard.fetchError'));
-    } finally {
-      setLoading(false);
     }
-  }, [setOnboardingVisible, t]);
+
+    if (needsActionMessages) {
+      for (const m of needsActionMessages) {
+        bannerItems.push({
+          id: m.id,
+          type: 'message',
+          senderName: m.senderName ?? null,
+          text: m.message || '',
+          createdAt: m.createdTime || m.createdAt || null,
+          flagReason: m.flagReason ?? null,
+          href: '/messages?filter=needs_action',
+        });
+      }
+    }
+
+    bannerItems.sort((a, b) => {
+      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - da;
+    });
+    return bannerItems.slice(0, 5);
+  }, [needsActionComments, needsActionMessages]);
 
   // Auto-sync if no pages found — only for existing users (onboarding already completed)
-  // New users are guided through onboarding instead
   const syncAttemptedRef = useRef(false);
   useEffect(() => {
     const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
@@ -345,20 +312,25 @@ const DashboardPage: NextPageWithLayout = () => {
       syncAttemptedRef.current = true;
       api.post('/pages/sync', { accessToken: fbToken })
         .then(() => {
-          fetchDashboardData();
+          queryClient.invalidateQueries({ queryKey: ['pages'] });
         })
         .catch(err => {
           captureError(err, 'Dashboard auto-sync failed', { tags: { page: 'dashboard', action: 'auto-sync' } });
           toast.error(t('dashboard.syncError'));
         });
     }
-  }, [loading, pages.length, fbToken, isAuthenticated, fetchDashboardData, t]);
+  }, [loading, pages.length, fbToken, isAuthenticated, queryClient, t]);
 
+  // Show onboarding for new users
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchDashboardData();
+    if (!loading && pages.length === 0) {
+      const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+      if (!onboardingComplete) {
+        setShowOnboarding(true);
+        setOnboardingVisible(true);
+      }
     }
-  }, [isAuthenticated, fetchDashboardData]);
+  }, [loading, pages.length, setOnboardingVisible]);
 
   // Pre-build a Map for O(1) page name lookups (avoids O(n×m) find() in render loops)
   const pageNameMap = useMemo(() => {
@@ -450,7 +422,7 @@ const DashboardPage: NextPageWithLayout = () => {
         replyRate={analytics?.totals?.replyRate ?? '0'}
         avgSpeedSeconds={analytics?.responseTime?.avgSeconds ?? null}
         hasError={sectionErrors.comments && sectionErrors.messages && sectionErrors.analytics}
-        onRetry={fetchDashboardData}
+        onRetry={refetchAll}
       />
 
       {/* Main Content Grid */}
@@ -472,7 +444,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
           <div className="divide-y divide-theme-border">
             {sectionErrors.recentComments ? (
-              <SectionError onRetry={fetchDashboardData} />
+              <SectionError onRetry={refetchAll} />
             ) : recentComments.length > 0 ? (
               (() => {
                 // Check if user has active pages on BOTH platforms
@@ -626,7 +598,7 @@ const DashboardPage: NextPageWithLayout = () => {
               pages.length >= 3 && 'max-h-[400px] overflow-y-auto'
             )}>
               {sectionErrors.pages ? (
-                <SectionError onRetry={fetchDashboardData} />
+                <SectionError onRetry={refetchAll} />
               ) : pages.length > 0 ? pages.map((page, i) => {
                 const pageComments = recentComments.filter(c => c.pageId === page.id || c.pageId === page.facebookPageId);
                 const pendingCount = pageComments.filter(c => !c.replied).length;
@@ -666,9 +638,7 @@ const DashboardPage: NextPageWithLayout = () => {
         <CommentDetailModal
           comment={selectedCommentData.comment}
           onClose={() => setSelectedCommentData(null)}
-          onReplySuccess={async () => {
-            await fetchDashboardData();
-          }}
+          onReplySuccess={() => refetchAll()}
           mode={selectedCommentData.mode}
         />
       )}
