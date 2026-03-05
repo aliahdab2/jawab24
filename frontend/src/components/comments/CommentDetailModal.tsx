@@ -419,7 +419,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <textarea
                 id="comment-reply-textarea"
                 ref={textareaRef}
-                className="w-full p-3 rounded-lg border border-theme-border focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-foreground placeholder:text-muted-foreground resize-y"
+                className="w-full p-3 rounded-lg border border-theme-border focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right resize-y"
                 placeholder={t('comments.typeReply')}
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}

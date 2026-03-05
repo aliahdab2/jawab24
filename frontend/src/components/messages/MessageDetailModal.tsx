@@ -325,7 +325,7 @@ export function MessageDetailModal({
               placeholder={t('messages.typeReply' as TranslationKey)}
               aria-label={t('messages.typeReply' as TranslationKey)}
               rows={1}
-              className="flex-1 min-w-0 resize-none rounded-full border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+              className="flex-1 min-w-0 resize-none rounded-full border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
               style={{ height: '42px', maxHeight: '120px' }}
               disabled={isReplying}
             />
