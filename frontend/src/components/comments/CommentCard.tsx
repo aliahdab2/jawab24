@@ -51,7 +51,7 @@ export function checkNeedsAttention(comment: Comment): boolean {
  */
 export function translateFlagReason(
   flagReason: string | null | undefined,
-  t: (key: any, params?: Record<string, string>) => string,
+  t: (key: string, params?: Record<string, string>) => string,
   locale: string,
 ): string {
   if (!flagReason) return '';

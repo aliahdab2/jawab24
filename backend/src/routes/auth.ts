@@ -4,8 +4,11 @@ import { authenticate } from '../middleware/auth';
 import { auth } from '../utils/swagger';
 
 export default async function authRoutes(fastify: FastifyInstance) {
-    // Public routes
+    // Public routes (stricter rate limit — prevent brute force)
+    const authRateLimit = { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } };
+
     fastify.post('/auth/facebook', {
+        ...authRateLimit,
         schema: {
             tags: ['Auth'],
             summary: 'Login with Facebook OAuth redirect',
@@ -14,6 +17,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     // Native Mobile Login (with schema validation)
     fastify.post('/auth/facebook/native', {
+        ...authRateLimit,
         schema: {
             tags: ['Auth'],
             summary: 'Login with Facebook access token (native mobile)',

@@ -99,9 +99,10 @@ export default function CompleteProfilePage() {
         router.push(redirect || '/dashboard');
       }, 2000);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       captureError(err, 'Save email error', { tags: { page: 'complete-profile' } });
-      setError(err.response?.data?.error || t('profile.saveFailed'));
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      setError(axiosErr.response?.data?.error || t('profile.saveFailed'));
       setSaving(false);
     }
   };

@@ -107,6 +107,7 @@ const PagesPage: NextPageWithLayout = () => {
         await FacebookLogin.initialize({ appId: fbAppId }).catch(() => {});
 
         const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging', 'instagram_basic', 'instagram_manage_messages'];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Facebook plugin types lack tracking field
         const result = await FacebookLogin.login({ permissions, tracking: 'enabled' } as any);
 
         if (!result.accessToken) {

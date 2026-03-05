@@ -51,10 +51,18 @@ const eslintConfig = [
     {
         files: ['**/*.{ts,tsx}'],
         rules: {
-            '@typescript-eslint/no-unused-vars': ['warn', { 
+            '@typescript-eslint/no-unused-vars': ['warn', {
                 argsIgnorePattern: '^_',
                 varsIgnorePattern: '^_',
             }],
+            '@typescript-eslint/no-explicit-any': 'warn',
+        },
+    },
+
+    // Relax any rule in test files where mocking often requires it
+    {
+        files: ['**/*.test.{ts,tsx}', '**/__tests__/**/*.{ts,tsx}'],
+        rules: {
             '@typescript-eslint/no-explicit-any': 'off',
         },
     },

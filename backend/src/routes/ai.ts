@@ -7,8 +7,11 @@ export default async function aiRoutes(fastify: FastifyInstance) {
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
 
-        // Generate AI reply
+        // Generate AI reply (stricter rate limit — calls OpenAI, costs money)
+        const aiRateLimit = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
+
         protectedRoutes.post('/ai/generate', {
+            ...aiRateLimit,
             schema: {
                 tags: ['AI'],
                 summary: 'Generate an AI reply synchronously',
@@ -17,6 +20,7 @@ export default async function aiRoutes(fastify: FastifyInstance) {
         }, aiController.generate);
 
         protectedRoutes.post('/ai/generate-async', {
+            ...aiRateLimit,
             schema: {
                 tags: ['AI'],
                 summary: 'Generate an AI reply asynchronously',

@@ -11,9 +11,10 @@ const TranslateRequestSchema = z.object({
 });
 
 export const translationRoutes: FastifyPluginAsync = async (fastify) => {
-  // POST /api/translation/translate
+  // POST /api/translation/translate (stricter rate limit — calls OpenAI)
   fastify.post('/translate', {
     preHandler: [authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (request, reply) => {
     const validation = validateSchema(TranslateRequestSchema, request.body);
     if (!validation.success) {

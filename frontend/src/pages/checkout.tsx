@@ -12,6 +12,7 @@ import { Button, BrandLogo } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import type { Plan } from '@jawab24/shared';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function CheckoutPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [plan, setPlan] = useState<any>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
   const [fetchError, setFetchError] = useState(false);
   const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null); // null = checking
 
@@ -108,11 +109,12 @@ export default function CheckoutPage() {
 
       // Redirect to Stripe Checkout
       window.location.href = url;
-    } catch (err: any) {
+    } catch (err: unknown) {
       captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session' } });
 
       // Handle specific error cases
-      const errorData = err.response?.data;
+      const axiosErr = err as { response?: { data?: { code?: string; error?: string; message?: string } } };
+      const errorData = axiosErr.response?.data;
 
       // Handle sanctions block from backend
       if (errorData?.code === 'SANCTIONED_GEO_BLOCK' || errorData?.code === 'GEO_VERIFICATION_REQUIRED') {

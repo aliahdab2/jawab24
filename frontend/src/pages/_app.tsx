@@ -122,6 +122,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       ]);
 
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Keyboard plugin type lacks 'body' mode
         await Keyboard.setResizeMode({ mode: 'body' } as any);
       } catch (err) {
         addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });
@@ -259,7 +260,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   useEffect(() => {
     if (!hasHydrated || !isNativePlatform()) return;
 
-    let listenerHandle: any;
+    let listenerHandle: { remove: () => void } | undefined;
 
     const setupDeepLinks = async () => {
       const { App } = await import("@capacitor/app");

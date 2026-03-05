@@ -5,10 +5,10 @@ import { CreateCheckoutSessionRequest } from '../types/payment';
 import { auth } from '../utils/swagger';
 
 export default async function paymentRoutes(fastify: FastifyInstance) {
-    // Create Stripe Checkout Session
+    // Create Stripe Checkout Session (stricter rate limit — creates Stripe sessions)
     fastify.post<{ Body: CreateCheckoutSessionRequest }>(
         '/create-checkout-session',
-        { schema: { tags: ['Payment'], summary: 'Create Stripe checkout session', security: auth }, preHandler: [authenticate] },
+        { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { tags: ['Payment'], summary: 'Create Stripe checkout session', security: auth }, preHandler: [authenticate] },
         async (request, reply) => {
             return paymentController.createCheckoutSession(request, reply);
         }

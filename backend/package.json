@@ -22,7 +22,8 @@
     "test": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:coverage": "vitest run --coverage",
-    "precommit": "npm run lint && npm run type-check && npm run db:check"
+    "precommit": "npm run lint && npm run type-check && npm run db:check",
+    "openapi:export": "tsx scripts/export-openapi.ts"
   },
   "dependencies": {
     "@fastify/compress": "^8.3.1",

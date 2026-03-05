@@ -39,6 +39,7 @@ export default function LoginPage() {
   const [urlParams, setUrlParams] = useState<URLSearchParams | null>(null);
   
   // Pre-loaded Facebook SDK reference to avoid delay on button tap
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Facebook SDK types are dynamic-imported
   const fbSdkRef = useRef<any>(null);
 
   useEffect(() => {
@@ -121,10 +122,12 @@ export default function LoginPage() {
 
         const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging', 'instagram_basic', 'instagram_manage_messages'];
 
-        const result = await Promise.race([
+        /* eslint-disable @typescript-eslint/no-explicit-any -- Capacitor Facebook plugin types lack tracking field */
+        const result: { accessToken?: { token: string } } = await Promise.race([
           FacebookLogin.login({ permissions, tracking: 'enabled' } as any),
           timeoutPromise
-        ]) as any;
+        ]);
+        /* eslint-enable @typescript-eslint/no-explicit-any */
 
         if (!result.accessToken) {
           toast.info(t('auth.loginCancelled'));
@@ -144,18 +147,20 @@ export default function LoginPage() {
         const returnUrl = router.query.redirect as string || '/dashboard';
         await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
-      } catch (error: any) {
+      } catch (error: unknown) {
         captureError(error, 'Android login error', { tags: { page: 'login', platform: 'android' } });
         setIsProcessing(false);
 
-        if (error.message === 'TIMEOUT') {
+        const msg = error instanceof Error ? error.message : '';
+        const code = (error as { code?: string }).code;
+        if (msg === 'TIMEOUT') {
           toast.error(t('auth.loginTimeout'));
-        } else if (error.message?.includes('cancel') || error.message?.includes('Cancel')) {
+        } else if (msg.includes('cancel') || msg.includes('Cancel')) {
           toast.info(t('auth.loginCancelled'));
-        } else if (error.message?.includes('network') || error.code === 'NETWORK_ERROR') {
+        } else if (msg.includes('network') || code === 'NETWORK_ERROR') {
           toast.error(t('auth.networkError'));
-        } else if (error.response?.data?.message) {
-          toast.error(error.response.data.message);
+        } else if ((error as { response?: { data?: { message?: string } } }).response?.data?.message) {
+          toast.error((error as { response: { data: { message: string } } }).response.data.message);
         } else {
           toast.error(t('auth.loginError'));
         }
@@ -182,7 +187,7 @@ export default function LoginPage() {
         const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
 
         await Browser.open({ url: oauthUrl });
-      } catch (error: any) {
+      } catch (error: unknown) {
         captureError(error, 'iOS login error', { tags: { page: 'login', platform: 'ios' } });
         toast.error(t('auth.loginError'));
       }
