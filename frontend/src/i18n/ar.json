@@ -308,6 +308,8 @@
   "flagReason.offensive": "محتوى مسيء",
   "flagReason.invalid_json": "خطأ في معالجة الرد",
   "flagReason.fallback_reply": "رد احتياطي",
+  "flagReason.info_not_in_kb": "معلومات غير موجودة في قاعدة المعرفة",
+  "flagReason.held_low_confidence": "ثقة منخفضة في الرد",
   "flagReason.slaNoReply": "لم يتم الرد خلال {minutes} دقيقة",
   "comments.repliedToday": "تم الرد اليوم",
   "comments.latestComments": "أحدث النشاطات",
