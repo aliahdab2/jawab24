@@ -72,7 +72,14 @@ export default function LandingPage() {
         />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-card overflow-x-hidden">
+      <div className="flex-1 overflow-y-auto bg-card overflow-x-hidden relative">
+        {/* Dark mode decorative background — blue glows + cubes pattern */}
+        <div className="hidden dark:block fixed inset-0 pointer-events-none z-0" aria-hidden="true">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(79,116,178,0.15),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(79,116,178,0.10),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.06]" />
+        </div>
+
         {/* Navigation */}
         <nav
           className="fixed w-full z-50 transition-all duration-300 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape"
@@ -116,7 +123,7 @@ export default function LandingPage() {
         </nav>
 
         {/* Coming Soon Banner */}
-        <div className="relative z-40 mt-16 sm:mt-20 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white py-3 sm:py-4 px-4 shadow-lg">
+        <div className="relative z-40 mt-16 sm:mt-20 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 dark:from-brand-600 dark:via-brand-500 dark:to-brand-600 text-white py-3 sm:py-4 px-4 shadow-lg">
           <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
             <div className="flex items-center gap-2">
               <Rocket className="w-5 h-5 sm:w-6 sm:h-6 animate-bounce" aria-hidden="true" />

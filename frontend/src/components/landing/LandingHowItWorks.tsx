@@ -18,8 +18,12 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
   ];
 
   return (
-    <section className="py-12 sm:py-20 lg:py-32 bg-background">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-12 sm:py-20 lg:py-32 bg-background relative overflow-hidden">
+      {/* Dark mode glow — center-right */}
+      <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div className="absolute top-1/4 -end-1/4 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,116,178,0.10),transparent_70%)]" />
+      </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-2 gap-4 sm:gap-8 lg:gap-16 items-center">
           {/* Steps */}
           <div className="space-y-4 sm:space-y-8 col-span-1">

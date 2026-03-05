@@ -21,8 +21,12 @@ export function LandingFeatures() {
   ];
 
   return (
-    <section id="features" className="py-12 sm:py-20 lg:py-32 bg-surface-50 relative">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="features" className="py-12 sm:py-20 lg:py-32 bg-surface-50 relative overflow-hidden">
+      {/* Dark mode glow — top-left */}
+      <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div className="absolute -top-1/4 -start-1/4 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,116,178,0.12),transparent_70%)]" />
+      </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-8 sm:mb-16 lg:mb-24">
           <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-3 sm:mb-6 tracking-tight">
             {t('landing.features.sectionTitle')}

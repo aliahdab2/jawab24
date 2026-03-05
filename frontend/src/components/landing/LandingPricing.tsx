@@ -7,8 +7,12 @@ export function LandingPricing() {
   const { t } = useTranslation();
 
   return (
-    <section id="pricing" className="py-12 sm:py-20 lg:py-32 bg-background relative">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="pricing" className="py-12 sm:py-20 lg:py-32 bg-background relative overflow-hidden">
+      {/* Dark mode glow — bottom-left */}
+      <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div className="absolute -bottom-1/4 -start-1/4 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,116,178,0.10),transparent_70%)]" />
+      </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-8 sm:mb-16">
           <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full status-brand border mb-4 sm:mb-6 font-bold text-[10px] sm:text-xs uppercase tracking-widest">
             {t('pricing.description')}

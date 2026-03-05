@@ -194,12 +194,12 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <aside
       className={clsx(
-        'fixed top-0 h-screen flex flex-col overflow-visible bg-zinc-900 text-white transition-all duration-500 z-40 shadow-2xl group/sidebar',
+        'fixed top-0 h-screen flex flex-col overflow-visible text-white transition-all duration-500 z-40 shadow-2xl group/sidebar',
         sidebarOpen ? 'w-64' : 'w-20'
       )}
       style={{
         insetInlineStart: 0,
-        background: 'linear-gradient(180deg, rgb(6,13,24) 0%, rgb(14,22,38) 100%)',
+        background: 'linear-gradient(180deg, rgb(13,24,39) 0%, rgb(27,40,64) 100%)',
         paddingTop: 'var(--sai-top)'
       }}
     >
@@ -310,7 +310,7 @@ export const Sidebar = memo(function Sidebar() {
 
                     {/* Tooltip — visible only when sidebar is collapsed */}
                     {!sidebarOpen && (
-                      <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-zinc-800 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+                      <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
                         {t(item.key as TranslationKey)}
                       </span>
                     )}
@@ -348,7 +348,7 @@ export const Sidebar = memo(function Sidebar() {
               )} />
               {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('admin.title' as TranslationKey)}</span>}
               {!sidebarOpen && (
-                <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-zinc-800 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+                <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
                   {t('admin.title' as TranslationKey)}
                 </span>
               )}
@@ -391,7 +391,7 @@ export const Sidebar = memo(function Sidebar() {
           <LogOut className="w-6 h-6 flex-shrink-0 group-hover/nav:-translate-x-1 transition-transform" />
           {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('nav.logout' as TranslationKey)}</span>}
           {!sidebarOpen && (
-            <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-zinc-800 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+            <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
               {t('nav.logout' as TranslationKey)}
             </span>
           )}

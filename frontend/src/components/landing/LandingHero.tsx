@@ -28,11 +28,11 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
   return (
     <section className="relative pt-8 sm:pt-12 lg:pt-20 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200">
       {/* Animated Background Elements */}
-      <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 dark:bg-brand-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
-      <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 dark:bg-violet-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
+      <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 dark:bg-blue-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
+      <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 dark:bg-indigo-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
       {/* Centered Glowing Background */}
       <div className="absolute top-1/2 inset-x-0 flex justify-center -translate-y-1/2 pointer-events-none">
-        <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 dark:from-brand-900/20 dark:to-violet-900/20 rounded-full blur-[80px] sm:blur-[150px]" />
+        <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-full blur-[80px] sm:blur-[150px]" />
       </div>
 
       <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">

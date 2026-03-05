@@ -5,6 +5,7 @@ export { normalizeArabic } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
+export { matchesKeyword, testKeywordsMatch } from './utils/keyword-matching';
 
 // --- SSE Event Types ---
 export * from './sse-events';

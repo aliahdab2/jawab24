@@ -15,6 +15,10 @@ export function LandingFAQ() {
 
   return (
     <section className="py-12 sm:py-20 lg:py-32 bg-surface-50 relative overflow-hidden">
+      {/* Dark mode glow — top-right */}
+      <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div className="absolute -top-1/4 -end-1/4 w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(79,116,178,0.08),transparent_70%)]" />
+      </div>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-8 sm:mb-20">
           <h2 className="text-2xl sm:text-4xl font-display font-extrabold text-foreground mb-2 sm:mb-4">

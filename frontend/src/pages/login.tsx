@@ -250,8 +250,8 @@ export default function LoginPage() {
       <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] relative">
         {/* Dark mode decorative overlays — span both panels seamlessly */}
         <div className="hidden dark:block absolute inset-0 pointer-events-none z-0" aria-hidden="true">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(93,174,164,0.18),transparent_60%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(79,116,178,0.18),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(79,116,178,0.15),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_90%,rgba(79,116,178,0.10),transparent_60%)]" />
           <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.06]" />
         </div>
 
@@ -480,7 +480,7 @@ export default function LoginPage() {
                   <Button
                     onClick={handleFacebookLogin}
                     size="lg"
-                    className="w-full bg-[#166FE5] hover:bg-[#1565D8] dark:bg-brand-400 dark:hover:bg-brand-500 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 dark:shadow-brand-400/25 ring-4 ring-blue-400/15 dark:ring-brand-400/15 font-bold text-lg lg:text-xl group transition-all active:scale-95"
+                    className="w-full bg-[#166FE5] hover:bg-[#1565D8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all active:scale-95"
                   >
                     <div className="flex items-center justify-center gap-3 text-white">
                       <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />

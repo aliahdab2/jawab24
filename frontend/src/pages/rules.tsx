@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback, useMemo, type ReactElement } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactElement } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Select, Modal, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, CharCounter } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
 import { rulesApi, templatesApi } from '@/lib/api';
 import { extractArrayData } from '@/lib/api-utils';
-import { Zap, Plus, BookTemplate, AlertTriangle } from 'lucide-react';
+import { Zap, Plus, BookTemplate, AlertTriangle, FlaskConical, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { RuleCard } from '@/components/rules';
 import type { Rule, Template } from '@jawab24/shared';
+import { testKeywordsMatch } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 
@@ -25,6 +26,10 @@ const RulesPage: NextPageWithLayout = () => {
     keywords: '',
     templateId: '',
   });
+
+  // Test rule state
+  const [testInput, setTestInput] = useState('');
+  const [testResult, setTestResult] = useState<{ matches: boolean; matchedKeyword?: string } | null>(null);
 
   // Quick-create template state
   const [showQuickCreate, setShowQuickCreate] = useState(false);
@@ -85,6 +90,8 @@ const RulesPage: NextPageWithLayout = () => {
     }
     setShowQuickCreate(false);
     setQuickTemplate({ name: '', text: '' });
+    setTestInput('');
+    setTestResult(null);
     setIsModalOpen(true);
   };
 
@@ -206,6 +213,61 @@ const RulesPage: NextPageWithLayout = () => {
       fetchData();
     }
   };
+
+  const handleTestRule = () => {
+    const keywords = formData.keywords.split(',').map(k => k.trim()).filter(Boolean);
+    if (!keywords.length || !testInput.trim()) return;
+    setTestResult(testKeywordsMatch(testInput, keywords));
+  };
+
+  // Auto-demo: detect single-word keywords and show animated example matches
+  const [demoVisibleCount, setDemoVisibleCount] = useState(0);
+  const demoTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const singleWordKeyword = useMemo(() => {
+    const keywords = formData.keywords.split(',').map(k => k.trim()).filter(Boolean);
+    return keywords.find(kw => !kw.includes(' ') && kw.length >= 2) || null;
+  }, [formData.keywords]);
+
+  const demoMessages = useMemo(() => {
+    if (!singleWordKeyword) return [];
+    const kw = singleWordKeyword;
+    return [
+      {
+        text: t('rules.demoDirectQuestion' as TranslationKey).replace('{keyword}', kw),
+        type: 'match' as const,
+      },
+      {
+        text: t('rules.demoFalsePositive' as TranslationKey).replace('{keyword}', kw),
+        type: 'warning' as const,
+        hint: t('rules.demoFalsePositiveHint' as TranslationKey),
+      },
+      {
+        text: t('rules.demoNoMatch' as TranslationKey),
+        type: 'nomatch' as const,
+      },
+    ];
+  }, [singleWordKeyword, t]);
+
+  useEffect(() => {
+    // Clear previous timers
+    demoTimers.current.forEach(clearTimeout);
+    demoTimers.current = [];
+    setDemoVisibleCount(0);
+
+    if (!singleWordKeyword || demoMessages.length === 0) return;
+
+    // Stagger each message appearing
+    demoMessages.forEach((_, i) => {
+      const timer = setTimeout(() => setDemoVisibleCount(i + 1), (i + 1) * 600);
+      demoTimers.current.push(timer);
+    });
+
+    return () => {
+      demoTimers.current.forEach(clearTimeout);
+      demoTimers.current = [];
+    };
+  }, [singleWordKeyword, demoMessages]);
 
   // Build template options with preview text
   const getTemplatePreview = (template: Template) => {
@@ -397,6 +459,97 @@ const RulesPage: NextPageWithLayout = () => {
                   </Button>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Test your rule */}
+          <div className="p-4 rounded-2xl bg-background border border-theme-border space-y-3">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              <FlaskConical className="w-3 h-3" />
+              <span>{t('rules.testTitle' as TranslationKey)}</span>
+            </div>
+
+            {/* Auto-demo: animated examples for single-word keywords */}
+            {demoMessages.length > 0 && demoVisibleCount > 0 && (
+              <div className="space-y-2">
+                {demoMessages.slice(0, demoVisibleCount).map((demo, i) => (
+                  <div
+                    key={i}
+                    className="animate-slide-up"
+                  >
+                    <div className={`flex items-start gap-2 text-xs rounded-xl px-3 py-2 border ${
+                      demo.type === 'match' ? 'status-success' :
+                      demo.type === 'warning' ? 'status-warning' :
+                      'status-error'
+                    }`}>
+                      {demo.type === 'match' ? (
+                        <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                      ) : demo.type === 'warning' ? (
+                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                      ) : (
+                        <X className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                      )}
+                      <div dir="auto">
+                        <span className="font-medium">&ldquo;{demo.text}&rdquo;</span>
+                        {demo.hint && (
+                          <span className="block text-[10px] mt-0.5 opacity-75">{demo.hint}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {demoVisibleCount >= demoMessages.length && (
+                  <p className="text-xs text-muted-foreground mt-1 animate-slide-up">
+                    {t('rules.demoTip' as TranslationKey)}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Manual test input */}
+            {formData.keywords.trim() ? (
+              <>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder={t('rules.testPlaceholder' as TranslationKey)}
+                    value={testInput}
+                    onChange={(e) => { setTestInput(e.target.value); setTestResult(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleTestRule(); } }}
+                    className="!py-2 flex-1"
+                    dir="auto"
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleTestRule}
+                    disabled={!testInput.trim()}
+                    className="flex-shrink-0"
+                  >
+                    {t('rules.testButton' as TranslationKey)}
+                  </Button>
+                </div>
+                {testResult && (
+                  <div className={`flex items-center gap-2 text-sm font-medium ${testResult.matches ? 'status-success' : 'status-error'} border rounded-xl px-3 py-2`}>
+                    {testResult.matches ? (
+                      <Check className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                    ) : (
+                      <X className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                    )}
+                    <span>
+                      {testResult.matches
+                        ? t('rules.testMatch' as TranslationKey)
+                        : t('rules.testNoMatch' as TranslationKey)}
+                      {testResult.matchedKeyword && (
+                        <span className="text-xs text-muted-foreground ms-2">
+                          ({t('rules.testMatchedKeyword' as TranslationKey).replace('{keyword}', testResult.matchedKeyword)})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">{t('rules.testNoKeywords' as TranslationKey)}</p>
             )}
           </div>
 
