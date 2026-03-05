@@ -29,10 +29,11 @@ describe('AutoReplyStatusCard', () => {
     vi.clearAllMocks();
   });
 
-  it('should not render anything when activePages is 0', () => {
+  it('should not render anything when totalPages is 0 (no connected pages)', () => {
     const { container } = render(
       <AutoReplyStatusCard
         activePages={0}
+        totalPages={0}
         commentsAutoReply={true}
         messagesAutoReply={true}
       />
@@ -40,10 +41,11 @@ describe('AutoReplyStatusCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render GREEN active card: Dismissible ONLY', () => {
+  it('should render VIOLET active card: Dismissible ONLY', () => {
     render(
       <AutoReplyStatusCard
         activePages={3}
+        totalPages={3}
         commentsAutoReply={true}
         messagesAutoReply={false}
       />
@@ -75,11 +77,28 @@ describe('AutoReplyStatusCard', () => {
     expect(sessionStorage.getItem('dashboard_success_banner_dismissed')).toBe('true');
   });
 
+  it('should use violet color scheme for the active banner', () => {
+    const { container } = render(
+      <AutoReplyStatusCard
+        activePages={3}
+        totalPages={3}
+        commentsAutoReply={true}
+        messagesAutoReply={false}
+      />
+    );
+
+    // The banner should use alert-violet class (not alert-success)
+    const banner = container.querySelector('.alert-violet');
+    expect(banner).toBeInTheDocument();
+    expect(container.querySelector('.alert-success')).not.toBeInTheDocument();
+  });
+
   it('should handle session persistence for dismissal', () => {
     sessionStorage.setItem('dashboard_success_banner_dismissed', 'true');
     const { container } = render(
       <AutoReplyStatusCard
         activePages={3}
+        totalPages={3}
         commentsAutoReply={true}
         messagesAutoReply={true}
       />
@@ -87,10 +106,11 @@ describe('AutoReplyStatusCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render AMBER warning card: navigates to settings on click', () => {
+  it('should render AMBER warning when pages exist but auto-reply toggles are off', () => {
     render(
       <AutoReplyStatusCard
         activePages={5}
+        totalPages={5}
         commentsAutoReply={false}
         messagesAutoReply={false}
       />
@@ -108,5 +128,33 @@ describe('AutoReplyStatusCard', () => {
     // CTAs should be present
     const ctas = screen.getAllByText('dashboard.goToSettings');
     expect(ctas.length).toBeGreaterThan(0);
+  });
+
+  it('should show warning when pages exist but none have autoReplyEnabled (activePages=0)', () => {
+    render(
+      <AutoReplyStatusCard
+        activePages={0}
+        totalPages={3}
+        commentsAutoReply={false}
+        messagesAutoReply={false}
+      />
+    );
+
+    // Should show warning, not be empty
+    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled')).toBeInTheDocument();
+  });
+
+  it('should show warning when toggles are on but no pages have autoReplyEnabled', () => {
+    render(
+      <AutoReplyStatusCard
+        activePages={0}
+        totalPages={3}
+        commentsAutoReply={true}
+        messagesAutoReply={true}
+      />
+    );
+
+    // activePages=0 means no page has autoReplyEnabled, so it's not truly active
+    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled')).toBeInTheDocument();
   });
 });
