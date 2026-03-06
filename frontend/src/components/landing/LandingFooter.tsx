@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MessageCircle, Facebook, Mail, Zap, Clock, Phone, MapPin } from 'lucide-react';
+import { MessageCircle, Facebook, Mail, Zap, Clock, Phone } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { BrandLogo } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -12,7 +12,7 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
   const { t } = useTranslation();
 
   return (
-    <footer className="landing-section-dark pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
+    <footer className="landing-section-dark dark:bg-surface-50 pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
       <div className="absolute bottom-0 end-0 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-500/5 rounded-full blur-[80px] sm:blur-[120px] pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -76,48 +76,35 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
                   <Zap className="w-3 h-3 sm:w-4 sm:h-4" />
                 </div>
-                <span className="text-[11px] sm:text-base whitespace-nowrap">support@jawab24.com</span>
+                <span className="text-xs sm:text-sm whitespace-nowrap">support@jawab24.com</span>
               </li>
               <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
                   <Phone className="w-3 h-3 sm:w-4 sm:h-4" />
                 </div>
-                <span className="text-[11px] sm:text-base whitespace-nowrap" dir="ltr">{t('landing.footer.phoneNumber' as TranslationKey)}</span>
+                <span className="text-xs sm:text-sm whitespace-nowrap" dir="ltr">{t('landing.footer.phoneNumber' as TranslationKey)}</span>
               </li>
               <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400">
                   <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
                 </div>
-                <span className="text-xs sm:text-base">{t('landing.footer.responseTime')}</span>
+                <span className="text-xs sm:text-base whitespace-nowrap">{t('landing.footer.responseTime')}</span>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="pt-6 sm:pt-12 border-t border-white/10 pb-safe">
-          <div className="flex flex-col items-center gap-3 sm:gap-4 text-center" dir="ltr">
-            <p className="text-surface-400 text-xs sm:text-sm font-medium">
-              {t('landing.footer.operatedBy' as TranslationKey)}
-            </p>
-            <p className="text-surface-300 text-sm sm:text-base font-semibold">
-              {t('landing.footer.operatorName' as TranslationKey)}
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-surface-400 text-xs sm:text-sm">
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
-                {t('landing.footer.businessInfo' as TranslationKey)}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-surface-400 text-xs sm:text-sm">
-              <span>{t('landing.footer.orgNumber' as TranslationKey)}</span>
-              <span aria-hidden="true">|</span>
-              <a href="mailto:support@jawab24.com" className="hover:text-brand-400 transition-colors">support@jawab24.com</a>
-              <span aria-hidden="true">|</span>
-              <a href="tel:+46700224720" className="hover:text-brand-400 transition-colors">{t('landing.footer.phoneNumber' as TranslationKey)}</a>
-            </div>
-            <div className="text-surface-500 font-bold text-xs tracking-widest uppercase">
-              © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
-            </div>
+        <div className="pt-4 sm:pt-6 border-t border-white/10 pb-safe">
+          <div className="flex flex-row flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center" dir="ltr">
+            <span className="text-surface-500 text-xs font-medium">{t('landing.footer.operatedBy' as TranslationKey)}</span>
+            <span className="text-surface-500 text-xs">·</span>
+            <span className="text-surface-400 text-xs font-medium">{t('landing.footer.operatorName' as TranslationKey)}</span>
+            <span className="text-surface-500 text-xs">·</span>
+            <span className="text-surface-500 text-xs">{t('landing.footer.orgNumber' as TranslationKey)}</span>
+            <span className="text-surface-500 text-xs">·</span>
+            <span className="text-surface-500 text-xs">{t('landing.footer.businessInfo' as TranslationKey)}</span>
+            <span className="text-surface-500 text-xs">·</span>
+            <span className="text-surface-500 text-xs">© {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}</span>
           </div>
         </div>
       </div>
