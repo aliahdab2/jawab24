@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
 import {
@@ -31,15 +31,7 @@ export function PageAccordionItem({
   animationDelay,
 }: PageAccordionItemProps) {
   const { t } = useTranslation();
-  const contentRef = useRef<HTMLDivElement>(null);
   const itemRef = useRef<HTMLDivElement>(null);
-  const [contentHeight, setContentHeight] = useState(0);
-
-  useEffect(() => {
-    if (contentRef.current) {
-      setContentHeight(contentRef.current.scrollHeight);
-    }
-  }, [isExpanded]);
 
   // Scroll expanded item into view after animation
   useEffect(() => {
@@ -122,18 +114,17 @@ export function PageAccordionItem({
         />
       </button>
 
-      {/* Expanded panel */}
+      {/* Expanded panel — CSS grid row animation (0fr → 1fr) */}
       <div
         id={panelId}
         role="region"
         aria-labelledby={headerId}
-        style={{ maxHeight: isExpanded ? `${contentHeight}px` : '0px' }}
         className={clsx(
-          'transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden',
-          isExpanded ? 'opacity-100' : 'opacity-0'
+          'grid transition-[grid-template-rows,opacity] duration-300 ease-in-out',
+          isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
         )}
       >
-        <div ref={contentRef}>
+        <div className="overflow-hidden">
           <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 px-4 sm:px-5 py-4">
             {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
