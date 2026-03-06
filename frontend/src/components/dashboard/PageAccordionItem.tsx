@@ -5,8 +5,6 @@ import {
   ChevronRight,
   FileText,
   Instagram,
-  Bot,
-  Minus,
   ArrowRight,
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -34,11 +32,22 @@ export function PageAccordionItem({
 }: PageAccordionItemProps) {
   const { t } = useTranslation();
   const contentRef = useRef<HTMLDivElement>(null);
+  const itemRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState(0);
 
   useEffect(() => {
     if (contentRef.current) {
       setContentHeight(contentRef.current.scrollHeight);
+    }
+  }, [isExpanded]);
+
+  // Scroll expanded item into view after animation
+  useEffect(() => {
+    if (isExpanded && itemRef.current) {
+      const timer = setTimeout(() => {
+        itemRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 320);
+      return () => clearTimeout(timer);
     }
   }, [isExpanded]);
 
@@ -48,6 +57,7 @@ export function PageAccordionItem({
 
   return (
     <div
+      ref={itemRef}
       className="animate-slide-up"
       style={{ animationDelay: `${animationDelay}s` } as React.CSSProperties}
     >
@@ -64,30 +74,17 @@ export function PageAccordionItem({
         aria-controls={panelId}
       >
         {/* Avatar */}
-        <div className="relative flex-shrink-0">
-          <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-brand-600 flex items-center justify-center transition-all group-hover:scale-105 shadow-sm">
-            {!imgError ? (
-              <img
-                src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
-                alt={page.name}
-                className="w-full h-full object-cover"
-                onError={onImgError}
-              />
-            ) : (
-              <FileText className="w-6 h-6 text-white" aria-hidden="true" />
-            )}
-          </div>
-          {/* Auto-reply status indicator */}
-          <div className={clsx(
-            'absolute -bottom-1 -end-1 w-5 h-5 rounded-full border-2 border-card flex items-center justify-center',
-            page.autoReplyEnabled ? 'bg-emerald-500' : 'bg-surface-300'
-          )}>
-            {page.autoReplyEnabled ? (
-              <Bot className="w-3 h-3 text-white" aria-hidden="true" />
-            ) : (
-              <Minus className="w-3 h-3 text-white" aria-hidden="true" />
-            )}
-          </div>
+        <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-brand-600 flex items-center justify-center transition-all group-hover:scale-105 shadow-sm">
+          {!imgError ? (
+            <img
+              src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
+              alt={page.name}
+              className="w-full h-full object-cover"
+              onError={onImgError}
+            />
+          ) : (
+            <FileText className="w-6 h-6 text-white" aria-hidden="true" />
+          )}
         </div>
 
         {/* Page info */}
