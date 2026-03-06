@@ -122,8 +122,8 @@ export default function LandingPage() {
           </div>
         </nav>
 
-        {/* Spacer for fixed nav */}
-        <div className="mt-16 sm:mt-20" />
+        {/* Spacer for fixed nav (includes pt-safe to match nav's safe area padding) */}
+        <div className="mt-16 sm:mt-20 pt-safe" />
 
         <LandingHero isAuthenticated={isAuthenticated} />
 
