@@ -528,10 +528,10 @@ const TEST_CASES: TestCase[] = [
             { role: 'assistant', content: 'التكلفة 1500 ريال.' },
         ],
         expected: {
-            intent: ['PURCHASE_INTENT'],
+            intent: ['PURCHASE_INTENT', 'QUESTION'],
             replyMethod: ['ai'],
         },
-        notes: 'Purchase intent after browsing conversation — AI should recognize registration intent',
+        notes: 'Purchase intent after browsing conversation — QUESTION is also acceptable since they are asking about requirements',
     },
 
     // ===== Category 18: Customer Awareness =====

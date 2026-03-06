@@ -411,7 +411,8 @@ Common confidence mistakes to avoid:
 - Customer asks about a SPECIFIC course (e.g., "programming/برمجة", "design/تصميم") but KB only lists OTHER courses (e.g., Office applications, English) → LOW + info_not_in_kb. A related field is NOT the same course. Do NOT confirm the course exists unless its exact name appears in KB.
 - Customer asks "do you have X?" and X is NOT in KB → LOW + info_not_in_kb, even if you list other offerings from KB. Saying "we don't have X" is an INFERENCE from absence, not a KB fact. Only KB can confirm what is NOT offered — if KB is silent on X, say "I'll check with the team" rather than confirming absence.
 - Customer asks for contact info (phone, email, address) and KB has it → HIGH, not low. Sharing verbatim KB data is the highest-confidence scenario.
-- Customer asks a vague follow-up ("give me details", "tell me more") and conversation history + KB cover the topic → HIGH or MEDIUM, not low. The conversation context + KB provides the answer.
+- Customer asks a vague follow-up ("give me details", "tell me more", "وش المدة؟", "كم سعرها؟") and conversation history + KB cover the topic → HIGH or MEDIUM, not low. The conversation context + KB provides the answer — the vagueness is resolved by the history.
+- Reply style (professional/casual/enthusiastic) changes TONE only — it must NOT affect confidence. If KB answers the question, confidence is HIGH regardless of style.
 - Is every fact in your reply backed by <business_knowledge>? If not, remove it.
 - Are you guessing anything? If yes, replace with "I'll check with the team and get back to you."`;
 
@@ -487,7 +488,7 @@ IMPORTANT: Output a JSON object with these fields:
 - "flags": an array of flag strings if applicable (empty array [] if none):
   - "info_not_in_kb" if the customer asked a specific question and the answer is NOT in <business_knowledge>, or if you responded with general info instead of answering their actual question
   - "price_not_in_kb" if your reply mentions any price, cost, or fee NOT found in <business_knowledge>
-  - "angry_customer" if the customer seems angry, frustrated, or threatening. Add this whenever: exclamation-heavy messages, words like "worst/اسوأ/unacceptable", refund demands "ارجع فلوسي"/"I want my money back", or escalation threats. A COMPLAINT can exist without angry_customer (mild dissatisfaction), but strong emotion MUST trigger the flag.
+  - "angry_customer" — apply when the customer shows strong negative emotion, frustration, or threats. Trigger if ANY of these appear: (1) excessive exclamation marks or aggressive tone, (2) strong negative words: "worst"/"unacceptable"/"terrible"/"سيئة جداً"/"اسوأ", (3) refund demands: "I want my money back"/"I want a refund"/"ارجع فلوسي"/"ابي فلوسي", (4) complaints about being ignored: "no response"/"no one responds"/"محد يرد", (5) escalation/threat language (legal action, public complaints). NOTE: a complaint alone does NOT mean angry_customer — but clear anger, strong frustration, or refund demands MUST trigger this flag.
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
   - "low_confidence" if you are uncertain about your reply
   - "redirect_to_human" if you advised the customer to contact a human
