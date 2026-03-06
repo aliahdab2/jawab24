@@ -209,6 +209,25 @@ export class InstagramService {
      * Send a direct message reply to a user (requires instagram_manage_messages)
      * Note: Can only message users who have messaged the account first
      */
+    async sendTypingIndicator(
+        instagramAccountId: string,
+        recipientId: string,
+        pageAccessToken: string,
+    ): Promise<void> {
+        try {
+            await axios.post(
+                `${INSTAGRAM_GRAPH_API}/${instagramAccountId}/messages`,
+                {
+                    recipient: { id: recipientId },
+                    sender_action: 'typing_on',
+                },
+                { params: { access_token: pageAccessToken } },
+            );
+        } catch {
+            // Typing indicator is cosmetic — silently ignore failures
+        }
+    }
+
     async sendDirectMessage(
         instagramAccountId: string, 
         recipientId: string, 

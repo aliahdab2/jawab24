@@ -5,6 +5,8 @@ import { FacebookMessageAdapter } from '../../src/services/reply/adapters/facebo
 vi.mock('../../src/services/facebook', () => ({
     facebookService: {
         getSenderProfile: vi.fn(),
+        sendTypingIndicator: vi.fn().mockResolvedValue(undefined),
+        sendPrivateMessage: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -121,5 +123,53 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
 
         expect(name).toBe('Fallback API');
         expect(facebookService.getSenderProfile).toHaveBeenCalled();
+    });
+});
+
+describe('FacebookMessageAdapter — typing indicator', () => {
+    const adapter = new FacebookMessageAdapter();
+    const mockPage = {
+        id: 'page-uuid',
+        userId: 'user-uuid',
+        workspaceId: 'ws-uuid',
+        name: 'Test Page',
+        accessToken: 'page-token',
+        knowledgeBase: null,
+        kbActiveVersion: null,
+        autoReplyEnabled: true,
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('sendReply calls sendTypingIndicator before sendPrivateMessage', async () => {
+        const callOrder: string[] = [];
+        vi.mocked(facebookService.sendTypingIndicator).mockImplementation(async () => { callOrder.push('typing'); });
+        vi.mocked(facebookService.sendPrivateMessage).mockImplementation(async () => { callOrder.push('message'); });
+
+        await adapter.sendReply(mockPage, 'recipient-1', 'Hello!');
+
+        expect(callOrder).toEqual(['typing', 'message']);
+        expect(facebookService.sendTypingIndicator).toHaveBeenCalledWith('page-token', 'recipient-1');
+        expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('page-token', 'recipient-1', 'Hello!');
+    });
+
+    it('sendReply still sends message when typing indicator fails', async () => {
+        vi.mocked(facebookService.sendTypingIndicator).mockRejectedValue(new Error('API down'));
+
+        await adapter.sendReply(mockPage, 'recipient-1', 'Hello!');
+
+        expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('page-token', 'recipient-1', 'Hello!');
+    });
+
+    it('sendAwayMessage calls sendTypingIndicator before sendPrivateMessage', async () => {
+        const callOrder: string[] = [];
+        vi.mocked(facebookService.sendTypingIndicator).mockImplementation(async () => { callOrder.push('typing'); });
+        vi.mocked(facebookService.sendPrivateMessage).mockImplementation(async () => { callOrder.push('message'); });
+
+        await adapter.sendAwayMessage(mockPage, 'recipient-1', 'We are away');
+
+        expect(callOrder).toEqual(['typing', 'message']);
     });
 });

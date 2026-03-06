@@ -88,6 +88,7 @@ vi.mock('../../src/services/instagram', () => ({
     instagramService: {
         replyToComment: vi.fn(),
         sendDirectMessage: vi.fn(),
+        sendTypingIndicator: vi.fn().mockResolvedValue(undefined),
     },
 }));
 

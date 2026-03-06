@@ -160,6 +160,22 @@ export class FacebookService {
         }
     }
     /**
+     * Send typing indicator to show "typing..." in the conversation
+     */
+    async sendTypingIndicator(pageAccessToken: string, recipientId: string): Promise<void> {
+        try {
+            await axios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
+                recipient: { id: recipientId },
+                sender_action: 'typing_on',
+            }, {
+                params: { access_token: pageAccessToken },
+            });
+        } catch {
+            // Typing indicator is cosmetic — silently ignore failures
+        }
+    }
+
+    /**
      * Send a private message to a user
      */
     async sendPrivateMessage(pageAccessToken: string, recipientId: string, text: string): Promise<void> {
