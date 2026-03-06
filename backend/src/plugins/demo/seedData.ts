@@ -105,6 +105,36 @@ const DEMO_PAGES = [
         autoReplyEnabled: true,
         instagramUsername: 'electronics_demo',
     },
+    {
+        facebookPageId: 'demo_page_fashion',
+        name: 'أزياء الخليج',
+        suggestedKnowledgeBase: `👗 أزياء الخليج - أناقتك تبدأ من هنا
+
+📍 الموقع: جدة، حي الحمراء، مول رد سي
+
+📞 الهاتف: 0509876543
+📱 واتساب: 0509876543
+
+⏰ ساعات العمل:
+السبت - الخميس: 10 صباحاً - 10 مساءً
+الجمعة: 4 مساءً - 10 مساءً
+
+👔 الأقسام:
+- أزياء رجالية (ثياب، أقمشة، بشوت)
+- أزياء نسائية (عبايات، فساتين، إكسسوارات)
+- أزياء أطفال
+- عطور ومستحضرات تجميل
+
+💰 نطاق الأسعار:
+- ثياب رجالية: 200 - 800 ريال
+- عبايات: 300 - 1,500 ريال
+- عطور: 150 - 600 ريال
+
+🚚 التوصيل: لجميع مناطق المملكة - مجاني للطلبات فوق 300 ريال
+🔄 الاستبدال والاسترجاع: خلال 14 يوم`,
+        autoReplyEnabled: true,
+        instagramUsername: 'gulf_fashion_sa',
+    },
 ];
 
 const DEMO_POSTS = [
@@ -140,6 +170,17 @@ const DEMO_POSTS = [
         facebookPostId: 'demo_post_6',
         message: 'وصلنا أحدث موديلات اللابتوبات 💻 زورونا الآن',
         pageIndex: 2,
+    },
+    // Fashion store posts
+    {
+        facebookPostId: 'demo_post_7',
+        message: 'تشكيلة العبايات الجديدة وصلت! تصاميم عصرية بأقمشة فاخرة 🖤✨',
+        pageIndex: 3,
+    },
+    {
+        facebookPostId: 'demo_post_8',
+        message: 'عرض نهاية الموسم 🔥 خصم حتى 40% على الثياب الرجالية والأطفال',
+        pageIndex: 3,
     },
 ];
 
@@ -337,6 +378,103 @@ const DEMO_COMMENTS: Array<{
         replyMethod: 'ai',
         resolved: true,
     },
+
+    // ── Fashion store comments (posts 6, 7) ──
+    {
+        facebookCommentId: 'demo_comment_17',
+        message: 'كم سعر العباية السوداء؟',
+        fromId: 'user_17',
+        fromName: 'مها الشهري',
+        postIndex: 6,
+        replied: true,
+        replyText: 'أهلاً مها! العباية السوداء الكلاسيك بـ 450 ريال والمطرزة بـ 750 ريال. نوصل لجميع المناطق 🖤',
+        replyMethod: 'ai',
+    },
+    {
+        facebookCommentId: 'demo_comment_18',
+        message: 'هل عندكم مقاسات كبيرة؟',
+        fromId: 'user_18',
+        fromName: 'أسماء القرني',
+        postIndex: 6,
+        replied: true,
+        replyText: 'نعم أسماء! متوفر جميع المقاسات من S حتى 3XL. راسلينا على الخاص لمساعدتك باختيار المقاس المناسب 👗',
+        replyMethod: 'ai',
+    },
+    {
+        facebookCommentId: 'demo_comment_19',
+        message: 'هل فيه توصيل للمدينة المنورة؟',
+        fromId: 'user_19',
+        fromName: 'رنا السلمي',
+        postIndex: 7,
+        replied: true,
+        replyText: 'أكيد رنا! نوصل لجميع مناطق المملكة. التوصيل مجاني للطلبات فوق 300 ريال، ويوصل خلال 3-5 أيام 🚚',
+        replyMethod: 'template',
+    },
+    {
+        // Unreplied — wants to exchange
+        facebookCommentId: 'demo_comment_20',
+        message: 'طلبت ثوب وجاني مقاس غلط، كيف أرجعه؟',
+        fromId: 'user_20',
+        fromName: 'بندر العتيبي',
+        postIndex: 7,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        needsAttention: true,
+        flagReason: 'negative_sentiment',
+    },
+    {
+        facebookCommentId: 'demo_comment_21',
+        message: 'ما شاء الله تشكيلة حلوة! وش أفضل عطر رجالي عندكم؟',
+        fromId: 'user_21',
+        fromName: 'ماجد الحربي',
+        postIndex: 7,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+    },
+
+    // ── English comments (mixed across pages — showcases bilingual auto-detect) ──
+    {
+        facebookCommentId: 'demo_comment_22',
+        message: 'How much is the IELTS course? And do you offer online classes?',
+        fromId: 'user_22',
+        fromName: 'Sarah Johnson',
+        postIndex: 1,
+        replied: true,
+        replyText: 'Hi Sarah! The IELTS course is 2,500 SAR for 8 weeks. Yes, we offer both in-person and online sessions. Contact us for details!',
+        replyMethod: 'ai',
+    },
+    {
+        facebookCommentId: 'demo_comment_23',
+        message: 'Do you ship internationally? I want to order the black abaya',
+        fromId: 'user_23',
+        fromName: 'Fatima Ali',
+        postIndex: 6,
+        replied: true,
+        replyText: 'Hi Fatima! Currently we ship across Saudi Arabia. International shipping is coming soon! DM us your location and we can check options for you.',
+        replyMethod: 'ai',
+    },
+    {
+        facebookCommentId: 'demo_comment_24',
+        message: 'What are your admission requirements for KG1?',
+        fromId: 'user_24',
+        fromName: 'Ahmed Hassan',
+        postIndex: 2,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+    },
+    {
+        facebookCommentId: 'demo_comment_25',
+        message: 'Is the MacBook Air M3 available for pickup today?',
+        fromId: 'user_25',
+        fromName: 'Omar K.',
+        postIndex: 5,
+        replied: true,
+        replyText: 'Hi Omar! Yes, the MacBook Air M3 is in stock. You can pick it up from our store in Al Olaya during business hours. We also offer same-day delivery within Riyadh!',
+        replyMethod: 'ai',
+    },
 ];
 
 const DEMO_MESSAGES: Array<{
@@ -529,6 +667,150 @@ const DEMO_MESSAGES: Array<{
         replyMethod: 'template',
         minutesAgo: 299,
     },
+
+    // ── Conversation 7: English inquiry — AI replied (Electronics page) ──
+    {
+        facebookMessageId: 'demo_msg_9a',
+        senderId: 'dm_user_9',
+        senderName: 'James Wilson',
+        message: 'Hi, do you have the Samsung Galaxy S24 in silver? What is the price?',
+        direction: 'incoming',
+        pageIndex: 2,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 170,
+    },
+    {
+        facebookMessageId: 'demo_msg_9b',
+        senderId: 'dm_user_9',
+        senderName: 'James Wilson',
+        message: 'Hi James! Yes, the Samsung Galaxy S24 in silver is available. The 256GB model is 2,900 SAR and the 512GB is 3,400 SAR. Both come with a 1-year warranty. Would you like to place an order?',
+        direction: 'outgoing',
+        pageIndex: 2,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        minutesAgo: 169,
+    },
+
+    // ── Conversation 8: English multi-turn (Institute page) ──
+    {
+        facebookMessageId: 'demo_msg_10a',
+        senderId: 'dm_user_10',
+        senderName: 'Emily Chen',
+        message: 'Hello! I am interested in the PMP course. When does the next batch start?',
+        direction: 'incoming',
+        pageIndex: 0,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 350,
+    },
+    {
+        facebookMessageId: 'demo_msg_10b',
+        senderId: 'dm_user_10',
+        senderName: 'Emily Chen',
+        message: 'Hello Emily! The next PMP course starts in two weeks. It runs for 6 weeks (Sun, Tue, Thu evenings 6-9 PM). The fee is 3,500 SAR with early bird discount available.',
+        direction: 'outgoing',
+        pageIndex: 0,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        minutesAgo: 349,
+    },
+    {
+        facebookMessageId: 'demo_msg_10c',
+        senderId: 'dm_user_10',
+        senderName: 'Emily Chen',
+        message: 'Great! Is there an online option? I live in Al Khobar.',
+        direction: 'incoming',
+        pageIndex: 0,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 330,
+    },
+    {
+        facebookMessageId: 'demo_msg_10d',
+        senderId: 'dm_user_10',
+        senderName: 'Emily Chen',
+        message: 'Yes Emily! We offer the PMP course online via Zoom with the same schedule. You will get recorded sessions too in case you miss any class.',
+        direction: 'outgoing',
+        pageIndex: 0,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        minutesAgo: 329,
+    },
+
+    // ── Conversation 9: Product inquiry — AI replied (Fashion page) ──
+    {
+        facebookMessageId: 'demo_msg_11a',
+        senderId: 'dm_user_7',
+        senderName: 'نورة الغامدي',
+        message: 'السلام عليكم، أبي عباية للمناسبات، عندكم شي مميز؟',
+        direction: 'incoming',
+        pageIndex: 3,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 150,
+    },
+    {
+        facebookMessageId: 'demo_msg_11b',
+        senderId: 'dm_user_7',
+        senderName: 'نورة الغامدي',
+        message: 'وعليكم السلام نورة! عندنا تشكيلة عبايات مناسبات فخمة بأقمشة كريب وحرير. الأسعار من 750 لـ 1,500 ريال. أرسلك صور التشكيلة؟ 🖤✨',
+        direction: 'outgoing',
+        pageIndex: 3,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        minutesAgo: 149,
+    },
+    {
+        facebookMessageId: 'demo_msg_11c',
+        senderId: 'dm_user_7',
+        senderName: 'نورة الغامدي',
+        message: 'إي أرسلي الصور، وهل فيه تفصيل؟',
+        direction: 'incoming',
+        pageIndex: 3,
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        minutesAgo: 60,
+    },
+
+    // ── Conversation 10: Exchange request — needs attention (Fashion page) ──
+    {
+        facebookMessageId: 'demo_msg_12a',
+        senderId: 'dm_user_8',
+        senderName: 'خلود المالكي',
+        message: 'مرحبا، استلمت الطلب بس اللون مختلف عن الصورة، أبي أرجعه',
+        direction: 'incoming',
+        pageIndex: 3,
+        replied: true,
+        replyText: null,
+        replyMethod: null,
+        needsAttention: true,
+        flagReason: 'negative_sentiment',
+        minutesAgo: 240,
+    },
+    {
+        facebookMessageId: 'demo_msg_12b',
+        senderId: 'dm_user_8',
+        senderName: 'خلود المالكي',
+        message: 'نعتذر خلود! يمكنك الاسترجاع أو الاستبدال خلال 14 يوم. أرسلي رقم الطلب وسنرتب لك الاسترجاع فوراً 🙏',
+        direction: 'outgoing',
+        pageIndex: 3,
+        replied: false,
+        replyText: null,
+        replyMethod: 'ai',
+        needsAttention: true,
+        flagReason: 'negative_sentiment',
+        minutesAgo: 239,
+    },
 ];
 
 const DEMO_TEMPLATES = [
@@ -662,6 +944,108 @@ const DEMO_SHOPIFY_STORE = {
     productSummary: `Store: https://demo-electronics.myshopify.com\nTop Products:\niPhone 15 Pro — 3,800 - 4,500 SAR — 128GB، 256GB، 512GB — أسود، أبيض، تيتانيوم — in stock — https://demo-electronics.myshopify.com/products/iphone-15-pro\nSamsung Galaxy S24 — 2,900 - 3,400 SAR — 256GB، 512GB — أسود، فضي — in stock — https://demo-electronics.myshopify.com/products/samsung-galaxy-s24\nMacBook Air M3 — 5,200 - 6,500 SAR — 13 بوصة، 15 بوصة — فضي، رمادي — low stock — https://demo-electronics.myshopify.com/products/macbook-air-m3\nAirPods Pro (الجيل الثاني) — 850 SAR — in stock — https://demo-electronics.myshopify.com/products/airpods-pro-2\nكفر حماية iPhone 15 — 120 - 180 SAR — أسود، أبيض، أزرق، أحمر، شفاف — in stock — https://demo-electronics.myshopify.com/products/iphone-15-case`,
     policiesSummary: `ضمان: سنة كاملة على جميع المنتجات\nإرجاع: 14 يوم\nتوصيل: 2-3 أيام عمل داخل الرياض، مجاني للطلبات فوق 500 ريال\nدفع: بطاقة، تحويل، الدفع عند الاستلام`,
 };
+
+const DEMO_SALLA_STORE = {
+    platform: 'salla' as const,
+    storeDomain: 'gulf-fashion.salla.sa',
+    accessToken: 'demo_salla_token_placeholder',
+    accessTokenIv: '00000000000000000000000000000000',
+    storeName: 'أزياء الخليج',
+    storeEmail: 'info@gulf-fashion.salla.sa',
+    storeCurrency: 'SAR',
+    storeTimezone: 'Asia/Riyadh',
+    platformData: { merchant_id: 'demo_salla_merchant' },
+    productCount: 6,
+    productSummary: `Store: https://gulf-fashion.salla.sa\nTop Products:\nعباية كلاسيك سوداء — 450 SAR — S، M، L، XL — أسود — in stock — https://gulf-fashion.salla.sa/products/classic-black-abaya\nعباية مطرزة فاخرة — 750 - 950 SAR — S، M، L، XL، XXL — أسود، كحلي — in stock — https://gulf-fashion.salla.sa/products/embroidered-luxury-abaya\nثوب رجالي قطن مصري — 280 - 450 SAR — 52، 54، 56، 58، 60 — أبيض — in stock — https://gulf-fashion.salla.sa/products/egyptian-cotton-thobe\nبشت رجالي فاخر — 1,200 - 2,500 SAR — 56، 58، 60 — بيج، بني — low stock — https://gulf-fashion.salla.sa/products/luxury-bisht\nعطر عود ملكي — 350 SAR — 100ml — in stock — https://gulf-fashion.salla.sa/products/royal-oud-perfume\nطقم أطفال عيد — 180 - 250 SAR — 4-6، 7-9، 10-12 سنة — أبيض، بيج — in stock — https://gulf-fashion.salla.sa/products/kids-eid-set`,
+    policiesSummary: `استبدال واسترجاع: 14 يوم من تاريخ الاستلام\nتوصيل: 3-5 أيام عمل لجميع مناطق المملكة\nتوصيل مجاني: للطلبات فوق 300 ريال\nطرق الدفع: بطاقة ائتمان، مدى، Apple Pay، الدفع عند الاستلام`,
+};
+
+const DEMO_SALLA_PRODUCTS = [
+    {
+        platformProductId: 'demo_salla_prod_1',
+        handle: 'classic-black-abaya',
+        title: 'عباية كلاسيك سوداء',
+        description: 'عباية سوداء كلاسيكية بقماش كريب ياباني فاخر، قصة واسعة مريحة، أكمام واسعة مع تطريز ناعم على الأكتاف، مناسبة للاستخدام اليومي والمناسبات الخفيفة',
+        productType: 'Abayas',
+        vendor: 'أزياء الخليج',
+        priceRange: '450 SAR',
+        currency: 'SAR',
+        totalInventory: 30,
+        hasVariants: true,
+        variantSummary: 'S، M، L، XL — أسود',
+        tags: 'عباية,كلاسيك,يومي',
+    },
+    {
+        platformProductId: 'demo_salla_prod_2',
+        handle: 'embroidered-luxury-abaya',
+        title: 'عباية مطرزة فاخرة',
+        description: 'عباية فاخرة بتطريز يدوي على الأكمام والصدر، قماش كريب مزدوج بجودة عالية، قصة انسيابية أنيقة، مناسبة للمناسبات والحفلات والأعراس',
+        productType: 'Abayas',
+        vendor: 'أزياء الخليج',
+        priceRange: '750 - 950 SAR',
+        currency: 'SAR',
+        totalInventory: 15,
+        hasVariants: true,
+        variantSummary: 'S، M، L، XL، XXL — أسود، كحلي',
+        tags: 'عباية,مطرزة,مناسبات,فاخرة',
+    },
+    {
+        platformProductId: 'demo_salla_prod_3',
+        handle: 'egyptian-cotton-thobe',
+        title: 'ثوب رجالي قطن مصري',
+        description: 'ثوب رجالي من أفخر أنواع القطن المصري، ناعم ومريح للبشرة، خياطة متقنة بأزرار مخفية، ياقة كلاسيكية، مقاوم للتجعد، مثالي للاستخدام اليومي والمناسبات',
+        productType: 'Thobes',
+        vendor: 'أزياء الخليج',
+        priceRange: '280 - 450 SAR',
+        currency: 'SAR',
+        totalInventory: 40,
+        hasVariants: true,
+        variantSummary: '52، 54، 56، 58، 60 — أبيض',
+        tags: 'ثوب,رجالي,قطن',
+    },
+    {
+        platformProductId: 'demo_salla_prod_4',
+        handle: 'luxury-bisht',
+        title: 'بشت رجالي فاخر',
+        description: 'بشت رجالي فاخر بتطريز ذهبي يدوي (زري)، قماش صوف ناعم ممزوج بالحرير، مناسب للأعراس والمناسبات الرسمية، يأتي في علبة هدايا فاخرة',
+        productType: 'Bishts',
+        vendor: 'أزياء الخليج',
+        priceRange: '1,200 - 2,500 SAR',
+        currency: 'SAR',
+        totalInventory: 4,
+        hasVariants: true,
+        variantSummary: '56، 58، 60 — بيج، بني',
+        tags: 'بشت,فاخر,مناسبات',
+    },
+    {
+        platformProductId: 'demo_salla_prod_5',
+        handle: 'royal-oud-perfume',
+        title: 'عطر عود ملكي',
+        description: 'عطر عود ملكي مركز بتركيبة فاخرة من العود الكمبودي والمسك الأبيض وخشب الصندل، ثبات عالي يدوم أكثر من 12 ساعة، مناسب للرجال والنساء',
+        productType: 'Perfumes',
+        vendor: 'أزياء الخليج',
+        priceRange: '350 SAR',
+        currency: 'SAR',
+        totalInventory: 25,
+        hasVariants: false,
+        variantSummary: null,
+        tags: 'عطر,عود,ملكي',
+    },
+    {
+        platformProductId: 'demo_salla_prod_6',
+        handle: 'kids-eid-set',
+        title: 'طقم أطفال عيد',
+        description: 'طقم عيد للأطفال يشمل ثوب قطني مع صديرية مطرزة وطاقية، أقمشة ناعمة ومريحة للأطفال، متوفر بألوان متعددة، هدية مثالية للعيد',
+        productType: 'Kids',
+        vendor: 'أزياء الخليج',
+        priceRange: '180 - 250 SAR',
+        currency: 'SAR',
+        totalInventory: 35,
+        hasVariants: true,
+        variantSummary: '4-6، 7-9، 10-12 سنة — أبيض، بيج',
+        tags: 'أطفال,عيد,طقم',
+    },
+];
 
 const DEMO_SHOPIFY_PRODUCTS = [
     {
@@ -897,7 +1281,10 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
         await refreshDemoNotifications(userId, logger);
 
         const electronicsRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_electronics');
-        if (electronicsRefresh) await seedDemoShopify(userId, electronicsRefresh.id, logger);
+        if (electronicsRefresh) await seedDemoStore(userId, electronicsRefresh.id, DEMO_SHOPIFY_STORE, DEMO_SHOPIFY_PRODUCTS, logger);
+
+        const fashionRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_fashion');
+        if (fashionRefresh) await seedDemoStore(userId, fashionRefresh.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger);
 
         return;
     }
@@ -1049,9 +1436,12 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
 
     logger.debug('[DemoData] Created demo rules', { count: DEMO_RULES.length });
 
-    // Seed Shopify demo store linked to the electronics page
+    // Seed e-commerce demo stores linked to their pages
     const electronicsPage = createdPages.find(p => p.facebookPageId === 'demo_page_electronics');
-    if (electronicsPage) await seedDemoShopify(userId, electronicsPage.id, logger);
+    if (electronicsPage) await seedDemoStore(userId, electronicsPage.id, DEMO_SHOPIFY_STORE, DEMO_SHOPIFY_PRODUCTS, logger);
+
+    const fashionPage = createdPages.find(p => p.facebookPageId === 'demo_page_fashion');
+    if (fashionPage) await seedDemoStore(userId, fashionPage.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger);
 
     // Create demo notifications (varied types, timestamps, and read states)
     await refreshDemoNotifications(userId, logger);
@@ -1066,38 +1456,47 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
 }
 
 /**
- * Seed Shopify demo store and products for the electronics page.
- * Deletes any existing demo store for the user first (cascade removes products).
+ * Seed a single e-commerce demo store and its products, linked to a specific page.
+ * Only deletes the store for the given platform (not all stores for the user).
  */
-async function seedDemoShopify(userId: string, electronicsPageId: string, logger: Logger): Promise<void> {
-    await db.delete(ecommerceStores).where(eq(ecommerceStores.userId, userId));
+async function seedDemoStore(
+    userId: string,
+    pageId: string,
+    storeConfig: typeof DEMO_SHOPIFY_STORE | typeof DEMO_SALLA_STORE,
+    products: typeof DEMO_SHOPIFY_PRODUCTS | typeof DEMO_SALLA_PRODUCTS,
+    logger: Logger,
+): Promise<void> {
+    // Delete only existing store for this specific platform + user
+    await db.delete(ecommerceStores).where(
+        and(eq(ecommerceStores.userId, userId), eq(ecommerceStores.platform, storeConfig.platform))
+    );
 
     const lastSyncAt = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h ago
     const [store] = await db.insert(ecommerceStores).values({
         userId,
-        ...DEMO_SHOPIFY_STORE,
+        ...storeConfig,
         lastSyncAt,
         isActive: true,
     }).returning({ id: ecommerceStores.id });
 
-    for (const prod of DEMO_SHOPIFY_PRODUCTS) {
+    for (const prod of products) {
         await db.insert(ecommerceProducts).values({ ecommerceStoreId: store.id, ...prod, status: 'active' });
     }
 
     await db.update(pages)
         .set({ ecommerceStoreId: store.id })
-        .where(eq(pages.id, electronicsPageId));
+        .where(eq(pages.id, pageId));
 
     // Trigger RAG ingestion so product chunks are searchable (same as production sync)
     try {
         const { invalidateCachesForStore } = await import('../../services/ecommerce');
         await invalidateCachesForStore(store.id);
-        logger.debug('[DemoData] RAG ingestion triggered for e-commerce store');
+        logger.debug('[DemoData] RAG ingestion triggered for e-commerce store', { platform: storeConfig.platform });
     } catch {
         // Non-critical — enriched KB text blob is the fallback
     }
 
-    logger.debug('[DemoData] Seeded e-commerce store', { storeId: store.id, products: DEMO_SHOPIFY_PRODUCTS.length });
+    logger.debug('[DemoData] Seeded e-commerce store', { platform: storeConfig.platform, storeId: store.id, products: products.length });
 }
 
 /**

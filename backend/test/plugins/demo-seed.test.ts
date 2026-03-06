@@ -61,6 +61,7 @@ describe('seedDemoData', () => {
             { facebookPageId: 'demo_page_institute', name: 'OLD NAME' },
             { facebookPageId: 'demo_page_school', name: 'OLD SCHOOL NAME' },
             { facebookPageId: 'demo_page_electronics', name: 'OLD STORE' },
+            { facebookPageId: 'demo_page_fashion', name: 'OLD FASHION' },
         ];
         vi.mocked(db.select).mockReturnValue(mockSelectChain(existingPages) as any);
 
@@ -73,9 +74,9 @@ describe('seedDemoData', () => {
 
         await seedDemoData('user-123');
 
-        // 3 page name refreshes + 1 Shopify page link update + 4 template upserts
+        // 4 page name refreshes + 2 e-commerce page link updates (Shopify + Salla) + 4 template upserts
         // (kbActiveVersion activation is now handled inside ingestFullPage, not by invalidateCachesForStore)
-        expect(db.update).toHaveBeenCalledTimes(8);
+        expect(db.update).toHaveBeenCalledTimes(10);
     });
 
     it('should create pages when no demo data exists', async () => {
