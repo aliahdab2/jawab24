@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { Rocket, ShoppingBag } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -122,19 +122,8 @@ export default function LandingPage() {
           </div>
         </nav>
 
-        {/* Coming Soon Banner */}
-        <div className="relative z-40 mt-16 sm:mt-20 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 dark:from-brand-600 dark:via-brand-500 dark:to-brand-600 text-white py-3 sm:py-4 px-4 shadow-lg">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
-            <div className="flex items-center gap-2">
-              <Rocket className="w-5 h-5 sm:w-6 sm:h-6 animate-bounce" aria-hidden="true" />
-              <div className="text-center sm:text-start">
-                <p className="font-bold text-sm sm:text-lg">{t('landing.comingSoon.banner')}</p>
-                <p className="text-xs sm:text-sm text-white/90 font-medium">{t('landing.comingSoon.subtitle')}</p>
-              </div>
-            </div>
-            <WaitlistForm feature="early_access" variant="banner" />
-          </div>
-        </div>
+        {/* Spacer for fixed nav */}
+        <div className="mt-16 sm:mt-20" />
 
         <LandingHero isAuthenticated={isAuthenticated} />
 
