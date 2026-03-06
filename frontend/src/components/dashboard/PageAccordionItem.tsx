@@ -125,7 +125,7 @@ export function PageAccordionItem({
         )}
       >
         <div className="overflow-hidden">
-          <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 px-4 sm:px-5 py-4">
+          <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 dark:from-emerald-950/30 dark:to-card px-4 sm:px-5 py-4">
             {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-card rounded-xl p-3 text-center shadow-sm">

@@ -44,16 +44,16 @@ function WelcomeStep({
 }) {
   return (
     <div className={`text-center ${isLandscape ? 'flex items-center gap-6' : ''}`}>
-      <div className={isLandscape ? 'flex-shrink-0' : 'mb-6'}>
-        <div className={`${isLandscape ? 'w-20 h-20' : 'w-32 h-32'} mx-auto bg-gradient-to-br from-brand-400 to-accent-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-brand-500/30`}>
-          <Sparkles className={`${isLandscape ? 'w-10 h-10' : 'w-16 h-16'} text-white`} />
+      <div className={isLandscape ? 'flex-shrink-0' : 'mb-4'}>
+        <div className={`${isLandscape ? 'w-16 h-16' : 'w-24 h-24'} mx-auto bg-gradient-to-br from-brand-400 to-accent-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-brand-500/30`}>
+          <Sparkles className={`${isLandscape ? 'w-8 h-8' : 'w-12 h-12'} text-white`} />
         </div>
       </div>
       <div className={isLandscape ? 'flex-1 text-start' : ''}>
-        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-xl mb-2' : 'text-2xl mb-4'}`}>
+        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-xl mb-2' : 'text-2xl mb-3'}`}>
           {t('onboarding.welcomeTitle')}
         </h2>
-        <p className={`text-muted-foreground leading-relaxed ${isLandscape ? 'text-sm' : 'text-lg'}`}>
+        <p className={`text-muted-foreground leading-relaxed ${isLandscape ? 'text-sm' : 'text-base'}`}>
           {t('onboarding.welcomeDesc')}
         </p>
       </div>
@@ -85,7 +85,7 @@ function PickPageStep({
     return (
       <div className="text-center py-8">
         <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-surface-500">{t('common.loading')}</p>
+        <p className="text-muted-foreground">{t('common.loading')}</p>
       </div>
     );
   }
@@ -93,10 +93,10 @@ function PickPageStep({
   if (fetchError) {
     return (
       <div className="text-center py-8">
-        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-          <X className="w-6 h-6 text-red-500" />
+        <div className="w-12 h-12 rounded-full icon-bg-red flex items-center justify-center mx-auto mb-4">
+          <X className="w-6 h-6" />
         </div>
-        <p className="text-surface-600 font-medium">{t('onboarding.fetchError' as TranslationKey)}</p>
+        <p className="text-muted-foreground font-medium">{t('onboarding.fetchError' as TranslationKey)}</p>
         <button
           onClick={onRetry}
           className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors"
@@ -111,7 +111,7 @@ function PickPageStep({
     return (
       <div className="text-center py-8">
         <FileText className="w-12 h-12 text-icon-muted mx-auto mb-4" />
-        <p className="text-surface-600 font-medium">{t('pages.noPages')}</p>
+        <p className="text-muted-foreground font-medium">{t('pages.noPages')}</p>
         <p className="text-muted-foreground text-sm mt-2">{t('onboarding.noPagesHelp' as TranslationKey)}</p>
         <button
           onClick={onRetry}
@@ -125,16 +125,16 @@ function PickPageStep({
 
   return (
     <div className={isLandscape ? 'flex gap-6' : ''}>
-      <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-6'}>
-        <div className={`${isLandscape ? 'w-16 h-16' : 'w-20 h-20 mx-auto'} icon-bg-blue rounded-2xl flex items-center justify-center`}>
-          <FileText className={`${isLandscape ? 'w-8 h-8' : 'w-10 h-10'}`} />
+      <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-4'}>
+        <div className={`${isLandscape ? 'w-14 h-14' : 'w-16 h-16 mx-auto'} icon-bg-blue rounded-2xl flex items-center justify-center`}>
+          <FileText className="w-8 h-8" />
         </div>
       </div>
       <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
-        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
+        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-1'}`}>
           {t('onboarding.pickPageTitle')}
         </h2>
-        <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'mb-6'}`}>
+        <p className={`text-muted-foreground ${isLandscape ? 'text-sm mb-3' : 'text-sm mb-4'}`}>
           {t('onboarding.pickPageDesc')}
           {pageLimit !== null && (
             <span className="block text-xs text-muted-foreground mt-1">
@@ -148,14 +148,14 @@ function PickPageStep({
             <div
               key={page.id}
               className={`flex items-center justify-between gap-4 p-4 rounded-2xl border-2 transition-all ${
-                page.autoReplyEnabled 
-                  ? 'border-brand-500 bg-brand-50/50'
+                page.autoReplyEnabled
+                  ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/30'
                   : 'border-theme-border bg-card'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  page.autoReplyEnabled ? 'bg-brand-500 text-white' : 'bg-surface-100 text-icon-muted'
+                  page.autoReplyEnabled ? 'bg-brand-500 text-white' : 'bg-muted text-icon-muted'
                 }`}>
                   <FileText className="w-5 h-5" />
                 </div>
@@ -200,7 +200,7 @@ function ReviewInfoStep({
     return (
       <div className="text-center py-8">
         <Info className="w-12 h-12 text-icon-muted mx-auto mb-4" />
-        <p className="text-surface-600">{t('onboarding.noPageSelected')}</p>
+        <p className="text-muted-foreground">{t('onboarding.noPageSelected')}</p>
       </div>
     );
   }
@@ -214,26 +214,26 @@ function ReviewInfoStep({
 
   return (
     <div className={isLandscape ? 'flex gap-6' : ''}>
-      <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-4'}>
-        <div className={`${isLandscape ? 'w-16 h-16' : 'w-20 h-20 mx-auto'} bg-emerald-100 rounded-2xl flex items-center justify-center`}>
-          <CheckCircle2 className={`${isLandscape ? 'w-8 h-8' : 'w-10 h-10'} text-emerald-600`} />
+      <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-3'}>
+        <div className={`${isLandscape ? 'w-14 h-14' : 'w-16 h-16 mx-auto'} icon-bg-emerald rounded-2xl flex items-center justify-center`}>
+          <CheckCircle2 className="w-8 h-8" />
         </div>
       </div>
       <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
         <h2 className={`font-bold text-foreground ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
           {t('onboarding.reviewInfoTitle')}
         </h2>
-        <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'text-sm mb-4'}`}>
+        <p className={`text-muted-foreground ${isLandscape ? 'text-sm mb-3' : 'text-sm mb-4'}`}>
           {t('onboarding.reviewInfoDesc')}
         </p>
 
         {/* Completion summary */}
         {selectedPage?.autoReplyEnabled && (
-          <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl mb-3 text-start">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" aria-hidden="true" />
+          <div className="flex items-center gap-2 p-3 alert-success border rounded-xl mb-3 text-start">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-emerald-800 truncate">{selectedPage.name}</p>
-              <p className="text-xs text-emerald-600">{t('onboarding.readySummary' as TranslationKey)}</p>
+              <p className="text-sm font-semibold truncate">{selectedPage.name}</p>
+              <p className="text-xs opacity-80">{t('onboarding.readySummary' as TranslationKey)}</p>
             </div>
           </div>
         )}
@@ -243,7 +243,7 @@ function ReviewInfoStep({
             <textarea
               value={knowledgeBase}
               onChange={(e) => onKnowledgeBaseChange(e.target.value)}
-              className={`w-full p-4 border-2 border-theme-border rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-foreground ${
+              className={`w-full p-4 border-2 border-theme-border rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-foreground bg-background ${
                 isLandscape ? 'h-[20vh]' : 'h-[30vh]'
               }`}
               placeholder={t('pages.writeBusinessInfo')}
@@ -259,7 +259,7 @@ function ReviewInfoStep({
           </div>
         ) : (
           <div 
-            className="text-start bg-surface-50 rounded-2xl p-4 border border-theme-border"
+            className="text-start bg-muted rounded-2xl p-4 border border-theme-border"
             dir="auto"
           >
             {knowledgeBase ? (
@@ -267,7 +267,7 @@ function ReviewInfoStep({
                 {/* Show indicators for what info is present */}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {hasAddress && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 status-success border rounded-lg text-xs font-medium">
                       <MapPin className="w-3 h-3" /> {t('onboarding.hasAddress')}
                     </span>
                   )}
@@ -287,7 +287,7 @@ function ReviewInfoStep({
                     </span>
                   )}
                 </div>
-                <p className="text-surface-600 text-sm whitespace-pre-wrap line-clamp-4">
+                <p className="text-muted-foreground text-sm whitespace-pre-wrap line-clamp-4">
                   {knowledgeBase}
                 </p>
                 <p className="text-xs text-muted-foreground mt-2">
@@ -540,7 +540,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
           </p>
 
           {/* Progress dots */}
-          <div className={`flex gap-2 justify-center mb-4`}>
+          <div className="flex gap-2 justify-center mb-3">
             {[0, 1, 2].map((index) => (
               <div
                 key={index}
@@ -550,8 +550,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
                   index === currentStep 
                     ? `bg-brand-500 ${isLandscape ? 'w-6' : 'w-8'}` 
                     : index < currentStep 
-                    ? 'bg-brand-300' 
-                    : 'bg-surface-200'
+                    ? 'bg-brand-300'
+                    : 'bg-muted'
                 }`}
               />
             ))}
