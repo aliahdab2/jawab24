@@ -117,7 +117,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const fetchLimits = useCallback(async () => {
     try {
       const { data } = await subscriptionApi.checkAiLimit();
-      setAiLimit(data);
+      // Backend wraps as { success, data: { allowed, reason?, limit?, used? } }
+      setAiLimit(data.data ?? data);
     } catch (error) {
       captureError(error, 'Failed to fetch AI limits', { tags: { component: 'comment-detail' } });
     }

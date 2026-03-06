@@ -50,8 +50,8 @@ describe('Demo seed — workspace scoping', () => {
 
         const pages = await pagesService.getPages(ws.id);
 
-        // Must return the 3 demo pages, not an empty array
-        expect(pages.length).toBe(3);
+        // Must return all demo pages, not an empty array
+        expect(pages.length).toBe(4);
         expect(pages.every(p => p.workspaceId === ws.id)).toBe(true);
     });
 
@@ -96,7 +96,7 @@ describe('Demo seed — workspace scoping', () => {
         await seedDemoData(user.id, ws.id);
 
         const pages = await pagesService.getPages(ws.id);
-        expect(pages.length).toBe(3);
+        expect(pages.length).toBe(4);
         expect(pages.every(p => p.workspaceId === ws.id)).toBe(true);
     });
 });
