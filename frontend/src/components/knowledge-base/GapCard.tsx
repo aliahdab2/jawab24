@@ -63,7 +63,7 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
         <div className="px-3 pb-3 space-y-2">
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[56px] p-2.5 border border-amber-200 rounded-lg bg-card focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm leading-relaxed text-foreground placeholder:text-surface-400 resize-none"
+            className="w-full min-h-[56px] p-2.5 border border-amber-200 rounded-lg bg-card focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground resize-none"
             placeholder={t('kb.gaps.answerPlaceholder' as TranslationKey)}
             aria-label={t('kb.gaps.answerPlaceholder' as TranslationKey)}
             value={answer}

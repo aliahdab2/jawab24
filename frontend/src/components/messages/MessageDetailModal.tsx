@@ -292,7 +292,7 @@ export function MessageDetailModal({
                 </div>
                 <div className={clsx(
                   "flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter",
-                  msg.direction === 'outgoing' ? 'text-brand-500' : 'text-surface-400'
+                  msg.direction === 'outgoing' ? 'text-brand-500' : 'text-muted-foreground'
                 )}>
                   <span title={formatFullTime(msg.createdAt)}>{formatMessageTime(msg.createdAt)}</span>
                   {msg.direction === 'outgoing' && msg.replyMethod && (

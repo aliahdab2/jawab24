@@ -50,7 +50,7 @@ export function KnowledgeBaseSection({
           ? 'border-brand-400 bg-brand-50/20 shadow-sm'
           : hasContent
             ? 'border-brand-200 bg-brand-50/10'
-            : 'border-theme-border bg-card hover:border-surface-300'
+            : 'border-theme-border bg-card hover:border-surface-300 dark:hover:border-surface-500'
       }`}
     >
       {/* Header - always visible, clickable */}
@@ -68,7 +68,7 @@ export function KnowledgeBaseSection({
             {t(config.titleKey as TranslationKey)}
           </p>
           {!isExpanded && (
-            <p className={`text-xs mt-0.5 truncate ${hasContent ? 'text-surface-500' : 'text-surface-400'}`}>
+            <p className={`text-xs mt-0.5 truncate ${hasContent ? 'text-surface-500 dark:text-surface-700' : 'text-muted-foreground'}`}>
               {preview}
             </p>
           )}
@@ -77,13 +77,13 @@ export function KnowledgeBaseSection({
         {/* Status dot */}
         <div
           className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors ${
-            hasContent ? 'bg-brand-500' : 'bg-surface-200'
+            hasContent ? 'bg-brand-500' : 'bg-dot-muted'
           }`}
         />
 
         {/* Chevron */}
         <ChevronDown
-          className={`w-4 h-4 text-surface-400 flex-shrink-0 transition-transform duration-200 ${
+          className={`w-4 h-4 text-icon-muted flex-shrink-0 transition-transform duration-200 ${
             isExpanded ? 'rotate-180' : ''
           }`}
         />
@@ -92,12 +92,12 @@ export function KnowledgeBaseSection({
       {/* Expanded content */}
       {isExpanded && (
         <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
-          <p className="text-xs text-surface-400 mb-2">
+          <p className="text-xs text-muted-foreground mb-2">
             {t(config.descKey as TranslationKey)}
           </p>
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-surface-300"
+            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground"
             placeholder={t(config.placeholderKey as TranslationKey)}
             aria-label={t(config.titleKey as TranslationKey)}
             value={section.content}
@@ -108,7 +108,7 @@ export function KnowledgeBaseSection({
           />
           {section.content.length > 0 && (
             <p className={`text-end text-xs mt-1 ${
-              section.content.length > 4500 ? 'text-amber-500' : 'text-surface-300'
+              section.content.length > 4500 ? 'text-amber-500' : 'text-muted-foreground'
             }`}>
               {t('kb.charCount' as TranslationKey)
                 .replace('{count}', String(section.content.length))

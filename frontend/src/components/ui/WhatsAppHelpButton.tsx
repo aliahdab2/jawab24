@@ -145,7 +145,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
                 {t('common.contactWhatsApp')}
               </button>
 
-              <p className="text-[9px] font-bold text-surface-400 text-center uppercase tracking-widest mt-3">
+              <p className="text-[9px] font-bold text-muted-foreground text-center uppercase tracking-widest mt-3">
                 {t('common.alwaysAvailable')}
               </p>
             </div>

@@ -87,7 +87,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
         aria-haspopup="listbox"
         className={clsx(
           "input !py-2.5 sm:!py-3 w-full text-start flex items-center justify-between gap-2",
-          !selectedOption && "text-surface-400",
+          !selectedOption && "text-muted-foreground",
           disabled && "opacity-50 cursor-not-allowed",
           className
         )}
@@ -110,7 +110,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
           className="absolute inset-x-0 z-[100] bg-card rounded-xl border border-theme-border shadow-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150"
         >
           {options.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-surface-400 text-center">
+            <div className="px-4 py-3 text-sm text-muted-foreground text-center">
               No options available
             </div>
           ) : (

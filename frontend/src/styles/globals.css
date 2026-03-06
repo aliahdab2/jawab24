@@ -571,6 +571,22 @@
            dark:bg-emerald-900/20 dark:text-emerald-200 dark:border-emerald-800;
   }
 
+  /* --- Muted text & icon utilities (single source of truth for dark mode) ---
+     Use these instead of raw `text-surface-300` which is invisible in dark mode.
+     • text-icon-muted   → decorative icons in empty states, chevrons, timestamps
+     • text-subtle       → secondary text like char counts, separators, previews
+     • bg-dot-muted      → small status dots (inactive state)
+  */
+  .text-icon-muted {
+    @apply text-surface-300 dark:text-surface-600;
+  }
+  .text-subtle {
+    @apply text-surface-300 dark:text-surface-600;
+  }
+  .bg-dot-muted {
+    @apply bg-surface-300 dark:bg-surface-600;
+  }
+
   /* --- Landing page theme classes --- */
   .landing-section-dark {
     @apply bg-zinc-900 dark:bg-zinc-900 text-white;

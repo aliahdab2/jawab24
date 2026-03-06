@@ -76,7 +76,7 @@ export function RuleCard({
               size="sm"
               onClick={() => onPriorityChange(rule.id, 'up')}
               disabled={index === 0}
-              className="text-surface-400 dark:text-surface-300 hover:text-brand-600 hover:bg-card shadow-sm"
+              className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-card shadow-sm"
             >
               <ArrowUp className="w-4 h-4" />
             </Button>
@@ -88,7 +88,7 @@ export function RuleCard({
               size="sm"
               onClick={() => onPriorityChange(rule.id, 'down')}
               disabled={index === totalRules - 1}
-              className="text-surface-400 dark:text-surface-300 hover:text-brand-600 hover:bg-card shadow-sm"
+              className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-card shadow-sm"
             >
               <ArrowDown className="w-4 h-4" />
             </Button>
@@ -107,7 +107,7 @@ export function RuleCard({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-bold text-foreground">{rule.name}</h3>
-              <div className={`w-2 h-2 rounded-full ${rule.active ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
+              <div className={`w-2 h-2 rounded-full ${rule.active ? 'bg-emerald-500 animate-pulse' : 'bg-dot-muted'}`}></div>
             </div>
             <div className="hidden lg:block">
               <Toggle
@@ -147,7 +147,7 @@ export function RuleCard({
                 <span>{t('rules.action')}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-surface-500 dark:text-surface-300">{t('rules.actions.replyWithTemplate')}:</span>
+                <span className="text-sm font-medium text-surface-500 dark:text-surface-600">{t('rules.actions.replyWithTemplate')}:</span>
                 <span className="text-sm font-bold text-brand-900 dark:text-brand-200">{getTemplateName(rule.templateId)}</span>
                 {getTemplateStatus(rule.templateId) === 'missing' && (
                   <Badge variant="error" size="sm" className="ms-2">
@@ -172,7 +172,7 @@ export function RuleCard({
             variant="ghost"
             size="sm"
             onClick={() => onEdit(rule)}
-            className="text-surface-400 dark:text-surface-300 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 flex items-center gap-2"
+            className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 flex items-center gap-2"
             aria-label={t('common.edit')}
             title={t('common.edit')}
           >
@@ -183,7 +183,7 @@ export function RuleCard({
             variant="ghost"
             size="sm"
             onClick={() => onDuplicate(rule)}
-            className="text-surface-400 dark:text-surface-300 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 flex items-center gap-2"
+            className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 flex items-center gap-2"
             aria-label={t('common.duplicate')}
             title={t('common.duplicate')}
           >
@@ -194,7 +194,7 @@ export function RuleCard({
             variant="ghost"
             size="sm"
             onClick={() => onDelete(rule.id)}
-            className="text-surface-400 dark:text-surface-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2"
+            className="text-surface-400 dark:text-surface-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2"
             aria-label={t('common.delete')}
             title={t('common.delete')}
           >
@@ -202,7 +202,7 @@ export function RuleCard({
             <span className="lg:hidden text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">{t('common.delete')}</span>
           </Button>
           {rule.matchCount !== undefined && (
-            <div className="mt-2 text-[10px] font-bold text-surface-400 uppercase tracking-widest">
+            <div className="mt-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
               {rule.matchCount} {t('rules.matches')}
             </div>
           )}

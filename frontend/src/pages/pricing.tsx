@@ -295,7 +295,7 @@ function FeatureRow({
 }) {
   return (
     <div className={`flex items-start gap-2.5 py-0.5 md:py-1 px-1 rounded-lg transition-colors ${highlight ? 'bg-brand-50/30 dark:bg-brand-900/20' : ''}`}>
-      <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${included ? 'icon-bg-emerald' : 'bg-muted text-surface-300'
+      <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${included ? 'icon-bg-emerald' : 'bg-muted text-icon-muted'
         }`}>
         {included ? (
           <Check className="w-3 h-3 stroke-[3]" />
@@ -537,7 +537,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               ))}
             </div>
             <span className="text-sm font-bold text-foreground/70">{t('pricing.socialProofRating' as TranslationKey)}</span>
-            <span className="text-surface-300" aria-hidden="true">·</span>
+            <span className="text-subtle" aria-hidden="true">·</span>
             <span className="text-sm text-muted-foreground">{t('pricing.socialProofReviews' as TranslationKey)}</span>
           </div>
         </div>

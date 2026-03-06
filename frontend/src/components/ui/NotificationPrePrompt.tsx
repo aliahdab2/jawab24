@@ -44,7 +44,7 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
           <button
             type="button"
             onClick={handleDismiss}
-            className="absolute top-4 end-4 p-1.5 rounded-full text-surface-300 hover:text-surface-500 hover:bg-surface-100 transition-colors"
+            className="absolute top-4 end-4 p-1.5 rounded-full text-icon-muted hover:text-surface-500 hover:bg-surface-100 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -78,7 +78,7 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
             <button
               type="button"
               onClick={handleDismiss}
-              className="py-3 px-5 rounded-2xl text-surface-400 text-sm font-medium hover:text-muted-foreground hover:bg-muted active:scale-[0.97] transition-all duration-200"
+              className="py-3 px-5 rounded-2xl text-muted-foreground text-sm font-medium hover:text-foreground hover:bg-muted active:scale-[0.97] transition-all duration-200"
             >
               {t('notifications.prePrompt.later' as TranslationKey)}
             </button>

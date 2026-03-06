@@ -512,9 +512,18 @@ className="status-warning border"
 
 **Available semantic classes** are defined in `globals.css` `@layer components` — read that file to discover the full list (status-*, icon-bg-*, alert-*, danger-zone-*, notif-ring-*, reply-*).
 
+**Muted text & icon classes** (use instead of `text-surface-300`/`text-surface-400` which are invisible in dark mode):
+- `text-icon-muted` → decorative icons, chevrons, empty state icons
+- `text-subtle` → separators, minor decorative text
+- `bg-dot-muted` → inactive status dots
+- `text-muted-foreground` → secondary/muted text (descriptions, timestamps, char counts)
+- For action buttons with hover states: `text-surface-400 dark:text-surface-600`
+- For placeholders: `placeholder:text-muted-foreground`
+
 **Key notes:**
 - Status and alert classes set `border-color` but you must add `border` yourself
 - Icon-bg classes set both `background` and `text` color
+- **NEVER use `text-surface-300` or `text-surface-400` for text/icons** — in dark mode, surface-300 = `rgb(20,30,48)` and surface-400 = `rgb(30,42,62)`, both invisible on dark backgrounds
 - Landing page (`/landing`, `components/landing/*`) is light-only — no `dark:` overrides needed
 
 **For dark mode / theming fixes, use `/style`** — it has the full workflow, color mapping tables, and class creation conventions.
@@ -757,6 +766,8 @@ return (
 | `bg-amber-50 text-amber-700` without `dark:` overrides | Use semantic class `status-warning` (or `alert-warning`, `icon-bg-amber`) — check `globals.css` for available classes before adding inline `dark:` overrides |
 | `<textarea>` or `<input>` with `text-foreground` but no `bg-*` | Add `bg-background` — browser default bg is white, causing white-on-white in dark mode |
 | `bg-green-100` circles/badges in dark mode | Use `icon-bg-emerald` or `icon-bg-green` — or add `dark:bg-green-900/30` if no semantic class fits |
+| `text-surface-300` or `text-surface-400` for text/icons | **NEVER** — these are invisible in dark mode (near-black). Use: `text-muted-foreground` (text), `text-icon-muted` (icons), `text-subtle` (separators), `bg-dot-muted` (dots). For action buttons with hover states: `text-surface-400 dark:text-surface-600` |
+| `placeholder:text-surface-300` or `placeholder:text-surface-400` | Use `placeholder:text-muted-foreground` — matches the standard `input` component pattern in `globals.css` |
 
 ---
 

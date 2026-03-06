@@ -471,7 +471,7 @@ const DashboardPage: NextPageWithLayout = () => {
             ) : (
               <div className="py-8 text-center">
                 <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
-                  <MessageSquare className="w-6 h-6 text-surface-300" />
+                  <MessageSquare className="w-6 h-6 text-icon-muted" />
                 </div>
                 <p className="text-sm font-medium text-muted-foreground mb-1">
                   {t('dashboard.noRecentComments')}
@@ -650,7 +650,7 @@ const DashboardPage: NextPageWithLayout = () => {
               }) : (
                 <div className="py-10 text-center">
                   <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
-                    <FileText className="w-6 h-6 text-surface-300" aria-hidden="true" />
+                    <FileText className="w-6 h-6 text-icon-muted" aria-hidden="true" />
                   </div>
                   <p className="text-sm text-muted-foreground mb-3">{t('pages.noPagesDesc')}</p>
                   <Link href="/pages">

@@ -116,7 +116,7 @@ export function PageAccordionItem({
             'w-5 h-5 transition-transform duration-300 flex-shrink-0',
             isExpanded
               ? 'text-brand-500 ltr:rotate-90 rtl:-rotate-90'
-              : 'text-surface-300 rtl:rotate-180'
+              : 'text-icon-muted rtl:rotate-180'
           )}
           aria-hidden="true"
         />

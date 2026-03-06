@@ -295,7 +295,7 @@ const PagesPage: NextPageWithLayout = () => {
                   {/* Facebook row */}
                   <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' : 'bg-background border-theme-border'}`}>
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'icon-bg-blue' : 'bg-surface-200 text-surface-400'}`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${page.autoReplyEnabled ? 'icon-bg-blue' : 'bg-surface-200 text-icon-muted'}`}>
                         <FileText className="w-4 h-4" />
                       </div>
                       <div className="min-w-0">
@@ -325,8 +325,8 @@ const PagesPage: NextPageWithLayout = () => {
                       <div className={clsx(
                         'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
                         page.instagramUsername
-                          ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-surface-400')
-                          : 'bg-surface-100 text-surface-300'
+                          ? (page.instagramAutoReplyEnabled ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-sm' : 'bg-surface-200 text-icon-muted')
+                          : 'bg-surface-100 text-icon-muted'
                       )}>
                         <Instagram className="w-4 h-4" />
                       </div>
@@ -412,7 +412,7 @@ const PagesPage: NextPageWithLayout = () => {
                         </p>
                       </div>
                     </div>
-                    <ChevronRight className={`w-5 h-5 transition-transform ${page.knowledgeBase ? 'text-brand-500' : 'text-surface-300'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
+                    <ChevronRight className={`w-5 h-5 transition-transform ${page.knowledgeBase ? 'text-brand-500' : 'text-icon-muted'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
                   </div>
                 </button>
               </div>

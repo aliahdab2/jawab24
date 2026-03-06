@@ -423,15 +423,15 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                             {/* Body */}
                             <p className={clsx(
                                 'text-xs leading-relaxed mt-0.5 line-clamp-2',
-                                isUnread ? 'text-muted-foreground' : 'text-surface-400',
+                                isUnread ? 'text-muted-foreground' : 'text-muted-foreground/70',
                             )}>
                                 {notification.body}
                             </p>
 
                             {/* Timestamp */}
                             <div className="flex items-center gap-1 mt-1.5">
-                                <Clock className="w-3 h-3 text-surface-300" aria-hidden="true" />
-                                <p className="text-[11px] text-surface-400">
+                                <Clock className="w-3 h-3 text-icon-muted" aria-hidden="true" />
+                                <p className="text-[11px] text-muted-foreground">
                                     {getRelativeTime(notification.createdAt)}
                                 </p>
                             </div>
@@ -456,8 +456,8 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         <div className="flex items-center self-center flex-shrink-0">
                             {getNotificationRoute(notification) ? (
                                 <>
-                                    <ChevronRight className="w-4 h-4 text-surface-300 group-hover:text-muted-foreground transition-colors ltr:block rtl:hidden" />
-                                    <ChevronLeft className="w-4 h-4 text-surface-300 group-hover:text-muted-foreground transition-colors rtl:block ltr:hidden" />
+                                    <ChevronRight className="w-4 h-4 text-icon-muted group-hover:text-muted-foreground transition-colors ltr:block rtl:hidden" />
+                                    <ChevronLeft className="w-4 h-4 text-icon-muted group-hover:text-muted-foreground transition-colors rtl:block ltr:hidden" />
                                 </>
                             ) : isUnread ? (
                                 <button
@@ -465,7 +465,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                         e.stopPropagation();
                                         handleMarkAsRead(notification.id);
                                     }}
-                                    className="p-1.5 rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/30 text-surface-400 hover:text-brand-600 transition-colors"
+                                    className="p-1.5 rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/30 text-surface-400 dark:text-surface-600 hover:text-brand-600 transition-colors"
                                     title={t('notifications.markAsRead')}
                                 >
                                     <Check className="w-4 h-4" />
@@ -577,7 +577,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         </div>
                         <button
                             onClick={() => setIsOpen(false)}
-                            className="p-1.5 rounded-lg hover:bg-muted text-surface-400 hover:text-muted-foreground transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-muted text-surface-400 dark:text-surface-600 hover:text-muted-foreground transition-colors"
                             aria-label={t('notifications.close')}
                         >
                             <X className="w-4 h-4" />
@@ -614,7 +614,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         {loading ? (
                             <div className="p-10 text-center">
                                 <div className="w-8 h-8 border-[3px] border-brand-200 border-t-brand-500 rounded-full animate-spin mx-auto mb-3" />
-                                <p className="text-sm text-surface-400">{t('notifications.loading')}</p>
+                                <p className="text-sm text-muted-foreground">{t('notifications.loading')}</p>
                             </div>
                         ) : notifications.length === 0 ? (
                             <NotificationEmptyState variant="global" />

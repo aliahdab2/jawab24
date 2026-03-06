@@ -50,7 +50,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     if (!mounted || !_hasHydrated || !isAuthenticated || !user?.isAdmin) {
         return (
             <div className="min-h-screen bg-surface-50 flex items-center justify-center">
-                <div className="animate-pulse text-surface-400">
+                <div className="animate-pulse text-muted-foreground">
                     {t('common.loading')}
                 </div>
             </div>

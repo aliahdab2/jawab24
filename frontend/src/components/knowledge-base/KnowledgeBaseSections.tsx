@@ -93,7 +93,7 @@ export function KnowledgeBaseSections({
         <button
           type="button"
           onClick={onAddCustomSection}
-          className="flex items-center justify-center gap-2 p-3.5 rounded-2xl border-2 border-dashed border-surface-200 text-surface-400 hover:border-brand-300 hover:text-brand-500 hover:bg-brand-50/10 transition-all"
+          className="flex items-center justify-center gap-2 p-3.5 rounded-2xl border-2 border-dashed border-surface-200 text-muted-foreground hover:border-brand-300 hover:text-brand-500 hover:bg-brand-50/10 transition-all"
         >
           <Plus className="w-4 h-4" />
           <span className="text-sm font-medium">

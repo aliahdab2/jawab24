@@ -110,9 +110,9 @@ function PickPageStep({
   if (pages.length === 0) {
     return (
       <div className="text-center py-8">
-        <FileText className="w-12 h-12 text-surface-300 mx-auto mb-4" />
+        <FileText className="w-12 h-12 text-icon-muted mx-auto mb-4" />
         <p className="text-surface-600 font-medium">{t('pages.noPages')}</p>
-        <p className="text-surface-400 text-sm mt-2">{t('onboarding.noPagesHelp' as TranslationKey)}</p>
+        <p className="text-muted-foreground text-sm mt-2">{t('onboarding.noPagesHelp' as TranslationKey)}</p>
         <button
           onClick={onRetry}
           className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors"
@@ -137,7 +137,7 @@ function PickPageStep({
         <p className={`text-surface-500 ${isLandscape ? 'text-sm mb-3' : 'mb-6'}`}>
           {t('onboarding.pickPageDesc')}
           {pageLimit !== null && (
-            <span className="block text-xs text-surface-400 mt-1">
+            <span className="block text-xs text-muted-foreground mt-1">
               {t('onboarding.pageLimitInfo' as TranslationKey, { limit: pageLimit })}
             </span>
           )}
@@ -155,13 +155,13 @@ function PickPageStep({
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  page.autoReplyEnabled ? 'bg-brand-500 text-white' : 'bg-surface-100 text-surface-400'
+                  page.autoReplyEnabled ? 'bg-brand-500 text-white' : 'bg-surface-100 text-icon-muted'
                 }`}>
                   <FileText className="w-5 h-5" />
                 </div>
                 <div className="min-w-0 text-start">
                   <p className="font-semibold text-foreground truncate" title={page.name}>{page.name}</p>
-                  <p className="text-xs text-surface-400">
+                  <p className="text-xs text-muted-foreground">
                     {page.autoReplyEnabled ? t('onboarding.autoReplyOn') : t('onboarding.autoReplyOff')}
                   </p>
                 </div>
@@ -199,7 +199,7 @@ function ReviewInfoStep({
   if (!selectedPage) {
     return (
       <div className="text-center py-8">
-        <Info className="w-12 h-12 text-surface-300 mx-auto mb-4" />
+        <Info className="w-12 h-12 text-icon-muted mx-auto mb-4" />
         <p className="text-surface-600">{t('onboarding.noPageSelected')}</p>
       </div>
     );
@@ -290,12 +290,12 @@ function ReviewInfoStep({
                 <p className="text-surface-600 text-sm whitespace-pre-wrap line-clamp-4">
                   {knowledgeBase}
                 </p>
-                <p className="text-xs text-surface-400 mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   {t('onboarding.fromFacebook')}
                 </p>
               </div>
             ) : (
-              <p className="text-surface-400 text-sm italic">
+              <p className="text-muted-foreground text-sm italic">
                 {t('onboarding.noBusinessInfo')}
               </p>
             )}
@@ -490,7 +490,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         <div className={`flex justify-end flex-shrink-0 ${isLandscape ? 'p-3 pb-0' : 'p-4 pb-0'}`}>
           <button 
             onClick={onSkip}
-            className="text-surface-400 hover:text-surface-600 text-sm flex items-center gap-1 min-h-[44px] min-w-[44px] justify-center"
+            className="text-muted-foreground hover:text-foreground text-sm flex items-center gap-1 min-h-[44px] min-w-[44px] justify-center"
           >
             {t('onboarding.skip')}
             <X className="w-4 h-4" />
@@ -535,7 +535,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         {/* Footer with progress and buttons */}
         <div className={`flex-shrink-0 border-t border-theme-border ${isLandscape ? 'px-6 py-3' : 'px-6 py-4'}`}>
           {/* Step label */}
-          <p className="text-center text-xs text-surface-400 mb-2">
+          <p className="text-center text-xs text-muted-foreground mb-2">
             {t('onboarding.stepOf' as TranslationKey, { step: currentStep + 1, total: totalSteps })}
           </p>
 

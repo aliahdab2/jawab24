@@ -72,7 +72,7 @@ export function KnowledgeBaseCustomSection({
           ? 'border-brand-400 bg-brand-50/20 shadow-sm'
           : hasContent
             ? 'border-brand-200 bg-brand-50/10'
-            : 'border-theme-border bg-card hover:border-surface-300'
+            : 'border-theme-border bg-card hover:border-surface-300 dark:hover:border-surface-500'
       }`}
     >
       {/* Header */}
@@ -82,7 +82,7 @@ export function KnowledgeBaseCustomSection({
         className="w-full flex items-center gap-3 p-3.5 sm:p-4 text-start"
       >
         {/* Custom marker icon */}
-        <span className="text-xl flex-shrink-0 text-surface-400">{CUSTOM_SECTION_MARKER}</span>
+        <span className="text-xl flex-shrink-0 text-icon-muted">{CUSTOM_SECTION_MARKER}</span>
 
         {/* Title + preview */}
         <div className="flex-1 min-w-0">
@@ -104,7 +104,7 @@ export function KnowledgeBaseCustomSection({
             </p>
           )}
           {!isExpanded && (
-            <p className={`text-xs mt-0.5 truncate ${hasContent ? 'text-surface-500' : 'text-surface-400'}`}>
+            <p className={`text-xs mt-0.5 truncate ${hasContent ? 'text-surface-500 dark:text-surface-700' : 'text-muted-foreground'}`}>
               {preview}
             </p>
           )}
@@ -114,7 +114,7 @@ export function KnowledgeBaseCustomSection({
         <button
           type="button"
           onClick={handleDelete}
-          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-surface-300 hover:text-red-500 transition-colors flex-shrink-0"
+          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -122,13 +122,13 @@ export function KnowledgeBaseCustomSection({
         {/* Status dot */}
         <div
           className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors ${
-            hasContent ? 'bg-brand-500' : 'bg-surface-200'
+            hasContent ? 'bg-brand-500' : 'bg-dot-muted'
           }`}
         />
 
         {/* Chevron */}
         <ChevronDown
-          className={`w-4 h-4 text-surface-400 flex-shrink-0 transition-transform duration-200 ${
+          className={`w-4 h-4 text-icon-muted flex-shrink-0 transition-transform duration-200 ${
             isExpanded ? 'rotate-180' : ''
           }`}
         />
@@ -137,12 +137,12 @@ export function KnowledgeBaseCustomSection({
       {/* Expanded content */}
       {isExpanded && (
         <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
-          <p className="text-xs text-surface-400 mb-2">
+          <p className="text-xs text-muted-foreground mb-2">
             {t('kb.customSection.desc' as TranslationKey)}
           </p>
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-surface-300"
+            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground"
             placeholder={t('kb.customSection.placeholder' as TranslationKey)}
             aria-label={t('kb.customSection.placeholder' as TranslationKey)}
             value={section.content}
@@ -153,7 +153,7 @@ export function KnowledgeBaseCustomSection({
           />
           {section.content.length > 0 && (
             <p className={`text-end text-xs mt-1 ${
-              section.content.length > 4500 ? 'text-amber-500' : 'text-surface-300'
+              section.content.length > 4500 ? 'text-amber-500' : 'text-muted-foreground'
             }`}>
               {t('kb.charCount' as TranslationKey)
                 .replace('{count}', String(section.content.length))

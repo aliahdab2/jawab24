@@ -210,7 +210,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                 <textarea
                   disabled={!settings.businessHoursOnly}
                   aria-label={t('settings.awayMessage.title')}
-                  className="input min-h-[56px] landscape:min-h-[44px] border-none bg-card focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-surface-400 placeholder:italic"
+                  className="input min-h-[56px] landscape:min-h-[44px] border-none bg-card focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-muted-foreground placeholder:italic"
                   placeholder={placeholder}
                   dir={displayValue ? 'auto' : undefined}
                   value={displayValue}

@@ -174,10 +174,10 @@ export const MessageCard = React.memo(function MessageCard({
                 {conv.senderName || t('common.unknownUser')}
               </span>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[10px] text-surface-400">
+                <span className="text-[10px] text-muted-foreground">
                   {formatTime(conv.lastMessage.createdAt)}
                 </span>
-                <span className="flex items-center gap-1 text-[10px] text-surface-400 px-1.5 py-0.5 bg-muted rounded">
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
                   <MessageCircle className="w-2.5 h-2.5" />
                   {conv.messages.length}
                 </span>

@@ -96,7 +96,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
               </span>
             </div>
 
-            <ArrowRight className="w-6 h-6 landscape:w-5 landscape:h-5 text-surface-400 flex-shrink-0 rtl:rotate-180 opacity-60" />
+            <ArrowRight className="w-6 h-6 landscape:w-5 landscape:h-5 text-icon-muted flex-shrink-0 rtl:rotate-180 opacity-60" />
 
             {/* Public Reply */}
             {(settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'public') && (
@@ -117,7 +117,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                   </span>
                 </div>
                 {settings.commentReplyMode === 'dual' && (
-                  <ArrowRight className="w-6 h-6 landscape:w-5 landscape:h-5 text-surface-400 flex-shrink-0 rtl:rotate-180 opacity-60" />
+                  <ArrowRight className="w-6 h-6 landscape:w-5 landscape:h-5 text-icon-muted flex-shrink-0 rtl:rotate-180 opacity-60" />
                 )}
               </>
             )}
@@ -176,7 +176,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                   const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
                   return isAutoTranslated && value ? value : t('settings.publicReplyPlaceholder');
                 })()}
-                className="bg-card !py-2.5 placeholder:text-surface-400 placeholder:italic"
+                className="bg-card !py-2.5 placeholder:text-muted-foreground placeholder:italic"
                 maxLength={80}
               />
 

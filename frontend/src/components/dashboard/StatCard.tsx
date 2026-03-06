@@ -129,7 +129,7 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
           {backgroundDecoration}
           {content}
           <div className="absolute bottom-2 end-2 opacity-0 group-hover:opacity-50 transition-opacity pointer-events-none">
-            <ChevronRight className="w-3.5 h-3.5 text-surface-400 rtl:rotate-180" />
+            <ChevronRight className="w-3.5 h-3.5 text-icon-muted rtl:rotate-180" />
           </div>
         </Card>
       </Link>
