@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
@@ -158,6 +158,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       onReplySuccess();
       onClose();
     } catch (error) {
+      const axiosErr = error as { response?: { status?: number } };
+      if (axiosErr.response?.status === 404) {
+        // Comment was deleted or already handled between loading and replying
+        toast.error(t('comments.replyNotFound' as TranslationKey));
+        onReplySuccess(); // refresh the list
+        onClose();
+        return;
+      }
       captureError(error, 'Failed to send reply', { tags: { component: 'comment-detail', action: 'send-reply' } });
       toast.error(t('common.error'));
     } finally {

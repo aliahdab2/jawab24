@@ -359,6 +359,7 @@
   "comments.close": "Close",
   "comments.tryDifferentSearch": "Try a different search term",
   "comments.connectPage": "Connect a Page",
+  "comments.replyNotFound": "This comment was removed or already handled. Refreshing the list.",
   "messages.title": "Messages",
   "messages.description": "View and manage private messages for your pages",
   "messages.totalMessages": "Total Messages",

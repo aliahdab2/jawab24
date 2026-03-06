@@ -359,6 +359,7 @@
   "comments.close": "إغلاق",
   "comments.tryDifferentSearch": "جرب مصطلح بحث آخر",
   "comments.connectPage": "ربط صفحة",
+  "comments.replyNotFound": "تم حذف هذا التعليق أو معالجته بالفعل. جارٍ تحديث القائمة.",
   "messages.title": "الرسائل",
   "messages.description": "عرض وإدارة الرسائل الخاصة لصفحاتك",
   "messages.totalMessages": "إجمالي الرسائل",
