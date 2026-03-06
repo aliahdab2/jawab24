@@ -140,12 +140,18 @@ class NotificationService {
                 .set({ lastUsedAt: new Date() })
                 .where(eq(deviceTokens.id, existing[0].id));
         } else {
-            // Insert new token
-            await db.insert(deviceTokens).values({
-                userId,
-                token,
-                platform,
-            });
+            try {
+                await db.insert(deviceTokens).values({
+                    userId,
+                    token,
+                    platform,
+                });
+            } catch (err: unknown) {
+                // FK violation = user was deleted but JWT is still valid — ignore silently
+                const pgErr = err as { code?: string };
+                if (pgErr.code === '23503') return;
+                throw err;
+            }
         }
     }
 
