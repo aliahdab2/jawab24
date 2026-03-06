@@ -249,12 +249,7 @@ export class MessageProcessor {
 
             // 11b. Send typing indicator before AI generation so customer sees "typing..."
             if (adapter.sendTypingIndicator) {
-                try {
-                    await adapter.sendTypingIndicator(page, senderId);
-                    this.logger.info(`[${platform}] ⏱ 11b-typingIndicator (sent)`);
-                } catch (err) {
-                    this.logger.info(`[${platform}] ⏱ 11b-typingIndicator (failed: ${err instanceof Error ? err.message : String(err)})`);
-                }
+                try { await adapter.sendTypingIndicator(page, senderId); } catch { /* cosmetic */ }
             }
 
             // 12. Generate reply (enrich KB with e-commerce data if linked)
