@@ -151,7 +151,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
       <div
-        className="bg-card rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden"
+        className="bg-card rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85vh] landscape:h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden pt-safe sm:pt-0"
         style={{ paddingBottom: '8px' }}
       >
         {/* Header */}
@@ -164,7 +164,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               <h2 className="text-base sm:text-lg font-semibold text-foreground">
                 {t('kb.title' as TranslationKey)}
               </h2>
-              <p className="text-xs sm:text-sm text-surface-500 landscape:hidden">{page.name}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground landscape:hidden">{page.name}</p>
             </div>
           </div>
           <button

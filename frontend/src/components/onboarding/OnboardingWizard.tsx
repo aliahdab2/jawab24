@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   FileText, 
   CheckCircle2,
@@ -476,7 +477,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     minSwipeDistance: 50
   });
 
-  return (
+  const content = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
     >
@@ -591,4 +592,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       </div>
     </div>
   );
+
+  // Portal to document.body to escape <main>'s stacking context (z-[1])
+  if (typeof document === 'undefined') return content;
+  return createPortal(content, document.body);
 }

@@ -64,7 +64,7 @@ export function useSSE(): void {
             url += `?token=${encodeURIComponent(token)}`;
         }
 
-        const es = new EventSource(url, { withCredentials: true });
+        const es = new EventSource(url, { withCredentials: !isNativePlatform() });
         esRef.current = es;
 
         es.addEventListener('connected', () => {
