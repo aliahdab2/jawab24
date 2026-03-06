@@ -1,16 +1,18 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
-import { Badge } from '@/components/ui';
+import { Badge, Button } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Conversation } from './MessageCard';
 import {
   User,
   X,
   Send,
+  Bot,
   AlertTriangle,
   Sparkles,
   CheckCircle,
@@ -58,6 +60,7 @@ export function MessageDetailModal({
   const { t } = useTranslation();
   const [replyText, setReplyText] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
+  const { isGenerating, generationStatus, aiLimit, generatedReply, generate } = useAiGeneration();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewMessage, setHasNewMessage] = useState(false);
@@ -110,6 +113,13 @@ export function MessageDetailModal({
     if (nearBottom) setHasNewMessage(false);
   }, [checkIfNearBottom]);
 
+  // Sync AI-generated reply into textarea
+  useEffect(() => {
+    if (generatedReply) {
+      setReplyText(generatedReply);
+    }
+  }, [generatedReply]);
+
   const sortedMessages = useMemo(() => {
     return [...conversation.messages].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -134,6 +144,30 @@ export function MessageDetailModal({
     setReplyText('');
     setSendError(null);
   };
+
+  const handleGenerateAi = () => {
+    const incoming = sortedMessages.filter(m => m.direction === 'incoming');
+    const lastIncoming = incoming[incoming.length - 1];
+    if (!lastIncoming) return;
+
+    const conversationHistory = sortedMessages.map(m => ({
+      role: m.direction === 'incoming' ? 'user' as const : 'assistant' as const,
+      content: m.message,
+    }));
+
+    generate({
+      comment: lastIncoming.message,
+      context: {
+        channel: 'dm',
+        conversationHistory,
+        pageId: conversation.lastMessage.pageId,
+      },
+    });
+  };
+
+  const hasUnrepliedIncoming = conversation.messages.some(
+    m => m.direction === 'incoming' && !m.replied
+  );
 
   const formatFullTime = (dateValue: string | Date | null | undefined) => {
     if (!dateValue) return '-';
@@ -310,6 +344,39 @@ export function MessageDetailModal({
             </div>
           )}
 
+          {/* Smart Reply button */}
+          {hasUnrepliedIncoming && (
+            <div className="flex justify-end mb-2">
+              <div className="relative group/tooltip inline-block">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleGenerateAi}
+                  disabled={isGenerating || !aiLimit.allowed}
+                  className={clsx(
+                    isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20',
+                    !aiLimit.allowed && 'opacity-50 cursor-not-allowed'
+                  )}
+                  icon={<Bot className="w-4 h-4" />}
+                >
+                  {isGenerating
+                    ? generationStatus || t('common.loading')
+                    : !aiLimit.allowed
+                      ? t('pricing.limitReached')
+                      : replyText
+                        ? t('comments.regenerate' as TranslationKey)
+                        : t('dashboard.aiReply')}
+                </Button>
+
+                {!aiLimit.allowed && (
+                  <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
+                    {aiLimit.reason || t('pricing.limitReached')}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Compose row: textarea + send button */}
           <div className="flex items-end gap-2">
             <textarea
@@ -327,11 +394,11 @@ export function MessageDetailModal({
               rows={1}
               className="flex-1 min-w-0 resize-none rounded-full border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
               style={{ height: '42px', maxHeight: '120px' }}
-              disabled={isReplying}
+              disabled={isReplying || isGenerating}
             />
             <button
               onClick={handleSend}
-              disabled={!replyText.trim() || isReplying}
+              disabled={!replyText.trim() || isReplying || isGenerating}
               aria-label={t('comments.reply' as TranslationKey)}
               className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
             >

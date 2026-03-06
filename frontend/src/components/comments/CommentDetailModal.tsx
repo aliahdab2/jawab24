@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { useTranslation } from '@/i18n';
-import { commentsApi, aiApi, subscriptionApi, messagesApi } from '@/lib/api';
+import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import {
   MessageSquare,
@@ -53,15 +54,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   useBodyScrollLock(true);
 
   const [replyText, setReplyText] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [generationStatus, setGenerationStatus] = useState<string>('');
-  
-  // Limit State
-  const [aiLimit, setAiLimit] = useState<{ allowed: boolean; reason?: string }>({ allowed: true });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { isGenerating, generationStatus, aiLimit, generatedReply, generate } = useAiGeneration({
+    fetchLimitsOnMount: mode === 'full',
+  });
 
   // Pause state
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
@@ -78,13 +76,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  // Cleanup polling on unmount
+  // Sync AI-generated reply into textarea
   useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
-    };
-  }, []);
+    if (generatedReply) {
+      setReplyText(generatedReply);
+    }
+  }, [generatedReply]);
 
   // Fetch pause status for the commenter
   useEffect(() => {
@@ -112,24 +109,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       setPauseLoading(false);
     }
   };
-
-  // Check limits on mount
-  const fetchLimits = useCallback(async () => {
-    try {
-      const { data } = await subscriptionApi.checkAiLimit();
-      // Backend wraps as { success, data: { allowed, reason?, limit?, used? } }
-      setAiLimit(data.data ?? data);
-    } catch (error) {
-      captureError(error, 'Failed to fetch AI limits', { tags: { component: 'comment-detail' } });
-    }
-  }, []);
-
-  useEffect(() => {
-    // Only fetch limits if AI is allowed (full mode)
-    if (mode === 'full') {
-      fetchLimits();
-    }
-  }, [fetchLimits, mode]);
 
   // Check if comment needs human attention
   const checkNeedsAttention = (c: Comment): boolean => {
@@ -162,82 +141,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     }
   };
 
-  const handleGenerateAi = async () => {
-    if (!aiLimit.allowed) return;
-
-    setIsGenerating(true);
-    setGenerationStatus(t('common.loading'));
-
-    try {
-      // 1. Start Async Job
-      const { data: job } = await aiApi.generateAsync({
-        comment: comment.message,
-        language: comment.detectedLanguage || 'en',
-        context: {}
-      });
-
-      // 2. Poll for Status
-      const stopPolling = () => {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
-        pollingRef.current = null;
-        pollingTimeoutRef.current = null;
-      };
-
-      pollingRef.current = setInterval(async () => {
-        try {
-          const { data: status } = await aiApi.getJobStatus(job.jobId);
-
-          if (status.status === 'completed' && status.result) {
-            stopPolling();
-            setReplyText(status.result.reply);
-            setIsGenerating(false);
-            setGenerationStatus('');
-
-            // Refresh limits after successful generation
-            fetchLimits();
-          } else if (status.status === 'failed') {
-            stopPolling();
-            setIsGenerating(false);
-            setGenerationStatus('');
-            toast.error(t('common.error'));
-          } else {
-            setGenerationStatus(t('common.loading'));
-          }
-        } catch {
-          stopPolling();
-          setIsGenerating(false);
-        }
-      }, 1000);
-
-      // Max polling timeout (60s) to prevent infinite polling
-      pollingTimeoutRef.current = setTimeout(() => {
-        if (pollingRef.current) {
-          stopPolling();
-          setIsGenerating(false);
-          setGenerationStatus('');
-          toast.error(t('common.error'));
-        }
-      }, 60000);
-
-    } catch (error: unknown) {
-      captureError(error, 'AI generation error', { tags: { component: 'comment-detail', action: 'ai-generate' } });
-      setIsGenerating(false);
-
-      // Fallback: If 403 happens (e.g. race condition), show toast and refresh limits
-      const axiosErr = error as { response?: { status?: number; data?: { error?: string } } };
-      if (axiosErr.response?.status === 403) {
-        setGenerationStatus('');
-        fetchLimits(); // Update UI state
-        toast.error(axiosErr.response?.data?.error || t('common.error'), {
-          duration: 5000,
-          action: {
-            label: t('pricing.upgrade'),
-            onClick: () => window.location.href = '/settings'
-          }
-        });
-      }
-    }
+  const handleGenerateAi = () => {
+    generate({
+      comment: comment.message,
+      language: comment.detectedLanguage || 'en',
+      context: {},
+    });
   };
 
   const handleSendReply = async () => {
