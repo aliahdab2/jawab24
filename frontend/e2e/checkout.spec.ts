@@ -125,7 +125,7 @@ test.describe('Checkout Page', () => {
     // Should show an error, not crash
     await page.waitForTimeout(4000);
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
-    await expect(page.locator('[class*="red-50"]').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[class*="alert-error"]').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('should not crash without planId param', async ({ page }) => {
