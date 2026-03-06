@@ -151,7 +151,6 @@ const MessagesPage: NextPageWithLayout = () => {
       } : null);
       queryClient.invalidateQueries({ queryKey: ['messages'] });
       queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-      toast.success(t('messages.replySent' as TranslationKey));
     },
     onError: (error: Error) => {
       toast.error(error.message || t('messages.replyFailed' as TranslationKey));
@@ -625,8 +624,8 @@ const MessagesPage: NextPageWithLayout = () => {
             )}
           >
             {conversations.map((conv, i) => {
-              const hasUnresolvedUnreplied = conv.messages.some(
-                m => m.direction === 'incoming' && !m.replied && !m.resolved
+              const hasUnresolved = conv.messages.some(
+                m => m.direction === 'incoming' && !m.resolved
               );
               return (
                 <MessageCard
@@ -634,7 +633,7 @@ const MessagesPage: NextPageWithLayout = () => {
                   conversation={conv}
                   animationDelay={i < 10 ? i * 0.05 : 0}
                   onClick={() => setSelectedConversation(conv)}
-                  onResolve={hasUnresolvedUnreplied ? () => handleResolve(conv.senderId, conv.lastMessage.pageId) : undefined}
+                  onResolve={hasUnresolved ? () => handleResolve(conv.senderId, conv.lastMessage.pageId) : undefined}
                 />
               );
             })}

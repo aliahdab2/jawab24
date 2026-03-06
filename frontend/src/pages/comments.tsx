@@ -493,7 +493,7 @@ const CommentsPage: NextPageWithLayout = () => {
                   animationDelay={i < 10 ? i * 0.05 : 0}
                   onClick={() => setSelectedComment(comment)}
                   onQuickReply={() => setSelectedComment(comment)}
-                  onResolve={!comment.replied && !comment.resolved ? () => handleResolve(comment.id) : undefined}
+                  onResolve={!comment.resolved ? () => handleResolve(comment.id) : undefined}
                 />
               );
             })}
@@ -550,7 +550,7 @@ const CommentsPage: NextPageWithLayout = () => {
           comment={selectedComment}
           onClose={() => setSelectedComment(null)}
           onReplySuccess={() => refetch()}
-          onResolve={!selectedComment.replied && !selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
+          onResolve={!selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
         />
