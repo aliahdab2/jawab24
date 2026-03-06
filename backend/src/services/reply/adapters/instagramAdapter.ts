@@ -83,11 +83,15 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         return `ig_${instagramMessageId}`;
     }
 
+    async sendTypingIndicator(page: PlatformPage, senderId: string): Promise<void> {
+        if (!page.platformAccountId) return;
+        await instagramService.sendTypingIndicator(page.platformAccountId, senderId, page.accessToken);
+    }
+
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
         if (!page.platformAccountId) {
             throw new Error('Page has no Instagram account ID');
         }
-        try { await instagramService.sendTypingIndicator(page.platformAccountId, senderId, page.accessToken); } catch { /* cosmetic */ }
         await instagramService.sendDirectMessage(
             page.platformAccountId,
             senderId,
@@ -99,7 +103,6 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
     async sendAwayMessage(page: PlatformPage, senderId: string, text: string): Promise<void> {
         if (!page.platformAccountId) return;
         try {
-            await instagramService.sendTypingIndicator(page.platformAccountId, senderId, page.accessToken);
             await instagramService.sendDirectMessage(
                 page.platformAccountId,
                 senderId,

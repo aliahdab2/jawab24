@@ -143,33 +143,23 @@ describe('FacebookMessageAdapter — typing indicator', () => {
         vi.clearAllMocks();
     });
 
-    it('sendReply calls sendTypingIndicator before sendPrivateMessage', async () => {
-        const callOrder: string[] = [];
-        vi.mocked(facebookService.sendTypingIndicator).mockImplementation(async () => { callOrder.push('typing'); });
-        vi.mocked(facebookService.sendPrivateMessage).mockImplementation(async () => { callOrder.push('message'); });
+    it('sendTypingIndicator delegates to facebookService', async () => {
+        await adapter.sendTypingIndicator(mockPage, 'recipient-1');
 
-        await adapter.sendReply(mockPage, 'recipient-1', 'Hello!');
-
-        expect(callOrder).toEqual(['typing', 'message']);
         expect(facebookService.sendTypingIndicator).toHaveBeenCalledWith('page-token', 'recipient-1');
-        expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('page-token', 'recipient-1', 'Hello!');
     });
 
-    it('sendReply still sends message when typing indicator fails', async () => {
-        vi.mocked(facebookService.sendTypingIndicator).mockRejectedValue(new Error('API down'));
-
+    it('sendReply sends message without calling typing (typing is handled by processor)', async () => {
         await adapter.sendReply(mockPage, 'recipient-1', 'Hello!');
 
         expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('page-token', 'recipient-1', 'Hello!');
+        expect(facebookService.sendTypingIndicator).not.toHaveBeenCalled();
     });
 
-    it('sendAwayMessage calls sendTypingIndicator before sendPrivateMessage', async () => {
-        const callOrder: string[] = [];
-        vi.mocked(facebookService.sendTypingIndicator).mockImplementation(async () => { callOrder.push('typing'); });
-        vi.mocked(facebookService.sendPrivateMessage).mockImplementation(async () => { callOrder.push('message'); });
-
+    it('sendAwayMessage sends message without calling typing', async () => {
         await adapter.sendAwayMessage(mockPage, 'recipient-1', 'We are away');
 
-        expect(callOrder).toEqual(['typing', 'message']);
+        expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('page-token', 'recipient-1', 'We are away');
+        expect(facebookService.sendTypingIndicator).not.toHaveBeenCalled();
     });
 });

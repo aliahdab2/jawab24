@@ -55,6 +55,9 @@ export interface MessagePlatformAdapter {
     /** Convert platform message ID to the internal ID used for debounce lookups */
     getInternalMessageId(platformMessageId: string): string;
 
+    /** Send typing indicator (cosmetic, fire-and-forget). Not all platforms support this. */
+    sendTypingIndicator?(page: PlatformPage, senderId: string): Promise<void>;
+
     /** Send a reply message to the sender */
     sendReply(page: PlatformPage, senderId: string, text: string): Promise<void>;
 

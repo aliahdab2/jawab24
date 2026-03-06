@@ -247,6 +247,11 @@ export class MessageProcessor {
                 ? unrepliedMessages.map(m => m.message).join('\n')
                 : messageText;
 
+            // 11b. Send typing indicator before AI generation so customer sees "typing..."
+            if (adapter.sendTypingIndicator) {
+                try { await adapter.sendTypingIndicator(page, senderId); } catch { /* cosmetic */ }
+            }
+
             // 12. Generate reply (enrich KB with e-commerce data if linked)
             let knowledgeBase = page.knowledgeBase || undefined;
             let storePolicies: string | undefined;
