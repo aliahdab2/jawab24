@@ -64,6 +64,7 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
               <li><Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="text-surface-400 hover:text-brand-400 transition-colors">{isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.footer.startTrial')}</Link></li>
               <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.termsOfService')}</Link></li>
               <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.privacyPolicy')}</Link></li>
+              <li><Link href="/data-deletion" className="text-surface-400 hover:text-brand-400 transition-colors">{t('dataDeletion.footerLink' as TranslationKey)}</Link></li>
               <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.contactUs' as TranslationKey)}</Link></li>
             </ul>
           </div>

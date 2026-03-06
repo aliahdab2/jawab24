@@ -1,6 +1,6 @@
 import Head from 'next/head';
 import Link from 'next/link';
-import { useTranslation } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { ArrowLeft } from 'lucide-react';
 
 export default function DataDeletion() {
@@ -16,13 +16,16 @@ export default function DataDeletion() {
 
       <div className="flex-1 overflow-y-auto bg-background py-12 px-4 sm:px-6 lg:px-8 text-start pt-safe pb-safe px-safe">
         <div className="max-w-3xl mx-auto bg-card rounded-2xl shadow-sm p-8 border border-theme-border">
-          <h1 className="text-3xl font-bold text-foreground mb-8">{t('dataDeletion.header')}</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">{t('dataDeletion.header')}</h1>
+          <h2 className="text-lg font-semibold text-brand-600 mb-4">{t('dataDeletion.subheader' as TranslationKey)}</h2>
+          <p className="text-foreground/70 mb-8 leading-relaxed">{t('dataDeletion.intro' as TranslationKey)}</p>
 
           <div className="prose prose-slate max-w-none">
             <p className="text-muted-foreground mb-6 italic text-sm">
               <strong>{t('dataDeletion.lastUpdated')}</strong> {t('dataDeletion.updateDate')}
             </p>
 
+            {/* Section 1: Deletion Options */}
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.howToDeleteTitle')}</h2>
               <p className="text-foreground/70 mb-4">
@@ -31,7 +34,7 @@ export default function DataDeletion() {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.option1Title')}</h2>
+              <h3 className="text-lg font-semibold text-foreground mb-4">{t('dataDeletion.option1Title')}</h3>
               <ol className="list-decimal ps-6 text-foreground/70 space-y-2">
                 <li>
                   {t('dataDeletion.option1Step1')}{' '}
@@ -43,13 +46,13 @@ export default function DataDeletion() {
                 <li>{t('dataDeletion.option1Step3')} <strong>{t('settings.deleteAccount')}</strong></li>
                 <li>{t('dataDeletion.option1Step4')}</li>
               </ol>
-              <p className="text-muted-foreground mt-4 p-3 bg-red-50 rounded-lg border border-red-100 text-sm">
+              <p className="text-muted-foreground mt-4 p-3 status-danger rounded-lg text-sm">
                 {t('dataDeletion.option1Note')}
               </p>
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.option2Title')}</h2>
+              <h3 className="text-lg font-semibold text-foreground mb-4">{t('dataDeletion.option2Title')}</h3>
               <ol className="list-decimal ps-6 text-foreground/70 space-y-2">
                 <li>
                   {t('dataDeletion.option2Step1')}{' '}
@@ -69,7 +72,7 @@ export default function DataDeletion() {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.option3Title')}</h2>
+              <h3 className="text-lg font-semibold text-foreground mb-4">{t('dataDeletion.option3Title')}</h3>
               <p className="text-foreground/70 mb-4">
                 {t('dataDeletion.option3Text')}
               </p>
@@ -84,6 +87,19 @@ export default function DataDeletion() {
               </p>
             </section>
 
+            {/* Section 2: Data Associated with Meta Platforms */}
+            <section className="mb-8 p-6 bg-background rounded-2xl border border-theme-border">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.metaDataTitle' as TranslationKey)}</h2>
+              <p className="text-foreground/70 mb-4">{t('dataDeletion.metaDataIntro' as TranslationKey)}</p>
+              <ul className="list-disc ps-6 text-foreground/70 space-y-2">
+                <li>{t('dataDeletion.metaItemPageIds' as TranslationKey)}</li>
+                <li>{t('dataDeletion.metaItemInstagramIds' as TranslationKey)}</li>
+                <li>{t('dataDeletion.metaItemWebhooks' as TranslationKey)}</li>
+                <li>{t('dataDeletion.metaItemTokens' as TranslationKey)}</li>
+              </ul>
+            </section>
+
+            {/* Section 3: What Will Be Deleted */}
             <section className="mb-8 p-6 bg-background rounded-2xl border border-theme-border">
               <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.whatWillBeDeletedTitle')}</h2>
               <ul className="list-disc ps-6 text-foreground/70 space-y-2">
@@ -96,6 +112,31 @@ export default function DataDeletion() {
               </ul>
             </section>
 
+            {/* Section 4: Processing Time */}
+            <section className="mb-8">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.processingTimeTitle' as TranslationKey)}</h2>
+              <p className="text-foreground/70 leading-relaxed">
+                {t('dataDeletion.processingTimeText' as TranslationKey)}
+              </p>
+            </section>
+
+            {/* Section 5: Revoking Access */}
+            <section className="mb-8">
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.revokeAccessTitle' as TranslationKey)}</h2>
+              <p className="text-foreground/70 leading-relaxed">
+                {t('dataDeletion.revokeAccessText' as TranslationKey)}{' '}
+                <a
+                  href="https://www.facebook.com/settings?tab=applications"
+                  className="text-brand-600 hover:underline font-medium"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t('dataDeletion.revokeAccessLink' as TranslationKey)}
+                </a>.
+              </p>
+            </section>
+
+            {/* Section 6: Data Retention */}
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-foreground mb-4">{t('dataDeletion.dataRetentionTitle')}</h2>
               <p className="text-foreground/70 leading-relaxed">
@@ -119,5 +160,3 @@ export default function DataDeletion() {
     </>
   );
 }
-
-
