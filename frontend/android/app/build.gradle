@@ -13,6 +13,13 @@ def facebookAppId = localProperties.getProperty('FACEBOOK_APP_ID', '')
 def facebookClientToken = localProperties.getProperty('FACEBOOK_CLIENT_TOKEN', '')
 def sentryDsn = localProperties.getProperty('SENTRY_DSN', '')
 
+// Release signing — keystore path & credentials from local.properties
+// Required keys: RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD
+def releaseStoreFile = localProperties.getProperty('RELEASE_STORE_FILE', '')
+def releaseStorePassword = localProperties.getProperty('RELEASE_STORE_PASSWORD', '')
+def releaseKeyAlias = localProperties.getProperty('RELEASE_KEY_ALIAS', '')
+def releaseKeyPassword = localProperties.getProperty('RELEASE_KEY_PASSWORD', '')
+
 if (facebookAppId.isEmpty()) {
     logger.warn("WARNING: FACEBOOK_APP_ID not set in local.properties. Facebook login will not work.")
 }
@@ -52,11 +59,25 @@ android {
         buildConfig true
     }
 
+    signingConfigs {
+        release {
+            if (!releaseStoreFile.isEmpty()) {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (!releaseStoreFile.isEmpty()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 

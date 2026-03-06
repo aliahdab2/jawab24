@@ -195,8 +195,12 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       });
       listenersRef.current.push(() => resumeListener.remove());
 
-      // Handle network changes
+      // Handle network changes — update offline indicator + refresh data on reconnect
+      const { setOffline } = useUIStore.getState();
+      const initialStatus = await Network.getStatus();
+      setOffline(!initialStatus.connected);
       const networkListener = await Network.addListener('networkStatusChange', (status) => {
+        setOffline(!status.connected);
         if (status.connected) {
           queryClient.invalidateQueries();
         }

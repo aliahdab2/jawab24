@@ -1453,6 +1453,10 @@
   "integrations.disconnectedState": "تم فصل هذا المتجر. أعد الاتصال لاستعادة الردود الذكية.",
   "integrations.reconnect": "إعادة الاتصال",
 
+  "pricing.manageOnWeb": "أدر اشتراكك عبر موقعنا الإلكتروني",
+  "common.offline": "أنت غير متصل بالإنترنت",
+  "common.backOnline": "عدت متصلاً",
+
   "sse.newComment": "تعليق جديد من {name}",
   "sse.newMessage": "رسالة جديدة من {name}",
   "sse.aiRepliedComment": "رد الذكاء الاصطناعي على تعليق",

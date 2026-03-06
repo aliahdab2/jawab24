@@ -14,6 +14,8 @@ import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
+import { isNativePlatform } from '@/lib/capacitor';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { BRAND_ASSETS } from '@/constants/brand';
 
@@ -351,6 +353,14 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   }, [isAuthenticated]);
 
   const handleSelectPlan = async (planId: string) => {
+    // On native (Android/iOS), open the web pricing page instead of in-app checkout.
+    // Google Play policy prohibits in-app purchases via Stripe.
+    if (isNativePlatform()) {
+      const locale = router.locale === 'en' ? '/en' : '';
+      await openExternalUrl(`https://jawab24.com${locale}/pricing`);
+      return;
+    }
+
     // STRICT PAYMENT VALIDATION: Re-check sanctions before payment
     // (Display is permissive, but payments are strict)
     const sanctioned = await isUserSanctioned();

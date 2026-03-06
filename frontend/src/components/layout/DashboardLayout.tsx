@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell } from '@/components/ui';
+import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { DemoBanner } from '@/features/demo';
 import clsx from 'clsx';
@@ -14,6 +15,8 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { isNativePlatform } from '@/lib/capacitor';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -103,6 +106,8 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
       </Head>
 
       <div className="dashboard-scroll-root flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh">
+        {/* Offline indicator — shown on native when network is lost */}
+        <OfflineBanner />
         {/* Dark mode decorative background — teal/blue glows + cubes pattern */}
         <div className="hidden dark:block fixed inset-0 pointer-events-none z-0" aria-hidden="true">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(93,174,164,0.15),transparent_60%)]" />
@@ -134,9 +139,18 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 {/* Actions - matches landing page */}
                 <div className="flex items-center gap-1 sm:gap-4">
                   {/* Pricing link - hidden on mobile */}
-                  <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
-                    {t('landing.nav.pricing' as TranslationKey)}
-                  </Link>
+                  {isNativePlatform() ? (
+                    <button
+                      onClick={() => openExternalUrl(`https://jawab24.com${language === 'en' ? '/en' : ''}/pricing`)}
+                      className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
+                    >
+                      {t('landing.nav.pricing' as TranslationKey)}
+                    </button>
+                  ) : (
+                    <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
+                      {t('landing.nav.pricing' as TranslationKey)}
+                    </Link>
+                  )}
                   <button
                     onClick={toggleLanguage}
                     className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
@@ -388,6 +402,13 @@ function MobileMenuOverlay({
   ];
 
   const handleNavigate = (path: string) => {
+    // On native, open pricing on the web (Google Play policy)
+    if (path === '/pricing' && isNativePlatform()) {
+      const locale = router.locale === 'en' ? '/en' : '';
+      openExternalUrl(`https://jawab24.com${locale}/pricing`);
+      onClose();
+      return;
+    }
     router.push(path);
     onClose();
   };

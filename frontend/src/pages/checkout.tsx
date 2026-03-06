@@ -12,6 +12,8 @@ import { Button, BrandLogo } from '@/components/ui';
 import { CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { isNativePlatform } from '@/lib/capacitor';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Plan } from '@jawab24/shared';
 
 export default function CheckoutPage() {
@@ -19,6 +21,14 @@ export default function CheckoutPage() {
   const { planId } = router.query;
   const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
+
+  // On native (Android/iOS), redirect to web checkout — Google Play prohibits Stripe in-app
+  useEffect(() => {
+    if (isNativePlatform()) {
+      const locale = router.locale === 'en' ? '/en' : '';
+      openExternalUrl(`https://jawab24.com${locale}/pricing`);
+    }
+  }, [router.locale]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,6 +41,7 @@ export default function CheckoutPage() {
 
   // SANCTIONS CHECK: Check geo on page load
   useEffect(() => {
+    if (isNativePlatform()) return; // Skip on native — redirected above
     const checkGeo = async () => {
       const sanctioned = await isUserSanctioned();
       setIsSanctioned(sanctioned);
@@ -247,7 +258,7 @@ export default function CheckoutPage() {
             </div>
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-700 text-start text-sm">
+              <div className="mb-6 p-4 alert-error border rounded-2xl text-start text-sm">
                 {error}
               </div>
             )}

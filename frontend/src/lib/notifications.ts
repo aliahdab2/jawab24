@@ -59,7 +59,6 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
         await registerPushListeners(authToken);
         return true;
     } catch (error) {
-        console.error('[Push] Permission request error:', error);
         captureError(error, 'Push permission request error', { tags: { context: 'push' } });
         return false;
     }
@@ -79,7 +78,6 @@ export async function initPushNotifications(token: string): Promise<void> {
     try {
         await registerPushListeners(token);
     } catch (error) {
-        console.error('[Push] Init error:', error);
         captureError(error, 'Push init error', { tags: { context: 'push' } });
     }
 }

@@ -1453,6 +1453,10 @@
   "integrations.disconnectedState": "This store was disconnected. Reconnect to restore AI replies.",
   "integrations.reconnect": "Reconnect",
 
+  "pricing.manageOnWeb": "Manage your subscription on our website",
+  "common.offline": "You're offline",
+  "common.backOnline": "Back online",
+
   "sse.newComment": "New comment from {name}",
   "sse.newMessage": "New message from {name}",
   "sse.aiRepliedComment": "AI replied to a comment",

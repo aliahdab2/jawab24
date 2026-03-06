@@ -22,6 +22,8 @@ import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
+import { isNativePlatform } from '@/lib/capacitor';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
 import { useIsDemoUser } from '@/features/demo';
@@ -100,7 +102,7 @@ const PLAN_NAME_KEYS: Record<string, TranslationKey> = {
 };
 
 const DashboardPage: NextPageWithLayout = () => {
-  const { t, intlLocale } = useTranslation();
+  const { t, language, intlLocale } = useTranslation();
   const { isAuthenticated, fbToken, user } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
@@ -530,24 +532,53 @@ const DashboardPage: NextPageWithLayout = () => {
                       )}
 
                       {isPaidPlan ? (
-                        <Link href="/pricing" className="block mt-5">
-                          <Button
-                            variant="secondary"
-                            className="w-full py-3.5 text-sm border-surface-400 dark:border-surface-400 hover:border-brand-500 dark:hover:border-brand-500"
+                        isNativePlatform() ? (
+                          <button
+                            onClick={() => openExternalUrl(`https://jawab24.com${language === 'en' ? '/en' : ''}/pricing`)}
+                            className="block mt-5 w-full"
                           >
-                            {t('subscription.managePlan')}
-                          </Button>
-                        </Link>
+                            <Button
+                              variant="secondary"
+                              className="w-full py-3.5 text-sm border-surface-400 dark:border-surface-400 hover:border-brand-500 dark:hover:border-brand-500"
+                            >
+                              {t('subscription.managePlan')}
+                            </Button>
+                          </button>
+                        ) : (
+                          <Link href="/pricing" className="block mt-5">
+                            <Button
+                              variant="secondary"
+                              className="w-full py-3.5 text-sm border-surface-400 dark:border-surface-400 hover:border-brand-500 dark:hover:border-brand-500"
+                            >
+                              {t('subscription.managePlan')}
+                            </Button>
+                          </Link>
+                        )
                       ) : (
-                        <Link href="/pricing" className="block mt-5">
-                          <Button
-                            variant="primary"
-                            className="w-full py-4 text-base shadow-[0_12px_32px_rgba(20,184,166,0.24)]"
-                            icon={<Sparkles className="w-5 h-5" />}
+                        isNativePlatform() ? (
+                          <button
+                            onClick={() => openExternalUrl(`https://jawab24.com${language === 'en' ? '/en' : ''}/pricing`)}
+                            className="block mt-5 w-full"
                           >
-                            {t('subscription.upgradePlan')}
-                          </Button>
-                        </Link>
+                            <Button
+                              variant="primary"
+                              className="w-full py-4 text-base shadow-[0_12px_32px_rgba(20,184,166,0.24)]"
+                              icon={<Sparkles className="w-5 h-5" />}
+                            >
+                              {t('subscription.upgradePlan')}
+                            </Button>
+                          </button>
+                        ) : (
+                          <Link href="/pricing" className="block mt-5">
+                            <Button
+                              variant="primary"
+                              className="w-full py-4 text-base shadow-[0_12px_32px_rgba(20,184,166,0.24)]"
+                              icon={<Sparkles className="w-5 h-5" />}
+                            >
+                              {t('subscription.upgradePlan')}
+                            </Button>
+                          </Link>
+                        )
                       )}
                     </div>
 

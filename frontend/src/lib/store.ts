@@ -163,10 +163,12 @@ interface UIState {
   theme: Theme;
   _hasHydrated: boolean;
   isOnboardingVisible: boolean;
-  // SSE live counters (ephemeral — not persisted, reset on page reload)
+  // Ephemeral state (not persisted, reset on page reload)
+  isOffline: boolean;
   unreadComments: number;
   unreadMessages: number;
   sseStatus: SSEStatus;
+  setOffline: (offline: boolean) => void;
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   setLanguage: (lang: Language) => void;
@@ -188,9 +190,11 @@ export const useUIStore = create<UIState>()(
       theme: 'system' as Theme,
       _hasHydrated: false,
       isOnboardingVisible: false,
+      isOffline: false,
       unreadComments: 0,
       unreadMessages: 0,
       sseStatus: 'disconnected' as SSEStatus,
+      setOffline: (offline) => set({ isOffline: offline }),
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setLanguage: (lang) => set({ language: lang }),
