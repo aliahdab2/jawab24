@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { ShoppingBag, Check } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 import { Button, BrandLogo } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
 import {
-  SallaIcon,
   LandingHero,
   LandingFeatures,
   LandingHowItWorks,
@@ -15,6 +13,7 @@ import {
   LandingPricing,
   LandingFAQ,
   LandingFooter,
+  IntegrationShowcase,
 } from '@/components/landing';
 
 export default function LandingPage() {
@@ -142,52 +141,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* E-commerce Integrations Section */}
-      <section className="py-10 sm:py-16 bg-gradient-to-br from-background via-card to-emerald-50/30 dark:to-emerald-950/20">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="relative rounded-2xl sm:rounded-3xl bg-card border border-theme-border shadow-xl shadow-surface-200/50 overflow-hidden">
-            <div className="absolute top-0 start-0 end-0 h-1 bg-gradient-to-r from-[#96bf48] to-[#004956]" />
-            <div className="p-6 sm:p-10 flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
-              {/* Platform logos */}
-              <div className="flex sm:flex-col items-center gap-3 flex-shrink-0">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#96bf48]/10 dark:bg-[#96bf48]/20 flex items-center justify-center">
-                  <ShoppingBag className="w-7 h-7 sm:w-8 sm:h-8 text-[#96bf48]" />
-                </div>
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#BAF3E6] dark:bg-[#004956] flex items-center justify-center">
-                  <SallaIcon className="w-7 h-7 sm:w-8 sm:h-8 text-[#004956] dark:text-[#BAF3E6]" />
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 text-center sm:text-start">
-                <h3 className="text-lg sm:text-2xl font-display font-bold text-foreground mb-2">
-                  {t('landing.features.integrationsTitle')}
-                </h3>
-                <p className="text-sm sm:text-base text-muted-foreground font-medium mb-4">
-                  {t('landing.features.integrationsDesc')}
-                </p>
-                <ul className="space-y-1.5 mb-5">
-                  {[
-                    t('landing.features.integrationsFeature1'),
-                    t('landing.features.integrationsFeature2'),
-                    t('landing.features.integrationsFeature3'),
-                  ].map((feature, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Check className="w-4 h-4 flex-shrink-0 text-[#96bf48]" aria-hidden="true" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Link href={isAuthenticated ? '/integrations' : '/login?redirect=%2Fintegrations'}>
-                  <Button className="font-bold shadow-lg shadow-brand-500/20">
-                    {t('landing.features.integrationsCta')}
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <IntegrationShowcase isAuthenticated={isAuthenticated} />
 
       <LandingFeatures />
       <LandingHowItWorks isAuthenticated={isAuthenticated} />
