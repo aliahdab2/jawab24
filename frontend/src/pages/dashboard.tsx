@@ -27,7 +27,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
-import { CommentDetailModal, CommentCard } from '@/components/comments';
+import { CommentDetailModal } from '@/components/comments';
 import { MessageDetailModal } from '@/components/messages/MessageDetailModal';
 import { useConversationActions } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
@@ -505,149 +505,193 @@ const DashboardPage: NextPageWithLayout = () => {
       />
 
       {/* Inbox: Comments + Messages side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Recent Comments */}
-        <Card className="border-none shadow-2xl shadow-surface-200/50 bg-card" padding="none">
-          <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
-            <div className="flex items-center gap-2.5">
-              <MessageSquare className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-              <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('dashboard.recentComments')}</h2>
-            </div>
-            {recentComments.length > 0 && (
-              <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
-                <span>{t('common.viewAll')}</span>
-                <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
-              </Link>
-            )}
-          </div>
+      {(() => {
+        // Shared time-label helper for both sections
+        const getTimeLabel = (date: string | Date | null | undefined) => {
+          if (!date) return '';
+          const d = new Date(typeof date === 'string' ? date : date);
+          const diffMs = Date.now() - d.getTime();
+          const diffMin = Math.floor(diffMs / 60_000);
+          const diffHr = Math.floor(diffMs / 3_600_000);
+          const diffDay = Math.floor(diffMs / 86_400_000);
+          if (diffMin < 1) return t('time.justNow' as TranslationKey);
+          if (diffMin < 60) return t('time.minutesAgo' as TranslationKey, { count: diffMin });
+          if (diffHr < 24) return t('time.hoursAgo' as TranslationKey, { count: diffHr });
+          return t('time.daysAgo' as TranslationKey, { count: diffDay });
+        };
 
-          <div className="divide-y divide-theme-border">
-            {sectionErrors.recentComments ? (
-              <SectionError onRetry={refetchAll} />
-            ) : recentComments.length > 0 ? (
-              (() => {
-                // Check if user has active pages on BOTH platforms
-                const hasFacebook = pages.some(p => !!p.facebookPageId);
-                const hasInstagram = pages.some(p => !!p.instagramAccountId);
-                const showPlatformIcon = hasFacebook && hasInstagram;
+        // Determine max items to show — cap at 5, match shorter column
+        const commentItems = recentComments.slice(0, 5);
+        const messageItems = (needsActionMessages ?? []).slice(0, 5);
+        const maxRows = Math.min(5, Math.max(commentItems.length, messageItems.length));
 
-                return recentComments.map((comment, i) => (
-                  <CommentCard
-                    key={comment.id}
-                    comment={comment}
-                    variant="compact"
-                    pageName={getPageName(comment.pageId) || undefined}
-                    showPlatformIcon={showPlatformIcon}
-                    animationDelay={(i + 3) * 0.1}
-                    onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
-                    onQuickReply={() => setSelectedCommentData({ comment, mode: 'quick' })}
-                  />
-                ));
-              })()
-            ) : (
-              <div className="py-8 text-center">
-                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
-                  <MessageSquare className="w-6 h-6 text-icon-muted" />
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {/* Incoming Comments */}
+            <Card className="border-none shadow-2xl shadow-surface-200/50 bg-card" padding="none">
+              <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
+                <div className="flex items-center gap-2.5">
+                  <MessageSquare className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+                  <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('dashboard.recentComments')}</h2>
+                  {statsData.commentsNeedsAction > 0 && (
+                    <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold rounded-full bg-red-500 text-white">
+                      {statsData.commentsNeedsAction > 99 ? '99+' : statsData.commentsNeedsAction}
+                    </span>
+                  )}
                 </div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">
-                  {t('dashboard.noRecentComments')}
-                </p>
-                {pages.length === 0 && (
-                  <Link href="/pages">
-                    <Button variant="primary" size="sm" className="mt-3">
-                      {t('pages.connectPage')}
-                    </Button>
+                {commentItems.length > 0 && (
+                  <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
+                    <span>{t('common.viewAll')}</span>
+                    <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
                   </Link>
                 )}
               </div>
-            )}
-          </div>
-        </Card>
 
-        {/* Recent Messages */}
-        <Card className="border-none shadow-2xl shadow-surface-200/50 bg-card" padding="none">
-          <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
-            <div className="flex items-center gap-2.5">
-              <MessageCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-              <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('messages.title')}</h2>
-              {statsData.messagesNeedsAction > 0 && (
-                <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold rounded-full bg-red-500 text-white">
-                  {statsData.messagesNeedsAction > 99 ? '99+' : statsData.messagesNeedsAction}
-                </span>
-              )}
-            </div>
-            {(needsActionMessages?.length ?? 0) > 0 && (
-              <Link href="/messages" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
-                <span>{t('common.viewAll')}</span>
-                <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
-              </Link>
-            )}
-          </div>
+              <div className="divide-y divide-theme-border">
+                {sectionErrors.recentComments ? (
+                  <SectionError onRetry={refetchAll} />
+                ) : commentItems.length > 0 ? (
+                  commentItems.slice(0, maxRows).map((comment) => {
+                    const snippet = comment.message && comment.message.length > 60
+                      ? `${comment.message.slice(0, 60)}...`
+                      : (comment.message || '');
+                    const timeLabel = getTimeLabel(comment.createdAt);
+                    const commentPageName = getPageName(comment.pageId);
 
-          <div className="divide-y divide-theme-border">
-            {sectionErrors.messages ? (
-              <SectionError onRetry={refetchAll} />
-            ) : (needsActionMessages?.length ?? 0) > 0 ? (
-              needsActionMessages!.slice(0, 5).map((msg) => {
-                const snippet = msg.message && msg.message.length > 60
-                  ? `${msg.message.slice(0, 60)}...`
-                  : (msg.message || '');
-                const msgDate = msg.createdTime || msg.createdAt;
-                const d = msgDate ? new Date(typeof msgDate === 'string' ? msgDate : msgDate) : null;
-                const diffMs = d ? Date.now() - d.getTime() : 0;
-                const diffMin = Math.floor(diffMs / 60_000);
-                const diffHr = Math.floor(diffMs / 3_600_000);
-                const diffDay = Math.floor(diffMs / 86_400_000);
-                const timeLabel = !d ? '' :
-                  diffMin < 1 ? t('time.justNow' as TranslationKey) :
-                  diffMin < 60 ? t('time.minutesAgo' as TranslationKey, { count: diffMin }) :
-                  diffHr < 24 ? t('time.hoursAgo' as TranslationKey, { count: diffHr }) :
-                  t('time.daysAgo' as TranslationKey, { count: diffDay });
-
-                return (
-                  <button
-                    key={msg.id}
-                    type="button"
-                    onClick={() => openConversationModal(msg.senderId, msg.pageId, msg.senderName)}
-                    className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-muted/50 transition-colors w-full text-start"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-xs font-bold text-muted-foreground">
-                        {(msg.senderName || '?')[0].toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-0.5">
-                        <span className="text-sm font-semibold text-foreground truncate">
-                          {msg.senderName || t('common.unknownUser' as TranslationKey)}
-                        </span>
-                        {timeLabel && (
-                          <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0 flex items-center gap-1">
-                            <Clock className="w-3 h-3" aria-hidden="true" />
-                            {timeLabel}
+                    return (
+                      <button
+                        key={comment.id}
+                        type="button"
+                        onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
+                        className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-muted/50 transition-colors w-full text-start"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-xs font-bold text-muted-foreground">
+                            {(comment.fromName || '?')[0].toUpperCase()}
                           </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate leading-relaxed">
-                        {snippet}
-                      </p>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm font-semibold text-foreground truncate">
+                                {comment.fromName || t('common.unknownUser' as TranslationKey)}
+                              </span>
+                              {commentPageName && (
+                                <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 bg-muted rounded truncate max-w-[100px] flex-shrink-0">
+                                  {commentPageName}
+                                </span>
+                              )}
+                            </div>
+                            {timeLabel && (
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0 flex items-center gap-1">
+                                <Clock className="w-3 h-3" aria-hidden="true" />
+                                {timeLabel}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate leading-relaxed">
+                            {snippet}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="py-8 text-center">
+                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
+                      <MessageSquare className="w-6 h-6 text-icon-muted" />
                     </div>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="py-8 text-center">
-                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
-                  <MessageCircle className="w-6 h-6 text-icon-muted" aria-hidden="true" />
-                </div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">
-                  {t('dashboard.noMessagesYet')}
-                </p>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                      {t('dashboard.noRecentComments')}
+                    </p>
+                    {pages.length === 0 && (
+                      <Link href="/pages">
+                        <Button variant="primary" size="sm" className="mt-3">
+                          {t('pages.connectPage')}
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
+            </Card>
+
+            {/* Recent Messages */}
+            <Card className="border-none shadow-2xl shadow-surface-200/50 bg-card" padding="none">
+              <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
+                <div className="flex items-center gap-2.5">
+                  <MessageCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+                  <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('messages.title')}</h2>
+                  {statsData.messagesNeedsAction > 0 && (
+                    <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold rounded-full bg-red-500 text-white">
+                      {statsData.messagesNeedsAction > 99 ? '99+' : statsData.messagesNeedsAction}
+                    </span>
+                  )}
+                </div>
+                {messageItems.length > 0 && (
+                  <Link href="/messages" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
+                    <span>{t('common.viewAll')}</span>
+                    <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
+                  </Link>
+                )}
+              </div>
+
+              <div className="divide-y divide-theme-border">
+                {sectionErrors.messages ? (
+                  <SectionError onRetry={refetchAll} />
+                ) : messageItems.length > 0 ? (
+                  messageItems.slice(0, maxRows).map((msg) => {
+                    const snippet = msg.message && msg.message.length > 60
+                      ? `${msg.message.slice(0, 60)}...`
+                      : (msg.message || '');
+                    const timeLabel = getTimeLabel(msg.createdTime || msg.createdAt);
+
+                    return (
+                      <button
+                        key={msg.id}
+                        type="button"
+                        onClick={() => openConversationModal(msg.senderId, msg.pageId, msg.senderName)}
+                        className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-muted/50 transition-colors w-full text-start"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-xs font-bold text-muted-foreground">
+                            {(msg.senderName || '?')[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
+                            <span className="text-sm font-semibold text-foreground truncate">
+                              {msg.senderName || t('common.unknownUser' as TranslationKey)}
+                            </span>
+                            {timeLabel && (
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0 flex items-center gap-1">
+                                <Clock className="w-3 h-3" aria-hidden="true" />
+                                {timeLabel}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate leading-relaxed">
+                            {snippet}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="py-8 text-center">
+                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
+                      <MessageCircle className="w-6 h-6 text-icon-muted" aria-hidden="true" />
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                      {t('dashboard.noMessagesYet')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
-        </Card>
-      </div>
+        );
+      })()}
 
       {/* Usage & Pages */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
