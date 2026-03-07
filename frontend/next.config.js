@@ -14,6 +14,9 @@ const nextConfig = {
   reactStrictMode: true,
   // Mobile: static export for Capacitor; Production: standalone for minimal Docker images
   output: isMobile ? 'export' : 'standalone',
+  // Separate build directories per output mode to prevent stale artifact conflicts
+  // (standalone expects pages-manifest.json; export doesn't generate it)
+  distDir: isMobile ? '.next-mobile' : '.next',
 
   images: {
     unoptimized: isMobile,

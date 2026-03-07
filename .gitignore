@@ -4,6 +4,7 @@ node_modules/
 dist/
 build/
 .next/
+.next-mobile/
 *.log
 .DS_Store
 .lighthouseci/
