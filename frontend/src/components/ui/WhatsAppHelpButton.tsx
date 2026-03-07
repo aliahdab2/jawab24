@@ -16,6 +16,10 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const [lastScrollY, setLastScrollY] = useState(0);
   const [shouldPulse, setShouldPulse] = useState(false);
 
+  // Hide on internal action screens where FAB overlaps with primary actions
+  const HIDDEN_ROUTES = ['/messages', '/comments', '/notifications'];
+  const isHiddenRoute = HIDDEN_ROUTES.some(r => pathname.startsWith(r));
+
   // Pulse once on mount
   useEffect(() => {
     const timer = setTimeout(() => setShouldPulse(true), 1200);
@@ -67,7 +71,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
         className={clsx(
           "fixed z-50 w-12 h-12 md:w-16 md:h-16 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl md:rounded-[2rem] transition-all duration-500 flex items-center justify-center group active:scale-90 overflow-hidden",
           "whatsapp-help-fab",
-          hidden || !isVisible || pathname === '/pricing' ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100',
+          hidden || !isVisible || isHiddenRoute || pathname === '/pricing' ? 'translate-y-32 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100',
           shouldPulse && "animate-bounce" // Fallback to bounce or custom pulse if defined
         )}
         style={{

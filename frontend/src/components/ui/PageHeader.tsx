@@ -23,7 +23,7 @@ export function PageHeader({ title, description, action, className }: PageHeader
         )}
       </div>
       {description && (
-        <p className="text-sm sm:text-lg text-surface-500 mt-2 sm:mt-3 lg:mt-5 font-medium leading-relaxed line-clamp-2 sm:line-clamp-none text-start">
+        <p className="hidden sm:block text-sm sm:text-lg text-surface-500 mt-2 sm:mt-3 lg:mt-5 font-medium leading-relaxed sm:line-clamp-none text-start">
           {description}
         </p>
       )}

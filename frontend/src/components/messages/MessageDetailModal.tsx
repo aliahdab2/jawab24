@@ -358,7 +358,9 @@ export function MessageDetailModal({
 
           {/* Smart Reply button */}
           {hasUnrepliedIncoming && (
-            <div className="flex justify-end mb-2">
+            <div className="flex items-center justify-between mb-2">
+              {replyText && !isGenerating && <span className="text-xs text-muted-foreground">{t('comments.aiSuggestedReply' as TranslationKey)}</span>}
+              <div className="flex-1" />
               <div className="relative group/tooltip inline-block">
                 <Button
                   variant="ghost"
@@ -423,32 +425,35 @@ export function MessageDetailModal({
 
           {/* Actions row: pause/resume + resolve */}
           <div className="flex items-center justify-between mt-4">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (isPaused) {
-                    onResume(conversation.senderId, pageId);
-                  } else {
-                    onPause(conversation.senderId, pageId);
-                  }
-                }}
-                disabled={isPausing || isResuming}
-                aria-label={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
-                className={clsx(
-                  'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-50',
-                  isPaused
-                    ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30'
-                    : 'text-muted-foreground hover:bg-muted dark:hover:bg-white/5'
+            <div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (isPaused) {
+                      onResume(conversation.senderId, pageId);
+                    } else {
+                      onPause(conversation.senderId, pageId);
+                    }
+                  }}
+                  disabled={isPausing || isResuming}
+                  aria-label={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-50',
+                    isPaused
+                      ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30'
+                      : 'text-muted-foreground hover:bg-muted dark:hover:bg-white/5'
+                  )}
+                >
+                  {isPaused ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
+                  <span>{isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}</span>
+                </button>
+                {conversation.pauseStatus?.paused && conversation.pauseStatus.remainingMinutes != null && (
+                  <span className="text-[10px] font-medium text-violet-500">
+                    {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: conversation.pauseStatus.remainingMinutes })}
+                  </span>
                 )}
-              >
-                {isPaused ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
-                <span>{isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}</span>
-              </button>
-              {conversation.pauseStatus?.paused && conversation.pauseStatus.remainingMinutes != null && (
-                <span className="text-[10px] font-medium text-violet-500">
-                  {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: conversation.pauseStatus.remainingMinutes })}
-                </span>
-              )}
+              </div>
+              <p className="text-[11px] text-muted-foreground ps-2 mt-0.5">{t('messages.pauseScope' as TranslationKey)}</p>
             </div>
 
             {/* Resolve — end-aligned */}

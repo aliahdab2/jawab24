@@ -308,7 +308,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 </div>
               )}
               <div className="flex justify-between items-center mb-2">
-                <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground">{t('comments.reply')}</label>
+                <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground">
+                  {t('comments.reply')}
+                  {replyText && !isGenerating && (
+                    <span className="text-xs font-normal text-muted-foreground ms-2">{t('comments.aiSuggestedReply')}</span>
+                  )}
+                </label>
                 
                 {mode === 'full' && (
                   <div className="relative group/tooltip inline-block">
@@ -351,17 +356,19 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 disabled={isGenerating || isSending}
                 dir="auto"
               />
-              <div className="flex justify-end mt-3 gap-2">
-                {onResolve && (
-                  <Button
-                    variant="secondary"
+              {onResolve && (
+                <div className="flex justify-center mt-3">
+                  <button
                     onClick={() => { onResolve(); onClose(); }}
                     disabled={isSending}
-                    icon={<CheckCircle className="w-4 h-4" />}
+                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors disabled:opacity-50"
                   >
+                    <CheckCircle className="w-3.5 h-3.5" />
                     {t('comments.resolve')}
-                  </Button>
-                )}
+                  </button>
+                </div>
+              )}
+              <div className="flex justify-end mt-3 gap-2">
                 <Button variant="secondary" onClick={onClose} disabled={isSending}>
                    {t('common.cancel')}
                 </Button>
