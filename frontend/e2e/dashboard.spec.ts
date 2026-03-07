@@ -364,7 +364,7 @@ test.describe('Dashboard Page', () => {
     ).toBeVisible({ timeout: 15000 });
 
     // With only 1 page, the accordion should auto-expand
-    const pageButton = page.getByRole('button', { name: /Test Business Page/i });
+    const pageButton = page.locator('button[id^="page-header-"]', { hasText: /Test Business Page/i });
     await expect(pageButton).toBeVisible({ timeout: 15000 });
     await expect(pageButton).toHaveAttribute('aria-expanded', 'true');
 
@@ -394,8 +394,8 @@ test.describe('Dashboard Page', () => {
     ).toBeVisible({ timeout: 15000 });
 
     // Both page buttons should be visible and collapsed
-    const firstButton = page.getByRole('button', { name: /Test Business Page/i });
-    const secondButton = page.getByRole('button', { name: /Second Page/i });
+    const firstButton = page.locator('button[id^="page-header-"]', { hasText: /Test Business Page/i });
+    const secondButton = page.locator('button[id^="page-header-"]', { hasText: /Second Page/i });
     await expect(firstButton).toBeVisible({ timeout: 15000 });
     await expect(secondButton).toBeVisible({ timeout: 15000 });
     await expect(firstButton).toHaveAttribute('aria-expanded', 'false');
