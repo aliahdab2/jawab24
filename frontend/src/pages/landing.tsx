@@ -80,10 +80,11 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.06]" />
       </div>
 
-      {/* Navigation — dir applied directly so fixed positioning inherits RTL reliably */}
+      {/* Navigation — fixed, extends into safe area via pt-safe + box-content.
+           bg-card (solid) so scrolling content never bleeds through. */}
       <nav
         dir={dir}
-        className="fixed w-full z-50 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape"
+        className="fixed w-full z-50 bg-card border-b border-theme-border pt-safe box-content px-safe-landscape"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
@@ -123,8 +124,8 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Spacer: matches nav height. box-content + pt-safe ensures safe area adds to height. */}
-      <div className="h-16 sm:h-20 box-content pt-safe" />
+      {/* Spacer: matches nav inner height. Safe area handled globally by app-shell. */}
+      <div className="h-16 sm:h-20" />
 
       <LandingHero isAuthenticated={isAuthenticated} />
 
