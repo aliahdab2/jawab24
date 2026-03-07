@@ -1,34 +1,43 @@
-Run the Jawab24 AI reply quality evaluation (98 test cases).
+Run the Jawab24 AI reply quality evaluation (125 test cases).
 
 Arguments: $ARGUMENTS
 - If arguments include a number (e.g. "category 3"), set CATEGORY=<number>
 - If arguments include "verbose", set VERBOSE=1
 - If arguments include a concurrency number, set CONCURRENCY=<number>
 
-Prerequisites — check if these are already running before starting them:
-1. Backend on port 3000
-2. AI worker on port 3002
+Prerequisites — check if ports 3000 and 3002 are already listening. If not, start them automatically (do NOT ask the user):
 
-If not running, start them in separate terminals:
 ```bash
-# Terminal 1 - Backend
-DATABASE_URL="postgres://postgres:postgres@localhost:5433/autoreply" npx tsx backend/src/index.ts
+# Check and start backend (source env from backend/.env)
+if ! lsof -i :3000 -sTCP:LISTEN >/dev/null 2>&1; then
+  cd /Users/aliahdab/Documents/AutoReply
+  export $(grep -v '^#' backend/.env | xargs)
+  nohup npx tsx backend/src/index.ts > /tmp/backend.log 2>&1 &
+  sleep 5
+fi
 
-# Terminal 2 - AI worker (ask user for OPENAI_API_KEY if not set in env)
-PORT=3002 OPENAI_API_KEY="$OPENAI_API_KEY" npx tsx ai-worker/src/index.ts
+# Check and start AI worker (source env from ai-worker/.env)
+if ! lsof -i :3002 -sTCP:LISTEN >/dev/null 2>&1; then
+  cd /Users/aliahdab/Documents/AutoReply
+  export $(grep -v '^#' ai-worker/.env | xargs)
+  export PORT=3002
+  nohup npx tsx ai-worker/src/index.ts > /tmp/ai-worker.log 2>&1 &
+  sleep 3
+fi
 ```
 
-Then get the admin token, clear the AI cache, and run the eval:
+IMPORTANT:
+- NEVER ask the user for OPENAI_API_KEY — it is in `ai-worker/.env`
+- NEVER ask for confirmation to start services — just start them
+- If demo auth returns empty token, check `/tmp/backend.log` — usually a missing DB column. Fix with psql against `postgres://aliahdab@localhost:5432/postgres`
+
+Then get the admin token and run the eval:
 ```bash
 ADMIN_TOKEN=$(curl -s -X POST http://localhost:3000/auth/demo | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
 
-# Clear AI cache so eval tests fresh responses (not cached ones)
-curl -s -X DELETE http://localhost:3000/api/ai/cache -H "Authorization: Bearer $ADMIN_TOKEN"
-
-ADMIN_TOKEN="$ADMIN_TOKEN" npm run eval
+ADMIN_TOKEN="$ADMIN_TOKEN" VERBOSE=1 npm run eval
 ```
 
-After the eval completes, summarize:
-- Overall pass rate
-- Which categories failed (if any)
-- Any patterns in failures worth noting
+After the eval completes:
+- Kill the background services: `pkill -f "tsx backend/src/index.ts"; pkill -f "tsx ai-worker/src/index.ts"`
+- Summarize: overall pass rate, which categories failed (if any), patterns in failures
