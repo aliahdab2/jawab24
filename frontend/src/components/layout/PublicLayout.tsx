@@ -74,7 +74,7 @@ export function PublicLayout({
       <div className="flex-1 overflow-y-auto bg-background">
         {/* Header - Consistent across all public pages */}
         {variant === 'landing' && (
-          <nav className="fixed w-full z-50 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe">
+          <nav className="fixed w-full z-50 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16 sm:h-20">
                 {/* Logo */}
