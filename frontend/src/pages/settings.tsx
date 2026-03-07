@@ -263,6 +263,10 @@ const SettingsPage: NextPageWithLayout = () => {
             onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
           />
         </div>
+
+        {settings.aiEnabled && (
+          <ReplyStyleCard settings={settings} setSettings={setSettings} />
+        )}
       </div>
 
       {/* Advanced Settings Toggle */}
@@ -302,7 +306,6 @@ const SettingsPage: NextPageWithLayout = () => {
           </div>
 
           <HandoffPauseCard settings={settings} setSettings={setSettings} />
-          <ReplyStyleCard settings={settings} setSettings={setSettings} />
           <GreetingMessageCard settings={settings} setSettings={setSettings} />
         </div>
       )}

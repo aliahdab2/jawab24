@@ -11,12 +11,14 @@ import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, analy
 import type { AnalyticsOverview } from '@/lib/api';
 import {
   MessageSquare,
+  MessageCircle,
   Zap,
   FileText,
   Sparkles,
   Crown,
   AlertTriangle,
   ArrowRight,
+  Clock,
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
@@ -428,14 +430,14 @@ const DashboardPage: NextPageWithLayout = () => {
         onRetry={refetchAll}
       />
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Inbox: Comments + Messages side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* Recent Comments */}
-        <Card className="lg:col-span-2 border-none shadow-2xl shadow-surface-200/50 bg-card" padding="none">
+        <Card className="border-none shadow-2xl shadow-surface-200/50 bg-card" padding="none">
           <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
-            <div>
-              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{t('dashboard.recentComments')}</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">{t('dashboard.latestCommentsDesc')}</p>
+            <div className="flex items-center gap-2.5">
+              <MessageSquare className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+              <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('dashboard.recentComments')}</h2>
             </div>
             {recentComments.length > 0 && (
               <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
@@ -488,8 +490,92 @@ const DashboardPage: NextPageWithLayout = () => {
           </div>
         </Card>
 
-        {/* Top Pages & Usage Column */}
-        <div className="space-y-8">
+        {/* Recent Messages */}
+        <Card className="border-none shadow-2xl shadow-surface-200/50 bg-card" padding="none">
+          <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
+            <div className="flex items-center gap-2.5">
+              <MessageCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+              <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('messages.title')}</h2>
+              {statsData.messagesNeedsAction > 0 && (
+                <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold rounded-full bg-red-500 text-white">
+                  {statsData.messagesNeedsAction > 99 ? '99+' : statsData.messagesNeedsAction}
+                </span>
+              )}
+            </div>
+            {(needsActionMessages?.length ?? 0) > 0 && (
+              <Link href="/messages" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
+                <span>{t('common.viewAll')}</span>
+                <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
+              </Link>
+            )}
+          </div>
+
+          <div className="divide-y divide-theme-border">
+            {sectionErrors.messages ? (
+              <SectionError onRetry={refetchAll} />
+            ) : (needsActionMessages?.length ?? 0) > 0 ? (
+              needsActionMessages!.slice(0, 5).map((msg) => {
+                const snippet = msg.message && msg.message.length > 60
+                  ? `${msg.message.slice(0, 60)}...`
+                  : (msg.message || '');
+                const msgDate = msg.createdTime || msg.createdAt;
+                const d = msgDate ? new Date(typeof msgDate === 'string' ? msgDate : msgDate) : null;
+                const diffMs = d ? Date.now() - d.getTime() : 0;
+                const diffMin = Math.floor(diffMs / 60_000);
+                const diffHr = Math.floor(diffMs / 3_600_000);
+                const diffDay = Math.floor(diffMs / 86_400_000);
+                const timeLabel = !d ? '' :
+                  diffMin < 1 ? t('time.justNow' as TranslationKey) :
+                  diffMin < 60 ? t('time.minutesAgo' as TranslationKey, { count: diffMin }) :
+                  diffHr < 24 ? t('time.hoursAgo' as TranslationKey, { count: diffHr }) :
+                  t('time.daysAgo' as TranslationKey, { count: diffDay });
+
+                return (
+                  <Link
+                    key={msg.id}
+                    href="/messages?filter=needs_action"
+                    className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-xs font-bold text-muted-foreground">
+                        {(msg.senderName || '?')[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <span className="text-sm font-semibold text-foreground truncate">
+                          {msg.senderName || t('common.unknownUser' as TranslationKey)}
+                        </span>
+                        {timeLabel && (
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0 flex items-center gap-1">
+                            <Clock className="w-3 h-3" aria-hidden="true" />
+                            {timeLabel}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate leading-relaxed">
+                        {snippet}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })
+            ) : (
+              <div className="py-8 text-center">
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
+                  <MessageCircle className="w-6 h-6 text-icon-muted" aria-hidden="true" />
+                </div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  {t('dashboard.noMessagesYet')}
+                </p>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Usage & Pages */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Usage Card — Split into Plan Info + Quota sections */}
           {usage && usage.subscription && (
             <Card className="border-none shadow-2xl shadow-brand-500/10 overflow-hidden bg-card relative group" padding="none">
@@ -663,7 +749,6 @@ const DashboardPage: NextPageWithLayout = () => {
             </div>
           </Card>
       </div>
-    </div>
 
       {/* Comment Detail Modal - Now handles both modes */}
       {selectedCommentData && (
