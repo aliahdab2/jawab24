@@ -6,6 +6,7 @@ import {
     getStoreByWorkspace,
     getStoreByWorkspaceAny,
     createStore,
+    deactivateStore,
     disconnectStore,
     linkStoreToPage,
     unlinkStoreFromPage,
@@ -152,7 +153,7 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
     }
 }
 
-// --- Webhooks (Salla calls these — HMAC verified with hex digest) ---
+// --- Webhook (single endpoint — dispatches by event type in body) ---
 
 function verifySallaWebhookHmac(request: FastifyRequest, reply: FastifyReply): boolean {
     const signature = request.headers['x-salla-signature'] as string;
@@ -169,32 +170,32 @@ function verifySallaWebhookHmac(request: FastifyRequest, reply: FastifyReply): b
     return true;
 }
 
-export async function webhookProductUpdate(request: FastifyRequest, reply: FastifyReply) {
+/**
+ * Single webhook handler for all Salla events.
+ * Dispatches to the correct action based on the `event` field in the body.
+ */
+export async function webhookHandler(request: FastifyRequest, reply: FastifyReply) {
     if (!verifySallaWebhookHmac(request, reply)) return;
 
-    const { merchant } = request.body as { merchant?: number };
-    if (merchant) {
-        // Find store by merchantId in platformData
+    const { event, merchant } = request.body as { event?: string; merchant?: number };
+
+    if (!merchant) {
+        return reply.status(200).send({ ok: true });
+    }
+
+    if (event === 'app.uninstalled') {
+        await deactivateStore('salla', String(merchant));
+        return reply.status(200).send({ ok: true });
+    }
+
+    // All product.* events trigger a sync
+    if (sallaService.isProductEvent(event || '')) {
         const store = await getStoreByDomain('salla', String(merchant));
         if (store) {
             enqueueSyncJob(store.id, 'salla').catch(err => {
                 request.log.error({ err }, 'Failed to enqueue Salla product sync');
             });
         }
-    }
-
-    return reply.status(200).send({ ok: true });
-}
-
-export async function webhookUninstall(request: FastifyRequest, reply: FastifyReply) {
-    if (!verifySallaWebhookHmac(request, reply)) return;
-
-    const { merchant } = request.body as { merchant?: number };
-    if (merchant) {
-        const { deactivateStore } = await import('../services/ecommerce');
-        // Look up store by merchantId — store domain is the merchant's domain
-        // For Salla, the merchant ID is stored as storeDomain
-        await deactivateStore('salla', String(merchant));
     }
 
     return reply.status(200).send({ ok: true });

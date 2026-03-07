@@ -880,15 +880,18 @@ describe('Salla Service', () => {
             expect(mockCaptureError).toHaveBeenCalled();
         });
 
-        it('should format webhook URLs with hyphens instead of dots', async () => {
+        it('should register all events to a single webhook URL', async () => {
             mockFetch.mockResolvedValue({ ok: true });
 
             await registerWebhooks('token');
 
-            // Check one specific webhook URL format
-            const firstCall = mockFetch.mock.calls[0];
-            const body = JSON.parse(firstCall[1].body);
-            expect(body.url).toBe('https://jawab24.com/salla/webhooks/product-created');
+            const urls = mockFetch.mock.calls.map(
+                (call: [string, { body: string }]) => JSON.parse(call[1].body).url,
+            );
+
+            // All events point to the same single endpoint
+            const expectedUrl = 'https://jawab24.com/salla/webhooks';
+            expect(urls.every((u: string) => u === expectedUrl)).toBe(true);
         });
     });
 

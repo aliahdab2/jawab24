@@ -9,9 +9,8 @@ export default async function sallaRoutes(fastify: FastifyInstance) {
     fastify.get('/auth', sallaController.authRedirect);
     fastify.get('/auth/callback', sallaController.authCallback);
 
-    // Webhooks (HMAC-verified in handler — no GDPR endpoints needed for Salla)
-    fastify.post('/webhooks/uninstall', sallaController.webhookUninstall);
-    fastify.post('/webhooks/product-update', sallaController.webhookProductUpdate);
+    // Single webhook endpoint — dispatches by event type in body (HMAC-verified in handler)
+    fastify.post('/webhooks', sallaController.webhookHandler);
 
     // --- Protected routes (Jawab24 JWT required) ---
 

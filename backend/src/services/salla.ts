@@ -187,19 +187,26 @@ export function verifyWebhookHmac(body: string, signature: string): boolean {
 
 // --- Webhook Registration via API ---
 
-export async function registerWebhooks(accessToken: string): Promise<void> {
-    const events = [
-        'product.created',
-        'product.deleted',
-        'product.price.updated',
-        'product.status.updated',
-        'product.quantity.low',
-        'app.uninstalled',
-    ];
+export const SALLA_WEBHOOK_EVENTS = [
+    'product.created',
+    'product.deleted',
+    'product.price.updated',
+    'product.status.updated',
+    'product.quantity.low',
+    'app.uninstalled',
+] as const;
 
+export type SallaWebhookEvent = typeof SALLA_WEBHOOK_EVENTS[number];
+
+export function isProductEvent(event: string): boolean {
+    return event.startsWith('product.');
+}
+
+export async function registerWebhooks(accessToken: string): Promise<void> {
+    // Single endpoint receives all events — dispatches by event type in body
     const webhookUrl = `https://${config.salla.hostName}/salla/webhooks`;
 
-    for (const event of events) {
+    for (const event of SALLA_WEBHOOK_EVENTS) {
         try {
             const response = await fetch('https://api.salla.dev/admin/v2/webhooks/subscribe', {
                 method: 'POST',
@@ -210,7 +217,7 @@ export async function registerWebhooks(accessToken: string): Promise<void> {
                 body: JSON.stringify({
                     name: event,
                     event,
-                    url: `${webhookUrl}/${event.replace(/\./g, '-')}`,
+                    url: webhookUrl,
                 }),
             });
             if (!response.ok) {

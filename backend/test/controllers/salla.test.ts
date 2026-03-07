@@ -17,6 +17,7 @@ const mockFetchStoreInfo = vi.fn().mockResolvedValue({
     merchantId: '12345',
 });
 const mockFullSync = vi.fn().mockResolvedValue({ synced: 10 });
+const mockIsProductEvent = vi.fn((event: string) => event.startsWith('product.'));
 
 vi.mock('../../src/services/salla', () => ({
     buildAuthUrl: (...args: any[]) => mockBuildAuthUrl(...args),
@@ -25,6 +26,7 @@ vi.mock('../../src/services/salla', () => ({
     registerWebhooks: (...args: any[]) => mockRegisterWebhooks(...args),
     fetchStoreInfo: (...args: any[]) => mockFetchStoreInfo(...args),
     fullSync: (...args: any[]) => mockFullSync(...args),
+    isProductEvent: (...args: any[]) => mockIsProductEvent(...args),
 }));
 
 // --- Mocked shared ecommerce service ---
@@ -106,8 +108,7 @@ vi.mock('../../src/lib/ecommerceSyncQueue', () => ({
 import {
     authRedirect,
     authCallback,
-    webhookProductUpdate,
-    webhookUninstall,
+    webhookHandler,
     getStore,
     connectStore,
     disconnectStoreHandler,
@@ -468,24 +469,24 @@ describe('Salla Controller', () => {
         });
     });
 
-    // --- Webhooks ---
+    // --- Webhook (single endpoint, dispatches by event type) ---
 
-    describe('webhookProductUpdate', () => {
+    describe('webhookHandler', () => {
         it('should reject missing rawBody', async () => {
             const req = mockRequest({
                 headers: { 'x-salla-signature': 'valid_hmac' },
-                body: { merchant: 12345 },
+                body: { event: 'product.created', merchant: 12345 },
             });
             const rep = mockReply();
 
-            await webhookProductUpdate(req, rep);
+            await webhookHandler(req, rep);
 
             expect(rep.status).toHaveBeenCalledWith(401);
         });
 
         it('should reject invalid HMAC', async () => {
             mockVerifyWebhookHmac.mockReturnValue(false);
-            const body = { merchant: 12345 };
+            const body = { event: 'product.created', merchant: 12345 };
             const req = mockRequest({
                 headers: { 'x-salla-signature': 'invalid' },
                 body,
@@ -493,15 +494,15 @@ describe('Salla Controller', () => {
             });
             const rep = mockReply();
 
-            await webhookProductUpdate(req, rep);
+            await webhookHandler(req, rep);
 
             expect(rep.status).toHaveBeenCalledWith(401);
         });
 
-        it('should enqueue sync on valid webhook', async () => {
+        it('should enqueue sync on product.created event', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
-            const body = { merchant: 12345 };
+            const body = { event: 'product.created', merchant: 12345 };
             const req = mockRequest({
                 headers: { 'x-salla-signature': 'valid_hmac' },
                 body,
@@ -509,7 +510,7 @@ describe('Salla Controller', () => {
             });
             const rep = mockReply();
 
-            await webhookProductUpdate(req, rep);
+            await webhookHandler(req, rep);
 
             await new Promise(r => setTimeout(r, 10));
 
@@ -517,10 +518,10 @@ describe('Salla Controller', () => {
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
-        it('should return 200 even when store not found', async () => {
+        it('should enqueue sync on product.price.updated event', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
-            mockGetStoreByDomain.mockResolvedValue(null);
-            const body = { merchant: 99999 };
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = { event: 'product.price.updated', merchant: 12345 };
             const req = mockRequest({
                 headers: { 'x-salla-signature': 'valid_hmac' },
                 body,
@@ -528,14 +529,66 @@ describe('Salla Controller', () => {
             });
             const rep = mockReply();
 
-            await webhookProductUpdate(req, rep);
+            await webhookHandler(req, rep);
 
+            await new Promise(r => setTimeout(r, 10));
+
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'salla');
+        });
+
+        it('should deactivate store on app.uninstalled event', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            const body = { event: 'app.uninstalled', merchant: 12345 };
+            const req = mockRequest({
+                headers: { 'x-salla-signature': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockDeactivateStore).toHaveBeenCalledWith('salla', '12345');
+            expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should return 200 even when store not found for product event', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue(null);
+            const body = { event: 'product.deleted', merchant: 99999 };
+            const req = mockRequest({
+                headers: { 'x-salla-signature': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should return 200 when merchant is missing', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            const body = { event: 'product.created' };
+            const req = mockRequest({
+                headers: { 'x-salla-signature': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
+            expect(mockDeactivateStore).not.toHaveBeenCalled();
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
         it('should use X-Salla-Signature header (not Shopify header)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
-            const body = { merchant: 12345 };
+            const body = { event: 'product.created', merchant: 12345 };
             const req = mockRequest({
                 headers: { 'x-salla-signature': 'hex_hmac_value' },
                 body,
@@ -543,34 +596,17 @@ describe('Salla Controller', () => {
             });
             const rep = mockReply();
 
-            await webhookProductUpdate(req, rep);
+            await webhookHandler(req, rep);
 
             expect(mockVerifyWebhookHmac).toHaveBeenCalledWith(
                 JSON.stringify(body),
                 'hex_hmac_value'
             );
         });
-    });
 
-    describe('webhookUninstall', () => {
-        it('should reject invalid HMAC', async () => {
-            mockVerifyWebhookHmac.mockReturnValue(false);
-            const body = { merchant: 12345 };
-            const req = mockRequest({
-                headers: { 'x-salla-signature': 'invalid' },
-                body,
-                rawBody: Buffer.from(JSON.stringify(body)),
-            });
-            const rep = mockReply();
-
-            await webhookUninstall(req, rep);
-
-            expect(rep.status).toHaveBeenCalledWith(401);
-        });
-
-        it('should deactivate store on valid uninstall webhook', async () => {
+        it('should ignore unknown events gracefully', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
-            const body = { merchant: 12345 };
+            const body = { event: 'order.created', merchant: 12345 };
             const req = mockRequest({
                 headers: { 'x-salla-signature': 'valid_hmac' },
                 body,
@@ -578,22 +614,11 @@ describe('Salla Controller', () => {
             });
             const rep = mockReply();
 
-            await webhookUninstall(req, rep);
+            await webhookHandler(req, rep);
 
-            expect(mockDeactivateStore).toHaveBeenCalledWith('salla', '12345');
+            expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
+            expect(mockDeactivateStore).not.toHaveBeenCalled();
             expect(rep.status).toHaveBeenCalledWith(200);
-        });
-
-        it('should reject missing rawBody', async () => {
-            const req = mockRequest({
-                headers: { 'x-salla-signature': 'valid_hmac' },
-                body: { merchant: 12345 },
-            });
-            const rep = mockReply();
-
-            await webhookUninstall(req, rep);
-
-            expect(rep.status).toHaveBeenCalledWith(401);
         });
     });
 
