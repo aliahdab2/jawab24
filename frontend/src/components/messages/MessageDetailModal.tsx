@@ -453,7 +453,6 @@ export function MessageDetailModal({
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-muted-foreground ps-2 mt-0.5">{t('messages.pauseScope' as TranslationKey)}</p>
             </div>
 
             {/* Resolve — end-aligned */}
