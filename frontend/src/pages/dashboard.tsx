@@ -336,8 +336,8 @@ const DashboardPage: NextPageWithLayout = () => {
           queryClient.invalidateQueries({ queryKey: ['pages'] });
         })
         .catch(err => {
+          // Silent — auto-sync is best-effort. User can manually refresh on the Pages screen.
           captureError(err, 'Dashboard auto-sync failed', { tags: { page: 'dashboard', action: 'auto-sync' } });
-          toast.error(t('dashboard.syncError'));
         });
     }
   }, [loading, pages.length, fbToken, isAuthenticated, queryClient, t]);
