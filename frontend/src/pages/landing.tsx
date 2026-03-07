@@ -123,8 +123,8 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Spacer: matches nav inner height. Safe area handled by app-shell padding-top. */}
-      <div className="h-16 sm:h-20" />
+      {/* Spacer: matches nav height. box-content + pt-safe ensures safe area adds to height. */}
+      <div className="h-16 sm:h-20 box-content pt-safe" />
 
       <LandingHero isAuthenticated={isAuthenticated} />
 
