@@ -393,7 +393,7 @@
   "messages.replySent": "Reply sent successfully",
   "messages.replyFailed": "Failed to send reply",
   "messages.pauseSmartReply": "Pause Smart Reply",
-  "messages.pauseScope": "Pauses AI replies for all conversations",
+  "messages.pauseScope": "Pauses Smart Reply for this conversation",
   "messages.resumeSmartReply": "Resume Smart Reply",
   "messages.smartReplyPaused": "Smart Reply Paused",
   "messages.smartReplyPausedRemaining": "{minutes} min remaining",

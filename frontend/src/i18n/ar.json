@@ -393,7 +393,7 @@
   "messages.replySent": "تم إرسال الرد بنجاح",
   "messages.replyFailed": "فشل إرسال الرد",
   "messages.pauseSmartReply": "إيقاف الرد الذكي",
-  "messages.pauseScope": "يوقف الردود الذكية لجميع المحادثات",
+  "messages.pauseScope": "يوقف الرد الذكي لهذه المحادثة",
   "messages.resumeSmartReply": "استئناف الرد الذكي",
   "messages.smartReplyPaused": "الرد الذكي متوقف",
   "messages.smartReplyPausedRemaining": "{minutes} دقيقة متبقية",
