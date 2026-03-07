@@ -27,6 +27,7 @@ export interface UserSettings {
     greetingMessageMulti?: Record<string, string> | null;
     awayMessageMulti?: Record<string, string> | null;
     dualReplyNudgeMulti?: Record<string, string> | null;
+    dualReplyNudgeVariations?: Record<string, string[]> | null;
     brandVoiceNotesMulti?: Record<string, string> | null;
     replyDelay: number;
     commentEscalationMinutes: number;
@@ -59,6 +60,7 @@ export interface UpdateSettingsDTO {
     greetingMessageMulti?: Record<string, string> | null;
     awayMessageMulti?: Record<string, string> | null;
     dualReplyNudgeMulti?: Record<string, string> | null;
+    dualReplyNudgeVariations?: Record<string, string[]> | null;
     brandVoiceNotesMulti?: Record<string, string> | null;
     replyDelay?: number;
     commentEscalationMinutes?: number;

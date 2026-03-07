@@ -18,7 +18,7 @@
  *   ADMIN_TOKEN  — Required. JWT token for an admin user.
  *   BASE_URL     — Backend base URL. Default: http://localhost:3000
  *   CONCURRENCY  — Max parallel requests. Default: 3
- *   CATEGORY     — Run only this category number (1-10). Default: all
+ *   CATEGORY     — Run only this category number (1-19). Default: all
  *   VERBOSE      — Set to "1" for detailed output per test. Default: summary only
  */
 
@@ -49,6 +49,9 @@ interface TestCase {
         replyNotContains?: string[];
         templateName?: string;
         needsAttention?: boolean;
+        nudgePresent?: boolean;         // true = nudgeText must be non-null/non-empty
+        nudgeMaxLength?: number;        // nudgeText length must be <= this
+        commentReplyMode?: string;      // expected commentReplyMode value
     };
     notes?: string;
 }
@@ -68,6 +71,8 @@ interface PlaygroundResponse {
         latencyMs: number;
         tokensUsed: number;
         model: string | null;
+        commentReplyMode?: string | null;
+        nudgeText?: string | null;
     };
     error?: string;
 }
@@ -534,6 +539,60 @@ const TEST_CASES: TestCase[] = [
         notes: 'Purchase intent after browsing conversation — QUESTION is also acceptable since they are asking about requirements',
     },
 
+    // ===== Category 19: Dual Mode Nudge Variation =====
+    // Tests require commentReplyMode=dual in demo user settings.
+    // The eval script configures this automatically before running these tests.
+
+    // 19.1 — Arabic comment in dual mode should return a nudge text
+    {
+        id: 122, category: 19, categoryName: 'Nudge Variations', channel: 'comment',
+        message: 'كم سعر الدورة؟',
+        page: 'training',
+        expected: {
+            nudgePresent: true,
+            nudgeMaxLength: 80,
+            commentReplyMode: 'dual',
+        },
+        notes: 'Dual mode comment — nudgeText must be present and under 80 chars',
+    },
+
+    // 19.2 — English comment in dual mode
+    {
+        id: 123, category: 19, categoryName: 'Nudge Variations', channel: 'comment',
+        message: 'What are your courses?',
+        page: 'training',
+        expected: {
+            nudgePresent: true,
+            nudgeMaxLength: 80,
+            commentReplyMode: 'dual',
+        },
+        notes: 'English dual mode — nudge should be in English or fallback language',
+    },
+
+    // 19.3 — DM should NOT have nudge (nudge is only for comment channel)
+    {
+        id: 124, category: 19, categoryName: 'Nudge Variations', channel: 'dm',
+        message: 'كم سعر الدورة؟',
+        page: 'training',
+        expected: {
+            nudgePresent: false,
+        },
+        notes: 'DM channel should never get nudgeText even when dual mode is active',
+    },
+
+    // 19.4 — Dual mode AI reply should be DM-quality (detailed, not a brief comment redirect)
+    {
+        id: 125, category: 19, categoryName: 'Nudge Variations', channel: 'comment',
+        message: 'عندكم دورة انجليزي؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            commentReplyMode: 'dual',
+            nudgePresent: true,
+        },
+        notes: 'In dual mode, the AI reply is the DM body — should be a full detailed answer',
+    },
+
     // ===== Category 18: Customer Awareness =====
 
     // 18.1 — First-time customer with name context, AI gets context and replies correctly
@@ -672,6 +731,25 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
         checks.push({ field: 'needsAttention', pass, detail: `expected ${e.needsAttention} got ${d.needsAttention}` });
     }
 
+    // nudgePresent
+    if (e.nudgePresent !== undefined) {
+        const hasNudge = !!d.nudgeText && d.nudgeText.trim().length > 0;
+        const pass = e.nudgePresent === hasNudge;
+        checks.push({ field: 'nudgePresent', pass, detail: e.nudgePresent ? (hasNudge ? 'present' : 'MISSING') : (hasNudge ? 'PRESENT (should not be)' : 'absent') });
+    }
+
+    // nudgeMaxLength
+    if (e.nudgeMaxLength && d.nudgeText) {
+        const pass = d.nudgeText.length <= e.nudgeMaxLength;
+        checks.push({ field: 'nudgeMaxLength', pass, detail: `length ${d.nudgeText.length} vs max ${e.nudgeMaxLength}` });
+    }
+
+    // commentReplyMode
+    if (e.commentReplyMode) {
+        const pass = d.commentReplyMode === e.commentReplyMode;
+        checks.push({ field: 'commentReplyMode', pass, detail: `expected ${e.commentReplyMode} got ${d.commentReplyMode}` });
+    }
+
     if (checks.length === 0) {
         return { verdict: 'PASS', reasons: ['No assertions defined'] };
     }
@@ -742,6 +820,50 @@ async function runWithConcurrency<T>(items: T[], concurrency: number, fn: (item:
 }
 
 // ---------------------------------------------------------------------------
+// Settings helpers for nudge variation tests (Category 19)
+// ---------------------------------------------------------------------------
+
+const NUDGE_CATEGORY = 19;
+
+async function updateDemoSettings(settings: Record<string, unknown>): Promise<boolean> {
+    try {
+        const res = await fetch(`${BASE_URL}/settings`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${ADMIN_TOKEN}`,
+            },
+            body: JSON.stringify(settings),
+        });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+/** Enable dual mode + custom nudge for Category 19 tests */
+async function setupNudgeTests(): Promise<boolean> {
+    console.log('  Setting up dual mode for nudge variation tests...');
+    const ok = await updateDemoSettings({
+        commentReplyMode: 'dual',
+        dualReplyNudgeMulti: {
+            ar: 'تفاصيل الطلب أرسلناها لك بالخاص',
+            en: 'Order details sent to your inbox',
+        },
+    });
+    if (!ok) {
+        console.error('  Warning: Failed to configure dual mode — nudge tests may fail');
+    }
+    return ok;
+}
+
+/** Restore public mode after Category 19 tests */
+async function teardownNudgeTests(): Promise<void> {
+    await updateDemoSettings({ commentReplyMode: 'public' });
+    console.log('  Restored public reply mode');
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -772,7 +894,12 @@ async function main() {
 
     const results: TestResult[] = [];
 
-    await runWithConcurrency(cases, CONCURRENCY, async (test) => {
+    // Split tests: run non-nudge tests first, then nudge tests with setup/teardown
+    const nonNudgeCases = cases.filter(t => t.category !== NUDGE_CATEGORY);
+    const nudgeCases = cases.filter(t => t.category === NUDGE_CATEGORY);
+
+    // Run non-nudge tests
+    await runWithConcurrency(nonNudgeCases, CONCURRENCY, async (test) => {
         const { resp, latencyMs } = await callPlayground(test);
         if (!resp || !resp.success) {
             results.push({ test, response: resp, verdict: 'FAIL', reasons: ['API call failed'], latencyMs });
@@ -788,6 +915,36 @@ async function main() {
             console.log(`  [${icon}] #${test.id} ${verdict} (${latencyMs}ms)${reasonStr}`);
         }
     });
+
+    // Run nudge tests with dual mode setup/teardown
+    if (nudgeCases.length > 0) {
+        const setupOk = await setupNudgeTests();
+        if (setupOk) {
+            // Run nudge tests sequentially (low concurrency to avoid race with settings change)
+            await runWithConcurrency(nudgeCases, 1, async (test) => {
+                const { resp, latencyMs } = await callPlayground(test);
+                if (!resp || !resp.success) {
+                    results.push({ test, response: resp, verdict: 'FAIL', reasons: ['API call failed'], latencyMs });
+                    if (VERBOSE) console.log(`  #${test.id} FAIL — API error`);
+                    return;
+                }
+                const { verdict, reasons } = evaluate(test, resp);
+                results.push({ test, response: resp, verdict, reasons, latencyMs });
+
+                if (VERBOSE) {
+                    const icon = verdict === 'PASS' ? 'ok' : verdict === 'PARTIAL' ? '~' : 'X';
+                    const reasonStr = reasons.length > 0 ? ` — ${reasons.join(', ')}` : '';
+                    console.log(`  [${icon}] #${test.id} ${verdict} (${latencyMs}ms)${reasonStr}`);
+                }
+            });
+            await teardownNudgeTests();
+        } else {
+            // Skip nudge tests if setup failed
+            for (const test of nudgeCases) {
+                results.push({ test, response: null, verdict: 'FAIL', reasons: ['Dual mode setup failed'], latencyMs: 0 });
+            }
+        }
+    }
 
     // Sort results by test ID for consistent output
     results.sort((a, b) => a.test.id - b.test.id);

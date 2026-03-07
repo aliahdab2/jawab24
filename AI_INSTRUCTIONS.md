@@ -491,6 +491,21 @@ npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility
     });
     ```
 
+13. **Never duplicate logic across files — extract shared utilities** — When the same decision logic (e.g., fallback chains, selection algorithms, formatting rules) appears in more than one place, extract it into a shared function. Import it everywhere instead of copy-pasting. This applies to both frontend hooks and backend services.
+    ```typescript
+    // ❌ WRONG - same fallback chain duplicated in adapter + admin route + sender
+    const variations = variationsMulti[lang]
+        || Object.values(variationsMulti).find(v => v.length > 0)
+        || DEFAULTS[lang];
+    const pick = variations[Math.floor(Math.random() * variations.length)];
+
+    // ✅ CORRECT - shared function, single source of truth
+    import { pickNudgeVariation } from '../services/reply/nudge';
+    const pick = pickNudgeVariation(variationsMulti, lang);
+    ```
+
+14. **Keep services focused — one file, one responsibility** — When adding new behavior to an existing service file, check if it belongs there or deserves its own file. If a function is used by multiple callers (adapter, controller, route), it should live in its own utility file, not buried inside one caller's service.
+
 ### 13. Dark Mode — Use Semantic CSS Classes - CRITICAL
 
 **Use the semantic CSS classes defined in `globals.css` instead of writing `dark:` overrides inline.**
@@ -768,6 +783,8 @@ return (
 | `bg-green-100` circles/badges in dark mode | Use `icon-bg-emerald` or `icon-bg-green` — or add `dark:bg-green-900/30` if no semantic class fits |
 | `text-surface-300` or `text-surface-400` for text/icons | **NEVER** — these are invisible in dark mode (near-black). Use: `text-muted-foreground` (text), `text-icon-muted` (icons), `text-subtle` (separators), `bg-dot-muted` (dots). For action buttons with hover states: `text-surface-400 dark:text-surface-600` |
 | `placeholder:text-surface-300` or `placeholder:text-surface-400` | Use `placeholder:text-muted-foreground` — matches the standard `input` component pattern in `globals.css` |
+| Duplicating logic (fallback chains, selection, formatting) across files | Extract a shared utility function and import it everywhere — single source of truth |
+| Adding new behavior to an unrelated service file | Create a dedicated file when the function is used by multiple callers (adapter, controller, route) |
 
 ---
 

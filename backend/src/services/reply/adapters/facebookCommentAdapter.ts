@@ -2,6 +2,7 @@ import { pagesService } from '../../pages';
 import { postsService } from '../../posts';
 import { commentsService } from '../../comments';
 import { replySender, ReplyMode } from '../sender';
+import { pickNudgeVariation } from '../nudge';
 import { detectLanguageCode } from '../../../utils/language';
 import type {
     CommentPlatformAdapter,
@@ -74,12 +75,10 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         const isDemo = opts.platformPageId.startsWith('demo_');
 
-        // Pick language-appropriate nudge from multi-language field
-        const nudgeMulti = (opts.userSettings.dualReplyNudgeMulti || {}) as Record<string, string>;
+        // Pick a random nudge variation for this comment's language
         const commentLang = detectLanguageCode(opts.commentMessage);
-        const dualReplyNudge = nudgeMulti[commentLang]
-            || Object.values(nudgeMulti).find(v => v && v !== nudgeMulti.sourceLang)
-            || opts.userSettings.dualReplyNudge as string | undefined;
+        const variationsMulti = opts.userSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined;
+        const dualReplyNudge = pickNudgeVariation(variationsMulti, commentLang);
 
         return replySender.sendCommentReply({
             facebookCommentId: opts.platformCommentId,

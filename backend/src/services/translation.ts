@@ -29,6 +29,30 @@ export interface TranslateResponse {
  * });
  * // Returns: { translatedText: 'Welcome!', detectedLanguage: 'ar', tokensUsed: 15 }
  */
+/**
+ * Generate variations of a nudge message via AI Worker.
+ * Used to avoid Facebook spam detection from identical repeated comments.
+ */
+export async function generateNudgeVariations(
+  text: string,
+  language: string,
+  count = 10,
+): Promise<string[]> {
+  try {
+    const response = await axios.post<{ variations: string[]; tokensUsed: number }>(
+      `${config.ai.serviceUrl}/generate-variations`,
+      { text, language, count },
+      { timeout: 30000 },
+    );
+    return response.data.variations;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new Error(`Variation generation failed: ${error.response?.data?.error || error.message}`);
+    }
+    throw new Error(`Variation generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
 export async function translateText(request: TranslateRequest): Promise<TranslateResponse> {
   const { text, sourceLanguage, targetLanguage } = request;
 

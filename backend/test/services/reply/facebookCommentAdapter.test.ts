@@ -34,6 +34,16 @@ vi.mock('../../../src/services/reply/sender', () => ({
     ReplyMode: {},
 }));
 
+const mockPickNudgeVariation = vi.fn();
+vi.mock('../../../src/services/reply/nudge', () => ({
+    pickNudgeVariation: (...args: unknown[]) => mockPickNudgeVariation(...args),
+}));
+
+const mockDetectLanguageCode = vi.fn();
+vi.mock('../../../src/utils/language', () => ({
+    detectLanguageCode: (...args: unknown[]) => mockDetectLanguageCode(...args),
+}));
+
 import { FacebookCommentAdapter } from '../../../src/services/reply/adapters/facebookCommentAdapter';
 
 describe('FacebookCommentAdapter', () => {
@@ -187,6 +197,11 @@ describe('FacebookCommentAdapter', () => {
     });
 
     describe('sendReply', () => {
+        beforeEach(() => {
+            mockDetectLanguageCode.mockReturnValue('en');
+            mockPickNudgeVariation.mockReturnValue('Details sent via DM');
+        });
+
         it('should delegate to replySender with correct params', async () => {
             mockSendCommentReply.mockResolvedValue({ success: true });
 
@@ -208,9 +223,53 @@ describe('FacebookCommentAdapter', () => {
                 accessToken: 'token_abc',
                 fromId: 'from_user_1',
                 replyMode: 'public',
-                dualReplyNudge: undefined,
+                dualReplyNudge: 'Details sent via DM',
                 isDemo: false,
             });
+        });
+
+        it('should detect language from comment and pick nudge variation', async () => {
+            mockDetectLanguageCode.mockReturnValue('ar');
+            mockPickNudgeVariation.mockReturnValue('تم الرد بالخاص');
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            const variations = { ar: ['تم الرد بالخاص', 'شيك الرسائل'] };
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'شكرا!',
+                commentMessage: 'كم السعر؟',
+                accessToken: 'token_abc',
+                userSettings: {
+                    commentReplyMode: 'dual',
+                    dualReplyNudgeVariations: variations,
+                },
+            });
+
+            expect(mockDetectLanguageCode).toHaveBeenCalledWith('كم السعر؟');
+            expect(mockPickNudgeVariation).toHaveBeenCalledWith(variations, 'ar');
+            expect(mockSendCommentReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    replyMode: 'dual',
+                    dualReplyNudge: 'تم الرد بالخاص',
+                }),
+            );
+        });
+
+        it('should pass undefined variations when none in settings', async () => {
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                userSettings: { commentReplyMode: 'dual' },
+            });
+
+            expect(mockPickNudgeVariation).toHaveBeenCalledWith(undefined, 'en');
         });
 
         it('should default commentReplyMode to public when not set', async () => {
@@ -244,29 +303,6 @@ describe('FacebookCommentAdapter', () => {
 
             expect(mockSendCommentReply).toHaveBeenCalledWith(
                 expect.objectContaining({ isDemo: true }),
-            );
-        });
-
-        it('should pass dualReplyNudge from settings', async () => {
-            mockSendCommentReply.mockResolvedValue({ success: true });
-
-            await adapter.sendReply({
-                platformCommentId: 'fb_comment_123',
-                platformPageId: 'fb_page_123',
-                replyText: 'Thank you!',
-                commentMessage: 'Great product!',
-                accessToken: 'token_abc',
-                userSettings: {
-                    commentReplyMode: 'dual',
-                    dualReplyNudge: 'Check your DM!',
-                },
-            });
-
-            expect(mockSendCommentReply).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    replyMode: 'dual',
-                    dualReplyNudge: 'Check your DM!',
-                }),
             );
         });
 

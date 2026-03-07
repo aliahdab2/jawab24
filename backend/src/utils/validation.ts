@@ -64,6 +64,7 @@ export const UpdateSettingsSchema = z.object({
     commentReplyMode: z.enum(['public', 'private', 'dual']).optional(),
     dualReplyNudge: z.string().max(80).optional(),
     dualReplyNudgeMulti: z.record(z.string()).optional(),
+    dualReplyNudgeVariations: z.record(z.array(z.string().max(80))).optional(),
     handoffPauseDurationMinutes: z.number().int().min(5).max(1440).optional(),
     commentEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     messageEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),

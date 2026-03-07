@@ -15,6 +15,7 @@ import { gapDetectorService } from '../services/kb/gap-detector';
 import { settingsService } from '../services/settings';
 import { getIngestionService } from '../services/pages';
 import { shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../services/reply/generator';
+import { pickNudgeVariation } from '../services/reply/nudge';
 import { isOffensiveContent } from '../services/offensive-filter';
 import { normalizeAiIntent } from '@jawab24/shared';
 import { RetrievedChunkContext } from '../types';
@@ -844,7 +845,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 }
 
                 // 1b. Fetch page owner's reply mode settings
-                const NUDGE_DEFAULT = 'تم إرسال التفاصيل برسالة خاصة 📩';
                 let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
                 let nudgeText: string | null = null;
                 if (page.userId) {
@@ -852,11 +852,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         const ownerSettings = await settingsService.getSettings(page.userId);
                         commentReplyMode = ownerSettings.commentReplyMode || 'public';
                         if (commentReplyMode === 'dual') {
-                            const nudgeMulti = (ownerSettings.dualReplyNudgeMulti || {}) as Record<string, string>;
                             const qLang = detectLanguageCode(question);
-                            nudgeText = (nudgeMulti[qLang]
-                                || Object.values(nudgeMulti).find(v => v && v !== nudgeMulti.sourceLang)
-                                || NUDGE_DEFAULT).slice(0, 80);
+                            nudgeText = pickNudgeVariation(
+                                ownerSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined,
+                                qLang,
+                            );
                         }
                     } catch {
                         // Non-critical — fall back to defaults

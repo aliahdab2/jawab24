@@ -399,8 +399,8 @@ describe('SettingsController Auto-Translation Logic', () => {
             // Both reset to defaults
             expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
                 dualReplyNudgeMulti: expect.objectContaining({
-                    ar: 'تم إرسال التفاصيل برسالة خاصة 📩',
-                    en: 'Details sent in a private message 📩',
+                    ar: 'أرسلنا لك التفاصيل برسالة خاصة 📩',
+                    en: 'Details sent via private message 📩',
                     sourceLang: 'default'
                 })
             }));

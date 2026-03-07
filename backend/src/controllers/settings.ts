@@ -2,7 +2,7 @@ import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
-import { translateText } from '../services/translation';
+import { translateText, generateNudgeVariations } from '../services/translation';
 import type { UpdateSettingsDTO } from '../types/settings';
 import { auditLog } from '../services/auditLog';
 
@@ -17,8 +17,8 @@ const DEFAULT_MESSAGES: Record<string, Record<string, string>> = {
         en: 'Welcome! How can I help you?',
     },
     dualReplyNudge: {
-        ar: 'تم إرسال التفاصيل برسالة خاصة 📩',
-        en: 'Details sent in a private message 📩',
+        ar: 'أرسلنا لك التفاصيل برسالة خاصة 📩',
+        en: 'Details sent via private message 📩',
     },
     brandVoiceNotes: {
         ar: '',
@@ -186,6 +186,32 @@ export class SettingsController {
                     currentSettings.dualReplyNudgeMulti,
                     'dualReplyNudge'
                 );
+            }
+
+            // Generate nudge variations when nudge text changes (anti-spam for dual mode)
+            if (updates.dualReplyNudgeMulti) {
+                const nudgeMulti = updates.dualReplyNudgeMulti;
+                const currentNudge = currentSettings.dualReplyNudgeMulti || {};
+                const changedLangs = supportedLanguages.filter(lang =>
+                    nudgeMulti[lang] && nudgeMulti[lang] !== currentNudge[lang]
+                );
+
+                if (changedLangs.length > 0) {
+                    const variations: Record<string, string[]> = {};
+                    const jobs = supportedLanguages
+                        .filter(lang => nudgeMulti[lang])
+                        .map(async (lang) => {
+                            try {
+                                variations[lang] = await generateNudgeVariations(nudgeMulti[lang], lang);
+                            } catch (e) {
+                                request.log.error({ error: String(e) }, `Nudge variation generation failed (${lang})`);
+                            }
+                        });
+                    await Promise.all(jobs);
+                    if (Object.keys(variations).length > 0) {
+                        updates.dualReplyNudgeVariations = variations;
+                    }
+                }
             }
 
             // Apply logic for Brand Voice Notes

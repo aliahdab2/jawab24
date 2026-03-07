@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { openaiService, GenerateRequest } from './services/openai';
-import { translationService, type TranslateRequest } from './services/translation';
+import { translationService, generateNudgeVariations, type TranslateRequest } from './services/translation';
 import { Sentry } from './lib/sentry';
 import { config } from './config';
 
@@ -82,6 +82,35 @@ async function routes(server: FastifyInstance) {
             });
             return reply.status(500).send({
                 error: error instanceof Error ? error.message : 'Failed to translate'
+            });
+        }
+    });
+
+    // Generate nudge variations endpoint (for anti-spam rotation in dual mode)
+    server.post<{ Body: { text: string; language: string; count?: number } }>('/generate-variations', async (request, reply) => {
+        const { text, language, count } = request.body;
+
+        if (!text || text.trim().length === 0) {
+            return reply.status(400).send({ error: 'Text is required' });
+        }
+        if (!language || typeof language !== 'string') {
+            return reply.status(400).send({ error: 'Language is required' });
+        }
+
+        if (!translationService.isConfigured()) {
+            return reply.status(503).send({ error: 'AI service not configured' });
+        }
+
+        try {
+            const result = await generateNudgeVariations(text, language, count || 10);
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error, 'Failed to generate variations');
+            Sentry.captureException(error, {
+                extra: { language, textLength: text.length }
+            });
+            return reply.status(500).send({
+                error: error instanceof Error ? error.message : 'Failed to generate variations'
             });
         }
     });

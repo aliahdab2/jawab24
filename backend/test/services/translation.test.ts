@@ -10,7 +10,7 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
-import { translateText } from '../../src/services/translation';
+import { translateText, generateNudgeVariations } from '../../src/services/translation';
 
 const mockedAxios = vi.mocked(axios, true);
 
@@ -177,6 +177,77 @@ describe('Translation Service', () => {
                 expect.any(Object),
                 { timeout: 30000 },
             );
+        });
+    });
+
+    describe('generateNudgeVariations', () => {
+        it('should call ai-worker /generate-variations endpoint', async () => {
+            const variations = ['V1', 'V2', 'V3'];
+            mockedAxios.post.mockResolvedValue({
+                data: { variations, tokensUsed: 40 },
+            });
+
+            const result = await generateNudgeVariations('test message', 'ar', 5);
+
+            expect(result).toEqual(variations);
+            expect(mockedAxios.post).toHaveBeenCalledWith(
+                'http://localhost:3002/generate-variations',
+                { text: 'test message', language: 'ar', count: 5 },
+                { timeout: 30000 },
+            );
+        });
+
+        it('should default count to 10', async () => {
+            mockedAxios.post.mockResolvedValue({
+                data: { variations: ['v1'], tokensUsed: 10 },
+            });
+
+            await generateNudgeVariations('test', 'en');
+
+            expect(mockedAxios.post).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({ count: 10 }),
+                expect.any(Object),
+            );
+        });
+
+        it('should throw on axios error with response', async () => {
+            const axiosError = new Error('Request failed') as Error & {
+                isAxiosError: boolean;
+                response: { data: { error: string } };
+            };
+            axiosError.isAxiosError = true;
+            axiosError.response = { data: { error: 'AI service down' } };
+            mockedAxios.post.mockRejectedValue(axiosError);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            await expect(
+                generateNudgeVariations('test', 'ar')
+            ).rejects.toThrow('Variation generation failed: AI service down');
+        });
+
+        it('should throw on non-axios error', async () => {
+            mockedAxios.post.mockRejectedValue(new Error('Network failure'));
+            mockedAxios.isAxiosError.mockReturnValue(false);
+
+            await expect(
+                generateNudgeVariations('test', 'en')
+            ).rejects.toThrow('Variation generation failed: Network failure');
+        });
+
+        it('should handle timeout errors', async () => {
+            const timeoutError = new Error('timeout of 30000ms exceeded') as Error & {
+                isAxiosError: boolean;
+                response: undefined;
+            };
+            timeoutError.isAxiosError = true;
+            timeoutError.response = undefined;
+            mockedAxios.post.mockRejectedValue(timeoutError);
+            mockedAxios.isAxiosError.mockReturnValue(true);
+
+            await expect(
+                generateNudgeVariations('test', 'ar')
+            ).rejects.toThrow('Variation generation failed:');
         });
     });
 });

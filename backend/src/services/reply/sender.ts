@@ -126,11 +126,10 @@ export class ReplySender {
     }
 
     /**
-     * Get the public "nudge" text for dual mode
-     * This is a short message that points to the private message
+     * Get the public "nudge" text for dual mode (already picked by caller).
      */
     private getDualModeNudge(nudge?: string): string {
-        const text = nudge || 'تم إرسال التفاصيل برسالة خاصة 📩';
+        const text = nudge || 'أرسلنا لك التفاصيل برسالة خاصة 📩';
         return text.slice(0, 80);
     }
 

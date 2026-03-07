@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "dual_reply_nudge_variations" jsonb DEFAULT '{}'::jsonb;

@@ -302,6 +302,7 @@ export const settings = pgTable('settings', {
     greetingMessageMulti: jsonb('greeting_message_multi').$type<Record<string, string>>().default({}),
     awayMessageMulti: jsonb('away_message_multi').$type<Record<string, string>>().default({}),
     dualReplyNudgeMulti: jsonb('dual_reply_nudge_multi').$type<Record<string, string>>().default({}),
+    dualReplyNudgeVariations: jsonb('dual_reply_nudge_variations').$type<Record<string, string[]>>().default({}),
     replyDelay: integer('reply_delay').default(0), // seconds
     // SLA escalation thresholds (minutes) - auto-flag unreplied items as needsAttention
     commentEscalationMinutes: integer('comment_escalation_minutes').default(60),

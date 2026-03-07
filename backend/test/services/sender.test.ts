@@ -249,7 +249,7 @@ describe('ReplySender', () => {
 
             const axiosCall = vi.mocked(axios.post).mock.calls[0];
             expect(axiosCall[1]).toEqual({
-                message: 'تم إرسال التفاصيل برسالة خاصة 📩',
+                message: 'أرسلنا لك التفاصيل برسالة خاصة 📩',
             });
         });
 
