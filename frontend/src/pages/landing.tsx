@@ -84,7 +84,7 @@ export default function LandingPage() {
            bg-card (solid) so scrolling content never bleeds through. */}
       <nav
         dir={dir}
-        className="fixed w-full z-50 bg-card border-b border-theme-border pt-safe box-content px-safe-landscape"
+        className="fixed top-0 w-full z-50 bg-card border-b border-theme-border pt-safe box-content px-safe-landscape"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
@@ -124,8 +124,8 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Spacer: matches nav inner height. Safe area handled globally by app-shell. */}
-      <div className="h-16 sm:h-20" />
+      {/* Spacer: matches full nav height (safe area + header). */}
+      <div className="h-16 sm:h-20 pt-safe box-content" />
 
       <LandingHero isAuthenticated={isAuthenticated} />
 

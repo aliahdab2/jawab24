@@ -124,7 +124,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 
         {/* Public header - Matches landing page style */}
         {isCleanLayout ? (
-          <nav className="fixed w-full z-50 transition-all duration-300 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape">
+          <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16">
                 {/* Logo - matches landing page */}
