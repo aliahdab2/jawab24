@@ -141,7 +141,7 @@ test.describe('Integrations Page', () => {
   /*  No stores — page shows header only (management-only view)          */
   /* ------------------------------------------------------------------ */
 
-  test('should render page title when no stores are connected', async ({ page }) => {
+  test('should render page title and not-connected cards when no stores are connected', async ({ page }) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
     await setupAuth(page);
     await mockAPIs(page, {});
@@ -153,9 +153,9 @@ test.describe('Integrations Page', () => {
       page.locator('h1').filter({ hasText: en['integrations.title'] }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // No Connect buttons — stores are connected externally via Shopify/Salla app stores
-    const connectButtons = page.getByRole('button', { name: /connect/i });
-    await expect(connectButtons).toHaveCount(0, { timeout: 10000 });
+    // Not-connected promo cards shown with Connect buttons for each platform
+    const connectButtons = page.getByRole('button', { name: new RegExp(en['integrations.notConnected.connectBtn'], 'i') });
+    await expect(connectButtons).toHaveCount(2, { timeout: 10000 });
   });
 
   /* ------------------------------------------------------------------ */
@@ -179,7 +179,7 @@ test.describe('Integrations Page', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('should not show Salla card when only Shopify is connected', async ({ page }) => {
+  test('should show Salla not-connected card when only Shopify is connected', async ({ page }) => {
     await setupAuth(page);
     await mockAPIs(page, { shopifyStore: MOCK_SHOPIFY_STORE, pages: MOCK_PAGES });
 
@@ -187,8 +187,10 @@ test.describe('Integrations Page', () => {
 
     await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
 
-    // Salla was never connected (404) → no Salla card shown at all
-    await expect(page.getByText(en['salla.title'])).not.toBeVisible();
+    // Salla was never connected (404) → not-connected promo card shown
+    await expect(page.getByText(en['salla.title']).first()).toBeVisible({ timeout: 10000 });
+    // But no Salla store data shown
+    await expect(page.getByText('Test Salla Store')).not.toBeVisible();
   });
 
   test('should show page linking chips when pages exist', async ({ page }) => {
