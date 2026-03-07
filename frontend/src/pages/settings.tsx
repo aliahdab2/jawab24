@@ -300,14 +300,14 @@ const SettingsPage: NextPageWithLayout = () => {
         </div>
       )}
 
-      <DangerZone onDeleteAccount={handleDeleteAccount} saving={saving} />
-
-      {/* Sticky Save Button */}
-      <div className="sticky bottom-0 z-30 -mx-4 md:-mx-8 lg:-mx-16 xl:-mx-20 mt-6">
-        <div className={clsx(
-          'px-4 md:px-8 lg:px-16 xl:px-20 py-3 pb-safe bg-background/80 backdrop-blur-md border-t border-theme-border transition-all duration-300',
-          hasChanges || saving ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
-        )}>
+      {/* Fixed Save Button — above bottom nav on mobile, bottom of viewport on desktop */}
+      <div className={clsx(
+        'fixed left-0 right-0 z-30 px-4 md:px-8 lg:px-16 xl:px-20 py-3 bg-background/80 backdrop-blur-md border-t border-theme-border transition-all duration-300',
+        'bottom-[calc(4rem+var(--sai-bottom))] lg:bottom-0 lg:pb-safe',
+        'px-safe-landscape',
+        hasChanges || saving ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
+      )}>
+        <div className="max-w-[1600px] mx-auto">
           <Button
             onClick={handleSave}
             disabled={!hasChanges || saving}
@@ -328,6 +328,11 @@ const SettingsPage: NextPageWithLayout = () => {
           </Button>
         </div>
       </div>
+
+      {/* Visual separator before danger zone */}
+      <div className="mt-12 mb-6 border-t-2 border-destructive/20" />
+
+      <DangerZone onDeleteAccount={handleDeleteAccount} saving={saving} />
     </div>
   );
 };

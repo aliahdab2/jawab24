@@ -193,11 +193,6 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">{t('settings.dualReplyVariationsHint')}</p>
-              {dualNudgeInput.length === 0 && settings.commentsAutoReply && (
-                <p className="mt-2 text-xs text-muted-foreground font-medium">
-                  {t('settings.dualReplyEmptyWarning')}
-                </p>
-              )}
             </div>
           </div>
       </div>

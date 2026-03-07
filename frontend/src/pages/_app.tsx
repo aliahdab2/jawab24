@@ -83,6 +83,24 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       StatusBar.setOverlaysWebView({ overlay: true }).catch((e) => addErrorBreadcrumb('capacitor', 'StatusBar overlay init failed', { error: String(e) }));
       StatusBar.setStyle({ style: Style.Default }).catch((e) => addErrorBreadcrumb('capacitor', 'StatusBar style init failed', { error: String(e) }));
     }).catch((e) => addErrorBreadcrumb('capacitor', 'StatusBar import failed', { error: String(e) }));
+
+    // Android fix: env(safe-area-inset-top) often returns 0 even with overlaysWebView.
+    // Detect this and apply a JS-measured fallback so safe area CSS works correctly.
+    import("@capacitor/core").then(({ Capacitor }) => {
+      if (Capacitor.getPlatform() !== 'android') return;
+      // Wait a frame for StatusBar overlay to take effect
+      requestAnimationFrame(() => {
+        const probe = document.createElement('div');
+        probe.style.paddingTop = 'env(safe-area-inset-top, 0px)';
+        document.body.appendChild(probe);
+        const inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+        document.body.removeChild(probe);
+        if (inset === 0) {
+          // env() returned 0 — set fallback via JS (24px is standard Android status bar)
+          document.documentElement.style.setProperty('--sai-top', '24px');
+        }
+      });
+    }).catch(() => {});
   }, []); // Empty deps = runs once on mount
 
   // Sync Next.js locale with language store
