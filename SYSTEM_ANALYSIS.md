@@ -1,7 +1,7 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
 > **Pre-Launch Reference Document / وثيقة مرجعية قبل الإطلاق**
-> Generated: 2026-02-28 | Updated: 2026-03-02 (v18 — customer awareness)
+> Generated: 2026-02-28 | Updated: 2026-03-07 (v20 — broadened angry_customer detection)
 
 ---
 
@@ -191,7 +191,16 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║  │    Tier B: price-cue phrase + number    │                            ║
 ║  │    → Replace with safe fallback         │                            ║
 ║  │  • Low confidence? → Hold for review    │                            ║
+║  │    (AI draft shown in review UI)       │                            ║
 ║  │  • Comment too long? → Truncate         │                            ║
+║  └────────────────┬────────────────────────┘                            ║
+║                   │                                                     ║
+║                   ▼                                                     ║
+║  ┌─────────────────────────────────────────┐                            ║
+║  │  STEP 8b: TYPING INDICATOR (DMs only)  │                            ║
+║  │  • Send "typing..." to Messenger/IG    │                            ║
+║  │  • Shown before AI reply arrives       │                            ║
+║  │  • Makes response feel more natural    │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
 ║                   ▼                                                     ║
@@ -356,8 +365,12 @@ Customer message: "كم سعر القميص الأزرق؟"
   - الطبقة أ: رقم مجاور لعملة (SAR/$/ريال)
   - الطبقة ب: عبارة سعرية + رقم قريب (مثل "سعره 120"، "only 50")
   - → رد آمن بديل
-- ثقة منخفضة؟ → احتجاز للمراجعة البشرية
+- ثقة منخفضة؟ → احتجاز للمراجعة البشرية (مع عرض مسودة AI في واجهة المراجعة)
 - تعليق طويل جداً؟ → اقتطاع
+
+**الخطوة 8ب: مؤشر الكتابة** (للرسائل المباشرة فقط)
+- إرسال مؤشر "يكتب..." إلى Messenger/Instagram قبل الرد
+- يجعل الرد يبدو أكثر طبيعية
 
 **الخطوة 9: إرسال الرد**
 - عبر واجهة Facebook/Instagram Graph API
@@ -445,9 +458,12 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   ├── Flag = price_not_in_kb? → Replace with SAFE FALLBACK
 │   │   (Tier A: currency-adjacent number not in KB)
 │   │   (Tier B: price-cue phrase + nearby number not in KB)
-│   ├── Confidence = low AND holdLowConfidence? → ❌ DON'T send → STOP
+│   ├── Confidence = low AND holdLowConfidence? → ❌ DON'T send (AI draft saved for review) → STOP
 │   ├── [Comment] Reply > 280 chars? → Truncate
-│   └── [Comment + QUESTION/PURCHASE] → Auto-append "DM us!"
+│   ├── [Comment + QUESTION/PURCHASE] → Auto-append "DM us!"
+│   └── [Comment + dual mode] → Pick random nudge variation (anti-spam)
+│
+├── [DM only] SEND TYPING INDICATOR → "typing..." to Messenger/Instagram
 │
 ├── SEND REPLY via Graph API
 │   └── FAIL → ❌ Don't mark as replied → STOP
@@ -513,8 +529,11 @@ CUSTOMER SENDS MESSAGE/COMMENT
 ├── فلاتر الأمان:
 │   ├── مسيء/سبام؟ → تعليم للمراجعة → لا رد
 │   ├── هلوسة أسعار؟ → رد آمن بديل
-│   ├── ثقة منخفضة + احتجاز مفعّل؟ → احتجاز للمراجعة
-│   └── [تعليق + سؤال] → إضافة "راسلنا للتفاصيل!"
+│   ├── ثقة منخفضة + احتجاز مفعّل؟ → احتجاز للمراجعة (مع حفظ مسودة AI)
+│   ├── [تعليق + سؤال] → إضافة "راسلنا للتفاصيل!"
+│   └── [تعليق + وضع مزدوج] → اختيار صيغة تنبيه عشوائية (مكافحة السبام)
+│
+├── [رسائل مباشرة فقط] إرسال مؤشر "يكتب..."
 │
 └── إرسال الرد → تعليم كمُرد عليه → تخزين → إشعار
 ```
@@ -706,13 +725,30 @@ After OpenAI returns, the system runs **6 automated checks**:
 |------|---------|
 | `info_not_in_kb` | Answer not found in knowledge base |
 | `price_not_in_kb` | Reply mentions a price not in KB (hallucination!) |
-| `angry_customer` | Customer seems angry/frustrated |
+| `angry_customer` | Customer seems angry/frustrated (structured 6-point trigger list, v19+) |
 | `offensive_or_abusive` | Insults, profanity, threats |
 | `low_confidence` | AI is uncertain about reply quality |
 | `redirect_to_human` | Advised customer to contact human |
 | `language_mismatch` | Reply language differs from input |
 | `comment_too_long` | Public comment exceeded 50 words |
 | `invalid_json` | AI returned non-JSON (parsing fallback) |
+
+### Prompt Version History
+
+| Version | Date | Key Changes | Eval Accuracy |
+|---------|------|-------------|---------------|
+| **v18** | 2026-03-02 | Customer awareness: pass customer name + returning status as context to GPT. Sharpened style descriptions. Natural behavior rules (vary structure, mirror dialect, emoji mirroring). | 98.3% |
+| **v19** | 2026-03-05 | Structured `angry_customer` flag with explicit 5-point trigger list (strong words, refund demands, ignored complaints, exclamation marks, escalation threats). Added confidence rule: reply style changes TONE only, must NOT affect confidence. Added Arabic vague follow-up examples ("وش المدة؟"). | 99.6% |
+| **v20** | 2026-03-06 | Made `angry_customer` trigger list non-exhaustive — added catch-all point (6): "any expression of strong dissatisfaction — use your judgment". Added Arabic colloquial examples (زفت/فشل). Clarified: polite complaint alone ≠ angry_customer. | 99.6% |
+
+### Fallback Classifier (when AI Worker is down)
+
+When the circuit breaker is open, a **zero-cost keyword-based classifier** (`fallbackClassifier.ts`) provides basic metadata (intent, confidence, flags) instead of returning empty data. It detects:
+- Spam/irrelevant (emoji-only, mentions, spam keywords EN/AR/Franco, punctuation-only)
+- Compliments (Arabic + English patterns, compliment emoji)
+- Basic intent classification via keyword matching
+
+This ensures pipeline metrics and downstream guards still function even without the AI worker.
 
 ## عربي
 
@@ -807,6 +843,11 @@ After OpenAI returns, the system runs **6 automated checks**:
 | **autoDetectLanguage** | boolean | true | Detect customer language from message |
 | **supportedLanguages** | array | ['en','ar'] | Languages business supports |
 | **notificationsEnabled** | boolean | true | Push/in-app notifications |
+| **dashboardLanguage** | enum | 'ar' | UI language preference for dashboard |
+| **aiModel** | string | gpt-4.1-mini | AI model selection (locked to DEFAULT_AI_MODEL) |
+| **dualReplyNudgeMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated nudge messages |
+| **dualReplyNudgeVariations** | JSONB | {} | `{ar: [...], en: [...]}` - anti-spam nudge variations per language |
+| **brandVoiceNotesMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated brand voice notes |
 
 ### Settings Save Flow
 
@@ -849,6 +890,11 @@ User saves settings on frontend
 | **احتجاز الثقة المنخفضة** | منطقي | مُعطّل | الردود منخفضة الثقة تُحتجز للمراجعة البشرية |
 | **رسالة الترحيب** | JSONB | {} | `{ar: "...", en: "..."}` - أول رسالة للعميل الجديد |
 | **رسالة الغياب** | JSONB | {} | `{ar: "...", en: "..."}` - خارج ساعات العمل |
+| **لغة لوحة التحكم** | اختيار | عربي | لغة واجهة المستخدم |
+| **نموذج AI** | نص | gpt-4.1-mini | نموذج الذكاء الاصطناعي |
+| **نص التنبيه المترجم** | JSONB | {} | `{ar: "...", en: "..."}` - نصوص تنبيه الرد المزدوج |
+| **تنويعات نص التنبيه** | JSONB | {} | `{ar: [...], en: [...]}` - صيغ متعددة لتجنب كشف السبام |
+| **ملاحظات صوت العلامة المترجمة** | JSONB | {} | `{ar: "...", en: "..."}` - ملاحظات صوت العلامة بلغتين |
 
 ---
 
@@ -1464,19 +1510,19 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
 | 1 | Zid e-commerce not implemented | Medium | Zid merchants can't connect |
-| 2 | No scheduled product sync | Medium | Manual "Sync Now" only |
+| ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` (since 2026-03-03) |
 | 3 | Single-language KB | Medium | Must mix both languages in one text |
 | 4 | Templates not auto-translated | Low | Manual both-language maintenance |
-| 5 | No visual regression tests | Medium | RTL/landscape may break silently |
+| 5 | No visual regression tests | Medium | RTL/landscape may break silently (macOS baselines only) |
 | 6 | One store per workspace | Low | Multi-store needs workaround |
-| 7 | No pluralization in i18n | Low | "1 Pages" instead of "1 Page" |
+| 7 | No pluralization in i18n | Low | "1 Pages" instead of "1 Page" (deferred to next-intl migration) |
 | 8 | Inventory is point-in-time | Info | AI adds "verify before ordering" caveat |
 
 ### System Resilience
 
 | Failure Point | What Happens | User Impact |
 |---------------|-------------|-------------|
-| AI Worker down | Circuit breaker → fallback | Generic replies |
+| AI Worker down | Circuit breaker → fallback classifier (keyword-based intent/confidence/flags) | Classified fallback replies (not empty metadata) |
 | Redis down | Fail-open → bypass cache + lock | Higher cost, possible double-reply (rare) |
 | PostgreSQL down | Fatal → service down | No replies |
 | OpenAI API down | Timeout → fallback | Generic replies |
@@ -1498,7 +1544,10 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Rate Limit | 10 msgs/min per sender |
 | Worker Concurrency | 5 jobs |
 | Cache TTL | 30 days |
-| Prompt Version | v18 |
+| Prompt Version | v20 |
+| Pipeline Outcomes | 20 types x 4 pipelines |
+| Eval Accuracy | 99.6% (v20) |
+| Scheduled Product Sync | Every 6 hours |
 | Queue Retries | 3 (exponential backoff) |
 | Handoff Pause | 15 minutes default |
 | Reply Lock TTL | 60 seconds (Redis SET NX EX) |
@@ -1514,7 +1563,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | # | الفجوة | الشدة | التأثير |
 |---|--------|-------|---------|
 | 1 | تكامل زد غير مُنفذ | متوسط | تجار زد لا يمكنهم الربط |
-| 2 | لا مزامنة تلقائية للمنتجات | متوسط | يدوية فقط |
+| ~~2~~ | ~~لا مزامنة تلقائية للمنتجات~~ | ~~تم الحل~~ | مزامنة تلقائية كل 6 ساعات عبر `setInterval` |
 | 3 | قاعدة معرفة بلغة واحدة | متوسط | خلط اللغتين في نص واحد |
 | 4 | القوالب لا تُترجم تلقائياً | منخفض | صيانة يدوية |
 | 5 | لا اختبارات بصرية | متوسط | أعطال RTL قد لا تُكتشف |
@@ -1524,7 +1573,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 | نقطة الفشل | ماذا يحدث | التأثير |
 |------------|-----------|---------|
-| AI Worker معطل | قاطع الدائرة → ردود احتياطية | ردود عامة |
+| AI Worker معطل | قاطع الدائرة → مُصنّف احتياطي (تصنيف النية/الثقة/الأعلام بالكلمات المفتاحية) | ردود مُصنّفة (ليست بيانات فارغة) |
 | Redis معطل | تجاوز الكاش + القفل | تكلفة أعلى، رد مزدوج ممكن (نادر) |
 | PostgreSQL معطل | الخدمة تتوقف | لا ردود |
 | OpenAI معطل | مهلة → رد احتياطي | ردود عامة |
@@ -1548,7 +1597,7 @@ Jawab24 has a solid monitoring foundation across 5 layers:
 │                                                                 │
 │  LAYER 1: PIPELINE METRICS (Redis counters)                     │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ 19 outcome types × 4 pipelines = 76 counters            │   │
+│  │ 20 outcome types × 4 pipelines = 80 counters            │   │
 │  │ Endpoint: GET /health/pipeline-metrics                   │   │
 │  │ Auth: x-cleanup-token header                             │   │
 │  └─────────────────────────────────────────────────────────┘   │
@@ -1587,7 +1636,7 @@ Jawab24 has a solid monitoring foundation across 5 layers:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Pipeline Metrics: All 19 Outcomes
+### Pipeline Metrics: All 20 Outcomes
 
 These are tracked per pipeline (facebook_comment, instagram_comment, facebook_message, instagram_message):
 
@@ -1660,7 +1709,8 @@ Normal operation: CLOSED
     OPEN (30 seconds)
     • Sentry warning on first open
     • Pipeline metric: circuit.ai_worker.opened
-    • All requests get fallback reply
+    • All requests get fallback reply via fallbackClassifier
+    •   (keyword-based: detects spam, compliments, basic intents)
          │
     30s timeout expires
          │

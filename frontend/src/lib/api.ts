@@ -361,6 +361,7 @@ export interface Message {
   needsAttention?: boolean;
   flagReason?: string | null;
   aiIntent?: string | null;
+  aiOriginalReply?: string | null;
   resolved?: boolean;
 }
 
