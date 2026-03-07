@@ -472,6 +472,7 @@ export function MessageDetailModal({
             ) : null}
           </div>
         </div>
+
       </div>
     </div>,
     document.body

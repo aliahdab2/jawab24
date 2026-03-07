@@ -21,7 +21,7 @@ const config: CapacitorConfig = {
   },
   plugins: {
     Keyboard: {
-      resize: KeyboardResize.Body,
+      resize: KeyboardResize.Native,
     },
     StatusBar: {
       overlaysWebView: true,

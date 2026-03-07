@@ -9,8 +9,9 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
-        <!-- Edge-to-edge: Draw under system bars -->
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Status bar: transparent (edge-to-edge for notch/status bar) -->
+        <!-- Navigation bar: opaque (env(safe-area-inset-bottom) is unreliable in WebView) -->
+        <item name="android:navigationBarColor">#000000</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 
@@ -18,8 +19,9 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <!-- Edge-to-edge: Draw under system bars -->
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Status bar: transparent (edge-to-edge for notch/status bar) -->
+        <!-- Navigation bar: opaque (env(safe-area-inset-bottom) is unreliable in WebView) -->
+        <item name="android:navigationBarColor">#000000</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 
