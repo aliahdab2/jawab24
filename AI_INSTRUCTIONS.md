@@ -589,10 +589,20 @@ cd backend && npm run dev     # Port 3000
 npm run lint
 npm run lint:fix
 
-# Run tests (REQUIRED after ANY code change)
+# Run unit tests (REQUIRED after ANY code change)
 npm run test
 # Or for frontend only:
 cd frontend && npm run test
+
+# Run E2E tests with Playwright CLI (from frontend/)
+cd frontend
+npm run test:e2e                        # Run all E2E specs
+npm run test:e2e -- e2e/landing.spec.ts # Run a single spec
+npm run test:e2e -- -g "login"          # Run tests matching name
+npm run test:e2e:ui                     # Interactive UI mode (best for debugging)
+npm run test:e2e:headed                 # Watch browser run tests
+npm run test:e2e:report                 # Open last HTML report
+npm run test:e2e -- --update-snapshots  # Update visual baselines
 
 # Build mobile app
 cd frontend
