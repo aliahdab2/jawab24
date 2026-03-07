@@ -102,6 +102,18 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         }
       });
     }).catch(() => {});
+
+    // Track keyboard height via visualViewport API (web standard).
+    // KeyboardResize.Body resizes <body> but fixed-position modals use viewport units,
+    // so they need --keyboard-height to cap their max-height correctly.
+    // visualViewport is more accurate than Capacitor Keyboard events and works on web too.
+    if (window.visualViewport) {
+      const updateKeyboardHeight = () => {
+        const kbHeight = Math.max(0, window.innerHeight - window.visualViewport!.height);
+        document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
+      };
+      window.visualViewport.addEventListener('resize', updateKeyboardHeight);
+    }
   }, []); // Empty deps = runs once on mount
 
   // Sync Next.js locale with language store
