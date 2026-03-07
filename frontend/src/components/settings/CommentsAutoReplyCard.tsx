@@ -47,7 +47,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
           !settings.commentsAutoReply && "opacity-50 pointer-events-none"
         )}
       >
-          <h4 id="comment-reply-mode-label" className="text-sm font-bold text-foreground uppercase tracking-wider mb-3 landscape:mb-2 flex items-center gap-2">
+          <h4 id="comment-reply-mode-label" className="text-sm font-bold text-foreground mb-3 landscape:mb-2 flex items-center gap-2">
             <Settings2 className="w-4 h-4" />
             {t('settings.commentReplyMode.question')}
           </h4>

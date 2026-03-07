@@ -494,6 +494,8 @@
   "settings.rulesCardDesc": "قواعد ذكية للرد بناءً على كلمات محددة",
   "settings.viewRules": "عرض القواعد",
   "settings.general": "عام",
+  "settings.sectionAutoReply": "الرد التلقائي",
+  "settings.sectionAiPersonality": "شخصية الذكاء الاصطناعي",
   "settings.account": "الحساب",
   "settings.notifications": "التنبيهات",
   "settings.language": "لغة لوحة التحكم",

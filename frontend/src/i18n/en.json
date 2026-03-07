@@ -494,6 +494,8 @@
   "settings.rulesCardDesc": "Smart rules to reply based on specific words",
   "settings.viewRules": "View Rules",
   "settings.general": "General",
+  "settings.sectionAutoReply": "Auto-Reply",
+  "settings.sectionAiPersonality": "AI Personality",
   "settings.account": "Account",
   "settings.notifications": "Notifications",
   "settings.language": "Language",

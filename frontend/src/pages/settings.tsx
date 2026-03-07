@@ -204,36 +204,15 @@ const SettingsPage: NextPageWithLayout = () => {
   }
 
   return (
-    <>
+    <div className="pb-24 landscape:pb-20">
       <PageHeader
         title={t('settings.title')}
         description={t('settings.pageContext')}
       />
 
-      {/* Sticky Save Button */}
-      <div className="lg:sticky lg:top-0 lg:z-10 mb-6 landscape:mb-4">
-        <Button
-          onClick={handleSave}
-          disabled={!hasChanges || saving}
-          icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          variant={hasChanges ? 'primary' : 'secondary'}
-          size="lg"
-          className={clsx(
-            'w-full shadow-2xl hover:shadow-2xl hover:translate-y-0 landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
-            saved && '!bg-green-500 !text-white hover:!bg-green-600'
-          )}
-        >
-          {saving
-            ? t('common.saving')
-            : saved
-              ? t('settings.settingsSaved')
-              : t('settings.saveSettings')
-          }
-        </Button>
-      </div>
-
-      {/* Main Settings */}
-      <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-6 sm:mb-8 landscape:mb-4">
+      {/* Section: General */}
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-2">{t('settings.general')}</p>
+      <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
         <LanguageSelector
           settings={settings}
           initialSettings={initialSettings}
@@ -241,9 +220,12 @@ const SettingsPage: NextPageWithLayout = () => {
           setInitialSettings={setInitialSettings}
           setLanguage={setLanguage}
         />
-
         <ThemeSelector />
+      </div>
 
+      {/* Section: Auto-Reply */}
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('settings.sectionAutoReply')}</p>
+      <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
         <CommentsAutoReplyCard settings={settings} setSettings={setSettings} />
 
         {/* Messages & AI Toggles */}
@@ -263,27 +245,35 @@ const SettingsPage: NextPageWithLayout = () => {
             onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
           />
         </div>
-
-        {settings.aiEnabled && (
-          <ReplyStyleCard settings={settings} setSettings={setSettings} />
-        )}
       </div>
+
+      {/* Section: AI Personality */}
+      {settings.aiEnabled && (
+        <>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('settings.sectionAiPersonality')}</p>
+          <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
+            <ReplyStyleCard settings={settings} setSettings={setSettings} />
+          </div>
+        </>
+      )}
 
       {/* Advanced Settings Toggle */}
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className={`w-full flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all duration-300 mb-6 landscape:mb-4 ${showAdvanced ? 'bg-background border-theme-border shadow-sm' : 'bg-card border-theme-border hover:border-theme-border hover:bg-background'
-          }`}
+        className={clsx(
+          'w-full flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all duration-300 mb-6 landscape:mb-4',
+          showAdvanced ? 'bg-background border-theme-border shadow-sm' : 'bg-card border-theme-border hover:border-theme-border hover:bg-background'
+        )}
       >
         <div className="flex items-center gap-4">
-          <div className={`p-2 rounded-lg ${showAdvanced ? 'bg-muted text-muted-foreground' : 'bg-muted text-muted-foreground'}`}>
+          <div className="p-2 rounded-lg bg-muted text-muted-foreground">
             <Settings2 className="w-6 h-6 landscape:w-5 landscape:h-5" />
           </div>
           <div className="text-start">
-            <span className={`block font-bold landscape:text-sm ${showAdvanced ? 'text-foreground' : 'text-foreground/70'}`}>
+            <span className={clsx('block font-bold landscape:text-sm', showAdvanced ? 'text-foreground' : 'text-foreground/70')}>
               {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
             </span>
-            <p className={`text-xs landscape:hidden ${showAdvanced ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
+            <p className="text-xs text-muted-foreground landscape:hidden">
               {t('settings.advancedDescription')}
             </p>
           </div>
@@ -300,7 +290,7 @@ const SettingsPage: NextPageWithLayout = () => {
         <div className="space-y-4 sm:space-y-6 landscape:space-y-4 animate-slide-up pb-4 sm:pb-6">
           <BusinessHoursCard settings={settings} setSettings={setSettings} currentTime={currentTime} />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4 items-start">
             <ReplyDelayCard settings={settings} setSettings={setSettings} />
             <NotificationsCard settings={settings} setSettings={setSettings} />
           </div>
@@ -311,7 +301,34 @@ const SettingsPage: NextPageWithLayout = () => {
       )}
 
       <DangerZone onDeleteAccount={handleDeleteAccount} saving={saving} />
-    </>
+
+      {/* Sticky Save Button */}
+      <div className="sticky bottom-0 z-30 -mx-4 md:-mx-8 lg:-mx-16 xl:-mx-20 mt-6">
+        <div className={clsx(
+          'px-4 md:px-8 lg:px-16 xl:px-20 py-3 pb-safe bg-background/80 backdrop-blur-md border-t border-theme-border transition-all duration-300',
+          hasChanges || saving ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
+        )}>
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            variant={hasChanges ? 'primary' : 'secondary'}
+            size="lg"
+            className={clsx(
+              'w-full shadow-2xl landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
+              saved && '!bg-green-500 !text-white hover:!bg-green-600'
+            )}
+          >
+            {saving
+              ? t('common.saving')
+              : saved
+                ? t('settings.settingsSaved')
+                : t('settings.saveSettings')
+            }
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 };
 

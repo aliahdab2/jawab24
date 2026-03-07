@@ -29,6 +29,7 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
         className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic ${currentLang === 'ar' ? 'italic italic-arabic' : ''}`}
         placeholder={placeholder}
         dir={displayValue ? 'auto' : undefined}
+        maxLength={500}
         value={displayValue}
         onChange={(e) => {
           const newValue = e.target.value;
@@ -42,6 +43,9 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
           });
         }}
       />
+      <p className="text-xs text-muted-foreground mt-1 text-end">
+        {displayValue.length}/500
+      </p>
     </Card>
   );
 }
