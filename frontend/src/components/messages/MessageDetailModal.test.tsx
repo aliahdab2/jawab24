@@ -529,4 +529,33 @@ describe('MessageDetailModal', () => {
       expect(textarea).not.toBeDisabled();
     });
   });
+
+  describe('keyboard-aware modal sizing', () => {
+    it('modal panel has keyboard-height in max-height class', () => {
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation()}
+        />
+      );
+
+      // The modal panel (inner container with bg-card) should include
+      // --keyboard-height in its className for keyboard-aware sizing
+      const modalPanel = document.querySelector('[class*="keyboard-height"]');
+      expect(modalPanel).toBeTruthy();
+      expect(modalPanel?.className).toContain('var(--keyboard-height,0px)');
+    });
+
+    it('modal panel has safe area top in max-height class', () => {
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation()}
+        />
+      );
+
+      const modalPanel = document.querySelector('[class*="--sai-top"]');
+      expect(modalPanel).toBeTruthy();
+    });
+  });
 });
