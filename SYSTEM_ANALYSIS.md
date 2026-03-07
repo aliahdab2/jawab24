@@ -1,7 +1,7 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
 > **Pre-Launch Reference Document / وثيقة مرجعية قبل الإطلاق**
-> Generated: 2026-02-28 | Updated: 2026-03-07 (v20 — broadened angry_customer detection)
+> Generated: 2026-02-28 | Updated: 2026-03-07 (v20 — consistency pass: fixed greeting flow, rate limits, auto-reply behavior, comment length rules)
 
 ---
 
@@ -18,6 +18,8 @@
 9. [Safety & Validation / الأمان والتحقق](#9-safety-and-validation)
 10. [Edge Cases & Scenarios / حالات خاصة وسيناريوهات](#10-edge-cases-and-scenarios)
 11. [Known Gaps & Pre-Launch Concerns / فجوات معروفة ومخاوف ما قبل الإطلاق](#11-known-gaps)
+12. [Monitoring & Alerting / المراقبة والتنبيهات](#12-monitoring--alerting)
+13. [Launch Defaults / القيم الافتراضية عند الإطلاق](#launch-defaults-single-source-of-truth)
 
 ---
 
@@ -126,7 +128,8 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║  │  ✓ Page exists & auto-reply enabled?    │                            ║
 ║  │  ✓ Platform auto-reply enabled?         │                            ║
 ║  │  ✓ Within business hours? (if setting)  │                            ║
-║  │  ✓ Rate limit OK? (10 msgs/min)        │                            ║
+║  │  ✓ Rate limit OK? (5/min comments,     │                            ║
+║  │    10/min messages)                    │                            ║
 ║  │  ✓ Handoff pause active? (human agent) │                            ║
 ║  │  ✓ Already replied?                     │                            ║
 ║  │  ✓ Debounce (fast-path only, skipped   │                            ║
@@ -149,10 +152,11 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║             YES   │                                                     ║
 ║                   ▼                                                     ║
 ║  ┌─────────────────────────────────────────┐                            ║
-║  │  STEP 4: GREETING GATE (if set)         │                            ║
-║  │  • Only on first DM from sender (ever) │                            ║
+║  │  STEP 4: GREETING GATE (DMs only)        │                            ║
+║  │  • Only on first-ever DM from sender   │                            ║
 ║  │  • Detect customer language             │                            ║
-║  │  • Send greeting, mark replied, RETURN │                            ║
+║  │  • Send greeting → mark replied → STOP │                            ║
+║  │    (no AI processing after greeting)   │                            ║
 ║  │  • On failure: fall through to AI      │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
@@ -192,7 +196,9 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║  │    → Replace with safe fallback         │                            ║
 ║  │  • Low confidence? → Hold for review    │                            ║
 ║  │    (AI draft shown in review UI)       │                            ║
-║  │  • Comment too long? → Truncate         │                            ║
+║  │  • Comment > 50 words? → Flag            │                            ║
+║  │  • Comment > 280 chars? → Truncate      │                            ║
+║  │    (public mode only, at sentence)      │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
 ║                   ▼                                                     ║
@@ -321,7 +327,7 @@ Customer message: "كم سعر القميص الأزرق؟"
 - هل الصفحة موجودة والرد التلقائي مفعّل؟
 - هل الرد التلقائي للمنصة مفعّل؟
 - هل نحن ضمن ساعات العمل؟ (إذا كان الإعداد مفعّلاً)
-- هل حد المعدل مقبول؟ (10 رسائل/دقيقة)
+- هل حد المعدل مقبول؟ (5/دقيقة للتعليقات، 10/دقيقة للرسائل)
 - هل هناك توقف تسليم نشط؟ (وكيل بشري)
 - هل تم الرد مسبقاً؟
 - إزالة الازدواجية (هل هناك رسالة أحدث قادمة؟)
@@ -331,10 +337,11 @@ Customer message: "كم سعر القميص الأزرق؟"
 - إذا كان محجوزاً → تخطي (عامل آخر يعالج)
 - يُحرر في كتلة finally عبر سكريبت Lua CAS
 
-**الخطوة 4: رسالة الترحيب** (إذا كانت مُعدّة)
+**الخطوة 4: رسالة الترحيب** (للرسائل المباشرة فقط)
+- فقط عند أول رسالة مباشرة من المرسل (على الإطلاق)
 - كشف لغة العميل تلقائياً
-- إرسال ترحيب بنفس اللغة
-- لا يتم تعليم الرسالة كمُرد عليها (الذكاء الاصطناعي لا يزال يعمل)
+- إرسال ترحيب → تعليم كمُرد عليها → **توقف** (لا معالجة AI بعد الترحيب)
+- عند الفشل: تجاوز إلى الذكاء الاصطناعي كاحتياطي
 
 **الخطوة 5: تأخير الرد** (إذا كان مُعدّاً)
 - انتظار X ثانية
@@ -366,7 +373,8 @@ Customer message: "كم سعر القميص الأزرق؟"
   - الطبقة ب: عبارة سعرية + رقم قريب (مثل "سعره 120"، "only 50")
   - → رد آمن بديل
 - ثقة منخفضة؟ → احتجاز للمراجعة البشرية (مع عرض مسودة AI في واجهة المراجعة)
-- تعليق طويل جداً؟ → اقتطاع
+- تعليق > 50 كلمة؟ → إضافة علم `comment_too_long`
+- تعليق > 280 حرف؟ → اقتطاع عند حدود الجملة (الوضع العام فقط)
 
 **الخطوة 8ب: مؤشر الكتابة** (للرسائل المباشرة فقط)
 - إرسال مؤشر "يكتب..." إلى Messenger/Instagram قبل الرد
@@ -392,17 +400,20 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   └── NO → ❌ Ignore (log error)
 │
 ├── Is platform auto-reply enabled? (comments/messages separately)
-│   └── NO → Send AWAY MESSAGE (language-matched) → STOP
+│   ├── Comments OFF → ❌ Ignore silently (comment still stored) → STOP
+│   └── Messages OFF → Send AWAY MESSAGE (language-matched, first msg only) → STOP
 │
 ├── Is businessHoursOnly enabled?
 │   ├── YES → Is it within business hours?
-│   │   └── NO → Send AWAY MESSAGE → STOP
+│   │   └── NO → Same as "platform disabled" above:
+│   │       ├── Comments → ❌ Ignore silently → STOP
+│   │       └── Messages → Send AWAY MESSAGE (first msg only) → STOP
 │   └── NO → Continue
 │
 ├── Is there an active HANDOFF PAUSE? (human agent took over)
 │   └── YES → Re-enqueue with delay → STOP (max 3 retries)
 │
-├── Rate limit exceeded? (>10 msgs/min from same sender)
+├── Rate limit exceeded? (>5/min comments, >10/min messages per sender)
 │   └── YES → ❌ Skip silently → STOP
 │
 ├── Already replied to this message?
@@ -459,7 +470,8 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   │   (Tier A: currency-adjacent number not in KB)
 │   │   (Tier B: price-cue phrase + nearby number not in KB)
 │   ├── Confidence = low AND holdLowConfidence? → ❌ DON'T send (AI draft saved for review) → STOP
-│   ├── [Comment] Reply > 280 chars? → Truncate
+│   ├── [Comment] Reply > 50 words? → Add `comment_too_long` flag
+│   ├── [Comment, public mode] Reply > 280 chars? → Truncate at sentence
 │   ├── [Comment + QUESTION/PURCHASE] → Auto-append "DM us!"
 │   └── [Comment + dual mode] → Pick random nudge variation (anti-spam)
 │
@@ -483,18 +495,21 @@ CUSTOMER SENDS MESSAGE/COMMENT
 ├── هل الصفحة صالحة والرد التلقائي مفعّل؟
 │   └── لا → ❌ تجاهل
 │
-├── هل الرد التلقائي للمنصة مفعّل؟
-│   └── لا → إرسال رسالة الغياب → توقف
+├── هل الرد التلقائي للمنصة مفعّل؟ (التعليقات/الرسائل منفصلة)
+│   ├── التعليقات مُعطّلة → ❌ تجاهل بصمت (التعليق يُحفظ) → توقف
+│   └── الرسائل مُعطّلة → إرسال رسالة الغياب (أول رسالة فقط) → توقف
 │
 ├── هل وضع ساعات العمل فقط مفعّل؟
 │   ├── نعم → هل نحن ضمن ساعات العمل؟
-│   │   └── لا → إرسال رسالة الغياب → توقف
+│   │   └── لا → نفس سلوك "المنصة مُعطّلة" أعلاه:
+│   │       ├── التعليقات → ❌ تجاهل بصمت → توقف
+│   │       └── الرسائل → إرسال رسالة الغياب (أول رسالة فقط) → توقف
 │   └── لا → متابعة
 │
 ├── هل هناك توقف تسليم نشط؟ (وكيل بشري تولى المحادثة)
 │   └── نعم → إعادة جدولة مع تأخير → توقف
 │
-├── هل تجاوز حد المعدل؟ (>10 رسائل/دقيقة)
+├── هل تجاوز حد المعدل؟ (>5/دقيقة تعليقات، >10/دقيقة رسائل)
 │   └── نعم → ❌ تخطي → توقف
 │
 ├── هل تم الرد مسبقاً؟
@@ -507,8 +522,9 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   └── القفل محجوز → ❌ تخطي (عامل آخر يعالج) → توقف
 │   └── تم الاكتساب → متابعة (يُحرر في كتلة finally عبر Lua CAS)
 │
-├── [رسائل مباشرة] هل هذه محادثة جديدة؟
-│   └── نعم → إرسال رسالة ترحيب
+├── [رسائل مباشرة] هل هذه أول رسالة من المرسل (على الإطلاق)؟
+│   └── نعم → إرسال رسالة ترحيب → تعليم كمُرد عليها → **توقف** (لا AI)
+│   └── فشل الإرسال → تجاوز إلى AI كاحتياطي
 │
 ├── محاولة مطابقة القوالب (قواعد الكلمات المفتاحية)
 │   └── تطابق → استخدام قالب الرد
@@ -530,6 +546,8 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   ├── مسيء/سبام؟ → تعليم للمراجعة → لا رد
 │   ├── هلوسة أسعار؟ → رد آمن بديل
 │   ├── ثقة منخفضة + احتجاز مفعّل؟ → احتجاز للمراجعة (مع حفظ مسودة AI)
+│   ├── [تعليق] > 50 كلمة؟ → إضافة علم `comment_too_long`
+│   ├── [تعليق، وضع عام] > 280 حرف؟ → اقتطاع عند حدود الجملة
 │   ├── [تعليق + سؤال] → إضافة "راسلنا للتفاصيل!"
 │   └── [تعليق + وضع مزدوج] → اختيار صيغة تنبيه عشوائية (مكافحة السبام)
 │
@@ -713,7 +731,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 | Check | What It Does | Action |
 |-------|-------------|--------|
 | **Hallucinated Prices** | Matches numbers adjacent to currency tokens (SAR, SR, ريال, $, etc.) and checks if they exist in KB. Ignores dates, phone numbers, delivery times. | Adds `price_not_in_kb` flag |
-| **Comment Too Long** | Word count > 50 for public comments | Adds `comment_too_long` flag |
+| **Comment Too Long** | Word count > 50 for comment replies (AI Worker flags it; backend separately truncates at 280 chars for public mode) | Adds `comment_too_long` flag |
 | **Language Mismatch** | Reply language differs from input language | Adds `language_mismatch` flag |
 | **Hedge Words** | Detects "let me check", "سأتحقق", etc. with high/medium confidence | **Downgrades to LOW** + adds `info_not_in_kb` |
 | **DM Deflection** | DM reply says "contact us" / "message us" | Adds `info_not_in_kb` + downgrades confidence |
@@ -804,7 +822,7 @@ This ensures pipeline metrics and downstream guards still function even without 
 | الفحص | ماذا يفعل | الإجراء |
 |-------|-----------|---------|
 | أرقام مهلوسة | استخراج الأرقام من الرد والتحقق من وجودها في KB | إضافة علم `info_not_in_kb` |
-| تعليق طويل | عدد الكلمات > 50 للتعليقات العامة | إضافة علم `comment_too_long` |
+| تعليق طويل | عدد الكلمات > 50 لردود التعليقات (AI Worker يعلّم؛ الخادم يقتطع منفصلاً عند 280 حرف في الوضع العام) | إضافة علم `comment_too_long` |
 | عدم تطابق اللغة | لغة الرد مختلفة عن لغة المدخل | إضافة علم `language_mismatch` |
 | كلمات تحفظية | كشف "خليني أتحقق"، "سأتحقق" مع ثقة عالية/متوسطة | **تخفيض إلى منخفض** |
 | تحويل في الرسائل المباشرة | الرد يقول "راسلنا" وهو في رسالة مباشرة | إضافة علم + تخفيض الثقة |
@@ -821,8 +839,8 @@ This ensures pipeline metrics and downstream guards still function even without 
 
 | Setting | Type | Default | Where It Affects |
 |---------|------|---------|------------------|
-| **commentsAutoReply** | boolean | true | If false, never auto-reply to comments |
-| **messagesAutoReply** | boolean | true | If false, sends away message instead |
+| **commentsAutoReply** | boolean | true | If false, ignore comments silently (no away message) |
+| **messagesAutoReply** | boolean | true | If false, send away message (language-matched, first msg only) |
 | **commentReplyMode** | enum | 'public' | `public` = visible comment, `private` = DM, `dual` = both |
 | **dualReplyNudge** | text | "Details sent in DM" | Appended to public reply in dual mode |
 | **businessHoursOnly** | boolean | false | If true, auto-reply ONLY during business hours |
@@ -876,8 +894,8 @@ User saves settings on frontend
 
 | الإعداد | النوع | الافتراضي | التأثير |
 |---------|-------|-----------|---------|
-| **الرد التلقائي على التعليقات** | منطقي | مفعّل | إذا مُعطّل، لا رد تلقائي على التعليقات |
-| **الرد التلقائي على الرسائل** | منطقي | مفعّل | إذا مُعطّل، يُرسل رسالة الغياب بدلاً |
+| **الرد التلقائي على التعليقات** | منطقي | مفعّل | إذا مُعطّل، تجاهل التعليقات بصمت (بدون رسالة غياب) |
+| **الرد التلقائي على الرسائل** | منطقي | مفعّل | إذا مُعطّل، إرسال رسالة الغياب (أول رسالة فقط) |
 | **وضع رد التعليقات** | اختيار | عام | `عام` = تعليق مرئي، `خاص` = رسالة مباشرة، `مزدوج` = كلاهما |
 | **ساعات العمل فقط** | منطقي | مُعطّل | إذا مفعّل، الرد فقط خلال ساعات العمل |
 | **بداية ساعات العمل** | وقت | 09:00 | بداية العمل (حسب المنطقة الزمنية) |
@@ -987,7 +1005,7 @@ Top Products:
 |----------|--------|-------|-------------|--------------|
 | **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL (unlimited) |
 | **Salla** | Active | OAuth 2.0 | 14 days (auto-refresh) | REST, max 260 |
-| **Zid** | Schema ready | - | - | Not yet implemented |
+| **Zid** | **Planned** (schema ready, no code) | - | - | Not yet implemented |
 
 ### Product Sync → Cache Invalidation
 
@@ -1323,7 +1341,7 @@ Customer question arrives
 | Angry customer | `angry_customer` flag | Send reply + notify merchant | Yes |
 | AI worker down | Circuit breaker open | Lightweight fallback reply | No |
 | Invalid JSON from AI | Parse error | Use raw text + `invalid_json` flag | No |
-| Rate limit exceeded | >10 msgs/min | Skip silently | No |
+| Rate limit exceeded | >5/min (comments) or >10/min (messages) | Skip silently | No |
 
 ### Circuit Breaker
 
@@ -1439,9 +1457,13 @@ AI MUST NOT: Ask "which product?" or switch topic
 
 ```
 Settings: businessHoursOnly=true, 09:00-18:00, Asia/Riyadh
-Customer messages at 21:00 Riyadh time:
-→ Away message: "شكراً لتواصلك! سنرد عليك خلال ساعات العمل 🕐"
+Customer DMs at 21:00 Riyadh time:
+→ Away message sent: "شكراً لتواصلك! سنرد عليك خلال ساعات العمل 🕐"
 → NO AI processing
+
+Customer comments at 21:00 Riyadh time:
+→ Comment stored in DB (visible in dashboard)
+→ NO reply sent, NO away message (comments don't get away messages)
 ```
 
 ### Scenario 6: Template Match vs AI
@@ -1489,7 +1511,8 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 - هذا يضمن أن RAG يجد الأجزاء المتعلقة بالمنتج الصحيح بدلاً من منتج عشوائي
 
 ### السيناريو 5: خارج ساعات العمل
-- إرسال رسالة الغياب، لا معالجة AI
+- الرسائل المباشرة: إرسال رسالة الغياب (أول رسالة فقط)، لا معالجة AI
+- التعليقات: تُحفظ في قاعدة البيانات، لا رد ولا رسالة غياب
 
 ### السيناريو 6: قالب vs AI
 - القوالب تُفحص أولاً = صفر تكلفة عند التطابق
@@ -1510,7 +1533,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
 | 1 | Zid e-commerce not implemented | Medium | Zid merchants can't connect |
-| ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` (since 2026-03-03) |
+| ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` — **note**: `setInterval` doesn't survive process restart without external scheduler; acceptable for single-instance deploy |
 | 3 | Single-language KB | Medium | Must mix both languages in one text |
 | 4 | Templates not auto-translated | Low | Manual both-language maintenance |
 | 5 | No visual regression tests | Medium | RTL/landscape may break silently (macOS baselines only) |
@@ -1541,7 +1564,9 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | KB Max Chars | 16,000 |
 | Product Catalog | 15 products, 800 chars |
 | Store Policies | 2,000 chars max |
-| Rate Limit | 10 msgs/min per sender |
+| Rate Limit (Comments) | 5/min per sender per page |
+| Rate Limit (Messages) | 10/min per sender per page |
+| Comment Reply Length | AI prompt: 40 words, flag: >50 words, hard truncate: >280 chars (public only) |
 | Worker Concurrency | 5 jobs |
 | Cache TTL | 30 days |
 | Prompt Version | v20 |
@@ -1563,7 +1588,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | # | الفجوة | الشدة | التأثير |
 |---|--------|-------|---------|
 | 1 | تكامل زد غير مُنفذ | متوسط | تجار زد لا يمكنهم الربط |
-| ~~2~~ | ~~لا مزامنة تلقائية للمنتجات~~ | ~~تم الحل~~ | مزامنة تلقائية كل 6 ساعات عبر `setInterval` |
+| ~~2~~ | ~~لا مزامنة تلقائية للمنتجات~~ | ~~تم الحل~~ | مزامنة تلقائية كل 6 ساعات عبر `setInterval` — **ملاحظة**: لا تنجو من إعادة تشغيل العملية؛ مقبول للنشر على خادم واحد |
 | 3 | قاعدة معرفة بلغة واحدة | متوسط | خلط اللغتين في نص واحد |
 | 4 | القوالب لا تُترجم تلقائياً | منخفض | صيانة يدوية |
 | 5 | لا اختبارات بصرية | متوسط | أعطال RTL قد لا تُكتشف |
@@ -1654,7 +1679,7 @@ These are tracked per pipeline (facebook_comment, instagram_comment, facebook_me
 | `debounce_skipped` | Newer message pending, skipped | Normal |
 | `handoff_active` | Human agent pause active | Expected |
 | `handoff_requeued` | Job re-enqueued after pause | Expected |
-| `rate_limited` | Rate limit exceeded (5/10 per min) | Watch |
+| `rate_limited` | Rate limit exceeded (5/min comments, 10/min messages) | Watch |
 | `already_replied` | Already replied to this message | Normal |
 | `lock_contention` | Redis lock held by another worker | Watch |
 | `no_reply_generated` | AI/template failed to generate | Warning |
@@ -1921,6 +1946,46 @@ The `analytics` service computes these from live tables (30-day window):
 
 ---
 
+# Launch Defaults (Single Source of Truth)
+# القيم الافتراضية عند الإطلاق
+
+These are the **actual production defaults** from the codebase (`workspaceSettings.ts`, `rate-limiter.ts`, `config.ts`, `shared/index.ts`).
+
+هذه هي **القيم الافتراضية الفعلية في الإنتاج** من الكود المصدري.
+
+| Parameter | Default | Source |
+|-----------|---------|--------|
+| **AI Model** | `gpt-4.1-mini` | `packages/shared` `DEFAULT_AI_MODEL` |
+| **Prompt Version** | `v20` | `packages/shared` `PROMPT_VERSION` |
+| **Temperature** | `0.3` | `ai-worker/config.ts` |
+| **Max Output Tokens** | `300` | `ai-worker/config.ts` |
+| **Comments Auto-Reply** | `true` | `workspaceSettings.ts` |
+| **Messages Auto-Reply** | `true` | `workspaceSettings.ts` |
+| **Comment Reply Mode** | `public` | `workspaceSettings.ts` |
+| **Business Hours Only** | `false` (always active) | `workspaceSettings.ts` |
+| **Business Hours** | `09:00–18:00` | `workspaceSettings.ts` |
+| **Timezone** | `Asia/Damascus` | `workspaceSettings.ts` |
+| **AI Enabled** | `true` | `workspaceSettings.ts` |
+| **Reply Delay** | `0` seconds (instant) | `workspaceSettings.ts` |
+| **Reply Style** | `professional` | `workspaceSettings.ts` |
+| **Hold Low Confidence** | `false` | `workspaceSettings.ts` |
+| **Auto Detect Language** | `true` | `workspaceSettings.ts` |
+| **Default Reply Language** | `ar` | `workspaceSettings.ts` |
+| **Rate Limit (Comments)** | `5/min` per sender per page | `rate-limiter.ts` |
+| **Rate Limit (Messages)** | `10/min` per sender per page | `rate-limiter.ts` |
+| **Comment Flag Threshold** | `> 50 words` → `comment_too_long` flag | `ai-worker/openai.ts` |
+| **Comment Hard Truncate** | `> 280 chars` → truncate at sentence (public mode only) | `commentProcessor.ts` |
+| **Cache TTL** | `30 days` | `ai.ts` |
+| **Reply Lock TTL** | `60 seconds` | `replyLock.ts` |
+| **Handoff Pause** | `15 minutes` | `workspaceSettings.ts` |
+| **Circuit Breaker** | `5 failures → 30s open` | env vars |
+| **Worker Concurrency** | `5 jobs` | `replyWorker.ts` |
+| **KB Max** | `16,000 chars` | prompt builder |
+| **Product Catalog** | `15 products, ~800 chars` | `ecommerce.ts` |
+| **Product Sync** | every `6 hours` via `setInterval` | `index.ts` |
+
+---
+
 # Quick Reference Card / بطاقة مرجعية سريعة
 
 ```
@@ -1955,7 +2020,7 @@ The `analytics` service computes these from live tables (30-day window):
 ║  • Comment reply: 40 words max (public)                          ║
 ║  • DM reply: 3-4 sentences with detail                           ║
 ║  • KB: 16,000 chars / Products: 15 items, 800 chars             ║
-║  • Rate: 10 msgs/min per sender per page                         ║
+║  • Rate: 5/min comments, 10/min messages per sender              ║
 ║  • Token budget: 24,000 input tokens                             ║
 ║  • Cache: 30-day TTL, version-scoped                             ║
 ║                                                                  ║
