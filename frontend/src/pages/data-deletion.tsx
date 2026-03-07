@@ -14,7 +14,7 @@ export default function DataDeletion() {
         <link rel="canonical" href="https://jawab24.com/data-deletion" />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-background py-12 px-4 sm:px-6 lg:px-8 text-start pt-safe pb-safe px-safe">
+      <div className="flex-1 overflow-y-auto bg-background py-12 px-4 sm:px-6 lg:px-8 text-start ">
         <div className="max-w-3xl mx-auto bg-card rounded-2xl shadow-sm p-8 border border-theme-border">
           <h1 className="text-3xl font-bold text-foreground mb-2">{t('dataDeletion.header')}</h1>
           <h2 className="text-lg font-semibold text-brand-600 mb-4">{t('dataDeletion.subheader' as TranslationKey)}</h2>

@@ -148,7 +148,7 @@ export default function CheckoutPage() {
   // EARLY RETURN 1: Show loading while checking geo
   if (isSanctioned === null) {
     return (
-      <div className="flex-1 flex items-center justify-center pt-safe pb-safe">
+      <div className="flex-1 flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
       </div>
     );
@@ -165,7 +165,7 @@ export default function CheckoutPage() {
         </Head>
 
         <div className="flex-1 flex flex-col overflow-y-auto bg-background">
-          <div className="flex-1 pt-safe pb-safe px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
+          <div className="flex-1  px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
             <div className="max-w-md mx-auto w-full">
 
               {/* Header: Back link on one side, Logo on other */}
@@ -205,7 +205,7 @@ export default function CheckoutPage() {
   // EARLY RETURN 3: Show loading while fetching plan (only for allowed geos)
   if (!plan && !error) {
     return (
-      <div className="flex-1 flex items-center justify-center pt-safe pb-safe">
+      <div className="flex-1 flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
       </div>
     );
@@ -223,7 +223,7 @@ export default function CheckoutPage() {
 
       <div className="flex-1 flex flex-col overflow-y-auto bg-background">
         {/* Content container - fills space with consistent background */}
-        <div className="flex-1 pt-safe pb-safe px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
+        <div className="flex-1  px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
           <div className="max-w-md mx-auto w-full">
 
             {/* Header: Back link on one side, Logo on other */}

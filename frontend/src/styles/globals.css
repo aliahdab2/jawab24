@@ -1355,11 +1355,12 @@ body.is-native .bottom-safe-bg {
 
 /* ═══════════════════════════════════════════════════════════════════
    INDUSTRY STANDARD: SAFE AREA HANDLING (Ionic/Capacitor Pattern)
-   
+
    1. Height chain: html → body → .app-shell (all 100%)
-   2. Safe areas applied at .app-shell level using env() with fallbacks
-   3. Top safe area: handled by fixed/sticky headers (pt-safe class)
-   4. Bottom/side safe areas: handled by AppShell padding
+   2. ALL safe areas (top, bottom, sides) applied GLOBALLY at .app-shell
+   3. Pages/content don't need pt-safe or pb-safe — it's automatic
+   4. ONLY fixed elements (headers, modals) need their own pt-safe
+      because position:fixed ignores parent padding
    5. Children use flex: 1 + overflow-y: auto for scrolling
 ═══════════════════════════════════════════════════════════════════ */
 
@@ -1391,13 +1392,15 @@ body.modal-open .whatsapp-help-fab {
   display: flex;
   flex-direction: column;
   overflow: hidden; /* Children handle their own scrolling */
-  
+
   /* Web browsers: use env() values (they handle safe areas correctly) */
+  padding-top: var(--sai-top);
   padding-bottom: 0px;
 }
 
 /* Step 3: Native apps - apply safe areas */
 html.is-native .app-shell {
+  padding-top: var(--sai-top);
   padding-bottom: var(--sai-bottom);
 }
 
@@ -1446,27 +1449,16 @@ html.is-native .app-shell {
   padding-inline-end: var(--sai-right);
 }
 
-/* Combined: header height + safe area (for content below sticky headers) 
-   Note: For native apps, header has box-content + pt-safe which adds safe area to height.
-   So pt-header should add header base height + safe area that pt-safe adds */
+/* Content spacing below fixed headers.
+   Safe area top is handled globally by .app-shell — pt-header only adds header height.
+   Fixed headers use pt-safe + box-content, so they extend INTO the app-shell's top padding. */
 .pt-header {
-  padding-top: calc(var(--header-height) + var(--sai-top));
-}
-
-/* Native apps: header uses max() for safe area, so we match */
-html.is-native .pt-header,
-body.is-native .pt-header {
-  padding-top: calc(var(--header-height) + var(--sai-top));
+  padding-top: var(--header-height);
 }
 
 @media (min-width: 640px) {
   .pt-header {
-    padding-top: calc(var(--header-height-lg) + var(--sai-top));
-  }
-  
-  html.is-native .pt-header,
-  body.is-native .pt-header {
-    padding-top: calc(var(--header-height-lg) + var(--sai-top));
+    padding-top: var(--header-height-lg);
   }
 }
 
