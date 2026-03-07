@@ -11,6 +11,9 @@ import {
   CheckCircle2,
   Store,
   PlugZap,
+  Sparkles,
+  ArrowRight,
+  Check,
 } from 'lucide-react';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useAuthStore } from '@/lib/store';
@@ -55,6 +58,10 @@ interface PlatformConfig {
   neverKey: TranslationKey;
   linkPageKey: TranslationKey;
   linkPageDescKey: TranslationKey;
+  /** Whether connect flow requires a shop domain input (Shopify = true, Salla = false) */
+  requiresDomain: boolean;
+  /** Initiate the connect flow. Returns { authUrl } for redirect. */
+  connectStore: (shopDomain?: string) => Promise<{ authUrl: string }>;
 }
 
 const PLATFORMS: PlatformConfig[] = [
@@ -88,6 +95,8 @@ const PLATFORMS: PlatformConfig[] = [
     neverKey: 'shopify.never' as TranslationKey,
     linkPageKey: 'shopify.linkPage' as TranslationKey,
     linkPageDescKey: 'shopify.linkPageDesc' as TranslationKey,
+    requiresDomain: true,
+    connectStore: (shopDomain) => ecommerceApi.connectStore(shopDomain!),
   },
   {
     id: 'salla',
@@ -119,6 +128,8 @@ const PLATFORMS: PlatformConfig[] = [
     neverKey: 'salla.never' as TranslationKey,
     linkPageKey: 'salla.linkPage' as TranslationKey,
     linkPageDescKey: 'salla.linkPageDesc' as TranslationKey,
+    requiresDomain: false,
+    connectStore: () => sallaApi.connectStore(),
   },
 ];
 
@@ -298,6 +309,151 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
 }
 
 /* ------------------------------------------------------------------ */
+/*  Not-connected card — compelling CTA to attract merchants           */
+/* ------------------------------------------------------------------ */
+
+function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
+  const { t } = useTranslation();
+  const [shopDomain, setShopDomain] = useState('');
+  const [connecting, setConnecting] = useState(false);
+
+  const pid = platform.id; // 'shopify' | 'salla'
+  const benefits = [
+    t(`integrations.notConnected.${pid}.benefit1` as TranslationKey),
+    t(`integrations.notConnected.${pid}.benefit2` as TranslationKey),
+    t(`integrations.notConnected.${pid}.benefit3` as TranslationKey),
+  ];
+
+  const steps = [
+    t('integrations.notConnected.step1' as TranslationKey),
+    t('integrations.notConnected.step2' as TranslationKey),
+    t('integrations.notConnected.step3' as TranslationKey),
+  ];
+
+  const handleConnect = async () => {
+    if (platform.requiresDomain && !shopDomain.trim()) return;
+    setConnecting(true);
+    try {
+      const { authUrl } = await platform.connectStore(
+        platform.requiresDomain ? shopDomain.trim() : undefined,
+      );
+      window.location.href = authUrl;
+    } catch {
+      toast.error(t('common.error' as TranslationKey));
+      setConnecting(false);
+    }
+  };
+
+  return (
+    <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="p-6 landscape:p-4">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className={clsx(
+            'w-12 h-12 rounded-2xl flex items-center justify-center landscape:w-10 landscape:h-10',
+            platform.iconClass,
+          )}>
+            {platform.icon}
+          </div>
+          <div className="text-start">
+            <h3 className="font-bold text-lg landscape:text-base">{t(platform.nameKey)}</h3>
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
+              <Sparkles className="w-3 h-3" aria-hidden="true" />
+              {t('integrations.notConnected.freeLabel' as TranslationKey)}
+            </span>
+          </div>
+        </div>
+
+        {/* Headline */}
+        <p className="text-sm font-semibold text-foreground mb-3">
+          {t(`integrations.notConnected.${pid}.headline` as TranslationKey)}
+        </p>
+
+        {/* Benefits */}
+        <ul className="space-y-2 mb-5">
+          {benefits.map((benefit, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Check className="w-4 h-4 mt-0.5 flex-shrink-0 text-brand-500" aria-hidden="true" />
+              {benefit}
+            </li>
+          ))}
+        </ul>
+
+        {/* How it works — 3 simple steps */}
+        <div className="mb-5 p-3 rounded-xl bg-muted/50">
+          <p className="text-xs font-semibold text-muted-foreground mb-2">
+            {t('integrations.notConnected.howItWorks' as TranslationKey)}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {steps.map((step, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span className={clsx(
+                  'flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold',
+                  'bg-brand-500 text-white',
+                )}>
+                  {i + 1}
+                </span>
+                <span>{step}</span>
+                {i < steps.length - 1 && (
+                  <ArrowRight className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Connect action */}
+        <div className="flex flex-col gap-2">
+          {platform.requiresDomain && (
+            <div>
+              <label htmlFor={`domain-${pid}`} className="block text-xs font-medium text-muted-foreground mb-1">
+                {t(`integrations.notConnected.${pid}.domainLabel` as TranslationKey)}
+              </label>
+              <input
+                id={`domain-${pid}`}
+                type="text"
+                dir="ltr"
+                value={shopDomain}
+                onChange={(e) => setShopDomain(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
+                placeholder={t(`integrations.notConnected.${pid}.domainPlaceholder` as TranslationKey)}
+                className={clsx(
+                  'w-full px-3 py-2 rounded-lg text-sm border border-theme-border',
+                  'bg-background text-foreground placeholder:text-muted-foreground',
+                  'focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500',
+                )}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {t(`integrations.notConnected.${pid}.domainHint` as TranslationKey)}
+              </p>
+            </div>
+          )}
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleConnect}
+            disabled={connecting || (platform.requiresDomain && !shopDomain.trim())}
+            className="w-full sm:w-auto"
+          >
+            {connecting ? (
+              <RefreshCw className="w-4 h-4 me-1.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <ArrowRight className="w-4 h-4 me-1.5" aria-hidden="true" />
+            )}
+            {t('integrations.notConnected.connectBtn' as TranslationKey)}
+          </Button>
+          {!platform.requiresDomain && (
+            <p className="text-[11px] text-muted-foreground">
+              {t(`integrations.notConnected.${pid}.connectHint` as TranslationKey)}
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -356,9 +512,6 @@ const IntegrationsPage: NextPageWithLayout = () => {
     return <PageSkeleton />;
   }
 
-  // Only render platforms where the API returned a store record (active or inactive)
-  const visiblePlatforms = PLATFORMS.filter((p) => stores[p.id] !== null);
-
   return (
     <>
       <PageHeader
@@ -367,8 +520,13 @@ const IntegrationsPage: NextPageWithLayout = () => {
       />
 
       <div className="space-y-6 landscape:space-y-4">
-        {visiblePlatforms.map((platform) => {
-          const store = stores[platform.id]!;
+        {PLATFORMS.map((platform) => {
+          const store = stores[platform.id];
+
+          if (!store) {
+            return <NotConnectedCard key={platform.id} platform={platform} />;
+          }
+
           return store.isActive ? (
             <ConnectedStoreCard
               key={platform.id}
