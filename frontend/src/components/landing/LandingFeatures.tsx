@@ -4,7 +4,7 @@ import {
   Languages,
   Zap,
   BookOpen,
-  Smartphone,
+  ShoppingBag,
 } from 'lucide-react';
 import { useTranslation } from '@/i18n';
 
@@ -17,7 +17,7 @@ export function LandingFeatures() {
     { icon: Languages, title: t('landing.features.languageTitle'), description: t('landing.features.languageDesc') },
     { icon: Zap, title: t('landing.features.instantTitle'), description: t('landing.features.instantDesc') },
     { icon: BookOpen, title: t('landing.features.knowledgeTitle'), description: t('landing.features.knowledgeDesc') },
-    { icon: Smartphone, title: t('landing.features.mobileTitle'), description: t('landing.features.mobileDesc') },
+    { icon: ShoppingBag, title: t('landing.features.ecommerceTitle'), description: t('landing.features.ecommerceDesc') },
   ];
 
   return (
