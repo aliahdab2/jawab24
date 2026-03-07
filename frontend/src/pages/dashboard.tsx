@@ -28,6 +28,8 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { CommentDetailModal, CommentCard } from '@/components/comments';
+import { MessageDetailModal } from '@/components/messages/MessageDetailModal';
+import { useConversationActions } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
@@ -114,6 +116,19 @@ const DashboardPage: NextPageWithLayout = () => {
 
   // Selected Comment State
   const [selectedCommentData, setSelectedCommentData] = useState<{ comment: Comment, mode: 'full' | 'quick' } | null>(null);
+
+  // Conversation modal actions (shared hook — reply, pause, resume, resolve, pause-status)
+  const {
+    selectedConversation,
+    setSelectedConversation,
+    handleReply: handleMessageReply,
+    handlePause: handleMessagePause,
+    handleResume: handleMessageResume,
+    handleResolve: handleMessageResolve,
+    isReplying,
+    isPausing,
+    isResuming,
+  } = useConversationActions({ extraInvalidateKeys: [['dashboard-needs-action-messages']] });
 
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
   const [expandedPageId, setExpandedPageId] = useState<string | null>(null);
@@ -296,6 +311,8 @@ const DashboardPage: NextPageWithLayout = () => {
           createdAt: m.createdTime || m.createdAt || null,
           flagReason: m.flagReason ?? null,
           href: '/messages?filter=needs_action',
+          senderId: m.senderId,
+          pageId: m.pageId,
         });
       }
     }
@@ -378,6 +395,62 @@ const DashboardPage: NextPageWithLayout = () => {
     setExpandedPageId(prev => prev === pageId ? null : pageId);
   }, []);
 
+  // --- Message conversation modal handlers ---
+
+  const openConversationModal = useCallback(async (senderId: string, pageId: string, senderName: string | null) => {
+    const loadingToastId = toast.loading(t('common.loading'));
+    try {
+      const res = await messagesApi.getConversation(senderId, { pageId, limit: 50 });
+      const msgs = Array.isArray(res.data) ? res.data : [];
+      if (msgs.length === 0) {
+        toast.error(t('common.noData'), { id: loadingToastId });
+        return;
+      }
+      toast.dismiss(loadingToastId);
+      const sorted = [...msgs].sort((a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      setSelectedConversation({
+        senderId,
+        senderName: senderName || msgs[0]?.senderName || null,
+        messages: sorted,
+        lastMessage: sorted[sorted.length - 1],
+        needsHumanAttention: sorted.some(m => m.needsAttention && !m.replied),
+      });
+    } catch (err) {
+      captureError(err, 'Failed to load conversation', { tags: { page: 'dashboard', action: 'open-conversation' } });
+      toast.error(t('dashboard.sectionLoadError'), { id: loadingToastId });
+    }
+  }, [t, setSelectedConversation]);
+
+  const handleAttentionItemClick = useCallback((item: NeedsAttentionItem) => {
+    if (item.type === 'message' && item.senderId && item.pageId) {
+      openConversationModal(item.senderId, item.pageId, item.senderName);
+    }
+  }, [openConversationModal]);
+
+  const handleConversationModalClose = useCallback(() => {
+    setSelectedConversation(null);
+    // Refresh attention data to reflect any changes made in the modal
+    queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-messages'] });
+    queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+  }, [queryClient, setSelectedConversation]);
+
+  // Resolved page name + URL for message modal
+  const selectedMessagePageName = useMemo(
+    () => selectedConversation
+      ? pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.name
+      : undefined,
+    [selectedConversation, pages]
+  );
+
+  const selectedMessagePageUrl = useMemo(() => {
+    if (!selectedConversation) return undefined;
+    const page = pages.find(p => p.id === selectedConversation.lastMessage.pageId);
+    if (!page) return undefined;
+    return `https://facebook.com/${page.facebookPageId}`;
+  }, [selectedConversation, pages]);
+
   // Dashboard Skeleton Loading State
   if (loading) {
     return <PageSkeleton type="dashboard" />;
@@ -418,6 +491,7 @@ const DashboardPage: NextPageWithLayout = () => {
         commentNeedsAction={statsData.commentsNeedsAction}
         messageNeedsAction={statsData.messagesNeedsAction}
         items={needsAttentionItems}
+        onMessageItemClick={handleAttentionItemClick}
       />
 
       {/* Command Center — consolidated metrics */}
@@ -531,10 +605,11 @@ const DashboardPage: NextPageWithLayout = () => {
                   t('time.daysAgo' as TranslationKey, { count: diffDay });
 
                 return (
-                  <Link
+                  <button
                     key={msg.id}
-                    href="/messages?filter=needs_action"
-                    className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-muted/50 transition-colors"
+                    type="button"
+                    onClick={() => openConversationModal(msg.senderId, msg.pageId, msg.senderName)}
+                    className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-muted/50 transition-colors w-full text-start"
                   >
                     <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-bold text-muted-foreground">
@@ -557,7 +632,7 @@ const DashboardPage: NextPageWithLayout = () => {
                         {snippet}
                       </p>
                     </div>
-                  </Link>
+                  </button>
                 );
               })
             ) : (
@@ -757,6 +832,24 @@ const DashboardPage: NextPageWithLayout = () => {
           onClose={() => setSelectedCommentData(null)}
           onReplySuccess={() => refetchAll()}
           mode={selectedCommentData.mode}
+        />
+      )}
+
+      {/* Message Conversation Modal — opens inline from attention items or recent messages */}
+      {selectedConversation && (
+        <MessageDetailModal
+          key={selectedConversation.senderId}
+          conversation={selectedConversation}
+          onClose={handleConversationModalClose}
+          onReply={handleMessageReply}
+          onResolve={handleMessageResolve}
+          onPause={handleMessagePause}
+          onResume={handleMessageResume}
+          isReplying={isReplying}
+          isPausing={isPausing}
+          isResuming={isResuming}
+          pageName={selectedMessagePageName}
+          pageUrl={selectedMessagePageUrl}
         />
       )}
     </>

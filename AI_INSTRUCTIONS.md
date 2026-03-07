@@ -808,7 +808,7 @@ fix(login): prevent double-click
 refactor(css): consolidate safe areas
 ```
 
-**IMPORTANT:** Never add `Co-Authored-By`, `Signed-off-by`, or any attribution trailer to commits unless the author is **Ali Ahdab**. Do not attribute commits to AI tools or bots.
+**IMPORTANT:** Never add `Co-Authored-By`, `Signed-off-by`, or any attribution trailer to commits. Do not attribute commits to AI tools, bots, or any third party. Commits must have no trailers at all.
 
 ---
 

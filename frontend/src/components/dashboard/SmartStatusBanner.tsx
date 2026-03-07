@@ -21,12 +21,18 @@ export interface NeedsAttentionItem {
   flagReason: string | null;
   /** Link path, e.g. "/comments?filter=needs_action" */
   href: string;
+  /** For messages: sender ID needed to fetch conversation */
+  senderId?: string;
+  /** For messages: page ID needed to fetch conversation */
+  pageId?: string;
 }
 
 interface SmartStatusBannerProps {
   commentNeedsAction: number;
   messageNeedsAction: number;
   items: NeedsAttentionItem[];
+  /** Called when a message item is clicked (opens inline modal instead of navigating) */
+  onMessageItemClick?: (item: NeedsAttentionItem) => void;
 }
 
 function getReasonTag(
@@ -65,6 +71,7 @@ export function SmartStatusBanner({
   commentNeedsAction,
   messageNeedsAction,
   items,
+  onMessageItemClick,
 }: SmartStatusBannerProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -194,37 +201,56 @@ export function SmartStatusBanner({
                     : item.text;
                   const reason = getReasonTag(item.flagReason, t);
 
-                  return (
-                    <li key={`${item.type}-${item.id}`}>
-                      <Link
-                        href={item.href}
-                        className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors group"
-                      >
-                        {/* Type icon */}
-                        <div className="shrink-0 mt-0.5">
-                          <ItemIcon className="w-4 h-4 text-amber-600" aria-hidden="true" />
-                        </div>
+                  const useInlineClick = item.type === 'message' && onMessageItemClick;
+                  const itemContent = (
+                    <>
+                      {/* Type icon */}
+                      <div className="shrink-0 mt-0.5">
+                        <ItemIcon className="w-4 h-4 text-amber-600" aria-hidden="true" />
+                      </div>
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-sm font-semibold text-amber-900 truncate">
-                              {item.senderName || t('common.unknownUser' as TranslationKey)}
-                            </span>
-                            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700/70">
-                              <Clock className="w-3 h-3" aria-hidden="true" />
-                              {formatRelativeTime(item.createdAt, t)}
-                            </span>
-                          </div>
-                          <p className="text-xs text-amber-800/70 truncate leading-relaxed">
-                            {snippet}
-                          </p>
-                          {/* Reason tag */}
-                          <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-800/80">
-                            {reason}
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-semibold text-amber-900 truncate">
+                            {item.senderName || t('common.unknownUser' as TranslationKey)}
+                          </span>
+                          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700/70">
+                            <Clock className="w-3 h-3" aria-hidden="true" />
+                            {formatRelativeTime(item.createdAt, t)}
                           </span>
                         </div>
-                      </Link>
+                        <p className="text-xs text-amber-800/70 truncate leading-relaxed">
+                          {snippet}
+                        </p>
+                        {/* Reason tag */}
+                        <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-800/80">
+                          {reason}
+                        </span>
+                      </div>
+                    </>
+                  );
+
+                  const sharedClassName = "flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors group w-full text-start";
+
+                  return (
+                    <li key={`${item.type}-${item.id}`}>
+                      {useInlineClick ? (
+                        <button
+                          type="button"
+                          className={sharedClassName}
+                          onClick={() => onMessageItemClick(item)}
+                        >
+                          {itemContent}
+                        </button>
+                      ) : (
+                        <Link
+                          href={item.href}
+                          className={sharedClassName}
+                        >
+                          {itemContent}
+                        </Link>
+                      )}
                     </li>
                   );
                 })}
