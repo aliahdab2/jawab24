@@ -1271,6 +1271,11 @@
   }
 }
 
+/* Sonner toast: push below safe area on native */
+[data-sonner-toaster][data-y-position='top'] {
+  top: var(--sai-top) !important;
+}
+
 .px-safe {
   padding-left: var(--sai-left);
   padding-right: var(--sai-right);
