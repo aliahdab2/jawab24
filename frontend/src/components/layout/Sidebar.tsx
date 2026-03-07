@@ -109,37 +109,39 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name, onError }: { 
   );
 })
 
-const navigationGroups = [
-  {
-    labelKey: 'sidebar.overview',
-    items: [
-      { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { key: 'nav.pages', href: '/pages', icon: FileText },
-    ],
-  },
-  {
-    labelKey: 'sidebar.inbox',
-    items: [
-      { key: 'nav.comments', href: '/comments', icon: MessageSquare },
-      { key: 'nav.messages', href: '/messages', icon: MessageCircle },
-    ],
-  },
-  {
-    labelKey: 'sidebar.automation',
-    items: [
-      { key: 'nav.templates', href: '/templates', icon: BookTemplate },
-      { key: 'nav.rules', href: '/rules', icon: Zap },
-      { key: 'nav.integrations', href: '/integrations', icon: Plug },
-    ],
-  },
-  {
-    labelKey: 'sidebar.account',
-    items: [
-      { key: 'pricing.title', href: '/pricing', icon: CreditCard },
-      { key: 'nav.settings', href: '/settings', icon: Settings },
-    ],
-  },
-];
+export function getNavigationGroups(hasEcommerceStore: boolean) {
+  return [
+    {
+      labelKey: 'sidebar.overview',
+      items: [
+        { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { key: 'nav.pages', href: '/pages', icon: FileText },
+      ],
+    },
+    {
+      labelKey: 'sidebar.inbox',
+      items: [
+        { key: 'nav.comments', href: '/comments', icon: MessageSquare },
+        { key: 'nav.messages', href: '/messages', icon: MessageCircle },
+      ],
+    },
+    {
+      labelKey: 'sidebar.automation',
+      items: [
+        { key: 'nav.templates', href: '/templates', icon: BookTemplate },
+        { key: 'nav.rules', href: '/rules', icon: Zap },
+        ...(hasEcommerceStore ? [{ key: 'nav.integrations', href: '/integrations', icon: Plug }] : []),
+      ],
+    },
+    {
+      labelKey: 'sidebar.account',
+      items: [
+        { key: 'pricing.title', href: '/pricing', icon: CreditCard },
+        { key: 'nav.settings', href: '/settings', icon: Settings },
+      ],
+    },
+  ];
+}
 
 /**
  * Sidebar - Memoized to prevent unnecessary re-renders on page navigation
@@ -155,6 +157,7 @@ export const Sidebar = memo(function Sidebar() {
   const sseStatus = useUIStore((s) => s.sseStatus);
   const { t } = useTranslation();
   const isDemoUser = useIsDemoUser();
+  const navigationGroups = getNavigationGroups(user?.hasEcommerceStore ?? false);
 
   // Memoize logout handler to prevent unnecessary re-renders
   const handleLogout = useCallback(() => {

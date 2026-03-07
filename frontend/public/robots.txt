@@ -9,6 +9,7 @@ Allow: /login
 Allow: /privacy
 Allow: /terms
 Allow: /data-deletion
+Allow: /contact
 
 # Allow English locale pages
 Allow: /en
@@ -18,6 +19,7 @@ Allow: /en/login
 Allow: /en/privacy
 Allow: /en/terms
 Allow: /en/data-deletion
+Allow: /en/contact
 
 # Disallow dashboard pages (require auth)
 Disallow: /dashboard

@@ -35,8 +35,8 @@ export default function Custom500() {
 
         {/* Illustration */}
         <div className="relative mb-6">
-          <div className="w-24 h-24 rounded-3xl bg-red-50 flex items-center justify-center">
-            <AlertTriangle className="w-12 h-12 text-red-300" />
+          <div className="w-24 h-24 rounded-3xl bg-red-50 dark:bg-red-900/30 flex items-center justify-center">
+            <AlertTriangle className="w-12 h-12 text-red-400 dark:text-red-300" />
           </div>
           <div className="absolute -top-1 -end-1 w-6 h-6 rounded-full bg-accent-100 flex items-center justify-center">
             <span className="text-accent-500 text-xs font-bold">!</span>

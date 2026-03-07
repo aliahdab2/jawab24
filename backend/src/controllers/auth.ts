@@ -9,8 +9,8 @@ import { integrationRegistry } from '../integrations';
 import { AuthRequest, AuthResponse } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
-import { users } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { users, ecommerceStores } from '../db/schema';
+import { eq, and } from 'drizzle-orm';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 
@@ -253,6 +253,12 @@ export class AuthController {
             if (!user) {
                 return reply.status(404).send({ error: 'User not found' });
             }
+
+            const storeRows = await db.select({ id: ecommerceStores.id })
+                .from(ecommerceStores)
+                .where(and(eq(ecommerceStores.userId, userId), eq(ecommerceStores.isActive, true)))
+                .limit(1);
+
             return reply.send({
                 id: user.id,
                 facebookId: user.facebookId,
@@ -260,6 +266,7 @@ export class AuthController {
                 email: user.email,
                 hasEmail: !!user.email,
                 isAdmin: user.isAdmin || false,
+                hasEcommerceStore: storeRows.length > 0,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt,
             });

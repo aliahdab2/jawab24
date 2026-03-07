@@ -99,7 +99,7 @@ export default function Document() {
               "logo": "https://jawab24.com/brand/apple-touch-icon.png",
               "description": "Smart AI auto-reply service for Facebook & Instagram",
               "sameAs": [
-                "https://facebook.com/jawab24",
+                "https://facebook.com/jawab24app",
                 "https://instagram.com/jawab24"
               ]
             })
@@ -133,14 +133,7 @@ export default function Document() {
                 "Business knowledge base"
               ],
               "screenshot": "https://jawab24.com/brand/og-social.png",
-              "softwareVersion": "1.0",
-              "aggregateRating": {
-                "@type": "AggregateRating",
-                "ratingValue": "4.8",
-                "ratingCount": "50",
-                "bestRating": "5",
-                "worstRating": "1"
-              }
+              "softwareVersion": "1.0"
             })
           }}
         />

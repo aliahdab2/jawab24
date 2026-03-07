@@ -31,6 +31,7 @@ interface User {
   facebookId: string;
   picture?: string;
   isAdmin?: boolean;
+  hasEcommerceStore?: boolean;
 }
 
 interface AuthState {

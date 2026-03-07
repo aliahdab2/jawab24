@@ -9,7 +9,7 @@
 
 | Item | Value |
 |------|-------|
-| **Node.js** | v20+ required |
+| **Node.js** | v22+ required |
 | **Package Manager** | npm (workspaces monorepo) |
 | **Frontend** | Next.js 15 + Tailwind CSS + Capacitor 8 |
 | **Backend** | Express + Drizzle ORM + PostgreSQL |

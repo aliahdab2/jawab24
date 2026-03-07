@@ -349,6 +349,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
             <link rel="alternate" hrefLang="x-default" href={BRAND_ASSETS.urls.canonical('/')} />
 
             {/* Open Graph Defaults */}
+            <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en' : '')} />
             <meta property="og:site_name" content={BRAND_ASSETS.meta.appName} />
             <meta property="og:title" content={BRAND_ASSETS.meta.appTitle} />
             <meta property="og:description" content="Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7." />
