@@ -212,7 +212,7 @@ export function MessageDetailModal({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 pb-safe landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -341,7 +341,7 @@ export function MessageDetailModal({
 
         {/* Footer — Reply + Actions */}
         <div
-          className="p-4 md:p-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
+          className="px-4 pt-4 md:px-6 md:pt-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
         >
           {heldMessage && (
             <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">

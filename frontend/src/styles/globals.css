@@ -1256,24 +1256,32 @@
   }
 }
 
-/* Modal footer: content padding + safe area inset on native */
+/* Modal footer: small content padding on web, safe area + content padding on native */
 .pb-safe-modal {
-  padding-bottom: 16px;
+  padding-bottom: 12px;
 }
 
 .is-native .pb-safe-modal {
-  padding-bottom: calc(var(--sai-bottom) + 16px);
+  padding-bottom: calc(var(--sai-bottom) + 8px);
 }
 
 @media (orientation: landscape) {
   .is-native .pb-safe-modal {
-    padding-bottom: 16px;
+    padding-bottom: 12px;
   }
 }
 
 .px-safe {
   padding-left: var(--sai-left);
   padding-right: var(--sai-right);
+}
+
+/* Native apps: push Sonner toasts below the status bar safe area.
+   Sonner uses --offset-top (desktop >600px) and --mobile-offset-top (mobile ≤600px).
+   We override both so toasts always clear the status bar on native platforms. */
+.is-native [data-sonner-toaster][data-y-position="top"] {
+  --offset-top: var(--sai-top) !important;
+  --mobile-offset-top: var(--sai-top) !important;
 }
 
 /* Native apps: use injected variable (Android WebView doesn't report env() correctly) */
