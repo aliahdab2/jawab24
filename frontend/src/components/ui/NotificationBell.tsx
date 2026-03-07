@@ -556,11 +556,9 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                     ref={dropdownRef}
                     className={clsx(
                         'fixed start-4 end-4 bg-card rounded-2xl shadow-2xl shadow-surface-900/10 border border-theme-border overflow-hidden z-[100] animate-fade-in',
-                        isDark
-                            ? 'max-h-[60vh]'
-                            : 'top-20 sm:end-auto sm:start-[272px] sm:w-[420px] max-h-[70vh]',
+                        'max-h-[60vh] lg:max-h-[70vh] sm:end-auto sm:start-[272px] sm:w-[420px]',
                     )}
-                    style={isDark ? { top: 'calc(var(--sai-top) + 4.5rem)' } : undefined}
+                    style={{ top: 'calc(var(--sai-top) + 4.5rem)' }}
                     dir={language === 'ar' ? 'rtl' : 'ltr'}
                 >
                     {/* Header Row 1: Title + Close */}

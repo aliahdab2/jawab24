@@ -178,10 +178,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           /* Mobile APP Header — Logo at start, bell at end.
              Follows natural text direction (LTR/RTL). */
           <div
-            className="lg:hidden sticky top-0 left-0 right-0 h-14 sm:h-16 flex items-center justify-between px-4 px-safe-landscape z-40 pt-safe box-content"
-            style={{
-              background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.5) 60%, transparent 100%)'
-            }}
+            className="lg:hidden fixed top-0 left-0 right-0 h-14 sm:h-16 flex items-center justify-between px-4 px-safe-landscape z-40 pt-safe box-content bg-card/90 backdrop-blur-md border-b border-theme-border"
           >
             <Link href="/dashboard" className="flex items-center min-w-[44px] min-h-[44px] justify-center">
               <BrandLogo variant="vector" className="w-9 h-9" />
@@ -191,7 +188,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
               {sseStatus === 'reconnecting' && (
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
               )}
-              <NotificationBell variant="dark" />
+              <NotificationBell />
             </div>
           </div>
         )}
@@ -200,16 +197,14 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
         <main
           className={clsx(
             'relative z-[1] transition-all duration-500 flex-1',
-            // Clean layout (public pages): use pt-header for fixed header spacing
-            // Regular layout: sticky header is in document flow, no extra padding needed on mobile
-            // Desktop (with sidebar) still gets no top padding
-            isCleanLayout ? 'pt-header' : 'lg:pt-0',
+            // Both layouts use fixed headers — content needs top padding to clear them
+            // Desktop (with sidebar) uses its own layout, no top padding needed
+            'pt-header lg:pt-0',
             !isCleanLayout && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >
           <div
             className={clsx(
-              // Padding around content - top padding is minimal since sticky header is in document flow
               'px-4 pt-5 px-safe-landscape max-lg:landscape:pt-2 md:px-8 md:pt-8 lg:px-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
               isCleanLayout ? 'pb-4' : 'pb-dash-mobile'
             )}
