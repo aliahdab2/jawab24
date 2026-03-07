@@ -1762,7 +1762,7 @@ Normal operation: CLOSED
 | `GET /health/live` | Liveness probe (Docker/K8s) | None | Always 200 |
 | `GET /health/ready` | Readiness probe (DB connectivity) | None | 200 ready, 503 not ready |
 | `GET /health/cache-stats` | AI cache: total entries, hits, age | x-cleanup-token | 200/403 |
-| `GET /health/pipeline-metrics` | All 19×4 outcome counters | x-cleanup-token | 200/403 |
+| `GET /health/pipeline-metrics` | All 20×4 outcome counters | x-cleanup-token | 200/403 |
 | `POST /health/cleanup` | Run DB cleanup (cache, logs, tokens) | x-cleanup-token | 200 |
 
 ### Database Cleanup Schedule
@@ -1858,7 +1858,7 @@ The `analytics` service computes these from live tables (30-day window):
 النظام يحتوي على 5 طبقات مراقبة:
 
 **الطبقة 1: مقاييس خط الإنتاج (Redis)**
-- 19 نتيجة × 4 خطوط إنتاج = 76 عداد
+- 20 نتيجة × 4 خطوط إنتاج = 80 عداد
 - نقطة وصول: `GET /health/pipeline-metrics`
 
 **الطبقة 2: تتبع تكلفة AI (PostgreSQL)**
@@ -1878,7 +1878,7 @@ The `analytics` service computes these from live tables (30-day window):
 - `/health/live` → فحص الحياة (Docker)
 - `/health/ready` → فحص الجاهزية (اتصال قاعدة البيانات)
 
-### نتائج خط الإنتاج (19 نتيجة)
+### نتائج خط الإنتاج (20 نتيجة)
 
 | النتيجة | المعنى | الشدة |
 |---------|--------|-------|
@@ -1960,6 +1960,6 @@ The `analytics` service computes these from live tables (30-day window):
 ║  • Cache: 30-day TTL, version-scoped                             ║
 ║                                                                  ║
 ║  PORTS: Frontend=3001 | Backend=3000 | AI Worker=3002            ║
-║  MODEL: gpt-4.1-mini | PROMPT: v14 | TEMP: 0.3                  ║
+║  MODEL: gpt-4.1-mini | PROMPT: v20 | TEMP: 0.3                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
