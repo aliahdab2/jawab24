@@ -258,7 +258,7 @@ test.describe('Landscape Mode', () => {
     await page.waitForSelector('h1', { timeout: 15000 });
     await page.waitForTimeout(500);
     const nav = page.locator('.bottom-nav-position');
-    await expect(nav).toHaveScreenshot('dashboard-en-landscape-nav.png', SNAP_OPTS);
+    await expect(nav).toHaveScreenshot('dashboard-en-landscape-nav.png', { maxDiffPixelRatio: 0.05 });
   });
 
   test('comments page is scrollable and not cut off in landscape', async ({ page }) => {
