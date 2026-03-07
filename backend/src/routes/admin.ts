@@ -852,7 +852,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         const ownerSettings = await settingsService.getSettings(page.userId);
                         commentReplyMode = ownerSettings.commentReplyMode || 'public';
                         if (commentReplyMode === 'dual') {
-                            nudgeText = ((ownerSettings.dualReplyNudge as string) || NUDGE_DEFAULT).slice(0, 80);
+                            const nudgeMulti = (ownerSettings.dualReplyNudgeMulti || {}) as Record<string, string>;
+                            const qLang = detectLanguageCode(question);
+                            nudgeText = (nudgeMulti[qLang]
+                                || Object.values(nudgeMulti).find(v => v && v !== nudgeMulti.sourceLang)
+                                || NUDGE_DEFAULT).slice(0, 80);
                         }
                     } catch {
                         // Non-critical — fall back to defaults

@@ -166,7 +166,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                         [currentLang]: value,
                         sourceLang: currentLang
                     },
-                    dualReplyNudge: value
+
                   });
                 }}
                 placeholder={(() => {
