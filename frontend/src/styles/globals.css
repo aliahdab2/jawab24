@@ -1256,18 +1256,18 @@
   }
 }
 
-/* Modal footer with extra breathing room from system buttons on mobile */
+/* Modal footer: content padding + safe area inset on native */
 .pb-safe-modal {
-  padding-bottom: 32px;
+  padding-bottom: 16px;
 }
 
 .is-native .pb-safe-modal {
-  padding-bottom: calc(var(--sai-bottom) + 32px);
+  padding-bottom: calc(var(--sai-bottom) + 16px);
 }
 
 @media (orientation: landscape) {
   .is-native .pb-safe-modal {
-    padding-bottom: 32px;
+    padding-bottom: 16px;
   }
 }
 
