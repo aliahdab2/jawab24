@@ -764,6 +764,7 @@ export class MessagesService {
             needsAttention: record.needsAttention ?? false,
             flagReason: record.flagReason ?? null,
             aiIntent: record.aiIntent ?? null,
+            aiOriginalReply: record.aiOriginalReply ?? null,
             resolved: record.resolved ?? false,
         };
     }

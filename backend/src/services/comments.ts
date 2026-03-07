@@ -97,6 +97,7 @@ export class CommentsService {
             needsAttention: comments.needsAttention,
             flagReason: comments.flagReason,
             aiIntent: comments.aiIntent,
+            aiOriginalReply: comments.aiOriginalReply,
             resolved: comments.resolved,
             source: sql<string>`'facebook'`.as('source'),
         })
@@ -140,6 +141,7 @@ export class CommentsService {
             needsAttention: instagramComments.needsAttention,
             flagReason: instagramComments.flagReason,
             aiIntent: instagramComments.aiIntent,
+            aiOriginalReply: instagramComments.aiOriginalReply,
             resolved: instagramComments.resolved,
             source: sql<string>`'instagram'`.as('source'),
         })

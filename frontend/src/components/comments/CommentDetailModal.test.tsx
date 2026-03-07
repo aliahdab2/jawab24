@@ -214,6 +214,57 @@ describe('CommentDetailModal', () => {
     expect(screen.getAllByText('Test User').length).toBeGreaterThanOrEqual(1);
   });
 
+  describe('held low-confidence reply', () => {
+    it('shows held reply banner and pre-fills textarea when aiOriginalReply is present', async () => {
+      const heldComment: Comment = {
+        ...mockComment,
+        replied: false,
+        aiOriginalReply: 'AI draft: Thanks for your interest!',
+        flagReason: 'held_low_confidence',
+      };
+
+      await renderModal({ comment: heldComment });
+
+      expect(screen.getByText('comments.heldReplyBanner')).toBeInTheDocument();
+      const textarea = screen.getByPlaceholderText('comments.typeReply');
+      expect(textarea).toHaveValue('AI draft: Thanks for your interest!');
+    });
+
+    it('does not show held reply banner for normal unreplied comments', async () => {
+      await renderModal();
+
+      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+    });
+
+    it('does not show held reply banner when flagReason is not held_low_confidence', async () => {
+      const flaggedComment: Comment = {
+        ...mockComment,
+        replied: false,
+        aiOriginalReply: 'Some reply',
+        flagReason: 'angry_customer',
+      };
+
+      await renderModal({ comment: flaggedComment });
+
+      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+    });
+
+    it('does not show held reply banner when comment is already replied', async () => {
+      const repliedComment: Comment = {
+        ...mockComment,
+        replied: true,
+        replyText: 'Sent reply',
+        replyMethod: 'ai',
+        aiOriginalReply: 'Original draft',
+        flagReason: 'held_low_confidence',
+      };
+
+      await renderModal({ comment: repliedComment });
+
+      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+    });
+  });
+
   describe('page name link', () => {
     it('shows clickable page name button when facebookCommentId is present', async () => {
       const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };

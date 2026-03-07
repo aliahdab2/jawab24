@@ -53,7 +53,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   useEscapeKey(onClose);
   useBodyScrollLock(true);
 
-  const [replyText, setReplyText] = useState('');
+  const isHeldReply = !comment.replied && !!comment.aiOriginalReply && comment.flagReason?.includes('held_low_confidence');
+  const [replyText, setReplyText] = useState(isHeldReply ? comment.aiOriginalReply! : '');
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -300,6 +301,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           {/* Reply Input Section */}
           {!comment.replied && (
             <div className="bg-muted rounded-xl p-4 border border-theme-border">
+              {isHeldReply && (
+                <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
+                  <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>{t('comments.heldReplyBanner')}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center mb-2">
                 <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground">{t('comments.reply')}</label>
                 

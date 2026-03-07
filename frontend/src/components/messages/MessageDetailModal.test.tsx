@@ -408,6 +408,66 @@ describe('MessageDetailModal', () => {
     expect(badges.length).toBeGreaterThanOrEqual(1);
   });
 
+  describe('held low-confidence reply', () => {
+    it('shows held reply banner and pre-fills textarea when aiOriginalReply is present', () => {
+      const heldMessage = makeMessage({
+        replied: false,
+        aiOriginalReply: 'AI suggested draft reply',
+        flagReason: 'held_low_confidence',
+      });
+
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [heldMessage],
+            lastMessage: heldMessage,
+          })}
+        />
+      );
+
+      expect(screen.getByText('comments.heldReplyBanner')).toBeInTheDocument();
+      const textarea = screen.getByPlaceholderText('messages.typeReply');
+      expect(textarea).toHaveValue('AI suggested draft reply');
+    });
+
+    it('does not show held reply banner for normal unreplied messages', () => {
+      const incoming = makeMessage({ replied: false });
+
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [incoming],
+            lastMessage: incoming,
+          })}
+        />
+      );
+
+      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+    });
+
+    it('does not show held reply banner when aiOriginalReply exists but flagReason is different', () => {
+      const flaggedMessage = makeMessage({
+        replied: false,
+        aiOriginalReply: 'Some reply',
+        flagReason: 'angry_customer',
+      });
+
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [flaggedMessage],
+            lastMessage: flaggedMessage,
+          })}
+        />
+      );
+
+      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Smart Reply button', () => {
     it('shows Smart Reply button when there are unreplied incoming messages', () => {
       const incoming = makeMessage({ replied: false });

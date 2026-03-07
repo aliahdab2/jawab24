@@ -58,7 +58,12 @@ export function MessageDetailModal({
   pageUrl,
 }: MessageDetailModalProps) {
   const { t } = useTranslation();
-  const [replyText, setReplyText] = useState('');
+
+  // Check for held low-confidence reply and pre-fill textarea
+  const heldMessage = conversation.messages.find(
+    m => m.direction === 'incoming' && !m.replied && !!m.aiOriginalReply && m.flagReason?.includes('held_low_confidence')
+  );
+  const [replyText, setReplyText] = useState(heldMessage?.aiOriginalReply || '');
   const [sendError, setSendError] = useState<string | null>(null);
   const { isGenerating, generationStatus, aiLimit, generatedReply, generate } = useAiGeneration();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -338,6 +343,13 @@ export function MessageDetailModal({
         <div
           className="p-4 md:p-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
         >
+          {heldMessage && (
+            <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
+              <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{t('comments.heldReplyBanner')}</span>
+            </div>
+          )}
+
           {sendError && (
             <div className="mb-3 px-3 py-2 rounded-lg alert-error text-xs font-medium">
               {sendError}
