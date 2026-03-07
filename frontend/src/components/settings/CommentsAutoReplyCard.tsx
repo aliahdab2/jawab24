@@ -142,11 +142,17 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
             )}
           </div>
 
-          {/* Dual Reply Configuration */}
-          {settings.commentReplyMode === 'dual' && (
-            <div className="mt-4 p-4 landscape:p-3 rounded-xl bg-brand-50/20 dark:bg-brand-950/20 border border-brand-200/50 dark:border-brand-800/40 animate-slide-up">
-              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-1">{t('settings.dualReplyConfigTitle.improved')}</h4>
-              <p className="text-xs text-brand-700 dark:text-brand-400 font-medium mb-3">{t('settings.dualReplyConfigDesc')}</p>
+          {/* Public Comment Reply Configuration */}
+          <div
+            className={clsx(
+              "mt-4 overflow-hidden transition-all duration-300 ease-in-out",
+              (settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'public')
+                ? 'max-h-[400px] opacity-100'
+                : 'max-h-0 opacity-0'
+            )}
+          >
+            <div className="p-4 landscape:p-3 rounded-xl bg-brand-50/20 dark:bg-brand-950/20 border border-brand-200/50 dark:border-brand-800/40">
+              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-3">{t('settings.dualReplyConfigTitle.improved')}</h4>
               <Input
                 aria-label={t('settings.dualReplyConfigTitle.improved')}
                 value={(() => {
@@ -186,13 +192,14 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                   {dualNudgeInput.length}/80
                 </span>
               </div>
+              <p className="text-xs text-muted-foreground mt-1">{t('settings.dualReplyVariationsHint')}</p>
               {dualNudgeInput.length === 0 && settings.commentsAutoReply && (
-                <p className="mt-2 text-xs text-amber-600 font-medium">
+                <p className="mt-2 text-xs text-muted-foreground font-medium">
                   {t('settings.dualReplyEmptyWarning')}
                 </p>
               )}
             </div>
-          )}
+          </div>
       </div>
     </Card>
   );

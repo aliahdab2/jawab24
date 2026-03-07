@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import clsx from 'clsx';
 import { Card, Toggle } from '@/components/ui';
 import { Sparkles, Check } from 'lucide-react';
@@ -8,6 +9,9 @@ const STYLES = ['professional', 'casual', 'enthusiastic'] as const;
 
 export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
   const { t } = useTranslation();
+  const currentLangForVoice = settings.dashboardLanguage;
+  const hasSavedVoiceNotes = !!(settings.brandVoiceNotesMulti?.[currentLangForVoice]);
+  const [voiceNotesOpen, setVoiceNotesOpen] = useState(hasSavedVoiceNotes);
 
   return (
     <Card className="border-none shadow-md shadow-theme-border/30 p-4 landscape:p-3">
@@ -40,51 +44,65 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
         ))}
       </div>
 
-      {/* Brand voice notes (multi-language) */}
-      {(() => {
-        const currentLang = settings.dashboardLanguage;
-        const value = settings.brandVoiceNotesMulti?.[currentLang] || '';
-        const sourceLang = settings.brandVoiceNotesMulti?.sourceLang;
-        const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-        const displayValue = isAutoTranslated ? '' : value;
-        const placeholder = isAutoTranslated && value ? value : t('settings.replyStyle.brandVoicePlaceholder');
+      {/* Brand voice notes (multi-language) — progressive disclosure */}
+      <button
+        type="button"
+        onClick={() => setVoiceNotesOpen(!voiceNotesOpen)}
+        className="text-sm font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-colors cursor-pointer min-h-[44px] flex items-center"
+      >
+        {voiceNotesOpen ? t('settings.replyStyle.hideBrandVoice') : t('settings.replyStyle.addBrandVoice')}
+      </button>
+      <div
+        className={clsx(
+          "overflow-hidden transition-all duration-300 ease-in-out",
+          voiceNotesOpen ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'
+        )}
+      >
+        {(() => {
+          const currentLang = settings.dashboardLanguage;
+          const value = settings.brandVoiceNotesMulti?.[currentLang] || '';
+          const sourceLang = settings.brandVoiceNotesMulti?.sourceLang;
+          const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+          const displayValue = isAutoTranslated ? '' : value;
+          const placeholder = isAutoTranslated && value ? value : t('settings.replyStyle.brandVoicePlaceholder');
 
-        return (
-          <>
-            <label htmlFor="brandVoiceNotes" className="block text-sm font-medium text-foreground/70 mb-1">
-              {t('settings.replyStyle.brandVoice')}
-            </label>
-            <textarea
-              id="brandVoiceNotes"
-              aria-label={t('settings.replyStyle.brandVoice')}
-              className={clsx(
-                'input min-h-[56px] landscape:min-h-[44px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic',
-                isAutoTranslated && 'placeholder:italic',
-                currentLang === 'ar' && 'italic italic-arabic',
-              )}
-              dir={displayValue ? 'auto' : undefined}
-              maxLength={500}
-              rows={3}
-              placeholder={placeholder}
-              value={displayValue}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                setSettings({
-                  ...settings,
-                  brandVoiceNotesMulti: {
-                    ...settings.brandVoiceNotesMulti,
-                    [currentLang]: newValue,
-                    sourceLang: currentLang,
-                  },
-                });
-              }}
-            />
-            <p className="text-xs text-muted-foreground mt-1 text-end">
-              {displayValue.length}/500
-            </p>
-          </>
-        );
-      })()}
+          return (
+            <>
+              <label htmlFor="brandVoiceNotes" className="sr-only">
+                {t('settings.replyStyle.brandVoice')}
+              </label>
+              <textarea
+                id="brandVoiceNotes"
+                aria-label={t('settings.replyStyle.brandVoice')}
+                className={clsx(
+                  'input min-h-[56px] landscape:min-h-[44px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic',
+                  isAutoTranslated && 'placeholder:italic',
+                  currentLang === 'ar' && 'italic italic-arabic',
+                )}
+                dir={displayValue ? 'auto' : undefined}
+                maxLength={500}
+                rows={3}
+                placeholder={placeholder}
+                value={displayValue}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setSettings({
+                    ...settings,
+                    brandVoiceNotesMulti: {
+                      ...settings.brandVoiceNotesMulti,
+                      [currentLang]: newValue,
+                      sourceLang: currentLang,
+                    },
+                  });
+                }}
+              />
+              <p className="text-xs text-muted-foreground mt-1 text-end">
+                {displayValue.length}/500
+              </p>
+            </>
+          );
+        })()}
+      </div>
 
       {/* Hold low-confidence toggle */}
       <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-theme-border">
