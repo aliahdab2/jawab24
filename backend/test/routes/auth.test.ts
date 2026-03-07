@@ -2,20 +2,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
 import authRoutes from '../../src/routes/auth';
 
-// Mock database
+// Mock database — chainable query builder for select/update
+const mockChain = {
+    from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue([]),
+    set: vi.fn().mockReturnThis(),
+};
 vi.mock('../../src/db', () => ({
     db: {
-        select: vi.fn(),
-        update: vi.fn(),
+        select: vi.fn(() => mockChain),
+        update: vi.fn(() => mockChain),
     },
 }));
 
 vi.mock('../../src/db/schema', () => ({
     users: { id: 'id', email: 'email', name: 'name', updatedAt: 'updated_at' },
+    ecommerceStores: { id: 'id', userId: 'user_id', isActive: 'is_active' },
 }));
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+    and: vi.fn((...args: unknown[]) => ({ op: 'and', conditions: args })),
 }));
 
 // Mock services
