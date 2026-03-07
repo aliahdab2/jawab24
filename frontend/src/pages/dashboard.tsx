@@ -222,7 +222,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const { data: needsActionMessages } = useQuery({
     queryKey: ['dashboard-needs-action-messages'],
     queryFn: async () => {
-      const res = await messagesApi.getAll({ replied: false, resolved: false, limit: 5 });
+      const res = await messagesApi.getAll({ replied: false, resolved: false, limit: 20 });
       if (Array.isArray(res.data)) return res.data;
       return res.data?.data ?? [];
     },
@@ -302,17 +302,44 @@ const DashboardPage: NextPageWithLayout = () => {
     }
 
     if (needsActionMessages) {
+      // Group messages by senderId so each conversation appears once
+      const grouped: Record<string, {
+        latest: typeof needsActionMessages[0];
+        earliestAt: string | Date | null;
+        count: number;
+      }> = {};
       for (const m of needsActionMessages) {
+        const key = m.senderId || m.id; // fallback to id if no senderId
+        const mDate = m.createdTime || m.createdAt || null;
+        if (!grouped[key]) {
+          grouped[key] = { latest: m, earliestAt: mDate, count: 1 };
+        } else {
+          grouped[key].count += 1;
+          // Track latest message (for snippet)
+          const existingDate = grouped[key].latest.createdTime || grouped[key].latest.createdAt;
+          if (mDate && existingDate && new Date(mDate).getTime() > new Date(existingDate).getTime()) {
+            grouped[key].latest = m;
+          }
+          // Track earliest message (for "waiting since")
+          const curEarliest = grouped[key].earliestAt;
+          if (mDate && curEarliest && new Date(mDate).getTime() < new Date(curEarliest).getTime()) {
+            grouped[key].earliestAt = mDate;
+          }
+        }
+      }
+      for (const { latest, earliestAt, count } of Object.values(grouped)) {
         bannerItems.push({
-          id: m.id,
+          id: latest.id,
           type: 'message',
-          senderName: m.senderName ?? null,
-          text: m.message || '',
-          createdAt: m.createdTime || m.createdAt || null,
-          flagReason: m.flagReason ?? null,
+          senderName: latest.senderName ?? null,
+          text: latest.message || '',
+          createdAt: latest.createdTime || latest.createdAt || null,
+          flagReason: latest.flagReason ?? null,
           href: '/messages?filter=needs_action',
-          senderId: m.senderId,
-          pageId: m.pageId,
+          senderId: latest.senderId,
+          pageId: latest.pageId,
+          messageCount: count,
+          earliestAt: count > 1 ? earliestAt : null,
         });
       }
     }

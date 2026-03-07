@@ -25,6 +25,10 @@ export interface NeedsAttentionItem {
   senderId?: string;
   /** For messages: page ID needed to fetch conversation */
   pageId?: string;
+  /** Number of messages in this conversation (for grouped message items) */
+  messageCount?: number;
+  /** Earliest message timestamp in conversation (for "waiting since" display) */
+  earliestAt?: string | Date | null;
 }
 
 interface SmartStatusBannerProps {
@@ -33,6 +37,16 @@ interface SmartStatusBannerProps {
   items: NeedsAttentionItem[];
   /** Called when a message item is clicked (opens inline modal instead of navigating) */
   onMessageItemClick?: (item: NeedsAttentionItem) => void;
+}
+
+/** Default SLA reasons that are obvious from context — no need to show a tag */
+const DEFAULT_FLAG_REASONS = ['sla_no_reply', 'no_reply'];
+
+function isNotableFlagReason(flagReason: string | null): boolean {
+  if (!flagReason) return false;
+  // sla_no_reply:30, sla_no_reply:60 etc. are default — strip the threshold
+  const base = flagReason.split(':')[0];
+  return !DEFAULT_FLAG_REASONS.includes(base);
 }
 
 function getReasonTag(
@@ -202,6 +216,13 @@ export function SmartStatusBanner({
                   const reason = getReasonTag(item.flagReason, t);
 
                   const useInlineClick = item.type === 'message' && onMessageItemClick;
+                  const hasMultiple = item.messageCount && item.messageCount > 1;
+                  const showReasonTag = isNotableFlagReason(item.flagReason);
+                  // For grouped conversations, show "waiting since" (earliest); otherwise show latest
+                  const displayTime = hasMultiple && item.earliestAt
+                    ? t('dashboard.smartBanner.waitingSince' as TranslationKey, { time: formatRelativeTime(item.earliestAt, t) })
+                    : formatRelativeTime(item.createdAt, t);
+
                   const itemContent = (
                     <>
                       {/* Type icon */}
@@ -214,19 +235,24 @@ export function SmartStatusBanner({
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-sm font-semibold text-amber-900 truncate">
                             {item.senderName || t('common.unknownUser' as TranslationKey)}
+                            {hasMultiple && (
+                              <span className="text-amber-700/70 font-bold"> ({item.messageCount})</span>
+                            )}
                           </span>
                           <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700/70">
                             <Clock className="w-3 h-3" aria-hidden="true" />
-                            {formatRelativeTime(item.createdAt, t)}
+                            {displayTime}
                           </span>
                         </div>
                         <p className="text-xs text-amber-800/70 truncate leading-relaxed">
                           {snippet}
                         </p>
-                        {/* Reason tag */}
-                        <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-800/80">
-                          {reason}
-                        </span>
+                        {/* Reason tag — only for notable reasons (not default SLA) */}
+                        {showReasonTag && (
+                          <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-800/80">
+                            {reason}
+                          </span>
+                        )}
                       </div>
                     </>
                   );

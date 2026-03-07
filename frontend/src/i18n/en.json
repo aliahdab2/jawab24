@@ -218,6 +218,7 @@
   "dashboard.smartBanner.messagesCount": "{count} Messages",
   "dashboard.smartBanner.goToComments": "Go to Comments",
   "dashboard.smartBanner.goToMessages": "Go to Messages",
+  "dashboard.smartBanner.waitingSince": "waiting {time}",
   "dashboard.inbox.commentsTitle": "Comments",
   "dashboard.inbox.messagesTitle": "Messages",
   "dashboard.inbox.noItems": "All caught up!",

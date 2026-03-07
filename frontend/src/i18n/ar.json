@@ -218,6 +218,7 @@
   "dashboard.smartBanner.messagesCount": "{count} رسائل",
   "dashboard.smartBanner.goToComments": "انتقل للتعليقات",
   "dashboard.smartBanner.goToMessages": "انتقل للرسائل",
+  "dashboard.smartBanner.waitingSince": "بالانتظار {time}",
   "dashboard.inbox.commentsTitle": "التعليقات",
   "dashboard.inbox.messagesTitle": "الرسائل",
   "dashboard.inbox.noItems": "لا يوجد شيء معلّق!",
