@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, PageHeader, PageSkeleton } from '@/components/ui';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { useRouter } from 'next/router';
 import { settingsApi, api } from '@/lib/api';
@@ -69,6 +69,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const { t, language } = useTranslation();
   const { setLanguage } = useLanguage();
   const { isAuthenticated } = useAuthStore();
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const router = useRouter();
 
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -204,7 +205,7 @@ const SettingsPage: NextPageWithLayout = () => {
   }
 
   return (
-    <div>
+    <div className="pb-24 landscape:pb-20">
       <PageHeader
         title={t('settings.title')}
         description={t('settings.pageContext')}
@@ -300,31 +301,34 @@ const SettingsPage: NextPageWithLayout = () => {
         </div>
       )}
 
-      {/* Sticky Save Button — stays at bottom of scroll area, respects sidebar naturally */}
+      {/* Fixed Save Button — above bottom nav on mobile, bottom of viewport on desktop */}
       <div className={clsx(
-        'sticky bottom-0 z-30 -mx-4 md:-mx-8 lg:-mx-16 xl:-mx-20 px-4 md:px-8 lg:px-16 xl:px-20 py-3 bg-background/80 backdrop-blur-md border-t border-theme-border transition-all duration-300',
-        'pb-[calc(4rem+var(--sai-bottom))] lg:pb-3',
+        'fixed end-0 start-0 z-30 px-4 md:px-8 lg:px-16 xl:px-20 py-3 bg-background/80 backdrop-blur-md border-t border-theme-border transition-all duration-300',
+        sidebarOpen ? 'lg:start-64' : 'lg:start-20',
+        'bottom-[calc(4rem+var(--sai-bottom))] lg:bottom-0 lg:pb-safe',
         'px-safe-landscape',
         hasChanges || saving ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
       )}>
-        <Button
-          onClick={handleSave}
-          disabled={!hasChanges || saving}
-          icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          variant={hasChanges ? 'primary' : 'secondary'}
-          size="lg"
-          className={clsx(
-            'w-full shadow-2xl landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
-            saved && '!bg-green-500 !text-white hover:!bg-green-600'
-          )}
-        >
-          {saving
-            ? t('common.saving')
-            : saved
-              ? t('settings.settingsSaved')
-              : t('settings.saveSettings')
-          }
-        </Button>
+        <div className="max-w-[1600px] mx-auto">
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            variant={hasChanges ? 'primary' : 'secondary'}
+            size="lg"
+            className={clsx(
+              'w-full shadow-2xl landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
+              saved && '!bg-green-500 !text-white hover:!bg-green-600'
+            )}
+          >
+            {saving
+              ? t('common.saving')
+              : saved
+                ? t('settings.settingsSaved')
+                : t('settings.saveSettings')
+            }
+          </Button>
+        </div>
       </div>
 
       {/* Visual separator before danger zone */}
