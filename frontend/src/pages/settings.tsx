@@ -204,7 +204,7 @@ const SettingsPage: NextPageWithLayout = () => {
   }
 
   return (
-    <div className="pb-24 landscape:pb-20">
+    <div>
       <PageHeader
         title={t('settings.title')}
         description={t('settings.pageContext')}
@@ -300,33 +300,31 @@ const SettingsPage: NextPageWithLayout = () => {
         </div>
       )}
 
-      {/* Fixed Save Button — above bottom nav on mobile, bottom of viewport on desktop */}
+      {/* Sticky Save Button — stays at bottom of scroll area, respects sidebar naturally */}
       <div className={clsx(
-        'fixed left-0 right-0 z-30 px-4 md:px-8 lg:px-16 xl:px-20 py-3 bg-background/80 backdrop-blur-md border-t border-theme-border transition-all duration-300',
-        'bottom-[calc(4rem+var(--sai-bottom))] lg:bottom-0 lg:pb-safe',
+        'sticky bottom-0 z-30 -mx-4 md:-mx-8 lg:-mx-16 xl:-mx-20 px-4 md:px-8 lg:px-16 xl:px-20 py-3 bg-background/80 backdrop-blur-md border-t border-theme-border transition-all duration-300',
+        'pb-[calc(4rem+var(--sai-bottom))] lg:pb-3',
         'px-safe-landscape',
         hasChanges || saving ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
       )}>
-        <div className="max-w-[1600px] mx-auto">
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-            icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            variant={hasChanges ? 'primary' : 'secondary'}
-            size="lg"
-            className={clsx(
-              'w-full shadow-2xl landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
-              saved && '!bg-green-500 !text-white hover:!bg-green-600'
-            )}
-          >
-            {saving
-              ? t('common.saving')
-              : saved
-                ? t('settings.settingsSaved')
-                : t('settings.saveSettings')
-            }
-          </Button>
-        </div>
+        <Button
+          onClick={handleSave}
+          disabled={!hasChanges || saving}
+          icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+          variant={hasChanges ? 'primary' : 'secondary'}
+          size="lg"
+          className={clsx(
+            'w-full shadow-2xl landscape:py-2.5 landscape:text-base disabled:opacity-50 disabled:cursor-not-allowed transition-all',
+            saved && '!bg-green-500 !text-white hover:!bg-green-600'
+          )}
+        >
+          {saving
+            ? t('common.saving')
+            : saved
+              ? t('settings.settingsSaved')
+              : t('settings.saveSettings')
+          }
+        </Button>
       </div>
 
       {/* Visual separator before danger zone */}
