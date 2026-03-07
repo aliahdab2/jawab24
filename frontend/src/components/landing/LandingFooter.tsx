@@ -95,17 +95,16 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
         </div>
 
         <div className="pt-4 sm:pt-6 border-t border-white/10 pb-safe">
-          <div className="flex flex-row flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center" dir="ltr">
-            <span className="text-surface-500 text-xs font-medium">{t('landing.footer.operatedBy' as TranslationKey)}</span>
-            <span className="text-surface-500 text-xs">·</span>
-            <span className="text-surface-400 text-xs font-medium">{t('landing.footer.operatorName' as TranslationKey)}</span>
-            <span className="text-surface-500 text-xs">·</span>
-            <span className="text-surface-500 text-xs">{t('landing.footer.orgNumber' as TranslationKey)}</span>
-            <span className="text-surface-500 text-xs">·</span>
-            <span className="text-surface-500 text-xs">{t('landing.footer.businessInfo' as TranslationKey)}</span>
-            <span className="text-surface-500 text-xs">·</span>
-            <span className="text-surface-500 text-xs">© {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}</span>
-          </div>
+          <p className="text-center text-[10px] sm:text-xs leading-relaxed text-surface-500" dir="ltr">
+            {t('landing.footer.operatedBy' as TranslationKey)}{' '}
+            <span className="text-surface-400 font-medium">{t('landing.footer.operatorName' as TranslationKey)}</span>
+            {' · '}{t('landing.footer.orgNumber' as TranslationKey)}
+            {' · '}{t('landing.footer.businessInfo' as TranslationKey)}
+            <br className="sm:hidden" />
+            <span className="hidden sm:inline">{' · '}</span>
+            <span className="sm:hidden">{' '}</span>
+            © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
+          </p>
         </div>
       </div>
     </footer>
