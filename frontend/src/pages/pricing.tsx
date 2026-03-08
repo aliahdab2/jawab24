@@ -461,7 +461,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         <meta property="og:description" content={t('pricing.ogDescription')} />
         <meta property="og:url" content={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/pricing' : '/pricing')} />
       </Head>
-        <div className="lg:-mt-4">
+        <div>
 
         {/* Usage Summary if subscribed - Inline */}
         {usage?.subscription?.plan && (
