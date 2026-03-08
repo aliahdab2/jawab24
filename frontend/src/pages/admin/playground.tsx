@@ -654,7 +654,7 @@ export default function AdminPlaygroundPage() {
                                     <MessageSquare className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />
                                     <span className="text-sm text-foreground/70 truncate flex-1">
                                         {conversationHistory.length > 0
-                                            ? t('admin.playground.historyCount_other', { count: conversationHistory.length })
+                                            ? t('admin.playground.historyCount', { count: conversationHistory.length })
                                             : t('admin.playground.conversationHistoryHint')
                                         }
                                     </span>
@@ -1227,3 +1227,5 @@ export default function AdminPlaygroundPage() {
         </AdminLayout>
     );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

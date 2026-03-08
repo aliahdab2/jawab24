@@ -54,6 +54,24 @@ vi.mock('next/router', () => ({
   }),
 }));
 
+// Mock next-intl (used by useTranslation compatibility shim)
+vi.mock('next-intl', () => ({
+  useTranslations: () => {
+    const t = (key: string, params?: Record<string, unknown>) => {
+      if (!params) return key;
+      return Object.entries(params).reduce(
+        (str, [k, v]) => str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)),
+        key,
+      );
+    };
+    t.has = () => true;
+    t.raw = (key: string) => key;
+    return t;
+  },
+  useLocale: () => 'en',
+  NextIntlClientProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 // Mock window.matchMedia for responsive tests
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

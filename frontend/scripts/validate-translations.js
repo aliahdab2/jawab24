@@ -47,12 +47,14 @@ function isLikelyBrandOrTechnical(value) {
   for (const term of BRAND_TERMS) {
     cleaned = cleaned.split(term).join('');
   }
-  // Remove URLs, emails, numbers, punctuation, whitespace, placeholders
+  // Remove URLs, emails, numbers, punctuation, whitespace, placeholders, ICU syntax
   cleaned = cleaned
     .replace(/https?:\/\/\S+/g, '')           // URLs
     .replace(/\S+@\S+\.\S+/g, '')             // emails
-    .replace(/\{[^}]+\}/g, '')                 // {placeholders}
+    .replace(/\{[^}]+\}/g, '')                 // {placeholders} and ICU {count, plural, ...}
     .replace(/\{\{[^}]+\}\}/g, '')             // {{placeholders}}
+    .replace(/\b(plural|select|one|two|few|many|other|zero|count|number)\b/g, '') // ICU keywords
+    .replace(/#/g, '')                         // ICU # (number placeholder)
     .replace(/[0-9.,/:;!?@#$%^&*()_+=\-\[\]{}|\\<>"'`~\n\r\t ]+/g, '') // numbers + punctuation + whitespace
     .replace(/[\u2705\u23F0\u26A0\uFE0F\u{1F514}\u{1F4AC}\u{1F4B3}\u{1F50C}\u{1F389}\u{1F60E}]/gu, ''); // emojis
 

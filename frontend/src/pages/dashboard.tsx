@@ -933,3 +933,5 @@ DashboardPage.getLayout = (page: ReactElement) => (
 );
 
 export default DashboardPage;
+
+export { getStaticProps } from '@/i18n/getMessages';

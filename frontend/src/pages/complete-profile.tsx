@@ -107,11 +107,8 @@ export default function CompleteProfilePage() {
     }
   };
 
-  // Don't render until mounted (prevents hydration mismatch)
-  if (!mounted) return null;
-
   // Loading state while checking user status
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
       <div className="flex-1 overflow-y-auto bg-background px-4 py-8">
         <div className="bg-card rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto animate-pulse">
@@ -329,3 +326,5 @@ export default function CompleteProfilePage() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

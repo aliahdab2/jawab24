@@ -12,5 +12,5 @@ export function formatConnectedDate(
   const days = Math.floor(diffMs / 86400000);
   if (days < 1) return t('pages.connectedToday' as TranslationKey);
   if (days === 1) return t('pages.connectedDayAgo' as TranslationKey);
-  return t('pages.connectedAgo' as TranslationKey).replace('{count}', String(days));
+  return t('pages.connectedAgo' as TranslationKey, { count: days });
 }

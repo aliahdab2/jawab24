@@ -584,3 +584,5 @@ RulesPage.getLayout = (page: ReactElement) => (
 );
 
 export default RulesPage;
+
+export { getStaticProps } from '@/i18n/getMessages';

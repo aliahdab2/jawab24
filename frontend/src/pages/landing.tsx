@@ -18,12 +18,11 @@ import {
 
 export default function LandingPage() {
   const { t, language, setLanguage } = useTranslation();
-  const { isAuthenticated } = useAuthStore();
+  // SSR renders with isAuthenticated=false (shows login button).
+  // After hydration, swaps to dashboard button if authenticated.
   const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
+  const isAuthenticated = mounted ? useAuthStore.getState().isAuthenticated : false;
 
   const isRTL = language === 'ar';
   const dir = isRTL ? 'rtl' : 'ltr';
@@ -43,10 +42,6 @@ export default function LandingPage() {
     { value: '24/7', label: t('landing.stats.available') },
     { value: '<1s', label: t('landing.stats.speed') },
   ];
-
-  if (!mounted) {
-    return null;
-  }
 
   return (
     <div dir={dir} className="flex-1 overflow-y-auto overflow-x-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200 relative">
@@ -159,3 +154,5 @@ export default function LandingPage() {
     </div>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

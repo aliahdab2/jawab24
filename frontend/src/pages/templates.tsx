@@ -264,3 +264,5 @@ TemplatesPage.getLayout = (page: ReactElement) => (
 );
 
 export default TemplatesPage;
+
+export { getStaticProps } from '@/i18n/getMessages';

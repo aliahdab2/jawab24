@@ -249,3 +249,5 @@ export default function AuthCallback() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

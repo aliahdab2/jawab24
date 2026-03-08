@@ -79,11 +79,9 @@ export default function LoginPage() {
     preInitFacebookSDK();
   }, []);
 
-  if (!mounted) return null;
-
   // Show dashboard skeleton while processing auth (after Facebook returns)
   // This gives a preview of the dashboard they're about to see
-  if (isProcessing) {
+  if (mounted && isProcessing) {
     return <AppSkeleton variant="dashboard" />;
   }
 
@@ -564,3 +562,5 @@ export default function LoginPage() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

@@ -171,7 +171,7 @@ function PlanCard({
         )}
         {!isFree && (
           <p className="text-xs text-muted-foreground mt-1">
-            {t('pricing.sarEquivalent' as TranslationKey).replace('{amount}', sarMonthly.toLocaleString())}
+            {t('pricing.sarEquivalent' as TranslationKey, { amount: sarMonthly.toLocaleString() })}
           </p>
         )}
         {/* Trial badge — inside the card, visible on all breakpoints */}
@@ -709,7 +709,10 @@ export default PricingPage;
  * ISR: Fetch plans server-side at build time, revalidate hourly.
  * Database is the single source of truth — no code changes needed to update prices.
  */
-export const getStaticProps: GetStaticProps<PricingPageProps> = async () => {
+export const getStaticProps: GetStaticProps<PricingPageProps> = async (ctx) => {
+  const { getI18nProps } = await import('@/i18n/getMessages');
+  const i18nProps = await getI18nProps(ctx);
+
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
     const res = await fetch(`${apiUrl}/plans`, { signal: AbortSignal.timeout(5000) });
@@ -718,14 +721,14 @@ export const getStaticProps: GetStaticProps<PricingPageProps> = async () => {
     const plans: Plan[] = json.data ?? [];
 
     return {
-      props: { plans },
+      props: { plans, ...i18nProps },
       // ISR: revalidate every hour (omitted for mobile static export which doesn't support it)
       ...(process.env.IS_MOBILE_BUILD !== 'true' ? { revalidate: 3600 } : {}),
     };
   } catch {
     // API unreachable at build time — use fallback plans, retry sooner
     return {
-      props: { plans: FALLBACK_PLANS },
+      props: { plans: FALLBACK_PLANS, ...i18nProps },
       ...(process.env.IS_MOBILE_BUILD !== 'true' ? { revalidate: 60 } : {}),
     };
   }

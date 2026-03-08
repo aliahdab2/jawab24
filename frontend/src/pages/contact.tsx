@@ -52,3 +52,5 @@ export default function ContactPage() {
     />
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

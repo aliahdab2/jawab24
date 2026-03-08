@@ -86,3 +86,5 @@ export default function Custom500() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

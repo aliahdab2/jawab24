@@ -344,3 +344,5 @@ SettingsPage.getLayout = (page: ReactElement) => (
 );
 
 export default SettingsPage;
+
+export { getStaticProps } from '@/i18n/getMessages';

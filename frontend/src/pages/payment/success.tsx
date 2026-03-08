@@ -90,3 +90,5 @@ export default function PaymentSuccessPage() {
   );
 }
 
+
+export { getStaticProps } from '@/i18n/getMessages';

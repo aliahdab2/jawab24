@@ -413,3 +413,5 @@ export default function ShopifyOnboarding() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

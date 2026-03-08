@@ -109,3 +109,5 @@ export default function Custom404() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

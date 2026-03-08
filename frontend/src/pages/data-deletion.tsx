@@ -160,3 +160,5 @@ export default function DataDeletion() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

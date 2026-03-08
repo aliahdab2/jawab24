@@ -26,29 +26,29 @@ describe('Internationalization (i18n)', () => {
     });
 
     it('Parameterized strings should have matching placeholders', () => {
-        const placeholderRegex = /\{([^}]+)\}/g;
+        // ICU MessageFormat uses {var, plural, ...} — skip these and only check simple {var} placeholders
+        const isICUPlural = (value: string) => /\{[^}]+,\s*plural\s*,/.test(value);
 
-        // Arabic _one and _two plural forms may omit {count} because the quantity
-        // is grammatically embedded in the word (e.g. "قاعدة واحدة" = one rule,
-        // "قاعدتين" = two rules). These forms never display a number.
-        const isPluralFormWithImplicitCount = (key: string) =>
-            key.endsWith('_one') || key.endsWith('_two');
+        // Extract simple placeholders like {name}, {amount} — not ICU syntax
+        const getSimplePlaceholders = (value: string) => {
+            // Remove ICU plural blocks first (they have nested braces)
+            if (isICUPlural(value)) return [];
+            const matches = [...value.matchAll(/\{([a-zA-Z_]+)\}/g)].map(m => m[1]);
+            return matches.sort();
+        };
 
         Object.entries(en).forEach(([key, enValue]) => {
             const arValue = (ar as Record<string, string>)[key];
             if (!arValue) return;
 
-            const enPlaceholders = [...enValue.matchAll(placeholderRegex)].map(m => m[1]).sort();
-            const arPlaceholders = [...arValue.matchAll(placeholderRegex)].map(m => m[1]).sort();
+            // Skip ICU plural keys — their structure differs between languages by design
+            // (Arabic has 6 plural forms, English has 2, and some Arabic forms embed the count in the word)
+            if (isICUPlural(enValue) || isICUPlural(arValue)) return;
 
-            if (isPluralFormWithImplicitCount(key)) {
-                // Arabic may omit {count} but must have all other placeholders
-                const enWithoutCount = enPlaceholders.filter(p => p !== 'count');
-                const arWithoutCount = arPlaceholders.filter(p => p !== 'count');
-                expect(arWithoutCount, `Non-count placeholder mismatch for plural key "${key}". \nEnglish: "${enValue}" \nArabic: "${arValue}"`).toEqual(enWithoutCount);
-            } else {
-                expect(arPlaceholders, `Placeholder mismatch for key "${key}". \nEnglish: "${enValue}" \nArabic: "${arValue}"`).toEqual(enPlaceholders);
-            }
+            const enPlaceholders = getSimplePlaceholders(enValue);
+            const arPlaceholders = getSimplePlaceholders(arValue);
+
+            expect(arPlaceholders, `Placeholder mismatch for key "${key}". \nEnglish: "${enValue}" \nArabic: "${arValue}"`).toEqual(enPlaceholders);
         });
     });
 });

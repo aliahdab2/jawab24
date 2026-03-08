@@ -509,10 +509,8 @@ const MessagesPage: NextPageWithLayout = () => {
       {conversations.length > 0 && conversations.length !== allMessages.length && (
         <p className="text-xs text-muted-foreground mb-3 -mt-2">
           {conversations.length === 1
-            ? t('messages.oneConversation' as TranslationKey).replace('{msgCount}', String(allMessages.length))
-            : t('messages.conversationCount' as TranslationKey)
-                .replace('{count}', String(conversations.length))
-                .replace('{msgCount}', String(allMessages.length))
+            ? t('messages.oneConversation' as TranslationKey, { msgCount: allMessages.length })
+            : t('messages.conversationCount' as TranslationKey, { count: conversations.length, msgCount: allMessages.length })
           }
         </p>
       )}
@@ -607,3 +605,5 @@ MessagesPage.getLayout = (page: ReactElement) => (
 );
 
 export default MessagesPage;
+
+export { getStaticProps } from '@/i18n/getMessages';

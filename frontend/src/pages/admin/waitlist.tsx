@@ -251,3 +251,5 @@ export default function AdminWaitlistPage() {
         </AdminLayout>
     );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

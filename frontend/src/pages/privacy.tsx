@@ -66,3 +66,5 @@ export default function PrivacyPolicy() {
     />
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

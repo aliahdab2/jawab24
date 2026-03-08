@@ -203,13 +203,13 @@ const PagesPage: NextPageWithLayout = () => {
     const minutes = Math.floor(diffMs / 60000);
     if (minutes < 1) return t('time.justNow' as TranslationKey);
     if (minutes === 1) return t('time.minuteAgo' as TranslationKey);
-    if (minutes < 60) return t('time.minutesAgo').replace('{count}', String(minutes));
+    if (minutes < 60) return t('time.minutesAgo' as TranslationKey, { count: minutes });
     const hours = Math.floor(minutes / 60);
     if (hours === 1) return t('time.hourAgo' as TranslationKey);
-    if (hours < 24) return t('time.hoursAgo').replace('{count}', String(hours));
+    if (hours < 24) return t('time.hoursAgo' as TranslationKey, { count: hours });
     const days = Math.floor(hours / 24);
     if (days === 1) return t('time.dayAgo' as TranslationKey);
-    return t('time.daysAgo' as TranslationKey).replace('{count}', String(days));
+    return t('time.daysAgo' as TranslationKey, { count: days });
   };
 
   const formatDate = (dateStr: string | null) => formatConnectedDate(dateStr, t);
@@ -502,3 +502,5 @@ PagesPage.getLayout = (page: ReactElement) => (
 );
 
 export default PagesPage;
+
+export { getStaticProps } from '@/i18n/getMessages';

@@ -321,3 +321,5 @@ export default function AdminCustomersPage() {
         </AdminLayout>
     );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

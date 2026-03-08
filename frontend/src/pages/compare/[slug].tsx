@@ -249,13 +249,15 @@ export const getStaticPaths: GetStaticPaths = async () => {
   return { paths, fallback: false };
 };
 
-export const getStaticProps: GetStaticProps<ComparePageProps> = async ({ params }) => {
-  const slug = params?.slug as string;
+export const getStaticProps: GetStaticProps<ComparePageProps> = async (ctx) => {
+  const { getI18nProps } = await import('@/i18n/getMessages');
+  const i18nProps = await getI18nProps(ctx);
+  const slug = ctx.params?.slug as string;
   const competitor = getCompetitor(slug);
 
   if (!competitor) {
     return { notFound: true };
   }
 
-  return { props: { competitor } };
+  return { props: { competitor, ...i18nProps } };
 };

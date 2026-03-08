@@ -155,9 +155,7 @@ export function KnowledgeBaseCustomSection({
             <p className={`text-end text-xs mt-1 ${
               section.content.length > 4500 ? 'text-amber-500' : 'text-muted-foreground'
             }`}>
-              {t('kb.charCount' as TranslationKey)
-                .replace('{count}', String(section.content.length))
-                .replace('{max}', '5000')}
+              {t('kb.charCount' as TranslationKey, { count: section.content.length, max: 5000 })}
             </p>
           )}
         </div>

@@ -45,3 +45,5 @@ export default function Home() {
   // Show skeleton while redirecting - contextual based on auth state
   return <AppSkeleton variant={isAuthenticated ? 'dashboard' : 'landing'} />;
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

@@ -407,3 +407,5 @@ export default function SallaOnboarding() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

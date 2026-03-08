@@ -62,3 +62,5 @@ export default function TermsOfService() {
     />
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

@@ -415,3 +415,5 @@ export default function WhatIsJawab24() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

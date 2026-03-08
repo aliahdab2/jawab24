@@ -551,3 +551,5 @@ IntegrationsPage.getLayout = (page: ReactElement) => (
 );
 
 export default IntegrationsPage;
+
+export { getStaticProps } from '@/i18n/getMessages';

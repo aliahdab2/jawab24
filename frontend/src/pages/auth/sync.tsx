@@ -74,3 +74,5 @@ export default function AuthSync() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

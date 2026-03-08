@@ -348,3 +348,5 @@ export default function CheckoutPage() {
     </>
   );
 }
+
+export { getStaticProps } from '@/i18n/getMessages';

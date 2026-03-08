@@ -4,6 +4,7 @@ import type { NextPage } from 'next';
 import type { ReactElement, ReactNode } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import { NextIntlClientProvider } from 'next-intl';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -362,11 +363,20 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   const arPagePath = cleanPath === '/' ? '' : cleanPath;
   const enPagePath = '/en' + (cleanPath === '/' ? '' : cleanPath);
 
+  // Effective locale: router > Zustand store > default 'ar'
+  // Mobile builds have no router locale, so fall back to store
+  const effectiveLocale = locale || useUIStore.getState().language || 'ar';
+
   // Always wrap in QueryClientProvider so hooks in child components can access it.
   // The hydration guard is inside the provider to avoid the "No QueryClient set" error
   // that occurs during Next.js prerendering when useQueryClient() is called outside a provider.
   return (
     <QueryClientProvider client={queryClient}>
+      <NextIntlClientProvider
+        locale={effectiveLocale}
+        messages={pageProps.messages || {}}
+        timeZone="Asia/Riyadh"
+      >
       {!hasHydrated ? (
         <AppSkeleton />
       ) : (
@@ -421,6 +431,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           </AppShell>
         </>
       )}
+      </NextIntlClientProvider>
     </QueryClientProvider>
   );
 }

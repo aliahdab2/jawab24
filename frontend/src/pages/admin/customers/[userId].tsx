@@ -465,3 +465,5 @@ export default function AdminCustomerDetailPage() {
         </AdminLayout>
     );
 }
+
+export { getServerSideProps } from '@/i18n/getMessages';

@@ -564,3 +564,5 @@ CommentsPage.getLayout = (page: ReactElement) => (
 );
 
 export default CommentsPage;
+
+export { getStaticProps } from '@/i18n/getMessages';
