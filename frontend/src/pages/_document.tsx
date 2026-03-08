@@ -1,9 +1,13 @@
-import { Html, Head, Main, NextScript } from 'next/document';
+import Document, { Html, Head, Main, NextScript, type DocumentContext } from 'next/document';
 
-export default function Document() {
+interface DocProps {
+  locale: string;
+}
+
+export default function MyDocument({ locale }: DocProps) {
   return (
-    // Default to LTR, client-side will update based on user preference
-    <Html lang="ar" dir="rtl" suppressHydrationWarning>
+    // Dynamic lang/dir based on Next.js i18n locale (SSR-correct for Google)
+    <Html lang={locale || 'ar'} dir={locale === 'en' ? 'ltr' : 'rtl'} suppressHydrationWarning>
       <Head>
         {/* Early detection of Capacitor native platform - runs BEFORE React hydrates
             Industry standard: Check Capacitor.isNativePlatform() first (most reliable) */}
@@ -123,10 +127,13 @@ export default function Document() {
                 "priceCurrency": "USD",
                 "description": "Start free trial - no credit card required"
               },
-              "description": "AI-powered auto-reply platform for Facebook and Instagram business pages. Automatically respond to comments and messages in Arabic and English 24/7.",
+              "description": "AI-powered auto-reply platform for Facebook and Instagram business pages. Integrates with Shopify and Salla e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7.",
               "featureList": [
                 "AI-powered automatic replies",
                 "Facebook & Instagram integration",
+                "Shopify store integration",
+                "Salla store integration",
+                "E-commerce product catalog sync",
                 "Arabic & English language support",
                 "24/7 automated responses",
                 "Custom reply templates",
@@ -156,3 +163,8 @@ export default function Document() {
     </Html>
   );
 }
+
+MyDocument.getInitialProps = async (ctx: DocumentContext) => {
+  const initialProps = await Document.getInitialProps(ctx);
+  return { ...initialProps, locale: ctx.locale || 'ar' };
+};

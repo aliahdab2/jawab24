@@ -1,4 +1,7 @@
 {
+  "meta.description": "Jawab24 - Smart AI auto-replies for Facebook & Instagram. Integrates with Shopify & Salla stores. Instant, accurate responses 24/7.",
+  "meta.ogDescription": "Jawab24 - Smart AI auto-replies for Facebook & Instagram. Integrates with Shopify & Salla e-commerce stores. Save time with instant responses 24/7.",
+  "meta.twitterDescription": "Smart AI auto-replies for Facebook & Instagram with Shopify & Salla integration. Automate your customer responses 24/7.",
   "common.appName": "Jawab24",
   "common.loading": "Loading...",
   "common.save": "Save",
@@ -941,7 +944,7 @@
   "landing.nav.start": "Start",
   "landing.seoTitle": "Jawab24 جواب | AI Auto-Reply for Facebook & Instagram",
   "landing.seoDescription": "Jawab24 جواب - Smart AI auto-replies for Facebook & Instagram Pages. Save time with instant, accurate responses 24/7.",
-  "landing.seoKeywords": "jawab, jawab24, جواب, جواب24, auto reply, smart replies, Facebook bot, Instagram bot, AI chatbot",
+  "landing.seoKeywords": "jawab, jawab24, جواب, جواب24, auto reply, smart replies, Facebook bot, Instagram bot, AI chatbot, Shopify auto reply, Salla auto reply, e-commerce chatbot",
   "landing.hero.badge": "Advanced AI Auto-Response",
   "landing.hero.title1": "Turn Your Page Into a",
   "landing.hero.title2": "Smart 24/7 Sales Machine",
