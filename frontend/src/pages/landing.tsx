@@ -49,7 +49,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div dir={dir} className="flex-1 overflow-y-auto overflow-x-hidden bg-card relative">
+    <div dir={dir} className="flex-1 overflow-y-auto overflow-x-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200 relative">
       <Head>
         <title>{BRAND_ASSETS.meta.appTitle}</title>
         <meta name="description" content={t('landing.seoDescription')} />
