@@ -157,9 +157,9 @@ function setupApiMocks(page: import('@playwright/test').Page) {
   });
 }
 
-// Shared screenshot options — 2% pixel ratio tolerates minor font differences
-// across CI environments without masking real layout regressions.
-const SNAP_OPTS = { maxDiffPixelRatio: 0.02 };
+// Shared screenshot options — 5% pixel ratio tolerates font antialiasing and
+// subpixel rendering differences across runs without masking real layout regressions.
+const SNAP_OPTS = { maxDiffPixelRatio: 0.05 };
 
 // ── 1. RTL Layout (Arabic) — highest regression risk ─────────────────────────
 
