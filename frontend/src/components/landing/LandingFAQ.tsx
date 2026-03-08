@@ -11,6 +11,7 @@ export function LandingFAQ() {
     { question: t('landing.faq.q2'), answer: t('landing.faq.a2') },
     { question: t('landing.faq.q3'), answer: t('landing.faq.a3') },
     { question: t('landing.faq.q4'), answer: t('landing.faq.a4') },
+    { question: t('landing.faq.q5'), answer: t('landing.faq.a5') },
   ];
 
   return (
