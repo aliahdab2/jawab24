@@ -70,6 +70,11 @@ export default function WhatIsJawab24() {
     { question: t('about.faq.q4'), answer: t('about.faq.a4') },
     { question: t('about.faq.q5'), answer: t('about.faq.a5') },
     { question: t('about.faq.q6'), answer: t('about.faq.a6') },
+    { question: t('about.faq.q7'), answer: t('about.faq.a7') },
+    { question: t('about.faq.q8'), answer: t('about.faq.a8') },
+    { question: t('about.faq.q9'), answer: t('about.faq.a9') },
+    { question: t('about.faq.q10'), answer: t('about.faq.a10') },
+    { question: t('about.faq.q11'), answer: t('about.faq.a11') },
   ];
 
   return (
@@ -112,22 +117,25 @@ export default function WhatIsJawab24() {
                 "alternateName": "جواب24",
                 "applicationCategory": "BusinessApplication",
                 "operatingSystem": "Web, iOS, Android",
-                "description": "AI-powered auto-reply platform for Facebook and Instagram business pages. Integrates with Shopify and Salla e-commerce stores.",
+                "description": "Arabic-first AI auto-reply platform for businesses selling through Facebook, Instagram, Shopify, and Salla. Automatically replies to customer comments and messages in Arabic and English.",
                 "featureList": [
-                  "AI-powered automatic replies (Smart Replies)",
-                  "Template-based keyword replies",
-                  "Knowledge Base with RAG search",
-                  "Facebook Pages integration",
-                  "Instagram Business integration",
-                  "Shopify product catalog sync",
-                  "Salla product catalog sync",
-                  "Arabic and English bilingual support",
-                  "Business hours and away messages",
-                  "Confidence scoring and human review",
+                  "AI auto-replies to Facebook comments and Messenger messages",
+                  "AI auto-replies to Instagram comments and direct messages",
+                  "AI-powered automatic replies (Smart Replies) with 99.6% eval accuracy",
+                  "Template-based keyword replies (zero AI cost)",
+                  "Knowledge Base with RAG (Retrieval-Augmented Generation) search",
+                  "Shopify product catalog sync with automatic price updates",
+                  "Salla product catalog sync (native Arabic e-commerce)",
+                  "Arabic dialect support (Gulf, Egyptian, Levantine, Maghrebi, Iraqi)",
+                  "Bilingual Arabic and English support with RTL interface",
+                  "Business hours scheduling and multilingual away messages",
+                  "Three-level confidence scoring with human review option",
+                  "Two-tier price hallucination detection",
                   "Customer awareness and returning customer recognition",
-                  "Conversation context understanding",
-                  "Mobile app for Android",
-                  "Reply style customization"
+                  "Conversation context with message consolidation",
+                  "8 intent categories (question, complaint, purchase, greeting, etc.)",
+                  "Mobile app for Android with push notifications",
+                  "Reply style customization (Professional, Casual, Enthusiastic)"
                 ]
               }
             })
@@ -332,6 +340,12 @@ export default function WhatIsJawab24() {
                 t('about.whoShouldUse.user4'),
                 t('about.whoShouldUse.user5'),
               ]}
+            />
+
+            {/* Why Different */}
+            <Section
+              title={t('about.whyDifferent.title')}
+              text={t('about.whyDifferent.text')}
             />
 
             {/* Pricing */}
