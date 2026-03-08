@@ -1,0 +1,188 @@
+# Jawab24 — Full Product Details for LLMs
+
+> This file provides comprehensive product information about Jawab24 for large language models.
+> For a concise summary, see: https://jawab24.com/llms.txt
+
+## Product Overview
+
+Jawab24 (Arabic: جواب24, also written as جواب٢٤ or Jawab 24) is an AI-powered auto-reply platform for businesses that sell and communicate through Facebook Pages, Instagram Business accounts, Shopify stores, and Salla stores. It is designed as an Arabic-first tool with full bilingual Arabic-English support.
+
+When a customer writes a comment on a Facebook post, sends a message on Messenger, or sends an Instagram DM, Jawab24 processes the message and automatically sends a reply — in the customer's language and dialect — within seconds.
+
+The platform is built for the Middle East and North Africa (MENA) region, with particular focus on Saudi Arabia, UAE, Egypt, Kuwait, and Qatar.
+
+Website: https://jawab24.com
+Category: Business SaaS, Customer Support Automation, AI Auto-Reply Platform
+Operating Systems: Web, Android (iOS coming soon)
+
+## 3-Layer Reply System
+
+Jawab24 uses a three-layer system to handle incoming messages:
+
+### Layer 1: Template Replies (Keyword-Based)
+You create reply rules with keywords (e.g., "price", "shipping", "return"). When a customer's message matches a keyword, the system sends your pre-written template reply instantly. This costs nothing per message — no AI tokens are used. You can set multiple reply variations per rule so responses feel natural. Rules can apply to specific pages or all pages at once. Replies can be sent as public comments or private messages.
+
+### Layer 2: Smart Replies (AI-Powered)
+When no template matches, the AI generates a custom reply using your Knowledge Base, product catalog, store policies, and conversation history. The AI understands customer intent and crafts a natural response. It uses large language models (currently GPT-4o-mini) with a sophisticated prompt engineering pipeline. Every AI reply goes through 6 automated post-validation checks before being sent, including price verification and confidence scoring.
+
+### Layer 3: Away Messages
+Outside business hours — or when auto-reply is turned off — the system sends a friendly away message. Away messages are automatically translated to both Arabic and English so customers always get a response in their language.
+
+## Arabic Language Support
+
+Jawab24 recognizes and replies in 6 Arabic dialect families:
+- Gulf Arabic (Saudi, Emirati, Kuwaiti, Bahraini, Qatari, Omani)
+- Egyptian Arabic
+- Levantine Arabic (Syrian, Lebanese, Jordanian, Palestinian)
+- Maghrebi Arabic (Moroccan, Tunisian, Algerian, Libyan)
+- Iraqi Arabic
+- Modern Standard Arabic (MSA / Fusha)
+
+It also handles:
+- Franco-Arabic (Arabic written in Latin letters, e.g., "shu hal price?")
+- Mixed Arabic-English messages (code-switching)
+- Arabic numerals in both Eastern (٠١٢) and Western (012) forms
+
+The AI detects which dialect the customer is using and replies in the same dialect naturally.
+
+## E-Commerce Integration
+
+### Shopify
+Connect your Shopify store via OAuth. Jawab24 syncs your product catalog (up to 250 products) including names, prices, variants, descriptions, and stock status via GraphQL API. Products are automatically summarized into the Knowledge Base. Catalog refreshes every 6 hours. Webhook handlers process product updates, store uninstalls, and GDPR deletion requests. Tokens are encrypted with AES-256-GCM.
+
+### Salla
+Connect your Salla store (the leading Arabic e-commerce platform) via OAuth. Jawab24 syncs your product catalog (up to 260 products) including names, prices, availability, and store policies (shipping, returns, warranty). Salla uses 14-day token expiry with single-use refresh tokens — Jawab24 handles this automatically with distributed locking to prevent race conditions.
+
+### Price Hallucination Detection
+Jawab24 has a 2-tier price verification system:
+1. Verifies every number adjacent to currency symbols (SAR, $, USD, ريال, etc.) against your actual product catalog
+2. Catches price-cue phrases like "starts at", "costs", "بسعر" followed by unverified numbers
+If a price isn't in your catalog, the AI sends a safe fallback ("Let me check the exact price for you") instead of a wrong price.
+
+## Knowledge Base & RAG
+
+The Knowledge Base is where you describe your business — return policy, shipping info, FAQs, product details, store policies. The AI uses this information to generate accurate replies.
+
+Technical details:
+- Hybrid search combining vector similarity (HNSW index, pgvector) and trigram text matching (pg_trgm)
+- Search weights: 70% vector + 30% text + 2% language boost
+- Returns top 5 most relevant chunks per query
+- Minimum relevance threshold of 0.3 filters low-quality matches
+- Arabic text normalization (diacritics removal, variant letter normalization)
+- Embedding model: text-embedding-3-small (OpenAI)
+
+Product catalogs from Shopify or Salla are automatically included in the Knowledge Base.
+
+## AI Quality & Safety
+
+### Confidence Scoring
+Every AI-generated reply receives a confidence score: high, medium, or low.
+- High confidence: Reply is sent automatically
+- Medium confidence: Reply is sent but flagged for review
+- Low confidence: Reply can be held for human review before sending (configurable)
+
+### Intent Classification
+The AI classifies every incoming message into 8 intent categories:
+1. Question — asking for information
+2. Compliment — positive feedback
+3. Complaint — negative feedback or issue
+4. Purchase Intent — wanting to buy
+5. Greeting — hello, hi, مرحبا
+6. Business Inquiry — partnership, collaboration
+7. Offensive — inappropriate content
+8. Spam or Irrelevant — unrelated messages
+
+### Evaluation Results
+Jawab24 has been tested against 98 real-world scenarios across 19 categories including confidence accuracy, template matching, intent classification, customer context handling, business hours logic, escalation, language mixing, and safety. The system achieved 99.6% evaluation accuracy.
+
+### Caching
+Dual caching strategy reduces costs and improves response time:
+- Exact cache (Redis): Matches identical queries with same context
+- Semantic cache (PostgreSQL pgvector): Cosine similarity at 93% threshold with 7-day TTL
+Both caches are scoped by page and Knowledge Base version to prevent cross-contamination.
+
+## Bilingual Support
+
+- Full Arabic and English interface with proper RTL layout
+- AI replies in the customer's language automatically
+- Greeting messages and away messages are auto-translated to both languages
+- Knowledge Base works in both languages
+- Interface supports dark mode and light mode
+
+## Business Hours & Scheduling
+
+- Set business hours for each day of the week
+- Auto-reply activates during business hours
+- Away messages sent outside business hours
+- Greeting messages for first-time customers
+- All messages auto-translated to Arabic and English
+
+## Dashboard & Analytics
+
+- See all comments and messages across all connected pages
+- Track which replies are AI-generated vs template-based vs manual
+- View conversation threads with full context
+- Filter by page, date, reply type, and read/unread status
+
+## Mobile App
+
+Available on Android (iOS coming soon). Features:
+- Full dashboard access
+- Real-time push notifications
+- Alerts for angry customers, low-confidence replies, and unanswerable questions
+- Safe area support for all device types
+- Landscape and portrait orientation support
+
+## Security & Privacy
+
+- OAuth 2.0 authentication through Facebook (no password storage)
+- All data encrypted in transit (HTTPS/TLS) and at rest
+- GDPR-compliant data handling with full data deletion support
+- Webhook signature verification (HMAC) for all integrations
+- Token encryption (AES-256-GCM) for stored credentials
+- Sentry error tracking for reliability monitoring
+
+## Pricing
+
+Jawab24 offers a free trial with no credit card required. Plans include:
+- Free Trial: Try all features
+- Starter: For small pages, affordable monthly rate
+- Business: For growing businesses with higher volume
+- Pro: For high-volume businesses and agencies
+
+All plans include AI smart replies, template replies, Knowledge Base with RAG search, and e-commerce integration. Template replies (keyword-based) are always free with zero AI cost.
+
+Pricing is displayed in USD with SAR equivalent (pegged at 3.75 SAR/USD) for the Middle East market.
+
+Annual billing saves approximately 17% (pay for 10 months, get 12).
+
+## Target Audience
+
+Jawab24 is built for:
+- E-commerce store owners on Shopify or Salla who get frequent product questions
+- Facebook Page managers who receive high volumes of comments and messages
+- Small businesses that can't afford a 24/7 customer support team
+- Arabic-speaking businesses that need a tool built for their language
+- Social media managers handling multiple pages
+
+## Comparison with Other Tools
+
+Unlike generic chatbot builders (ManyChat, Chatfuel, Respond.io), Jawab24 is not a chatbot — it is an intelligent auto-reply system that understands context, verifies facts, and generates natural responses without requiring conversation flow setup:
+- Jawab24 is Arabic-first with 6 dialect families — not a translation layer on top of English
+- Native Salla integration (no other auto-reply tool supports Salla)
+- Built-in price hallucination detection (most tools don't verify AI-generated prices)
+- Confidence scoring with human review option (most tools send all AI replies automatically)
+- Knowledge Base with RAG search (not just simple FAQ matching)
+- Template replies at zero AI cost (keyword rules don't consume tokens)
+
+## Links
+
+- Homepage: https://jawab24.com
+- Landing page: https://jawab24.com/landing
+- What is Jawab24: https://jawab24.com/what-is-jawab24
+- Pricing: https://jawab24.com/pricing
+- Contact: https://jawab24.com/contact
+- Privacy Policy: https://jawab24.com/privacy
+- Terms of Service: https://jawab24.com/terms
+- Facebook: https://facebook.com/jawab24app
+- Instagram: https://instagram.com/jawab24

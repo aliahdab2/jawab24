@@ -1,0 +1,40 @@
+# Jawab24
+
+> Arabic-first AI auto-reply platform for Facebook, Instagram, Shopify, and Salla businesses.
+
+Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool built for Arabic-speaking and bilingual businesses. It automatically replies to Facebook comments, Instagram DMs, and Messenger messages in Arabic and English, 24/7.
+
+## Key Facts
+
+- Website: https://jawab24.com
+- Platforms: Facebook Pages, Instagram Business, Shopify, Salla
+- Languages: Arabic (6 dialect families) + English, full RTL interface
+- Reply system: 3-layer (Template Replies + AI Smart Replies + Away Messages)
+- AI accuracy: 99.6% across 125 real-world evaluation scenarios
+- E-commerce: Syncs product catalogs from Shopify and Salla with automatic price verification
+- Pricing: Free trial (no credit card) → Starter → Business → Pro plans
+- Mobile: Android app with push notifications (iOS coming soon)
+
+## What Makes Jawab24 Different
+
+1. Arabic-first: Understands Gulf, Egyptian, Levantine, Maghrebi, Iraqi dialects and Franco-Arabic
+2. Salla integration: Only auto-reply tool with native Salla e-commerce support
+3. Price hallucination detection: 2-tier verification ensures AI never invents prices
+4. Confidence scoring: Low-confidence replies are held for human review
+5. Knowledge Base with RAG: AI answers only from your verified business information
+6. Template replies at zero AI cost: Keyword-based rules with no per-message charges
+
+## Target Audience
+
+- E-commerce store owners on Shopify or Salla
+- Facebook Page managers with high comment/message volume
+- Small businesses needing 24/7 customer support without hiring staff
+- Arabic-speaking businesses that need tools built for their language
+- Social media managers handling multiple pages
+
+## Links
+
+- Landing page: https://jawab24.com/landing
+- What is Jawab24: https://jawab24.com/what-is-jawab24
+- Pricing: https://jawab24.com/pricing
+- Full details for LLMs: https://jawab24.com/llms-full.txt

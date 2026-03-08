@@ -11,6 +11,9 @@ Allow: /terms
 Allow: /data-deletion
 Allow: /contact
 Allow: /what-is-jawab24
+Allow: /compare/
+Allow: /llms.txt
+Allow: /llms-full.txt
 
 # Allow English locale pages
 Allow: /en
@@ -22,6 +25,7 @@ Allow: /en/terms
 Allow: /en/data-deletion
 Allow: /en/contact
 Allow: /en/what-is-jawab24
+Allow: /en/compare/
 
 # Disallow dashboard pages (require auth)
 Disallow: /dashboard
