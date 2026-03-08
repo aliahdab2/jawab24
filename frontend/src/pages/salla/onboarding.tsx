@@ -9,6 +9,7 @@ import {
   Globe,
   XCircle,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from 'sonner';
@@ -18,6 +19,8 @@ import { useAuthStore } from '@/lib/store';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 
 type TFunc = (key: TranslationKey | string, params?: Record<string, string | number>) => string;
+
+const TOTAL_STEPS = 4;
 
 export default function SallaOnboarding() {
   const router = useRouter();
@@ -32,6 +35,7 @@ export default function SallaOnboarding() {
   const [pages, setPages] = useState<Page[]>([]);
   const [pagesLoading, setPagesLoading] = useState(false);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [linkedPageName, setLinkedPageName] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
 
   useEffect(() => {
@@ -40,6 +44,7 @@ export default function SallaOnboarding() {
     }
   }, [isAuthenticated, router]);
 
+  // Fetch store info when moving past welcome
   useEffect(() => {
     async function fetchStore() {
       try {
@@ -59,10 +64,10 @@ export default function SallaOnboarding() {
         setStoreLoading(false);
       }
     }
-    if (isAuthenticated) {
+    if (isAuthenticated && step >= 1) {
       fetchStore();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, step >= 1]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRetrySync = useCallback(async () => {
     setSyncStatus('syncing');
@@ -87,7 +92,7 @@ export default function SallaOnboarding() {
   }, []);
 
   useEffect(() => {
-    if (step === 1) {
+    if (step === 2) {
       fetchPages();
     }
   }, [step, fetchPages]);
@@ -97,7 +102,9 @@ export default function SallaOnboarding() {
     setLinking(true);
     try {
       await sallaApi.linkPage(selectedPageId);
-      setStep(2);
+      const page = pages.find((p) => p.id === selectedPageId);
+      setLinkedPageName(page?.name || null);
+      setStep(3);
     } catch {
       toast.error(t('salla.pageLinkError' as TranslationKey));
     }
@@ -105,6 +112,12 @@ export default function SallaOnboarding() {
   };
 
   if (!isAuthenticated) return null;
+
+  const benefits = [
+    (t as TFunc)('salla.onboarding.welcome.benefit1'),
+    (t as TFunc)('salla.onboarding.welcome.benefit2'),
+    (t as TFunc)('salla.onboarding.welcome.benefit3'),
+  ];
 
   return (
     <>
@@ -115,7 +128,7 @@ export default function SallaOnboarding() {
         <div className="w-full max-w-lg">
           {/* Progress indicator */}
           <div className="flex gap-2 mb-8 justify-center">
-            {[0, 1, 2].map((i) => (
+            {Array.from({ length: TOTAL_STEPS }, (_, i) => (
               <div
                 key={i}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -127,8 +140,46 @@ export default function SallaOnboarding() {
 
           <div className="bg-card rounded-3xl shadow-xl border border-theme-border overflow-hidden">
             <div className="p-8">
-              {/* Step 0: Store Connected + Product Sync */}
+              {/* Step 0: Welcome / Value Prop */}
               {step === 0 && (
+                <div className="text-center space-y-6">
+                  <div className="w-16 h-16 mx-auto bg-teal-100 rounded-2xl flex items-center justify-center">
+                    <Sparkles className="w-8 h-8 text-teal-700" />
+                  </div>
+
+                  <div>
+                    <h2 className="text-2xl font-bold text-foreground mb-2">
+                      {(t as TFunc)('salla.onboarding.welcome.title')}
+                    </h2>
+                    <p className="text-muted-foreground text-sm">
+                      {(t as TFunc)('salla.onboarding.welcome.subtitle')}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 text-start">
+                    {benefits.map((benefit, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-background border border-theme-border">
+                        <CheckCircle2 className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-foreground">{benefit}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button
+                    onClick={() => setStep(1)}
+                    size="lg"
+                    className="w-full bg-teal-700 hover:bg-teal-800 text-white rounded-2xl py-4"
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <span>{(t as TFunc)('salla.onboarding.welcome.cta')}</span>
+                      <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+                    </div>
+                  </Button>
+                </div>
+              )}
+
+              {/* Step 1: Store Connected + Product Sync */}
+              {step === 1 && (
                 <div className="text-center space-y-6">
                   <div className="w-16 h-16 mx-auto bg-teal-100 rounded-2xl flex items-center justify-center">
                     <ShoppingBag className="w-8 h-8 text-teal-700" />
@@ -192,8 +243,15 @@ export default function SallaOnboarding() {
                     )}
                   </div>
 
+                  {/* Allow continue during sync */}
+                  {syncStatus === 'syncing' && !storeLoading && !storeError && (
+                    <p className="text-xs text-muted-foreground">
+                      {(t as TFunc)('salla.onboarding.syncBackground')}
+                    </p>
+                  )}
+
                   <Button
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep(2)}
                     disabled={storeLoading || storeError}
                     size="lg"
                     className="w-full bg-teal-700 hover:bg-teal-800 text-white rounded-2xl py-4"
@@ -206,8 +264,8 @@ export default function SallaOnboarding() {
                 </div>
               )}
 
-              {/* Step 1: Connect Facebook Page */}
-              {step === 1 && (
+              {/* Step 2: Connect Facebook Page */}
+              {step === 2 && (
                 <div className="space-y-6">
                   <div className="text-center">
                     <div className="w-16 h-16 mx-auto bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
@@ -263,7 +321,7 @@ export default function SallaOnboarding() {
 
                   <div className="flex gap-3">
                     <Button
-                      onClick={() => setStep(0)}
+                      onClick={() => setStep(1)}
                       variant="ghost"
                       className="flex-1 rounded-2xl"
                     >
@@ -292,8 +350,8 @@ export default function SallaOnboarding() {
                 </div>
               )}
 
-              {/* Step 2: Done */}
-              {step === 2 && (
+              {/* Step 3: Done — show accomplishments */}
+              {step === 3 && (
                 <div className="text-center space-y-6">
                   <div className="w-16 h-16 mx-auto bg-teal-100 rounded-2xl flex items-center justify-center">
                     <CheckCircle2 className="w-8 h-8 text-teal-700" />
@@ -306,6 +364,33 @@ export default function SallaOnboarding() {
                       {(t as TFunc)('salla.onboarding.doneDesc')}
                     </p>
                   </div>
+
+                  {/* Accomplishment checklist */}
+                  <div className="space-y-2 text-start">
+                    {(syncResult.synced ?? 0) > 0 && (
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
+                        <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
+                        <span className="text-sm text-foreground font-medium">
+                          {(t as TFunc)('salla.onboarding.doneCheck.products', { count: syncResult.synced || 0 })}
+                        </span>
+                      </div>
+                    )}
+                    {linkedPageName && (
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
+                        <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
+                        <span className="text-sm text-foreground font-medium">
+                          {(t as TFunc)('salla.onboarding.doneCheck.page', { name: linkedPageName })}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
+                      <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
+                      <span className="text-sm text-foreground font-medium">
+                        {(t as TFunc)('salla.onboarding.doneCheck.active')}
+                      </span>
+                    </div>
+                  </div>
+
                   <Button
                     onClick={() => router.push('/dashboard')}
                     size="lg"
