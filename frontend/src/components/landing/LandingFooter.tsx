@@ -62,11 +62,11 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
             <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
               <li><Link href="/pricing" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.pricingPlans')}</Link></li>
               <li><Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="text-surface-400 hover:text-brand-400 transition-colors">{isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.footer.startTrial')}</Link></li>
+              <li><Link href="/what-is-jawab24" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.whatIsJawab24' as TranslationKey)}</Link></li>
+              <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.contactUs' as TranslationKey)}</Link></li>
               <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.termsOfService')}</Link></li>
               <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.privacyPolicy')}</Link></li>
               <li><Link href="/data-deletion" className="text-surface-400 hover:text-brand-400 transition-colors">{t('dataDeletion.footerLink' as TranslationKey)}</Link></li>
-              <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.contactUs' as TranslationKey)}</Link></li>
-              <li><Link href="/what-is-jawab24" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.whatIsJawab24' as TranslationKey)}</Link></li>
             </ul>
           </div>
 
@@ -77,13 +77,13 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
                   <Zap className="w-3 h-3 sm:w-4 sm:h-4" />
                 </div>
-                <span className="text-xs sm:text-sm whitespace-nowrap">support@jawab24.com</span>
+                <a href="mailto:support@jawab24.com" className="text-xs sm:text-sm whitespace-nowrap hover:text-brand-400 transition-colors">support@jawab24.com</a>
               </li>
               <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
                   <Phone className="w-3 h-3 sm:w-4 sm:h-4" />
                 </div>
-                <span className="text-xs sm:text-sm whitespace-nowrap" dir="ltr">{t('landing.footer.phoneNumber' as TranslationKey)}</span>
+                <a href="tel:+46700224720" className="text-xs sm:text-sm whitespace-nowrap hover:text-brand-400 transition-colors" dir="ltr">{t('landing.footer.phoneNumber' as TranslationKey)}</a>
               </li>
               <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400">
@@ -96,6 +96,9 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
         </div>
 
         <div className="pt-4 sm:pt-6 border-t border-white/10 pb-safe">
+          <p className="text-center text-[10px] sm:text-xs leading-relaxed text-surface-400 mb-2" dir="auto">
+            {t('landing.footer.seoTagline' as TranslationKey)}
+          </p>
           <p className="text-center text-[10px] sm:text-xs leading-relaxed text-surface-500" dir="ltr">
             {t('landing.footer.operatedBy' as TranslationKey)}{' '}
             <span className="text-surface-400 font-medium">{t('landing.footer.operatorName' as TranslationKey)}</span>
