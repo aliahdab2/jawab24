@@ -223,11 +223,10 @@ test.describe('Safe Area Positioning — English', () => {
     await page.goto('/en/dashboard');
     await page.waitForSelector('h1', { timeout: 15000 });
     await page.waitForTimeout(500);
-    // Capture just the bottom portion to detect bottom-nav-position regressions
-    await expect(page).toHaveScreenshot('dashboard-en-mobile-bottom-nav.png', {
-      ...SNAP_OPTS,
-      clip: { x: 0, y: 704, width: 390, height: 140 },
-    });
+    // Use the nav element directly — page clip captured content above the nav
+    // that varies with accordion timing, causing flaky 6% diffs.
+    const nav = page.locator('.bottom-nav-position');
+    await expect(nav).toHaveScreenshot('dashboard-en-mobile-bottom-nav.png', SNAP_OPTS);
   });
 });
 
