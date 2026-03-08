@@ -66,6 +66,7 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
               <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.privacyPolicy')}</Link></li>
               <li><Link href="/data-deletion" className="text-surface-400 hover:text-brand-400 transition-colors">{t('dataDeletion.footerLink' as TranslationKey)}</Link></li>
               <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.contactUs' as TranslationKey)}</Link></li>
+              <li><Link href="/what-is-jawab24" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.whatIsJawab24' as TranslationKey)}</Link></li>
             </ul>
           </div>
 
