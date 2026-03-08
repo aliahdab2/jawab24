@@ -627,6 +627,14 @@
     @apply bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 dark:text-pink-300 hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white;
   }
 
+  .landing-platform-chip-shopify {
+    @apply bg-[#96BF47]/10 text-[#96BF47] hover:bg-[#96BF47] hover:text-white;
+  }
+
+  .landing-platform-chip-salla {
+    @apply bg-[#2DC0C8]/10 text-[#2DC0C8] hover:bg-[#2DC0C8] hover:text-white;
+  }
+
   .gradient-text {
     @apply bg-gradient-to-r from-brand-600 to-accent-500 bg-clip-text text-transparent;
     padding-bottom: 0.1em;

@@ -10,6 +10,16 @@ import {
 import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui';
 
+export function ShopifyIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 28" fill="none" className={className} aria-hidden="true">
+      <path d="M20.5 5.4c-.1-.1-.2-.2-.4-.2s-1.8-.1-1.8-.1-.8-.8-1-1c-.2-.2-.5-.1-.6-.1l-.8.3c-.1-.4-.3-.8-.6-1.2C14.6 2 13.6 1.5 12.4 1.5h-.2c-.3-.4-.7-.6-1-.6C8.3.9 7 4.3 6.6 6l-2.4.7c-.7.2-.7.2-.8.9L2 19.3l13.6 2.5 7.3-1.8c0 .1-2.3-14.2-2.4-14.6zM14.7 4.5l-1.2.4V4.5c0-.5-.1-1-.2-1.4.8.1 1.1.9 1.4 1.4zm-2.6-1.1c.1.4.2.9.2 1.5v.1l-2.6.8c.5-1.9 1.4-2.3 2.4-2.4zm-1-.7c.2 0 .3.1.5.2-.6.3-1.3.9-1.7 2.5L8.1 6c.5-1.7 1.5-3.3 3-3.3z" fill="#96BF47" />
+      <path d="M20.1 5.2c-.2 0-1.8-.1-1.8-.1s-.8-.8-1-1c-.1-.1-.1-.1-.2-.1l-1 20.5 7.3-1.8L20.1 5.2z" fill="#5E8E3E" />
+      <path d="M12.4 9.4l-.8 2.5s-.9-.5-2-.4c-1.6.1-1.6 1.1-1.6 1.3.1 1.5 3.9 1.8 4.1 5.2.2 2.7-1.4 4.5-3.7 4.6-2.7.2-4.2-1.4-4.2-1.4l.6-2.4s1.5 1.1 2.7 1c.8 0 1.1-.7 1.1-1.2-.1-1.9-3.2-1.8-3.4-4.9-.2-2.6 1.5-5.2 5.3-5.4 1.4-.1 2.2.3 2.2.3l-.3.8z" fill="#fff" />
+    </svg>
+  );
+}
+
 export function SallaIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
@@ -80,6 +90,14 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-instagram font-bold text-sm sm:text-base transition-all cursor-default">
                 <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>{t('landing.platforms.instagram')}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-shopify font-bold text-sm sm:text-base transition-all cursor-default">
+                <ShopifyIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>{t('landing.platforms.shopify')}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-salla font-bold text-sm sm:text-base transition-all cursor-default">
+                <SallaIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>{t('landing.platforms.salla')}</span>
               </div>
             </div>
           </div>

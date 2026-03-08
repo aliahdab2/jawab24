@@ -149,7 +149,7 @@ export default function LandingPage() {
       <LandingSocialProof />
       <LandingPricing />
       <LandingFAQ />
-      <LandingFooter isAuthenticated={isAuthenticated} />
+      <LandingFooter />
 
       {/* Fixed bottom safe area background (native only) */}
       <div

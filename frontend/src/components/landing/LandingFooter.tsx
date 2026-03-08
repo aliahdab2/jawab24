@@ -4,11 +4,7 @@ import { useTranslation, type TranslationKey } from '@/i18n';
 import { BrandLogo } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 
-interface LandingFooterProps {
-  isAuthenticated: boolean;
-}
-
-export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
+export function LandingFooter() {
   const { t } = useTranslation();
 
   return (
@@ -60,8 +56,6 @@ export function LandingFooter({ isAuthenticated }: LandingFooterProps) {
           <div>
             <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.quickLinks')}</h3>
             <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
-              <li><Link href="/pricing" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.pricingPlans')}</Link></li>
-              <li><Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="text-surface-400 hover:text-brand-400 transition-colors">{isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.footer.startTrial')}</Link></li>
               <li><Link href="/what-is-jawab24" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.whatIsJawab24' as TranslationKey)}</Link></li>
               <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.contactUs' as TranslationKey)}</Link></li>
               <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.termsOfService')}</Link></li>

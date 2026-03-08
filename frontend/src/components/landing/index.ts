@@ -1,4 +1,4 @@
-export { LandingHero, SallaIcon } from './LandingHero';
+export { LandingHero, SallaIcon, ShopifyIcon } from './LandingHero';
 export { LandingFeatures } from './LandingFeatures';
 export { LandingHowItWorks } from './LandingHowItWorks';
 export { LandingSocialProof } from './LandingSocialProof';
