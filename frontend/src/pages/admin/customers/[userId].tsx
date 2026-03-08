@@ -466,4 +466,8 @@ export default function AdminCustomerDetailPage() {
     );
 }
 
-export { getServerSideProps } from '@/i18n/getMessages';
+export { getStaticProps } from '@/i18n/getMessages';
+
+export async function getStaticPaths() {
+  return { paths: [], fallback: 'blocking' };
+}

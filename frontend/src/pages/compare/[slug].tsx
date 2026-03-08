@@ -242,10 +242,13 @@ export default function ComparePage({ competitor }: ComparePageProps) {
 
 export const getStaticPaths: GetStaticPaths = async () => {
   const slugs = getAllCompetitorSlugs();
-  const paths = slugs.flatMap((slug) => [
-    { params: { slug }, locale: 'ar' },
-    { params: { slug }, locale: 'en' },
-  ]);
+  const isMobile = process.env.IS_MOBILE_BUILD === 'true';
+  const paths = isMobile
+    ? slugs.map((slug) => ({ params: { slug } }))
+    : slugs.flatMap((slug) => [
+        { params: { slug }, locale: 'ar' },
+        { params: { slug }, locale: 'en' },
+      ]);
   return { paths, fallback: false };
 };
 
