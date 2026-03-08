@@ -447,8 +447,8 @@ fi
 echo ""
 echo "7️⃣  E2E tests..."
 
-# Clean frontend build (E2E rebuilds via Playwright webServer)
-rm -rf frontend/.next
+# Clean frontend build + Playwright caches (avoids stale .next and ghost specs)
+rm -rf frontend/.next frontend/test-results frontend/playwright-report frontend/blob-report
 
 # Kill any existing process on port 3001 so Playwright can start its own server
 if lsof -ti:3001 > /dev/null 2>&1; then
