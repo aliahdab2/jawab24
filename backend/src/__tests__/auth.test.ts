@@ -49,6 +49,26 @@ vi.mock('../services/settings', () => ({
     }
 }));
 
+vi.mock('../services/refreshToken', () => ({
+    refreshTokenService: {
+        createRefreshToken: vi.fn().mockResolvedValue('mock-refresh-token'),
+    }
+}));
+
+vi.mock('../services/cookies', () => ({
+    cookiesService: {
+        setAuthCookies: vi.fn(),
+        setRefreshTokenCookie: vi.fn(),
+        clearAuthCookies: vi.fn(),
+    }
+}));
+
+vi.mock('../integrations', () => ({
+    integrationRegistry: {
+        getEnabled: vi.fn().mockReturnValue([]),
+    }
+}));
+
 vi.mock('../services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'test_workspace_id' }]),
