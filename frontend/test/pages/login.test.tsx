@@ -55,6 +55,14 @@ vi.mock('@capacitor-community/facebook-login', () => ({
     }
 }));
 
+// Mock Capacitor Browser (used as web OAuth fallback on Android)
+const mockBrowserOpen = vi.fn().mockResolvedValue(undefined);
+vi.mock('@capacitor/browser', () => ({
+    Browser: {
+        open: (...args: unknown[]) => mockBrowserOpen(...args),
+    }
+}));
+
 // Mock Store
 const mockSetAuth = vi.fn();
 const mockSetLanguage = vi.fn();
@@ -248,7 +256,7 @@ describe('LoginPage', () => {
             expect(mockSetAuth).not.toHaveBeenCalled();
         });
 
-        it('should show error when SDK login throws an error', async () => {
+        it('should fall back to web OAuth when SDK login throws an error', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
 
             // Mock SDK throwing error
@@ -267,16 +275,19 @@ describe('LoginPage', () => {
                 loginButton.click();
             });
 
+            // Should fall back to web OAuth (Browser.open) instead of showing error
             await vi.waitFor(() => {
-                expect(toastErrorSpy).toHaveBeenCalled();
+                expect(mockBrowserOpen).toHaveBeenCalled();
             });
+            const openUrl = mockBrowserOpen.mock.calls[0][0]?.url as string;
+            expect(openUrl).toContain('facebook.com');
 
             // Should NOT navigate or set auth
             expect(mockPush).not.toHaveBeenCalled();
             expect(mockSetAuth).not.toHaveBeenCalled();
         });
 
-        it('should show error when backend API fails after successful SDK login', async () => {
+        it('should fall back to web OAuth when backend API fails after successful SDK login', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
 
             // SDK succeeds
@@ -298,8 +309,9 @@ describe('LoginPage', () => {
                 loginButton.click();
             });
 
+            // Should fall back to web OAuth
             await vi.waitFor(() => {
-                expect(toastErrorSpy).toHaveBeenCalled();
+                expect(mockBrowserOpen).toHaveBeenCalled();
             });
 
             // Should NOT navigate or set auth
@@ -307,7 +319,7 @@ describe('LoginPage', () => {
             expect(mockSetAuth).not.toHaveBeenCalled();
         });
 
-        it('should handle login timeout', async () => {
+        it('should fall back to web OAuth on login timeout', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
 
             // Mock SDK that never resolves (simulates hanging)
@@ -334,8 +346,9 @@ describe('LoginPage', () => {
                 await vi.advanceTimersByTimeAsync(31000);
             });
 
+            // Should fall back to web OAuth instead of showing timeout toast
             await vi.waitFor(() => {
-                expect(toastErrorSpy).toHaveBeenCalledWith('auth.loginTimeout');
+                expect(mockBrowserOpen).toHaveBeenCalled();
             });
 
             vi.useRealTimers();
