@@ -178,7 +178,10 @@ export default function WhatIsJawab24() {
             {t('about.backToHome')}
           </Link>
 
-          <h1 className="text-4xl font-bold mb-6">{t('about.title')}</h1>
+          <h1 className="text-4xl font-bold mb-3">{t('about.title')}</h1>
+          <p className="text-lg text-foreground/70 leading-relaxed mb-8">
+            {t('about.subtitle')}
+          </p>
 
           <div className="space-y-10">
             {/* Introduction */}
