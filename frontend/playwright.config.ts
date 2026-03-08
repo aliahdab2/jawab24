@@ -23,16 +23,14 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // In CI, use next dev since 'next start' doesn't work with output: 'standalone'
-    // The production build is validated separately via the Docker build step
-    command: 'npm run dev',
-    // Use url (not port) so Playwright waits for an actual HTTP response — this ensures
-    // the dev server has finished its initial compilation before any tests run.
+    // CI: use production server (next start) — no HMR/Fast Refresh, so .next files
+    // are never rewritten mid-test (eliminates ENOENT race conditions).
+    // Local: use dev server (reuseExistingServer reuses whatever is on :3001).
+    command: process.env.CI ? 'npm run start' : 'npm run dev',
     url: 'http://localhost:3001/en/login',
     timeout: 120 * 1000,
     reuseExistingServer: !process.env.CI,
-    // Force getStaticProps to use FALLBACK_PLANS by pointing to a non-existent server.
-    // Playwright route mocking only intercepts browser requests, not server-side fetches.
+    // Dev mode: forces getStaticProps fallback. Prod mode: data baked in at build time.
     env: {
       NEXT_PUBLIC_API_URL: 'http://localhost:4999/api',
     },

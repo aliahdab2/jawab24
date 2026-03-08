@@ -447,8 +447,20 @@ fi
 echo ""
 echo "7️⃣  E2E tests..."
 
-# Clean frontend build + Playwright caches (avoids stale .next and ghost specs)
-rm -rf frontend/.next frontend/test-results frontend/playwright-report frontend/blob-report
+# Clean only test artifacts — keep .next from step 2's production build.
+# Playwright uses `next start` (CI=true) so .next files are static and stable —
+# no HMR/Fast Refresh rewriting files mid-test (eliminates ENOENT race conditions).
+rm -rf frontend/test-results frontend/playwright-report frontend/blob-report
+
+# Safety: if .next is missing (e.g. step 2 was skipped), build it now
+if [ ! -d "frontend/.next" ]; then
+    echo "   ⚠️  No .next build found, building for E2E..."
+    if ! (cd frontend && npx next build) > /dev/null 2>&1; then
+        echo -e "${RED}   ❌ E2E build failed!${NC}"
+        (cd frontend && npx next build)
+        exit 1
+    fi
+fi
 
 # Kill any existing process on port 3001 so Playwright can start its own server
 if lsof -ti:3001 > /dev/null 2>&1; then
