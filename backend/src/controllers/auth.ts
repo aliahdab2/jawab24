@@ -176,15 +176,19 @@ export class AuthController {
                 }
             }
 
-            // 9. Set cookies (HttpOnly + CSRF)
-            cookiesService.setAuthCookies(reply, token);
+            // 9. Generate refresh token (same as web login)
+            const refreshToken = await refreshTokenService.createRefreshToken(user.id);
 
-            // 10. Build response
+            // 10. Set cookies (HttpOnly + CSRF + Refresh)
+            cookiesService.setAuthCookies(reply, token);
+            cookiesService.setRefreshTokenCookie(reply, refreshToken);
+
+            // 11. Build response
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             }, workspaces);
 
-            // 11. Check for pending e-commerce integration installs
+            // 12. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
                 const claim = await integration.claimPendingInstall(request, reply, user.id);
                 if (claim) Object.assign(response, claim);

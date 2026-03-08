@@ -103,6 +103,8 @@ export default function LoginPage() {
 
     if (isMobile && platform === 'android') {
       // --- ANDROID NATIVE LOGIN FLOW (uses native FB SDK) ---
+      // Falls back to web OAuth if the native SDK fails (common after app idle —
+      // Android may kill the Activity, leaving the Facebook SDK in a broken state).
       try {
         let FacebookLogin = fbSdkRef.current;
         if (!FacebookLogin) {
@@ -113,6 +115,15 @@ export default function LoginPage() {
           } catch {
             // May already be initialized
           }
+        }
+
+        // Clear any stale native SDK session before login.
+        // After the app has been idle, the native Facebook LoginManager may hold
+        // stale state that causes "There is an error logging you into this application".
+        try {
+          await FacebookLogin.logout();
+        } catch {
+          // Ignore — logout may fail if SDK wasn't fully initialized
         }
 
         const TIMEOUT_MS = 30000;
@@ -148,21 +159,46 @@ export default function LoginPage() {
         await router.push(returnUrl, returnUrl, { locale: finalLocale });
 
       } catch (error: unknown) {
-        captureError(error, 'Android login error', { tags: { page: 'login', platform: 'android' } });
         setIsProcessing(false);
 
         const msg = error instanceof Error ? error.message : '';
         const code = (error as { code?: string }).code;
-        if (msg === 'TIMEOUT') {
-          toast.error(t('auth.loginTimeout'));
-        } else if (msg.includes('cancel') || msg.includes('Cancel')) {
+        if (msg.includes('cancel') || msg.includes('Cancel')) {
           toast.info(t('auth.loginCancelled'));
-        } else if (msg.includes('network') || code === 'NETWORK_ERROR') {
-          toast.error(t('auth.networkError'));
-        } else if ((error as { response?: { data?: { message?: string } } }).response?.data?.message) {
-          toast.error((error as { response: { data: { message: string } } }).response.data.message);
-        } else {
-          toast.error(t('auth.loginError'));
+          return;
+        }
+
+        // Native SDK failed — fall back to web-based OAuth (Chrome Custom Tab).
+        // This bypasses the native Facebook app which can be flaky after app idle.
+        captureError(error, 'Android native login failed, falling back to web OAuth', {
+          tags: { page: 'login', platform: 'android', fallback: 'web-oauth' },
+        });
+
+        try {
+          const { Browser } = await import('@capacitor/browser');
+          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+          const normalizedOrigin = siteUrl.replace(/\/$/, '');
+          const localePath = language === 'ar' ? '' : `/${language}`;
+          const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
+          const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
+          const returnUrl = router.query.redirect as string || '/dashboard';
+          const state = encodeURIComponent(`${returnUrl}|mobile|${language}`);
+          const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
+          await Browser.open({ url: oauthUrl });
+        } catch (fallbackError: unknown) {
+          captureError(fallbackError, 'Android web OAuth fallback also failed', {
+            tags: { page: 'login', platform: 'android' },
+          });
+
+          if (msg === 'TIMEOUT') {
+            toast.error(t('auth.loginTimeout'));
+          } else if (msg.includes('network') || code === 'NETWORK_ERROR') {
+            toast.error(t('auth.networkError'));
+          } else if ((error as { response?: { data?: { message?: string } } }).response?.data?.message) {
+            toast.error((error as { response: { data: { message: string } } }).response.data.message);
+          } else {
+            toast.error(t('auth.loginError'));
+          }
         }
       }
 

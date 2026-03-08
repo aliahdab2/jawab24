@@ -15,8 +15,20 @@ const MAX_BACKOFF = 30_000;
 const TOAST_THROTTLE = 5_000;
 
 /**
- * Real-time SSE hook — connects to the backend EventSource stream,
- * invalidates React Query caches, updates unread badges, and shows toasts.
+ * Native mobile polling interval (ms).
+ * Mobile apps rely on push notifications for instant alerts.
+ * Polling is a lightweight fallback to keep dashboard stats fresh.
+ */
+const NATIVE_POLL_INTERVAL = 60_000;
+
+/**
+ * Real-time updates hook.
+ *
+ * - **Web**: SSE (EventSource) for instant updates.
+ * - **Native mobile**: Lightweight polling. Android WebView's EventSource is
+ *   unreliable (connections drop silently, causing perpetual "reconnecting"
+ *   state and battery drain). Push notifications handle instant alerts;
+ *   polling keeps dashboard stats fresh.
  *
  * Mount once in _app.tsx after hydration + auth.
  */
@@ -25,7 +37,6 @@ export function useSSE(): void {
     const router = useRouter();
     const { t } = useTranslation();
 
-    const token = useAuthStore((s) => s.token);
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
     const setSSEStatus = useUIStore((s) => s.setSSEStatus);
@@ -35,6 +46,7 @@ export function useSSE(): void {
     const esRef = useRef<EventSource | null>(null);
     const retryCountRef = useRef(0);
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const lastToastRef = useRef(0);
 
     /** Rate-limited toast — max 1 per TOAST_THROTTLE ms */
@@ -54,17 +66,14 @@ export function useSSE(): void {
         [router.pathname],
     );
 
-    const connect = useCallback(() => {
+    // ── Web: SSE via EventSource ──────────────────────────────────────
+
+    const connectSSE = useCallback(() => {
         if (typeof window === 'undefined') return;
         if (!isAuthenticated) return;
 
-        // Build URL — native needs ?token, web uses cookies
-        let url = `${API_URL}/sse/events`;
-        if (isNativePlatform() && token) {
-            url += `?token=${encodeURIComponent(token)}`;
-        }
-
-        const es = new EventSource(url, { withCredentials: !isNativePlatform() });
+        const url = `${API_URL}/sse/events`;
+        const es = new EventSource(url, { withCredentials: true });
         esRef.current = es;
 
         es.addEventListener('connected', () => {
@@ -150,11 +159,10 @@ export function useSSE(): void {
             );
             retryCountRef.current++;
 
-            retryTimerRef.current = setTimeout(connect, delay);
+            retryTimerRef.current = setTimeout(connectSSE, delay);
         };
     }, [
         isAuthenticated,
-        token,
         queryClient,
         setSSEStatus,
         incrementUnreadComments,
@@ -165,18 +173,49 @@ export function useSSE(): void {
         router,
     ]);
 
+    // ── Native mobile: lightweight polling ─────────────────────────────
+
+    const startPolling = useCallback(() => {
+        if (pollTimerRef.current) return; // already polling
+
+        // Mark as connected immediately — no "reconnecting" indicator on native
+        setSSEStatus('connected');
+
+        pollTimerRef.current = setInterval(() => {
+            queryClient.invalidateQueries({ queryKey: ['comments'] });
+            queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['messages'] });
+            queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['subscription-usage'] });
+        }, NATIVE_POLL_INTERVAL);
+    }, [queryClient, setSSEStatus]);
+
+    // ── Lifecycle ──────────────────────────────────────────────────────
+
     useEffect(() => {
         if (!isAuthenticated) {
-            // Not authenticated — close any existing connection
+            // Not authenticated — tear down
             if (esRef.current) {
                 esRef.current.close();
                 esRef.current = null;
+            }
+            if (retryTimerRef.current) {
+                clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = null;
+            }
+            if (pollTimerRef.current) {
+                clearInterval(pollTimerRef.current);
+                pollTimerRef.current = null;
             }
             setSSEStatus('disconnected');
             return;
         }
 
-        connect();
+        if (isNativePlatform()) {
+            startPolling();
+        } else {
+            connectSSE();
+        }
 
         return () => {
             if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
@@ -184,7 +223,11 @@ export function useSSE(): void {
                 esRef.current.close();
                 esRef.current = null;
             }
+            if (pollTimerRef.current) {
+                clearInterval(pollTimerRef.current);
+                pollTimerRef.current = null;
+            }
             setSSEStatus('disconnected');
         };
-    }, [isAuthenticated, connect, setSSEStatus]);
+    }, [isAuthenticated, connectSSE, startPolling, setSSEStatus]);
 }
