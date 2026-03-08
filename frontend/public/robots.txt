@@ -10,6 +10,7 @@ Allow: /privacy
 Allow: /terms
 Allow: /data-deletion
 Allow: /contact
+Allow: /what-is-jawab24
 
 # Allow English locale pages
 Allow: /en
@@ -20,6 +21,7 @@ Allow: /en/privacy
 Allow: /en/terms
 Allow: /en/data-deletion
 Allow: /en/contact
+Allow: /en/what-is-jawab24
 
 # Disallow dashboard pages (require auth)
 Disallow: /dashboard
