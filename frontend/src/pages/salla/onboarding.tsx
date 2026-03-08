@@ -114,9 +114,9 @@ export default function SallaOnboarding() {
   if (!isAuthenticated) return null;
 
   const benefits = [
-    (t as TFunc)('salla.onboarding.welcome.benefit1'),
-    (t as TFunc)('salla.onboarding.welcome.benefit2'),
-    (t as TFunc)('salla.onboarding.welcome.benefit3'),
+    (t as TFunc)('salla.onboarding.welcomeBenefit1'),
+    (t as TFunc)('salla.onboarding.welcomeBenefit2'),
+    (t as TFunc)('salla.onboarding.welcomeBenefit3'),
   ];
 
   return (
@@ -149,10 +149,10 @@ export default function SallaOnboarding() {
 
                   <div>
                     <h2 className="text-2xl font-bold text-foreground mb-2">
-                      {(t as TFunc)('salla.onboarding.welcome.title')}
+                      {(t as TFunc)('salla.onboarding.welcomeTitle')}
                     </h2>
                     <p className="text-muted-foreground text-sm">
-                      {(t as TFunc)('salla.onboarding.welcome.subtitle')}
+                      {(t as TFunc)('salla.onboarding.welcomeSubtitle')}
                     </p>
                   </div>
 
@@ -171,7 +171,7 @@ export default function SallaOnboarding() {
                     className="w-full bg-teal-700 hover:bg-teal-800 text-white rounded-2xl py-4"
                   >
                     <div className="flex items-center justify-center gap-2">
-                      <span>{(t as TFunc)('salla.onboarding.welcome.cta')}</span>
+                      <span>{(t as TFunc)('salla.onboarding.welcomeCta')}</span>
                       <ArrowRight className="w-4 h-4 rtl:rotate-180" />
                     </div>
                   </Button>
@@ -371,7 +371,7 @@ export default function SallaOnboarding() {
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
                         <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
                         <span className="text-sm text-foreground font-medium">
-                          {(t as TFunc)('salla.onboarding.doneCheck.products', { count: syncResult.synced || 0 })}
+                          {(t as TFunc)('salla.onboarding.doneCheckProducts', { count: syncResult.synced || 0 })}
                         </span>
                       </div>
                     )}
@@ -379,14 +379,14 @@ export default function SallaOnboarding() {
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
                         <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
                         <span className="text-sm text-foreground font-medium">
-                          {(t as TFunc)('salla.onboarding.doneCheck.page', { name: linkedPageName })}
+                          {(t as TFunc)('salla.onboarding.doneCheckPage', { name: linkedPageName })}
                         </span>
                       </div>
                     )}
                     <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
                       <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
                       <span className="text-sm text-foreground font-medium">
-                        {(t as TFunc)('salla.onboarding.doneCheck.active')}
+                        {(t as TFunc)('salla.onboarding.doneCheckActive')}
                       </span>
                     </div>
                   </div>

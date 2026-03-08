@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
-import en from '../src/i18n/en.json';
-import ar from '../src/i18n/ar.json';
+import { t, tAr } from './i18n';
 
 /**
  * Integrations Page E2E Tests
@@ -148,13 +147,13 @@ test.describe('Integrations Page', () => {
 
     await page.goto('/en/integrations');
 
-    await expect(page).toHaveTitle(new RegExp(`${en['integrations.title']}.*Jawab24`, 'i'));
+    await expect(page).toHaveTitle(new RegExp(`${t('integrations.title')}.*Jawab24`, 'i'));
     await expect(
-      page.locator('h1').filter({ hasText: en['integrations.title'] }).first()
+      page.locator('h1').filter({ hasText: t('integrations.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Not-connected promo cards shown with Connect buttons for each platform
-    const connectButtons = page.getByRole('button', { name: new RegExp(en['integrations.notConnected.connectBtn'], 'i') });
+    const connectButtons = page.getByRole('button', { name: new RegExp(t('integrations.notConnected.connectBtn'), 'i') });
     await expect(connectButtons).toHaveCount(2, { timeout: 10000 });
   });
 
@@ -172,10 +171,10 @@ test.describe('Integrations Page', () => {
     await expect(page.getByText('42').first()).toBeVisible({ timeout: 10000 });
 
     await expect(
-      page.locator('button').filter({ hasText: en['shopify.syncNow'] }).first()
+      page.locator('button').filter({ hasText: t('shopify.syncNow') }).first()
     ).toBeVisible({ timeout: 10000 });
     await expect(
-      page.locator('button').filter({ hasText: en['shopify.disconnect'] }).first()
+      page.locator('button').filter({ hasText: t('shopify.disconnect') }).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -188,7 +187,7 @@ test.describe('Integrations Page', () => {
     await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
 
     // Salla was never connected (404) → not-connected promo card shown
-    await expect(page.getByText(en['salla.title']).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(t('salla.title')).first()).toBeVisible({ timeout: 10000 });
     // But no Salla store data shown
     await expect(page.getByText('Test Salla Store')).not.toBeVisible();
   });
@@ -199,7 +198,7 @@ test.describe('Integrations Page', () => {
 
     await page.goto('/en/integrations');
 
-    await expect(page.getByText(en['shopify.linkPage']).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(t('shopify.linkPage')).first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('My Second Page').first()).toBeVisible({ timeout: 10000 });
   });
@@ -220,15 +219,15 @@ test.describe('Integrations Page', () => {
 
     // Reconnect button shown
     await expect(
-      page.locator('button').filter({ hasText: en['integrations.reconnect'] }).first()
+      page.locator('button').filter({ hasText: t('integrations.reconnect') }).first()
     ).toBeVisible({ timeout: 10000 });
 
     // Disconnected state message shown
-    await expect(page.getByText(en['integrations.disconnectedState']).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(t('integrations.disconnectedState')).first()).toBeVisible({ timeout: 10000 });
 
     // No sync or disconnect buttons (store is not active)
-    await expect(page.locator('button').filter({ hasText: en['shopify.syncNow'] })).toHaveCount(0);
-    await expect(page.locator('button').filter({ hasText: en['shopify.disconnect'] })).toHaveCount(0);
+    await expect(page.locator('button').filter({ hasText: t('shopify.syncNow') })).toHaveCount(0);
+    await expect(page.locator('button').filter({ hasText: t('shopify.disconnect') })).toHaveCount(0);
   });
 
   test('should show Reconnect card after user clicks Disconnect', async ({ page }) => {
@@ -240,16 +239,16 @@ test.describe('Integrations Page', () => {
     await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
 
     // Click Disconnect
-    const disconnectBtn = page.locator('button').filter({ hasText: en['shopify.disconnect'] }).first();
+    const disconnectBtn = page.locator('button').filter({ hasText: t('shopify.disconnect') }).first();
     await disconnectBtn.click();
 
     // Confirm in modal
-    const confirmBtn = page.getByRole('button', { name: en['shopify.disconnect'], exact: true }).last();
+    const confirmBtn = page.getByRole('button', { name: t('shopify.disconnect'), exact: true }).last();
     await confirmBtn.click();
 
     // Now shows Reconnect card
     await expect(
-      page.locator('button').filter({ hasText: en['integrations.reconnect'] }).first()
+      page.locator('button').filter({ hasText: t('integrations.reconnect') }).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -263,11 +262,11 @@ test.describe('Integrations Page', () => {
 
     await page.goto('/en/integrations');
 
-    const syncBtn = page.locator('button').filter({ hasText: en['shopify.syncNow'] }).first();
+    const syncBtn = page.locator('button').filter({ hasText: t('shopify.syncNow') }).first();
     await expect(syncBtn).toBeVisible({ timeout: 15000 });
     await syncBtn.click();
 
-    await expect(page.getByText(en['shopify.syncSuccess']).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(t('shopify.syncSuccess')).first()).toBeVisible({ timeout: 10000 });
   });
 
   /* ------------------------------------------------------------------ */
@@ -293,7 +292,7 @@ test.describe('Integrations Page', () => {
 
     await page.goto('/ar/integrations');
 
-    const titlePattern = new RegExp(`${ar['integrations.title']}|${en['integrations.title']}`, 'i');
+    const titlePattern = new RegExp(`${tAr('integrations.title')}|${t('integrations.title')}`, 'i');
     await expect(
       page.locator('h1').filter({ hasText: titlePattern }).first()
     ).toBeVisible({ timeout: 15000 });
@@ -319,7 +318,7 @@ test.describe('Integrations Page', () => {
 
     await page.goto('/en/integrations');
 
-    await expect(page).toHaveTitle(new RegExp(`${en['integrations.title']}.*Jawab24`, 'i'), { timeout: 15000 });
+    await expect(page).toHaveTitle(new RegExp(`${t('integrations.title')}.*Jawab24`, 'i'), { timeout: 15000 });
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
 
     // No store cards shown (all APIs failed = null → not rendered)
@@ -333,6 +332,6 @@ test.describe('Integrations Page', () => {
 
     await page.goto('/en/integrations');
 
-    await expect(page.getByText(en['shopify.never']).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(t('shopify.never')).first()).toBeVisible({ timeout: 15000 });
   });
 });

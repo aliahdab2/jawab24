@@ -174,10 +174,10 @@ export default function AdminCustomersPage() {
                             className="px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card"
                         >
                             <option value="">{t('admin.customers.allStatuses')}</option>
-                            <option value="active">{t('admin.customers.status.active')}</option>
-                            <option value="trialing">{t('admin.customers.status.trialing')}</option>
-                            <option value="past_due">{t('admin.customers.status.past_due')}</option>
-                            <option value="canceled">{t('admin.customers.status.canceled')}</option>
+                            <option value="active">{t('admin.customers.statusActive')}</option>
+                            <option value="trialing">{t('admin.customers.statusTrialing')}</option>
+                            <option value="past_due">{t('admin.customers.statusPast_due')}</option>
+                            <option value="canceled">{t('admin.customers.statusCanceled')}</option>
                         </select>
 
                         {/* Plan Filter */}
@@ -217,19 +217,19 @@ export default function AdminCustomersPage() {
                                 <thead className="bg-background border-b border-theme-border">
                                     <tr>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.table.customer')}
+                                            {t('admin.customers.tableCustomer')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.table.plan')}
+                                            {t('admin.customers.tablePlan')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.table.status')}
+                                            {t('admin.customers.tableStatus')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.table.periodEnd')}
+                                            {t('admin.customers.tablePeriodEnd')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.table.signedUp')}
+                                            {t('admin.customers.tableSignedUp')}
                                         </th>
                                     </tr>
                                 </thead>
@@ -289,7 +289,7 @@ export default function AdminCustomersPage() {
                     {pagination.totalPages > 1 && (
                         <div className="px-4 py-3 border-t border-theme-border flex items-center justify-between">
                             <div className="text-sm text-muted-foreground">
-                                {t('admin.customers.pagination.showing', {
+                                {t('admin.customers.paginationShowing', {
                                     from: (pagination.page - 1) * pagination.limit + 1,
                                     to: Math.min(pagination.page * pagination.limit, pagination.total),
                                     total: pagination.total,

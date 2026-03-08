@@ -7,6 +7,7 @@
  *  1. Key sync   — EN keys missing from AR and vice versa
  *  2. Language    — Arabic chars in EN values; Latin-only text in AR values
  *  3. Empty vals  — keys with "" value
+ *  4. Nesting     — max 3 levels deep, no deeper
  *
  * Usage:  node scripts/validate-translations.js
  * Exit:   0 = pass, 1 = errors found
@@ -27,10 +28,46 @@ function loadJSON(filePath) {
 const en = loadJSON(path.join(I18N_DIR, 'en.json'));
 const ar = loadJSON(path.join(I18N_DIR, 'ar.json'));
 
-const enKeys = Object.keys(en);
-const arKeys = Object.keys(ar);
-
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Recursively collect all leaf key paths from a nested object */
+function collectKeys(obj, prefix = '') {
+  const keys = [];
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === 'string') {
+      keys.push(fullKey);
+    } else if (typeof value === 'object' && value !== null) {
+      keys.push(...collectKeys(value, fullKey));
+    }
+  }
+  return keys;
+}
+
+/** Resolve a dot-notation key against a nested object */
+function resolve(obj, key) {
+  const parts = key.split('.');
+  let current = obj;
+  for (const part of parts) {
+    if (current == null || typeof current !== 'object') return undefined;
+    current = current[part];
+  }
+  return typeof current === 'string' ? current : undefined;
+}
+
+/** Check nesting depth of an object */
+function maxDepth(obj, depth = 1) {
+  let max = depth;
+  for (const value of Object.values(obj)) {
+    if (typeof value === 'object' && value !== null) {
+      max = Math.max(max, maxDepth(value, depth + 1));
+    }
+  }
+  return max;
+}
+
+const enKeys = collectKeys(en);
+const arKeys = collectKeys(ar);
 
 const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
@@ -95,15 +132,16 @@ const BILINGUAL_KEYS = new Set([
 const arabicInEN = [];
 for (const key of enKeys) {
   if (BILINGUAL_KEYS.has(key)) continue;
-  if (ARABIC_RE.test(en[key])) {
-    arabicInEN.push({ key, value: en[key] });
+  const value = resolve(en, key);
+  if (value && ARABIC_RE.test(value)) {
+    arabicInEN.push({ key, value });
   }
 }
 
 const untranslatedInAR = [];
 for (const key of arKeys) {
   if (BILINGUAL_KEYS.has(key)) continue;
-  const value = ar[key];
+  const value = resolve(ar, key);
   if (typeof value !== 'string' || value.length === 0) continue;
   if (!ARABIC_RE.test(value) && !isLikelyBrandOrTechnical(value)) {
     untranslatedInAR.push({ key, value });
@@ -112,8 +150,14 @@ for (const key of arKeys) {
 
 // ── Check 3: Empty Values ───────────────────────────────────────────────────
 
-const emptyEN = enKeys.filter(k => en[k] === '');
-const emptyAR = arKeys.filter(k => ar[k] === '');
+const emptyEN = enKeys.filter(k => resolve(en, k) === '');
+const emptyAR = arKeys.filter(k => resolve(ar, k) === '');
+
+// ── Check 4: Nesting Depth ─────────────────────────────────────────────────
+
+const enDepth = maxDepth(en);
+const arDepth = maxDepth(ar);
+const MAX_DEPTH = 3;
 
 // ── Output ──────────────────────────────────────────────────────────────────
 
@@ -179,6 +223,16 @@ if (emptyEN.length > 0 || emptyAR.length > 0) {
   }
 } else {
   console.log('  ✅ No empty values');
+}
+console.log('');
+
+// Nesting Depth
+console.log('Nesting Depth');
+if (enDepth > MAX_DEPTH || arDepth > MAX_DEPTH) {
+  hasErrors = true;
+  console.log(`  ❌ Max nesting exceeds ${MAX_DEPTH} levels (EN: ${enDepth}, AR: ${arDepth})`);
+} else {
+  console.log(`  ✅ Max nesting within ${MAX_DEPTH} levels (EN: ${enDepth}, AR: ${arDepth})`);
 }
 console.log('');
 

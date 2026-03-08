@@ -357,7 +357,7 @@ export default function AdminCustomerDetailPage() {
                         {showUpgradeForm && (
                             <Card>
                                 <h3 className="text-lg font-semibold text-foreground mb-4">
-                                    {t('admin.customer.upgradeForm.title')}
+                                    {t('admin.customer.upgradeFormTitle')}
                                 </h3>
 
                                 {upgradeError && (
@@ -370,14 +370,14 @@ export default function AdminCustomerDetailPage() {
                                     {/* Plan Selection */}
                                     <div>
                                         <label className="block text-sm font-medium text-foreground/70 mb-1">
-                                            {t('admin.customer.upgradeForm.plan')} *
+                                            {t('admin.customer.upgradeFormPlan')} *
                                         </label>
                                         <select
                                             value={selectedPlan}
                                             onChange={(e) => setSelectedPlan(e.target.value)}
                                             className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                                         >
-                                            <option value="">{t('admin.customer.upgradeForm.selectPlan')}</option>
+                                            <option value="">{t('admin.customer.upgradeFormSelectPlan')}</option>
                                             {plans.filter(p => p.isActive).map((plan) => (
                                                 <option key={plan.id} value={plan.id}>
                                                     {plan.name} (${(plan.price / 100).toFixed(0)}/mo)
@@ -389,46 +389,46 @@ export default function AdminCustomerDetailPage() {
                                     {/* Period */}
                                     <div>
                                         <label className="block text-sm font-medium text-foreground/70 mb-1">
-                                            {t('admin.customer.upgradeForm.period')} *
+                                            {t('admin.customer.upgradeFormPeriod')} *
                                         </label>
                                         <select
                                             value={periodMonths}
                                             onChange={(e) => setPeriodMonths(Number(e.target.value) as 1 | 3 | 6 | 12)}
                                             className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                                         >
-                                            <option value={1}>1 {t('admin.customer.upgradeForm.month')}</option>
-                                            <option value={3}>3 {t('admin.customer.upgradeForm.months')}</option>
-                                            <option value={6}>6 {t('admin.customer.upgradeForm.months')}</option>
-                                            <option value={12}>12 {t('admin.customer.upgradeForm.months')}</option>
+                                            <option value={1}>1 {t('admin.customer.upgradeFormMonth')}</option>
+                                            <option value={3}>3 {t('admin.customer.upgradeFormMonths')}</option>
+                                            <option value={6}>6 {t('admin.customer.upgradeFormMonths')}</option>
+                                            <option value={12}>12 {t('admin.customer.upgradeFormMonths')}</option>
                                         </select>
                                     </div>
 
                                     {/* Payment Method */}
                                     <div>
                                         <label className="block text-sm font-medium text-foreground/70 mb-1">
-                                            {t('admin.customer.upgradeForm.paymentMethod')} *
+                                            {t('admin.customer.upgradeFormPaymentMethod')} *
                                         </label>
                                         <select
                                             value={paymentMethod}
                                             onChange={(e) => setPaymentMethod(e.target.value as 'manual' | 'bank_transfer' | 'syrian_bank')}
                                             className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                                         >
-                                            <option value="manual">{t('admin.customer.upgradeForm.paymentMethods.manual')}</option>
-                                            <option value="bank_transfer">{t('admin.customer.upgradeForm.paymentMethods.bankTransfer')}</option>
-                                            <option value="syrian_bank">{t('admin.customer.upgradeForm.paymentMethods.syrianBank')}</option>
+                                            <option value="manual">{t('admin.customer.upgradeFormPaymentMethodsManual')}</option>
+                                            <option value="bank_transfer">{t('admin.customer.upgradeFormPaymentMethodsBankTransfer')}</option>
+                                            <option value="syrian_bank">{t('admin.customer.upgradeFormPaymentMethodsSyrianBank')}</option>
                                         </select>
                                     </div>
 
                                     {/* Payment Reference */}
                                     <div>
                                         <label className="block text-sm font-medium text-foreground/70 mb-1">
-                                            {t('admin.customer.upgradeForm.paymentReference')}
+                                            {t('admin.customer.upgradeFormPaymentReference')}
                                         </label>
                                         <input
                                             type="text"
                                             value={paymentReference}
                                             onChange={(e) => setPaymentReference(e.target.value)}
-                                            placeholder={t('admin.customer.upgradeForm.paymentReferencePlaceholder')}
+                                            placeholder={t('admin.customer.upgradeFormPaymentReferencePlaceholder')}
                                             className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
                                         />
                                     </div>
@@ -436,12 +436,12 @@ export default function AdminCustomerDetailPage() {
                                     {/* Note */}
                                     <div>
                                         <label className="block text-sm font-medium text-foreground/70 mb-1">
-                                            {t('admin.customer.upgradeForm.note')}
+                                            {t('admin.customer.upgradeFormNote')}
                                         </label>
                                         <textarea
                                             value={note}
                                             onChange={(e) => setNote(e.target.value)}
-                                            placeholder={t('admin.customer.upgradeForm.notePlaceholder')}
+                                            placeholder={t('admin.customer.upgradeFormNotePlaceholder')}
                                             rows={3}
                                             className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
                                         />
@@ -454,7 +454,7 @@ export default function AdminCustomerDetailPage() {
                                         disabled={!selectedPlan || upgradeLoading}
                                         className="w-full"
                                     >
-                                        {t('admin.customer.upgradeForm.submit')}
+                                        {t('admin.customer.upgradeFormSubmit')}
                                     </Button>
                                 </div>
                             </Card>

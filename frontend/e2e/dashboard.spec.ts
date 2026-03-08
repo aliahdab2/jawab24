@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import en from '../src/i18n/en.json';
+import { t } from './i18n';
 
 /**
  * Dashboard E2E Tests
@@ -226,7 +226,7 @@ test.describe('Dashboard Page', () => {
 
     // Dashboard header must be visible
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Command Center should show Smart Replies count: 20 (comments AI) + 5 (messages AI) = 25
@@ -248,15 +248,15 @@ test.describe('Dashboard Page', () => {
 
     // Wait for dashboard to load
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // SmartStatusBanner uses unreplied (12) + pending (5) = 17
     await expect(page.getByText(/17.*items need your attention/i)).toBeVisible({ timeout: 15000 });
 
     // Breakdown should show comment and message counts (in the header button)
-    const commentsLabel = en['comments.title'].toLowerCase();
-    const messagesLabel = en['messages.title'].toLowerCase();
+    const commentsLabel = t('comments.title').toLowerCase();
+    const messagesLabel = t('messages.title').toLowerCase();
     const breakdown = `12 ${commentsLabel} · 5 ${messagesLabel}`;
     await expect(page.getByText(breakdown)).toBeVisible();
 
@@ -285,7 +285,7 @@ test.describe('Dashboard Page', () => {
     await page.goto('/en/dashboard');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Banner should NOT be visible when count is 0
@@ -297,7 +297,7 @@ test.describe('Dashboard Page', () => {
 
     // Wait for dashboard content to render
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // The page should have meaningful text content, not just an image
@@ -351,7 +351,7 @@ test.describe('Dashboard Page', () => {
 
     // Header should be visible
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
@@ -360,7 +360,7 @@ test.describe('Dashboard Page', () => {
 
     // Wait for dashboard to load
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // With only 1 page, the accordion should auto-expand
@@ -369,7 +369,7 @@ test.describe('Dashboard Page', () => {
     await expect(pageButton).toHaveAttribute('aria-expanded', 'true');
 
     // The expanded panel should show the "Manage Page" CTA link
-    const manageLink = page.getByRole('link', { name: new RegExp(en['dashboard.pageAccordion.managePage'], 'i') });
+    const manageLink = page.getByRole('link', { name: new RegExp(t('dashboard.pageAccordion.managePage'), 'i') });
     await expect(manageLink).toBeVisible();
 
     // The href must deep-link to the individual page card via hash
@@ -390,7 +390,7 @@ test.describe('Dashboard Page', () => {
     await page.goto('/en/dashboard');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['dashboard.greeting'] }).first()
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Both page buttons should be visible and collapsed

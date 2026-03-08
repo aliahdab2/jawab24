@@ -50,7 +50,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           </div>
           <div className="text-start">
             <div className="flex items-center gap-2">
-              <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.businessHours')}</h4>
+              <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.businessHoursLabel')}</h4>
               {settings.businessHoursOnly && (() => {
                 const parts = new Intl.DateTimeFormat('en-US', {
                   timeZone: settings.timezone,
@@ -89,7 +89,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
             <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('settings.businessHoursDesc')}</p>
           </div>
         </div>
-        <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} aria-label={t('settings.businessHours')} />
+        <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} aria-label={t('settings.businessHoursLabel')} />
       </div>
 
       <div
@@ -179,7 +179,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               <div className="flex items-start gap-2 p-3 rounded-xl alert-error border animate-in fade-in slide-in-from-top-1">
                 <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-bold text-red-700">{t('settings.businessHoursError' as TranslationKey)}</p>
+                  <p className="text-sm font-bold text-red-700">{t('settings.businessHoursErrorMsg' as TranslationKey)}</p>
                   <p className="text-xs text-red-600 mt-0.5">{t('settings.businessHoursError.hint' as TranslationKey)}</p>
                 </div>
               </div>

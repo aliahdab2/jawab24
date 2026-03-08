@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
-import en from '../src/i18n/en.json';
-import ar from '../src/i18n/ar.json';
+import { t, tAr } from './i18n';
 
 /**
  * Rules Page E2E Tests
@@ -129,7 +128,7 @@ test.describe('Rules Page', () => {
 
     // Page header
     await expect(
-      page.locator('h1').filter({ hasText: en['rules.title'] }).first()
+      page.locator('h1').filter({ hasText: t('rules.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Rule name should be visible
@@ -181,7 +180,7 @@ test.describe('Rules Page', () => {
     await page.goto('/en/rules');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['rules.title'] }).first()
+      page.locator('h1').filter({ hasText: t('rules.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     const bodyText = await page.locator('body').innerText();
@@ -202,7 +201,7 @@ test.describe('Rules Page', () => {
     await page.goto('/en/rules');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['rules.title'] }).first()
+      page.locator('h1').filter({ hasText: t('rules.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Should show the first-match-wins hint
@@ -233,15 +232,15 @@ test.describe('Rules Page', () => {
     await page.goto('/en/rules');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['rules.title'] }).first()
+      page.locator('h1').filter({ hasText: t('rules.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Click "Add Rule" button
-    const addBtn = page.locator('button').filter({ hasText: en['rules.addRule'] }).first();
+    const addBtn = page.locator('button').filter({ hasText: t('rules.addRule') }).first();
     await addBtn.click();
 
     // Modal should open
-    await expect(page.getByText(en['rules.ruleName']).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(t('rules.ruleName')).first()).toBeVisible({ timeout: 5000 });
 
     // Fill in rule name
     const nameInput = page.locator('input').first();
@@ -273,7 +272,7 @@ test.describe('Rules Page', () => {
     await page.goto('/en/rules');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['rules.title'] }).first()
+      page.locator('h1').filter({ hasText: t('rules.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Both rules should be visible
@@ -312,7 +311,7 @@ test.describe('Rules Page', () => {
 
     // Arabic heading
     await expect(
-      page.locator('h1').filter({ hasText: ar['rules.title'] }).first()
+      page.locator('h1').filter({ hasText: tAr('rules.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Rule name should still be visible (rule names are user-defined, not translated)
@@ -320,12 +319,12 @@ test.describe('Rules Page', () => {
 
     // Arabic hint text
     await expect(
-      page.getByText(ar['rules.firstMatchHint'], { exact: false }).first()
+      page.getByText(tAr('rules.firstMatchHint'), { exact: false }).first()
     ).toBeVisible({ timeout: 10000 });
 
     // Add Rule button in Arabic
     await expect(
-      page.locator('button').filter({ hasText: ar['rules.addRule'] }).first()
+      page.locator('button').filter({ hasText: tAr('rules.addRule') }).first()
     ).toBeVisible();
   });
 
@@ -350,15 +349,15 @@ test.describe('Rules Page', () => {
     await page.goto('/ar/rules');
 
     await expect(
-      page.locator('h1').filter({ hasText: ar['rules.title'] }).first()
+      page.locator('h1').filter({ hasText: tAr('rules.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Click Arabic "Add Rule" button
-    const addBtn = page.locator('button').filter({ hasText: ar['rules.addRule'] }).first();
+    const addBtn = page.locator('button').filter({ hasText: tAr('rules.addRule') }).first();
     await addBtn.click();
 
     // Modal should open with Arabic label
-    await expect(page.getByText(ar['rules.ruleName']).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(tAr('rules.ruleName')).first()).toBeVisible({ timeout: 5000 });
 
     // Fill in rule name
     const nameInput = page.locator('input').first();

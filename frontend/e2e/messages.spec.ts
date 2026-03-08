@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import en from '../src/i18n/en.json';
+import { t } from './i18n';
 
 /**
  * Messages Page E2E Tests
@@ -74,7 +74,7 @@ test.describe('Messages Page', () => {
     await page.goto('/en/messages');
 
     await expect(page).toHaveTitle(/Messages.*Jawab24/i);
-    await expect(page.locator('h1').filter({ hasText: en['messages.title'] }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1').filter({ hasText: t('messages.title') }).first()).toBeVisible({ timeout: 15000 });
 
     // Should show message sender from mock data
     await expect(page.locator('text=Alice Brown').first()).toBeVisible({ timeout: 10000 });

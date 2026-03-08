@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import en from '../src/i18n/en.json';
+import { t } from './i18n';
 
 /**
  * Pricing Page E2E Tests
@@ -73,7 +73,7 @@ test.describe('Pricing Page', () => {
     await page.goto('/en/pricing');
 
     await expect(
-      page.getByText(en['pricing.choosePlan']).first()
+      page.getByText(t('pricing.choosePlan')).first()
     ).toBeVisible({ timeout: 15000 });
 
   });
@@ -82,7 +82,7 @@ test.describe('Pricing Page', () => {
     await page.goto('/en/pricing');
 
     await expect(
-      page.getByText(en['pricing.choosePlan']).first()
+      page.getByText(t('pricing.choosePlan')).first()
     ).toBeVisible({ timeout: 15000 });
 
     // All plan cards should be visible (use heading role with exact match to target card titles)
@@ -95,28 +95,28 @@ test.describe('Pricing Page', () => {
     await page.goto('/en/pricing');
 
     await expect(
-      page.getByText(en['pricing.choosePlan']).first()
+      page.getByText(t('pricing.choosePlan')).first()
     ).toBeVisible({ timeout: 15000 });
 
-    await expect(page.getByText(en['pricing.popular']).first()).toBeVisible();
+    await expect(page.getByText(t('pricing.popular')).first()).toBeVisible();
   });
 
   test('should toggle between monthly and yearly billing', async ({ page }) => {
     await page.goto('/en/pricing');
 
     await expect(
-      page.getByText(en['pricing.choosePlan']).first()
+      page.getByText(t('pricing.choosePlan')).first()
     ).toBeVisible({ timeout: 15000 });
 
-    const monthlyBtn = page.getByText(en['pricing.monthly']).first();
-    const yearlyBtn = page.getByText(en['pricing.yearly']).first();
+    const monthlyBtn = page.getByText(t('pricing.monthly')).first();
+    const yearlyBtn = page.getByText(t('pricing.yearly')).first();
 
     await expect(monthlyBtn).toBeVisible();
     await expect(yearlyBtn).toBeVisible();
 
     // Click yearly — save badge should be visible
     await yearlyBtn.click();
-    await expect(page.getByText(en['pricing.savePercent']).first()).toBeVisible();
+    await expect(page.getByText(t('pricing.savePercent')).first()).toBeVisible();
 
     // Switch back to monthly
     await monthlyBtn.click();
@@ -126,11 +126,11 @@ test.describe('Pricing Page', () => {
     await page.goto('/en/pricing');
 
     await expect(
-      page.getByText(en['pricing.faqTitle']).first()
+      page.getByText(t('pricing.faqTitle')).first()
     ).toBeVisible({ timeout: 15000 });
 
     // First FAQ question
-    const faqQuestion = page.getByText(en['pricing.faq1Q']).first();
+    const faqQuestion = page.getByText(t('pricing.faq1Q')).first();
     await expect(faqQuestion).toBeVisible();
 
     // Click to expand
@@ -138,7 +138,7 @@ test.describe('Pricing Page', () => {
 
     // Answer should now be visible
     await expect(
-      page.getByText(en['pricing.faq1A']).first()
+      page.getByText(t('pricing.faq1A')).first()
     ).toBeVisible();
   });
 
@@ -146,14 +146,14 @@ test.describe('Pricing Page', () => {
     await page.goto('/en/pricing');
 
     await expect(
-      page.getByText(en['pricing.choosePlan']).first()
+      page.getByText(t('pricing.choosePlan')).first()
     ).toBeVisible({ timeout: 15000 });
 
     // The badge depends on plan data from getStaticProps (server-side fetch).
     // In dev mode this hits the production API, so we check gracefully:
     // if any plan has ecommerceEnabled=true, the badge text must appear.
-    const badgeLocator = page.getByText(en['pricing.shopifyBadge']).first();
-    const badgeCount = await page.getByText(en['pricing.shopifyBadge']).count();
+    const badgeLocator = page.getByText(t('pricing.shopifyBadge')).first();
+    const badgeCount = await page.getByText(t('pricing.shopifyBadge')).count();
 
     if (badgeCount > 0) {
       await expect(badgeLocator).toBeVisible();
@@ -165,10 +165,10 @@ test.describe('Pricing Page', () => {
     await page.goto('/en/pricing');
 
     await expect(
-      page.getByText(en['pricing.choosePlan']).first()
+      page.getByText(t('pricing.choosePlan')).first()
     ).toBeVisible({ timeout: 15000 });
 
-    await expect(page.getByText(en['auth.login']).first()).toBeVisible();
+    await expect(page.getByText(t('auth.login')).first()).toBeVisible();
   });
 
   test('should show WhatsApp fallback for sanctioned users', async ({ page }) => {
@@ -183,7 +183,7 @@ test.describe('Pricing Page', () => {
     await page.goto('/en/pricing');
 
     await expect(
-      page.getByText(en['pricing.choosePlan']).first()
+      page.getByText(t('pricing.choosePlan')).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Should show unavailable message instead of subscribe buttons

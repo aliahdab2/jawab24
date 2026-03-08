@@ -38,8 +38,8 @@ export interface SectionConfig {
 
 /** Ordered list of preset section configs (2 core sections) */
 export const SECTION_CONFIGS: SectionConfig[] = [
-  { id: 'products', emoji: '💰', titleKey: 'kb.section.products', descKey: 'kb.section.products.desc', placeholderKey: 'kb.section.products.placeholder' },
-  { id: 'notes',    emoji: '📝', titleKey: 'kb.section.notes',    descKey: 'kb.section.notes.desc',    placeholderKey: 'kb.section.notes.placeholder' },
+  { id: 'products', emoji: '💰', titleKey: 'kb.section.productsLabel', descKey: 'kb.section.productsDesc', placeholderKey: 'kb.section.productsPlaceholder' },
+  { id: 'notes',    emoji: '📝', titleKey: 'kb.section.notesLabel',    descKey: 'kb.section.notesDesc',    placeholderKey: 'kb.section.notesPlaceholder' },
 ];
 
 /** Map emoji → presetSectionId */

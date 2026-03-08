@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
-import en from '../src/i18n/en.json';
-import ar from '../src/i18n/ar.json';
+import { t, tAr } from './i18n';
 
 /**
  * Templates Page E2E Tests
@@ -117,7 +116,7 @@ test.describe('Templates Page', () => {
 
     // Page header
     await expect(
-      page.locator('h1').filter({ hasText: en['templates.title'] }).first()
+      page.locator('h1').filter({ hasText: t('templates.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Template names should be visible
@@ -163,7 +162,7 @@ test.describe('Templates Page', () => {
     await page.goto('/en/templates');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['templates.title'] }).first()
+      page.locator('h1').filter({ hasText: t('templates.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     const bodyText = await page.locator('body').innerText();
@@ -192,15 +191,15 @@ test.describe('Templates Page', () => {
     await page.goto('/en/templates');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['templates.title'] }).first()
+      page.locator('h1').filter({ hasText: t('templates.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Click "Add Template" button
-    const addBtn = page.locator('button').filter({ hasText: en['templates.addTemplate'] }).first();
+    const addBtn = page.locator('button').filter({ hasText: t('templates.addTemplate') }).first();
     await addBtn.click();
 
     // Modal should open with template name label
-    await expect(page.getByText(en['templates.templateName']).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(t('templates.templateName')).first()).toBeVisible({ timeout: 5000 });
 
     // Fill in template name
     const nameInput = page.locator('input').first();
@@ -227,7 +226,7 @@ test.describe('Templates Page', () => {
     await page.goto('/en/templates');
 
     await expect(
-      page.locator('h1').filter({ hasText: en['templates.title'] }).first()
+      page.locator('h1').filter({ hasText: t('templates.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Both templates should be visible
@@ -284,7 +283,7 @@ test.describe('Templates Page', () => {
 
     // Arabic heading
     await expect(
-      page.locator('h1').filter({ hasText: ar['templates.title'] }).first()
+      page.locator('h1').filter({ hasText: tAr('templates.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Template names should still be visible (user-defined, not translated)
@@ -293,7 +292,7 @@ test.describe('Templates Page', () => {
 
     // Add Template button in Arabic
     await expect(
-      page.locator('button').filter({ hasText: ar['templates.addTemplate'] }).first()
+      page.locator('button').filter({ hasText: tAr('templates.addTemplate') }).first()
     ).toBeVisible();
   });
 
@@ -318,15 +317,15 @@ test.describe('Templates Page', () => {
     await page.goto('/ar/templates');
 
     await expect(
-      page.locator('h1').filter({ hasText: ar['templates.title'] }).first()
+      page.locator('h1').filter({ hasText: tAr('templates.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Click Arabic "Add Template" button
-    const addBtn = page.locator('button').filter({ hasText: ar['templates.addTemplate'] }).first();
+    const addBtn = page.locator('button').filter({ hasText: tAr('templates.addTemplate') }).first();
     await addBtn.click();
 
     // Modal should open with Arabic label
-    await expect(page.getByText(ar['templates.templateName']).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(tAr('templates.templateName')).first()).toBeVisible({ timeout: 5000 });
 
     // Fill in template name in Arabic
     const nameInput = page.locator('input').first();

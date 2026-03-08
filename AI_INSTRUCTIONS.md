@@ -215,8 +215,33 @@ const title = t('common.title');
 - They make translation management impossible
 - They violate single-source-of-truth principle
 
+**Translation Key Structure (nested JSON):**
+
+The JSON files (`en.json`, `ar.json`) use **nested objects**. Keys in code use dot-notation: `t('landing.hero.title')`.
+
+```json
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "landing": {
+    "hero": {
+      "title": "Turn Your Page Into a"
+    }
+  }
+}
+```
+
+- **Level 1**: page or namespace (`common`, `landing`, `settings`, `kb`)
+- **Level 2**: section or feature (`hero`, `businessHours`, `replyStyle`)
+- **Level 3**: specific key (`title`, `label`, `desc`)
+- **NEVER** go deeper than 3 levels — the validator enforces this
+- **NEVER** create a key that is both a value and a parent namespace (e.g., `settings.businessHours` cannot be a string AND have children like `settings.businessHours.label`)
+- Shared keys go under `common.*` (e.g., `common.save`, `common.loading`)
+
 **Before committing:**
-- Run `npm run translation:validate` to check for missing keys
+- Run `npm run translation:validate` to check for missing keys, nesting depth, and language integrity
 - See `frontend/docs/TRANSLATION_GUIDE.md` for full rules (key naming, RTL, interpolation, brand terms)
 
 ### 6. Product Terminology
