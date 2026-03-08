@@ -120,7 +120,7 @@ test.describe('Settings Page', () => {
 
     // Business Hours heading should now be visible
     await expect(
-      page.locator('h4').filter({ hasText: t('settings.businessHours') }).first()
+      page.locator('h4').filter({ hasText: t('settings.businessHoursLabel') }).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -154,7 +154,7 @@ test.describe('Settings Page', () => {
 
     // Business Hours heading should be visible
     await expect(
-      page.locator('h4').filter({ hasText: t('settings.businessHours') }).first()
+      page.locator('h4').filter({ hasText: t('settings.businessHoursLabel') }).first()
     ).toBeVisible({ timeout: 10000 });
 
     // Time selects should show the start/end time labels
