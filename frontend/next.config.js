@@ -49,6 +49,31 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: false,
   },
+
+  async headers() {
+    return [
+      // Static brand assets — immutable, cached for 1 year
+      {
+        source: '/brand/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+      // Font files — immutable, cached for 1 year
+      {
+        source: '/fonts/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+      // LLM discovery files — cache 1 day, serve stale for 1 week
+      {
+        source: '/llms:path(.*).txt',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' }],
+      },
+      // Public pages — cache 1 hour, serve stale for 1 day
+      {
+        source: '/:locale(en|ar)?/:page(landing|pricing|login|what-is-jawab24|compare/:slug*)',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=3600, stale-while-revalidate=86400' }],
+      },
+    ];
+  },
 }
 
 // Sentry configuration

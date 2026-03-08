@@ -394,12 +394,15 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
             <meta property="og:title" content={BRAND_ASSETS.meta.appTitle} />
             <meta property="og:description" content={t('meta.ogDescription')} />
             <meta property="og:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
+            <meta property="og:image:width" content="1200" />
+            <meta property="og:image:height" content="630" />
             <meta property="og:type" content="website" />
             <meta property="og:locale" content={locale === 'ar' ? 'ar_SA' : 'en_US'} />
             <meta property="og:locale:alternate" content={locale === 'ar' ? 'en_US' : 'ar_SA'} />
 
             {/* Twitter Card */}
             <meta name="twitter:card" content="summary_large_image" />
+            <meta name="twitter:site" content="@jawab24" />
             <meta name="twitter:title" content={BRAND_ASSETS.meta.appTitle} />
             <meta name="twitter:description" content={t('meta.twitterDescription')} />
             <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
