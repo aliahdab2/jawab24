@@ -420,7 +420,7 @@ smoke_test_content() {
         echo "   ⚠️  No CSS link tags found in SSR HTML (CSS loads client-side in standalone mode)"
         # Verify CSS files exist in the static directory instead
         local CSS_COUNT
-        CSS_COUNT=$(docker exec "$F_ID" find /app/.next/static/css -name '*.css' 2>/dev/null | wc -l)
+        CSS_COUNT=$(docker exec "$F_ID" ls /app/frontend/.next/static/css/*.css 2>/dev/null | wc -l)
         if [ "$CSS_COUNT" -gt 0 ]; then
             echo "   ✅ Found $CSS_COUNT CSS file(s) in .next/static/css/ — build is valid"
         else
