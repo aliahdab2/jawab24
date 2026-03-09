@@ -6,8 +6,119 @@
  *   import { t, tAr } from './i18n';
  *   await page.getByText(t('landing.hero.title1'));
  */
-import en from '../src/i18n/en.json';
-import ar from '../src/i18n/ar.json';
+
+// English namespace files
+import enAbout from '../src/i18n/en/about.json';
+import enAdmin from '../src/i18n/en/admin.json';
+import enAuth from '../src/i18n/en/auth.json';
+import enCheckout from '../src/i18n/en/checkout.json';
+import enComments from '../src/i18n/en/comments.json';
+import enCommon from '../src/i18n/en/common.json';
+import enCompare from '../src/i18n/en/compare.json';
+import enContact from '../src/i18n/en/contact.json';
+import enDashboard from '../src/i18n/en/dashboard.json';
+import enDataDeletion from '../src/i18n/en/dataDeletion.json';
+import enErrorBoundary from '../src/i18n/en/errorBoundary.json';
+import enErrors from '../src/i18n/en/errors.json';
+import enExport from '../src/i18n/en/export.json';
+import enFeedback from '../src/i18n/en/feedback.json';
+import enFlagReason from '../src/i18n/en/flagReason.json';
+import enIntegrations from '../src/i18n/en/integrations.json';
+import enKb from '../src/i18n/en/kb.json';
+import enLanding from '../src/i18n/en/landing.json';
+import enLogout from '../src/i18n/en/logout.json';
+import enMessages from '../src/i18n/en/messages.json';
+import enMeta from '../src/i18n/en/meta.json';
+import enNav from '../src/i18n/en/nav.json';
+import enNotifications from '../src/i18n/en/notifications.json';
+import enOnboarding from '../src/i18n/en/onboarding.json';
+import enPages from '../src/i18n/en/pages.json';
+import enPayment from '../src/i18n/en/payment.json';
+import enPlans from '../src/i18n/en/plans.json';
+import enPricing from '../src/i18n/en/pricing.json';
+import enPrivacy from '../src/i18n/en/privacy.json';
+import enProfile from '../src/i18n/en/profile.json';
+import enRules from '../src/i18n/en/rules.json';
+import enSalla from '../src/i18n/en/salla.json';
+import enSettings from '../src/i18n/en/settings.json';
+import enShopify from '../src/i18n/en/shopify.json';
+import enSidebar from '../src/i18n/en/sidebar.json';
+import enSse from '../src/i18n/en/sse.json';
+import enSubscription from '../src/i18n/en/subscription.json';
+import enTemplates from '../src/i18n/en/templates.json';
+import enTerms from '../src/i18n/en/terms.json';
+import enTime from '../src/i18n/en/time.json';
+
+// Arabic namespace files
+import arAbout from '../src/i18n/ar/about.json';
+import arAdmin from '../src/i18n/ar/admin.json';
+import arAuth from '../src/i18n/ar/auth.json';
+import arCheckout from '../src/i18n/ar/checkout.json';
+import arComments from '../src/i18n/ar/comments.json';
+import arCommon from '../src/i18n/ar/common.json';
+import arCompare from '../src/i18n/ar/compare.json';
+import arContact from '../src/i18n/ar/contact.json';
+import arDashboard from '../src/i18n/ar/dashboard.json';
+import arDataDeletion from '../src/i18n/ar/dataDeletion.json';
+import arErrorBoundary from '../src/i18n/ar/errorBoundary.json';
+import arErrors from '../src/i18n/ar/errors.json';
+import arExport from '../src/i18n/ar/export.json';
+import arFeedback from '../src/i18n/ar/feedback.json';
+import arFlagReason from '../src/i18n/ar/flagReason.json';
+import arIntegrations from '../src/i18n/ar/integrations.json';
+import arKb from '../src/i18n/ar/kb.json';
+import arLanding from '../src/i18n/ar/landing.json';
+import arLogout from '../src/i18n/ar/logout.json';
+import arMessages from '../src/i18n/ar/messages.json';
+import arMeta from '../src/i18n/ar/meta.json';
+import arNav from '../src/i18n/ar/nav.json';
+import arNotifications from '../src/i18n/ar/notifications.json';
+import arOnboarding from '../src/i18n/ar/onboarding.json';
+import arPages from '../src/i18n/ar/pages.json';
+import arPayment from '../src/i18n/ar/payment.json';
+import arPlans from '../src/i18n/ar/plans.json';
+import arPricing from '../src/i18n/ar/pricing.json';
+import arPrivacy from '../src/i18n/ar/privacy.json';
+import arProfile from '../src/i18n/ar/profile.json';
+import arRules from '../src/i18n/ar/rules.json';
+import arSalla from '../src/i18n/ar/salla.json';
+import arSettings from '../src/i18n/ar/settings.json';
+import arShopify from '../src/i18n/ar/shopify.json';
+import arSidebar from '../src/i18n/ar/sidebar.json';
+import arSse from '../src/i18n/ar/sse.json';
+import arSubscription from '../src/i18n/ar/subscription.json';
+import arTemplates from '../src/i18n/ar/templates.json';
+import arTerms from '../src/i18n/ar/terms.json';
+import arTime from '../src/i18n/ar/time.json';
+
+// Merged translation objects keyed by namespace
+export const en = {
+  about: enAbout, admin: enAdmin, auth: enAuth, checkout: enCheckout,
+  comments: enComments, common: enCommon, compare: enCompare, contact: enContact,
+  dashboard: enDashboard, dataDeletion: enDataDeletion, errorBoundary: enErrorBoundary,
+  errors: enErrors, export: enExport, feedback: enFeedback, flagReason: enFlagReason,
+  integrations: enIntegrations, kb: enKb, landing: enLanding, logout: enLogout,
+  messages: enMessages, meta: enMeta, nav: enNav, notifications: enNotifications,
+  onboarding: enOnboarding, pages: enPages, payment: enPayment, plans: enPlans,
+  pricing: enPricing, privacy: enPrivacy, profile: enProfile, rules: enRules,
+  salla: enSalla, settings: enSettings, shopify: enShopify, sidebar: enSidebar,
+  sse: enSse, subscription: enSubscription, templates: enTemplates, terms: enTerms,
+  time: enTime,
+};
+
+export const ar = {
+  about: arAbout, admin: arAdmin, auth: arAuth, checkout: arCheckout,
+  comments: arComments, common: arCommon, compare: arCompare, contact: arContact,
+  dashboard: arDashboard, dataDeletion: arDataDeletion, errorBoundary: arErrorBoundary,
+  errors: arErrors, export: arExport, feedback: arFeedback, flagReason: arFlagReason,
+  integrations: arIntegrations, kb: arKb, landing: arLanding, logout: arLogout,
+  messages: arMessages, meta: arMeta, nav: arNav, notifications: arNotifications,
+  onboarding: arOnboarding, pages: arPages, payment: arPayment, plans: arPlans,
+  pricing: arPricing, privacy: arPrivacy, profile: arProfile, rules: arRules,
+  salla: arSalla, settings: arSettings, shopify: arShopify, sidebar: arSidebar,
+  sse: arSse, subscription: arSubscription, templates: arTemplates, terms: arTerms,
+  time: arTime,
+};
 
 /** Resolve a dot-notation key from a nested object */
 function resolve(obj: Record<string, unknown>, key: string): string {
@@ -22,13 +133,10 @@ function resolve(obj: Record<string, unknown>, key: string): string {
 
 /** Get English translation by dot-notation key */
 export function t(key: string): string {
-  return resolve(en, key);
+  return resolve(en as unknown as Record<string, unknown>, key);
 }
 
 /** Get Arabic translation by dot-notation key */
 export function tAr(key: string): string {
-  return resolve(ar as Record<string, unknown>, key);
+  return resolve(ar as unknown as Record<string, unknown>, key);
 }
-
-// Re-export raw objects for cases that need direct access
-export { en, ar };

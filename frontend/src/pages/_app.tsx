@@ -355,15 +355,6 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   // This prevents DashboardLayout (and Sidebar) from remounting on navigation
   const getLayout = Component.getLayout ?? ((page) => page);
 
-  // Translated meta descriptions (locale-aware, scoped to 'meta' namespace)
-  const tMeta = useTranslations('meta');
-
-  // Compute page-aware paths for hreflang, canonical, and og:url
-  // Uses asPath (resolved URL) not pathname (which has [slug] placeholders)
-  const cleanPath = router.asPath.split('?')[0].split('#')[0];
-  const arPagePath = cleanPath === '/' ? '' : cleanPath;
-  const enPagePath = '/en' + (cleanPath === '/' ? '' : cleanPath);
-
   // Effective locale: router > Zustand store > default 'ar'
   // Mobile builds have no router locale, so fall back to store
   const effectiveLocale = locale || useUIStore.getState().language || 'ar';
@@ -384,43 +375,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         <>
           <SSEManager />
           <ThemeManager />
-          <Head>
-            <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-            <title>{BRAND_ASSETS.meta.appTitle}</title>
-            <meta name="description" content={tMeta('description')} />
-            <meta name="theme-color" content={BRAND_ASSETS.meta.themeColor} />
-            <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-
-            {/* Canonical URL - Dynamic based on locale and current page */}
-            <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? enPagePath : arPagePath)} />
-
-            {/* Hreflang Tags for Multi-language Support - page-aware */}
-            <link rel="alternate" hrefLang="ar" href={BRAND_ASSETS.urls.canonical(arPagePath)} />
-            <link rel="alternate" hrefLang="en" href={BRAND_ASSETS.urls.canonical(enPagePath)} />
-            <link rel="alternate" hrefLang="x-default" href={BRAND_ASSETS.urls.canonical(arPagePath)} />
-
-            {/* Open Graph Defaults */}
-            <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? enPagePath : arPagePath)} />
-            <meta property="og:site_name" content={BRAND_ASSETS.meta.appName} />
-            <meta property="og:title" content={BRAND_ASSETS.meta.appTitle} />
-            <meta property="og:description" content={tMeta('ogDescription')} />
-            <meta property="og:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
-            <meta property="og:image:width" content="1200" />
-            <meta property="og:image:height" content="630" />
-            <meta property="og:type" content="website" />
-            <meta property="og:locale" content={locale === 'ar' ? 'ar_SA' : 'en_US'} />
-            <meta property="og:locale:alternate" content={locale === 'ar' ? 'en_US' : 'ar_SA'} />
-
-            {/* Twitter Card */}
-            <meta name="twitter:card" content="summary_large_image" />
-            <meta name="twitter:site" content="@jawab24" />
-            <meta name="twitter:title" content={BRAND_ASSETS.meta.appTitle} />
-            <meta name="twitter:description" content={tMeta('twitterDescription')} />
-            <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
-
-            <meta name="mobile-web-app-capable" content="yes" />
-            <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-          </Head>
+          <MetaHead locale={effectiveLocale} />
           <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
             <ErrorBoundary name="root" resetKeys={router.asPath}>
               {getLayout(<Component {...pageProps} />)}
@@ -447,4 +402,53 @@ function SSEManager() {
 function ThemeManager() {
   useTheme();
   return null;
+}
+
+/** Renders translated <Head> meta tags — must be inside NextIntlClientProvider */
+function MetaHead({ locale }: { locale: string }) {
+  const tMeta = useTranslations('meta');
+  const router = useRouter();
+  const cleanPath = router.asPath.split('?')[0].split('#')[0];
+  const arPagePath = cleanPath === '/' ? '' : cleanPath;
+  const enPagePath = '/en' + (cleanPath === '/' ? '' : cleanPath);
+
+  return (
+    <Head>
+      <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      <title>{BRAND_ASSETS.meta.appTitle}</title>
+      <meta name="description" content={tMeta('description')} />
+      <meta name="theme-color" content={BRAND_ASSETS.meta.themeColor} />
+      <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+
+      {/* Canonical URL - Dynamic based on locale and current page */}
+      <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? enPagePath : arPagePath)} />
+
+      {/* Hreflang Tags for Multi-language Support - page-aware */}
+      <link rel="alternate" hrefLang="ar" href={BRAND_ASSETS.urls.canonical(arPagePath)} />
+      <link rel="alternate" hrefLang="en" href={BRAND_ASSETS.urls.canonical(enPagePath)} />
+      <link rel="alternate" hrefLang="x-default" href={BRAND_ASSETS.urls.canonical(arPagePath)} />
+
+      {/* Open Graph Defaults */}
+      <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? enPagePath : arPagePath)} />
+      <meta property="og:site_name" content={BRAND_ASSETS.meta.appName} />
+      <meta property="og:title" content={BRAND_ASSETS.meta.appTitle} />
+      <meta property="og:description" content={tMeta('ogDescription')} />
+      <meta property="og:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:type" content="website" />
+      <meta property="og:locale" content={locale === 'ar' ? 'ar_SA' : 'en_US'} />
+      <meta property="og:locale:alternate" content={locale === 'ar' ? 'en_US' : 'ar_SA'} />
+
+      {/* Twitter Card */}
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:site" content="@jawab24" />
+      <meta name="twitter:title" content={BRAND_ASSETS.meta.appTitle} />
+      <meta name="twitter:description" content={tMeta('twitterDescription')} />
+      <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
+
+      <meta name="mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    </Head>
+  );
 }

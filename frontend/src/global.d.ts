@@ -1,6 +1,6 @@
-import en from './i18n/en.json';
+import type { AllMessages } from './i18n/messages';
 
-type Messages = typeof en;
+type Messages = AllMessages;
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- required by next-intl for type-safe translations
