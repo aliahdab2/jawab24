@@ -56,13 +56,7 @@ vi.mock('@/lib/api-utils', () => ({
     extractObjectData: (data: any) => data,
 }));
 
-// Mock Translation
-vi.mock('@/i18n', () => ({
-    useTranslation: () => ({
-        t: (key: string) => key,
-        language: 'en',
-    }),
-}));
+// next-intl is mocked globally in test/setup.ts — real English translations are used
 
 // Mock geo check to allow payments (not sanctioned)
 vi.mock('@/utils/geoCheck', () => ({
@@ -105,8 +99,7 @@ describe('PricingPage Navigation Logic', () => {
         // Plans are passed as props (SSR via getStaticProps), so they render immediately
         expect(screen.getAllByText('Starter').length).toBeGreaterThan(0);
 
-        // Find button by text content (mocked t() returns the key)
-        const subscribeButton = screen.getByText('pricing.subscribe');
+        const subscribeButton = screen.getByText('Subscribe');
         expect(subscribeButton).toBeInTheDocument();
 
         // Action: Click subscribe
@@ -139,8 +132,8 @@ describe('PricingPage Navigation Logic', () => {
         expect(screen.getAllByText('Starter').length).toBeGreaterThan(0);
 
         // Wait for usage data to load (async useEffect fetches subscription info)
-        // Once loaded, button changes from "subscribe" to "upgrade"
-        const upgradeButton = await screen.findByText('pricing.upgrade', {}, { timeout: 3000 });
+        // Once loaded, button changes from "Subscribe" to "Upgrade"
+        const upgradeButton = await screen.findByText('Upgrade', {}, { timeout: 3000 });
         expect(upgradeButton).toBeInTheDocument();
 
         // Action: Click upgrade

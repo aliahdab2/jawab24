@@ -20,6 +20,24 @@ import { useAuthStore } from '@/lib/store';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
 
+/** Routes namespace-prefixed keys (e.g. 'shopify.title') to the correct scoped translator. */
+function usePlatformT() {
+  const tShopify = useTranslations('shopify');
+  const tSalla = useTranslations('salla');
+  const tInt = useTranslations('integrations');
+  const tCommon = useTranslations('common');
+  return (key: string, params?: Record<string, string | number>): string => {
+    const dot = key.indexOf('.');
+    if (dot < 0) return key;
+    const ns = key.slice(0, dot);
+    const k = key.slice(dot + 1);
+    if (ns === 'shopify') return params ? tShopify(k, params) : tShopify(k);
+    if (ns === 'salla') return params ? tSalla(k, params) : tSalla(k);
+    if (ns === 'common') return params ? tCommon(k, params) : tCommon(k);
+    return params ? tInt(k, params) : tInt(k);
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Platform config — add new entries here to support more platforms   */
 /* ------------------------------------------------------------------ */
@@ -152,7 +170,7 @@ function ConnectedStoreCard({
   onDisconnect: () => void;
   onLinkPage: (pageId: string) => void;
 }) {
-  const t = useTranslations();
+  const t = usePlatformT();
   const [syncing, setSyncing] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -278,7 +296,7 @@ function ConnectedStoreCard({
 /* ------------------------------------------------------------------ */
 
 function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store: EcommerceStore }) {
-  const t = useTranslations();
+  const t = usePlatformT();
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
   const handleReconnect = () => {
@@ -313,15 +331,15 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
 /* ------------------------------------------------------------------ */
 
 function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
-  const t = useTranslations();
+  const t = usePlatformT();
   const [shopDomain, setShopDomain] = useState('');
   const [connecting, setConnecting] = useState(false);
 
   const pid = platform.id; // 'shopify' | 'salla'
   const benefits = [
-    t(`integrations.notConnected.${pid}.benefit1`),
-    t(`integrations.notConnected.${pid}.benefit2`),
-    t(`integrations.notConnected.${pid}.benefit3`),
+    t(`integrations.notConnected.${pid}Benefit1`),
+    t(`integrations.notConnected.${pid}Benefit2`),
+    t(`integrations.notConnected.${pid}Benefit3`),
   ];
 
   const steps = [
@@ -366,7 +384,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
 
         {/* Headline */}
         <p className="text-sm font-semibold text-foreground mb-3">
-          {t(`integrations.notConnected.${pid}.headline`)}
+          {t(`integrations.notConnected.${pid}Headline`)}
         </p>
 
         {/* Benefits */}
@@ -407,7 +425,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
           {platform.requiresDomain && (
             <div>
               <label htmlFor={`domain-${pid}`} className="block text-xs font-medium text-muted-foreground mb-1">
-                {t(`integrations.notConnected.${pid}.domainLabel`)}
+                {t(`integrations.notConnected.${pid}DomainLabel`)}
               </label>
               <input
                 id={`domain-${pid}`}
@@ -416,7 +434,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
                 value={shopDomain}
                 onChange={(e) => setShopDomain(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-                placeholder={t(`integrations.notConnected.${pid}.domainPlaceholder`)}
+                placeholder={t(`integrations.notConnected.${pid}DomainPlaceholder`)}
                 className={clsx(
                   'w-full px-3 py-2 rounded-lg text-sm border border-theme-border',
                   'bg-background text-foreground placeholder:text-muted-foreground',
@@ -424,7 +442,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
                 )}
               />
               <p className="text-[11px] text-muted-foreground mt-1">
-                {t(`integrations.notConnected.${pid}.domainHint`)}
+                {t(`integrations.notConnected.${pid}DomainHint`)}
               </p>
             </div>
           )}
@@ -444,7 +462,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
           </Button>
           {!platform.requiresDomain && (
             <p className="text-[11px] text-muted-foreground">
-              {t(`integrations.notConnected.${pid}.connectHint`)}
+              {t(`integrations.notConnected.${pid}ConnectHint`)}
             </p>
           )}
         </div>
@@ -458,7 +476,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
 /* ------------------------------------------------------------------ */
 
 const IntegrationsPage: NextPageWithLayout = () => {
-  const t = useTranslations();
+  const t = usePlatformT();
   const { isAuthenticated } = useAuthStore();
 
   const [stores, setStores] = useState<Record<string, EcommerceStore | null>>({});

@@ -30,7 +30,6 @@ function PlanCard({
   hasActiveSubscription,
   onSelect,
   loading,
-  t,
   currentPlanPrice,
   subscriptionStatus,
   isSanctioned,
@@ -42,13 +41,25 @@ function PlanCard({
   hasActiveSubscription: boolean;
   onSelect: () => void;
   loading: boolean;
-  t: (key: string, params?: Record<string, string | number>) => string;
   currentPlanPrice: number;
   subscriptionStatus?: string;
   isSanctioned: boolean;
   billingInterval: 'month' | 'year';
   locale?: string;
 }) {
+  const tPricing = useTranslations('pricing');
+  const tPayment = useTranslations('payment');
+  const tLanding = useTranslations('landing');
+  const t = (key: string, params?: Record<string, string | number>): string => {
+    const dot = key.indexOf('.');
+    if (dot < 0) return key;
+    const ns = key.slice(0, dot);
+    const k = key.slice(dot + 1);
+    if (ns === 'pricing') return params ? tPricing(k, params) : tPricing(k);
+    if (ns === 'payment') return params ? tPayment(k, params) : tPayment(k);
+    return params ? tLanding(k, params) : tLanding(k);
+  };
+
   const isPopular = plan.slug === 'business';
   const isFree = plan.price === 0;
   const isAnnual = billingInterval === 'year';
@@ -57,14 +68,8 @@ function PlanCard({
   const displayPrice = isAnnual && !isFree ? plan.price * 10 : plan.price;
   const monthlyEquivalent = isAnnual && !isFree ? Math.round(displayPrice / 12) : plan.price;
 
-  // Translate plan names and descriptions based on slug with fallbacks
-  const planName = t(`pricing.${plan.slug}`) !== `pricing.${plan.slug}`
-    ? t(`pricing.${plan.slug}`)
-    : (t(`plans.${plan.slug}.name`) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name`) : plan.name);
-
-  const planDescription = t(`pricing.${plan.slug}Desc`) !== `pricing.${plan.slug}Desc`
-    ? t(`pricing.${plan.slug}Desc`)
-    : (t(`plans.${plan.slug}.description`) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description`) : plan.description);
+  const planName = tPricing(plan.slug);
+  const planDescription = tPricing(`${plan.slug}Desc`);
 
   // Format price
   const formatPrice = (price: number) => {
@@ -321,7 +326,16 @@ function FeatureRow({
 const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans }) => {
   const router = useRouter();
   const locale = router.locale;
-  const t = useTranslations();
+  const tPricing = useTranslations('pricing');
+  const tSub = useTranslations('subscription');
+  const t = (key: string, params?: Record<string, string | number>): string => {
+    const dot = key.indexOf('.');
+    if (dot < 0) return key;
+    const ns = key.slice(0, dot);
+    const k = key.slice(dot + 1);
+    if (ns === 'pricing') return params ? tPricing(k, params) : tPricing(k);
+    return params ? tSub(k, params) : tSub(k);
+  };
   const { isAuthenticated } = useAuthStore();
   const [plans] = useState<Plan[]>(serverPlans);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -474,15 +488,11 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-base font-bold text-foreground">
-                    {t(`pricing.${usage.subscription.plan.slug}`) !== `pricing.${usage.subscription.plan.slug}`
-                      ? t(`pricing.${usage.subscription.plan.slug}`)
-                      : (t(`plans.${usage.subscription.plan.slug}.name`) !== `plans.${usage.subscription.plan.slug}.name`
-                        ? t(`plans.${usage.subscription.plan.slug}.name`)
-                        : usage.subscription.plan.name)}
+                    {tPricing(usage.subscription.plan.slug)}
                   </span>
                   {usage.subscription.status === 'trialing' && (
                     <span className="px-2 py-0.5 bg-amber-500 text-white rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm">
-                      {t('pricing.trial') !== 'pricing.trial' ? t('pricing.trial') : 'TRIAL'}
+                      {tPricing('trial')}
                     </span>
                   )}
                 </div>
@@ -576,9 +586,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           onKeyDown={handleTabKeyDown}
         >
           {activePlans.map((plan, index) => {
-            const tabLabel = t(`pricing.${plan.slug}`) !== `pricing.${plan.slug}`
-              ? t(`pricing.${plan.slug}`)
-              : plan.name;
+            const tabLabel = tPricing(plan.slug);
             return (
               <button
                 key={plan.id}
@@ -634,7 +642,6 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 loading={changingPlan === plan.id}
                 currentPlanPrice={currentPlanPrice}
                 subscriptionStatus={usage?.subscription?.status}
-                t={t}
                 isSanctioned={isSanctioned === true}
                 billingInterval={billingInterval}
                 locale={locale}
