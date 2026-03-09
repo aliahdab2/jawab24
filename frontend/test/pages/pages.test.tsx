@@ -42,15 +42,7 @@ vi.mock('next/router', () => ({
   })),
 }));
 
-// Mock translation hook
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    language: 'en',
-    setLanguage: vi.fn(),
-    isRTL: false,
-  }),
-}));
+// next-intl is mocked globally in test/setup.ts — no local @/i18n mock needed
 
 // Mock Store
 vi.mock('@/lib/store', () => ({

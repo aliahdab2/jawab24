@@ -7,16 +7,9 @@ import { vi } from 'vitest';
 // Mocks
 // ----------------------------------------------------------------------
 
-// 1. Mock i18n globally for all tests using this utility
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    language: 'en',
-    setLanguage: vi.fn(),
-  }),
-}));
+// next-intl is mocked globally in test/setup.ts — no local @/i18n mock needed
 
-// 2. Mock API modules (generic mock, specific tests can override)
+// 1. Mock API modules (generic mock, specific tests can override)
 vi.mock('@/lib/api', () => ({
   commentsApi: {
     getAll: vi.fn(),

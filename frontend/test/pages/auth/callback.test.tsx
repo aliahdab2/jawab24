@@ -20,13 +20,7 @@ vi.mock('@/lib/store', () => ({
     })),
 }));
 
-// Mock translations
-vi.mock('@/i18n', () => ({
-    useTranslation: () => ({
-        t: (key: string) => key, // Return the key itself as translation
-        language: 'ar',
-    }),
-}));
+// next-intl is mocked globally in test/setup.ts — no local @/i18n mock needed
 
 describe('AuthCallback - OAuth edge cases', () => {
     let mockPush: ReturnType<typeof vi.fn>;

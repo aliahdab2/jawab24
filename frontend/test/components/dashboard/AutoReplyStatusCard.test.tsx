@@ -2,15 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { AutoReplyStatusCard } from '@/components/dashboard/AutoReplyStatusCard';
 import { vi, beforeEach } from 'vitest';
 
-// Mock translation hook
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string, data?: any) => {
-      if (data?.count !== undefined) return `${key} ${data.count}`;
-      return key;
-    },
-  }),
-}));
+// next-intl is mocked globally in test/setup.ts — no local @/i18n mock needed
 
 // Mock Link component
 vi.mock('next/link', () => ({
