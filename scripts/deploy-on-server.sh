@@ -382,19 +382,25 @@ smoke_test_content() {
 
     F_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "frontend-$DEPLOY_ENV")
 
-    # Verify CSS was built by checking static files on disk.
-    # SSR HTML from the standalone server inconsistently includes CSS link tags
-    # (depends on warm-up state), so checking the filesystem is more reliable.
-    local CSS_FILES
-    CSS_FILES=$(docker exec "$F_ID" ls /app/frontend/.next/static/css/ 2>/dev/null)
-    if echo "$CSS_FILES" | grep -q '\.css'; then
-        echo "   ✅ CSS stylesheets built successfully"
-    else
+    # 1. Verify CSS is serveable — request an actual CSS file via HTTP.
+    #    First, find the CSS filename from the build output on disk,
+    #    then confirm the server can serve it (proves both build + routing work).
+    local CSS_FILE
+    CSS_FILE=$(docker exec "$F_ID" ls /app/frontend/.next/static/css/ 2>/dev/null | grep '\.css$' | head -1)
+    if [ -z "$CSS_FILE" ]; then
         echo "   ❌ No CSS files in .next/static/css/ — Tailwind CSS was not built!"
         exit 1
     fi
 
-    # Verify /en/login returns valid HTML with Next.js content
+    local CSS_STATUS
+    CSS_STATUS=$(docker exec "$F_ID" wget -qO /dev/null -S "http://127.0.0.1:3001/_next/static/css/$CSS_FILE" 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}')
+    if [ "$CSS_STATUS" = "200" ]; then
+        echo "   ✅ CSS served correctly ($CSS_FILE)"
+    else
+        echo "   ⚠️  CSS file exists but server returned HTTP $CSS_STATUS (server may still be warming up)"
+    fi
+
+    # 2. Verify /en/login returns valid HTML with Next.js content
     local SMOKE_HTML
     SMOKE_HTML=$(docker exec "$F_ID" wget -qO- http://127.0.0.1:3001/en/login 2>/dev/null || echo "FETCH_FAILED")
 
