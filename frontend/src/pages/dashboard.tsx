@@ -113,6 +113,9 @@ const DashboardPage: NextPageWithLayout = () => {
   const queryClient = useQueryClient();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [kbNudgeDismissed, setKbNudgeDismissed] = useState(() =>
+    typeof window !== 'undefined' && localStorage.getItem('kbNudgeDismissed') === 'true'
+  );
 
   // Selected Comment State
   const [selectedCommentData, setSelectedCommentData] = useState<{ comment: Comment, mode: 'full' | 'quick' } | null>(null);
@@ -850,6 +853,42 @@ const DashboardPage: NextPageWithLayout = () => {
               })()}
             </Card>
           )}
+
+          {/* KB Nudge Banner — after first reply + thin KB */}
+          {!kbNudgeDismissed && (() => {
+            const hasReplied = pages.some(p => (p.repliesCount ?? 0) >= 1);
+            const hasThinKb = pages.some(p => (p.repliesCount ?? 0) >= 1 && (p.knowledgeBase || '').length < 200);
+
+            if (hasReplied && hasThinKb) {
+              return (
+                <div className="flex items-start gap-3 p-4 rounded-2xl alert-warning border mb-0">
+                  <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">{t('dashboard.kbNudgeTitle' as TranslationKey)}</p>
+                    <p className="text-xs mt-0.5 opacity-80">{t('dashboard.kbNudgeDesc' as TranslationKey)}</p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <Link href="/pages">
+                        <Button size="sm" variant="primary" className="text-xs">
+                          {t('dashboard.kbNudgeCta' as TranslationKey)}
+                        </Button>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          localStorage.setItem('kbNudgeDismissed', 'true');
+                          setKbNudgeDismissed(true);
+                        }}
+                        className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {t('common.dismiss' as TranslationKey)}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">

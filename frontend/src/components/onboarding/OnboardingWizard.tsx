@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  FileText, 
+import {
+  FileText,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
@@ -12,7 +12,8 @@ import {
   Phone,
   Globe,
   Clock,
-  Info
+  Info,
+  Check,
 } from 'lucide-react';
 import { Button, Toggle } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -35,34 +36,19 @@ interface OnboardingWizardProps {
   onSkip: () => void;
 }
 
-// Step 1: Welcome
-function WelcomeStep({ 
-  isLandscape, 
-  t 
-}: { 
-  isLandscape: boolean; 
-  t: TFunction;
-}) {
-  return (
-    <div className={`text-center ${isLandscape ? 'flex items-center gap-6' : ''}`}>
-      <div className={isLandscape ? 'flex-shrink-0' : 'mb-4'}>
-        <div className={`${isLandscape ? 'w-16 h-16' : 'w-24 h-24'} mx-auto bg-gradient-to-br from-brand-400 to-accent-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-brand-500/30`}>
-          <Sparkles className={`${isLandscape ? 'w-8 h-8' : 'w-12 h-12'} text-white`} />
-        </div>
-      </div>
-      <div className={isLandscape ? 'flex-1 text-start' : ''}>
-        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-xl mb-2' : 'text-2xl mb-3'}`}>
-          {t('onboarding.welcomeTitle')}
-        </h2>
-        <p className={`text-muted-foreground leading-relaxed ${isLandscape ? 'text-sm' : 'text-base'}`}>
-          {t('onboarding.welcomeDesc')}
-        </p>
-      </div>
-    </div>
-  );
-}
+// Suggestion chip definitions — emojis match EMOJI_TO_SECTION in knowledgeBaseParser
+const SUGGESTION_CHIPS = [
+  { id: 'prices', emoji: '💰', labelKey: 'onboarding.chipPrices', placeholderKey: 'onboarding.chipPricesPlaceholder' },
+  { id: 'hours', emoji: '🕐', labelKey: 'onboarding.chipHours', placeholderKey: 'onboarding.chipHoursPlaceholder' },
+  { id: 'location', emoji: '📍', labelKey: 'onboarding.chipLocation', placeholderKey: 'onboarding.chipLocationPlaceholder' },
+  { id: 'services', emoji: '📋', labelKey: 'onboarding.chipServices', placeholderKey: 'onboarding.chipServicesPlaceholder' },
+  { id: 'delivery', emoji: '📦', labelKey: 'onboarding.chipDelivery', placeholderKey: 'onboarding.chipDeliveryPlaceholder' },
+  { id: 'other', emoji: '✦', labelKey: 'onboarding.chipOther', placeholderKey: 'onboarding.chipOtherPlaceholder' },
+] as const;
 
-// Step 2: Pick Page
+type ChipId = typeof SUGGESTION_CHIPS[number]['id'];
+
+// Step 1: Pick Page (with welcome header merged in)
 function PickPageStep({
   pages,
   loading,
@@ -125,17 +111,26 @@ function PickPageStep({
   }
 
   return (
-    <div className={isLandscape ? 'flex gap-6' : ''}>
-      <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-4'}>
-        <div className={`${isLandscape ? 'w-14 h-14' : 'w-16 h-16 mx-auto'} icon-bg-blue rounded-2xl flex items-center justify-center`}>
-          <FileText className="w-8 h-8" />
+    <div>
+      {/* Welcome header — merged from removed WelcomeStep */}
+      <div className={`text-center ${isLandscape ? 'mb-3' : 'mb-4'}`}>
+        <div className={`${isLandscape ? 'w-12 h-12' : 'w-16 h-16'} mx-auto bg-gradient-to-br from-brand-400 to-accent-500 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-500/20 mb-2`}>
+          <Sparkles className={`${isLandscape ? 'w-6 h-6' : 'w-8 h-8'} text-white`} />
         </div>
-      </div>
-      <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
         <h2 className={`font-bold text-foreground ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-1'}`}>
-          {t('onboarding.pickPageTitle')}
+          {t('onboarding.welcomeTitle')}
         </h2>
-        <p className={`text-muted-foreground ${isLandscape ? 'text-sm mb-3' : 'text-sm mb-4'}`}>
+        <p className={`text-muted-foreground ${isLandscape ? 'text-xs' : 'text-sm'}`}>
+          {t('onboarding.welcomeDesc')}
+        </p>
+      </div>
+
+      {/* Page picker */}
+      <div>
+        <h3 className={`font-semibold text-foreground ${isLandscape ? 'text-sm mb-2' : 'text-base mb-2'}`}>
+          {t('onboarding.pickPageTitle')}
+        </h3>
+        <p className={`text-muted-foreground ${isLandscape ? 'text-xs mb-2' : 'text-sm mb-3'}`}>
           {t('onboarding.pickPageDesc')}
           {pageLimit !== null && (
             <span className="block text-xs text-muted-foreground mt-1">
@@ -143,8 +138,8 @@ function PickPageStep({
             </span>
           )}
         </p>
-        
-        <div className={`space-y-3 ${isLandscape ? 'max-h-[30vh] overflow-y-auto' : 'max-h-[40vh] overflow-y-auto'}`}>
+
+        <div className={`space-y-3 ${isLandscape ? 'max-h-[25vh] overflow-y-auto' : 'max-h-[35vh] overflow-y-auto'}`}>
           {pages.map((page) => (
             <div
               key={page.id}
@@ -179,13 +174,17 @@ function PickPageStep({
   );
 }
 
-// Step 3: Review Business Info
+// Step 2: Review Business Info + Suggestion Chips
 function ReviewInfoStep({
   selectedPage,
   knowledgeBase,
   onKnowledgeBaseChange,
   isEditing,
   onEditToggle,
+  chipData,
+  activeChip,
+  onChipToggle,
+  onChipContentChange,
   isLandscape,
   t,
 }: {
@@ -194,6 +193,10 @@ function ReviewInfoStep({
   onKnowledgeBaseChange: (value: string) => void;
   isEditing: boolean;
   onEditToggle: () => void;
+  chipData: Record<ChipId, string>;
+  activeChip: ChipId | null;
+  onChipToggle: (chipId: ChipId) => void;
+  onChipContentChange: (chipId: ChipId, content: string) => void;
   isLandscape: boolean;
   t: TFunction;
 }) {
@@ -214,99 +217,155 @@ function ReviewInfoStep({
   const hasHours = lines.some(l => l.includes('ساعات') || l.includes('hours'));
 
   return (
-    <div className={isLandscape ? 'flex gap-6' : ''}>
-      <div className={isLandscape ? 'flex-shrink-0 flex items-start' : 'text-center mb-3'}>
-        <div className={`${isLandscape ? 'w-14 h-14' : 'w-16 h-16 mx-auto'} icon-bg-emerald rounded-2xl flex items-center justify-center`}>
-          <CheckCircle2 className="w-8 h-8" />
+    <div>
+      <div className="text-center mb-3">
+        <div className={`${isLandscape ? 'w-12 h-12' : 'w-14 h-14'} mx-auto icon-bg-emerald rounded-2xl flex items-center justify-center mb-2`}>
+          <CheckCircle2 className={`${isLandscape ? 'w-6 h-6' : 'w-7 h-7'}`} />
         </div>
-      </div>
-      <div className={`flex-1 ${isLandscape ? 'text-start' : 'text-center'}`}>
-        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-2'}`}>
+        <h2 className={`font-bold text-foreground ${isLandscape ? 'text-lg mb-1' : 'text-xl mb-1'}`}>
           {t('onboarding.reviewInfoTitle')}
         </h2>
-        <p className={`text-muted-foreground ${isLandscape ? 'text-sm mb-3' : 'text-sm mb-4'}`}>
+        <p className={`text-muted-foreground ${isLandscape ? 'text-xs' : 'text-sm'}`}>
           {t('onboarding.reviewInfoDesc')}
         </p>
+      </div>
 
-        {/* Completion summary */}
-        {selectedPage?.autoReplyEnabled && (
-          <div className="flex items-center gap-2 p-3 alert-success border rounded-xl mb-3 text-start">
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">{selectedPage.name}</p>
-              <p className="text-xs opacity-80">{t('onboarding.readySummary' as TranslationKey)}</p>
-            </div>
+      {/* Completion summary */}
+      {selectedPage?.autoReplyEnabled && (
+        <div className="flex items-center gap-2 p-3 alert-success border rounded-xl mb-3 text-start">
+          <CheckCircle2 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{selectedPage.name}</p>
+            <p className="text-xs opacity-80">{t('onboarding.readySummary' as TranslationKey)}</p>
           </div>
-        )}
+        </div>
+      )}
 
-        {isEditing ? (
-          <div className="text-start">
+      {/* Imported info preview */}
+      {isEditing ? (
+        <div className="text-start mb-3">
+          <textarea
+            value={knowledgeBase}
+            onChange={(e) => onKnowledgeBaseChange(e.target.value)}
+            className={`w-full p-3 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-foreground bg-background text-sm ${
+              isLandscape ? 'h-[15vh]' : 'h-[20vh]'
+            }`}
+            placeholder={t('pages.writeBusinessInfo')}
+            aria-label={t('pages.writeBusinessInfo')}
+            dir="auto"
+            autoFocus
+          />
+          <div className="flex justify-end mt-2">
+            <Button size="sm" onClick={onEditToggle}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="text-start bg-muted rounded-xl p-3 border border-theme-border mb-3"
+          dir="auto"
+        >
+          {knowledgeBase ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {hasAddress && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 status-success border rounded-lg text-xs font-medium">
+                    <MapPin className="w-3 h-3" /> {t('onboarding.hasAddress')}
+                  </span>
+                )}
+                {hasPhone && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 status-info rounded-lg text-xs font-medium">
+                    <Phone className="w-3 h-3" /> {t('onboarding.hasPhone')}
+                  </span>
+                )}
+                {hasWebsite && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 status-violet rounded-lg text-xs font-medium">
+                    <Globe className="w-3 h-3" /> {t('onboarding.hasWebsite')}
+                  </span>
+                )}
+                {hasHours && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 status-warning rounded-lg text-xs font-medium">
+                    <Clock className="w-3 h-3" /> {t('onboarding.hasHours')}
+                  </span>
+                )}
+              </div>
+              <p className="text-muted-foreground text-xs whitespace-pre-wrap line-clamp-3">
+                {knowledgeBase}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t('onboarding.fromFacebook')}
+              </p>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm italic">
+              {t('onboarding.noBusinessInfo')}
+            </p>
+          )}
+          <button
+            onClick={onEditToggle}
+            className="mt-2 inline-flex items-center gap-2 text-brand-600 hover:text-brand-700 text-sm font-medium"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            {knowledgeBase ? t('onboarding.editInfo') : t('onboarding.addInfo')}
+          </button>
+        </div>
+      )}
+
+      {/* Suggestion chips — "Add more details" */}
+      <div className="text-start">
+        <p className={`font-semibold text-foreground ${isLandscape ? 'text-xs mb-2' : 'text-sm mb-2'}`}>
+          {t('onboarding.addMore' as TranslationKey)}
+        </p>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {SUGGESTION_CHIPS.map((chip) => {
+            const hasContent = chipData[chip.id]?.trim();
+            const isActive = activeChip === chip.id;
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={() => onChipToggle(chip.id)}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all min-h-[44px] ${
+                  isActive
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : hasContent
+                    ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800'
+                    : 'bg-muted text-foreground border border-theme-border hover:border-brand-300 hover:bg-brand-50/50 dark:hover:bg-brand-950/20'
+                }`}
+              >
+                <span>{chip.emoji}</span>
+                <span>{t(chip.labelKey as TranslationKey)}</span>
+                {hasContent && !isActive && <Check className="w-3.5 h-3.5 text-brand-500" />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active chip textarea */}
+        {activeChip && (
+          <div className="animate-fade-in">
             <textarea
-              value={knowledgeBase}
-              onChange={(e) => onKnowledgeBaseChange(e.target.value)}
-              className={`w-full p-4 border-2 border-theme-border rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-foreground bg-background ${
-                isLandscape ? 'h-[20vh]' : 'h-[30vh]'
+              value={chipData[activeChip] || ''}
+              onChange={(e) => onChipContentChange(activeChip, e.target.value)}
+              className={`w-full p-3 border-2 border-brand-200 dark:border-brand-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-foreground bg-background text-sm placeholder:text-muted-foreground ${
+                isLandscape ? 'min-h-[60px]' : 'min-h-[80px]'
               }`}
-              placeholder={t('pages.writeBusinessInfo')}
-              aria-label={t('pages.writeBusinessInfo')}
+              placeholder={t(SUGGESTION_CHIPS.find(c => c.id === activeChip)!.placeholderKey as TranslationKey)}
+              aria-label={t(SUGGESTION_CHIPS.find(c => c.id === activeChip)!.labelKey as TranslationKey)}
               dir="auto"
               autoFocus
             />
-            <div className="flex justify-end mt-2">
-              <Button size="sm" onClick={onEditToggle}>
-                {t('common.save')}
-              </Button>
+            <div className="flex justify-end mt-1.5">
+              <button
+                type="button"
+                onClick={() => onChipToggle(activeChip)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-brand-950/30 rounded-lg transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" />
+                {t('onboarding.addMoreDone' as TranslationKey)}
+              </button>
             </div>
-          </div>
-        ) : (
-          <div 
-            className="text-start bg-muted rounded-2xl p-4 border border-theme-border"
-            dir="auto"
-          >
-            {knowledgeBase ? (
-              <div className="space-y-3">
-                {/* Show indicators for what info is present */}
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {hasAddress && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 status-success border rounded-lg text-xs font-medium">
-                      <MapPin className="w-3 h-3" /> {t('onboarding.hasAddress')}
-                    </span>
-                  )}
-                  {hasPhone && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 status-info rounded-lg text-xs font-medium">
-                      <Phone className="w-3 h-3" /> {t('onboarding.hasPhone')}
-                    </span>
-                  )}
-                  {hasWebsite && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 status-violet rounded-lg text-xs font-medium">
-                      <Globe className="w-3 h-3" /> {t('onboarding.hasWebsite')}
-                    </span>
-                  )}
-                  {hasHours && (
-                    <span className="inline-flex items-center gap-1 px-2 py-1 status-warning rounded-lg text-xs font-medium">
-                      <Clock className="w-3 h-3" /> {t('onboarding.hasHours')}
-                    </span>
-                  )}
-                </div>
-                <p className="text-muted-foreground text-sm whitespace-pre-wrap line-clamp-4">
-                  {knowledgeBase}
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {t('onboarding.fromFacebook')}
-                </p>
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm italic">
-                {t('onboarding.noBusinessInfo')}
-              </p>
-            )}
-            <button
-              onClick={onEditToggle}
-              className="mt-3 inline-flex items-center gap-2 text-brand-600 hover:text-brand-700 text-sm font-medium"
-            >
-              <Pencil className="w-4 h-4" />
-              {knowledgeBase ? t('onboarding.editInfo') : t('onboarding.addInfo')}
-            </button>
           </div>
         )}
       </div>
@@ -327,6 +386,10 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const [saving, setSaving] = useState(false);
   const [fetchError, setFetchError] = useState(false);
   const [pageLimit, setPageLimit] = useState<number | null>(null);
+  const [chipData, setChipData] = useState<Record<ChipId, string>>({
+    prices: '', hours: '', location: '', services: '', delivery: '', other: '',
+  });
+  const [activeChip, setActiveChip] = useState<ChipId | null>(null);
 
   // Reusable hooks
   const isLandscape = useLandscape();
@@ -428,12 +491,32 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     }
   }, [pages, pageLimit, t]);
 
+  const handleChipToggle = useCallback((chipId: ChipId) => {
+    setActiveChip(prev => prev === chipId ? null : chipId);
+  }, []);
+
+  const handleChipContentChange = useCallback((chipId: ChipId, content: string) => {
+    setChipData(prev => ({ ...prev, [chipId]: content }));
+  }, []);
+
   const handleComplete = async () => {
-    // Save knowledge base if changed
-    if (selectedPageId && knowledgeBase) {
+    // Build final KB: existing content + chip additions
+    let finalKb = knowledgeBase.trim();
+
+    // Append chip content using emoji markers (compatible with knowledgeBaseParser)
+    for (const chip of SUGGESTION_CHIPS) {
+      const content = chipData[chip.id]?.trim();
+      if (!content) continue;
+
+      const label = t(chip.labelKey as TranslationKey);
+      const section = `${chip.emoji} ${label}:\n${content}`;
+      finalKb = finalKb ? `${finalKb}\n\n${section}` : section;
+    }
+
+    if (selectedPageId && finalKb) {
       setSaving(true);
       try {
-        await api.put(`/pages/${selectedPageId}`, { knowledgeBase });
+        await api.put(`/pages/${selectedPageId}`, { knowledgeBase: finalKb });
       } catch (error) {
         captureError(error, 'Onboarding: failed to save knowledge base', { tags: { component: 'onboarding' } });
       } finally {
@@ -446,13 +529,12 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const selectedPage = pages.find(p => p.id === selectedPageId) || null;
   const hasEnabledPage = pages.some(p => p.autoReplyEnabled);
 
-  const totalSteps = 3;
+  const totalSteps = 2;
   const isLastStep = currentStep === totalSteps - 1;
   const isFirstStep = currentStep === 0;
 
   const canProceed = () => {
-    if (currentStep === 0) return true; // Welcome - always can proceed
-    if (currentStep === 1) return hasEnabledPage; // Must enable at least one page
+    if (currentStep === 0) return hasEnabledPage; // Must enable at least one page
     return true; // Review step - always can proceed
   };
 
@@ -506,9 +588,6 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
           }`}
         >
           {currentStep === 0 && (
-            <WelcomeStep isLandscape={isLandscape} t={t} />
-          )}
-          {currentStep === 1 && (
             <PickPageStep
               pages={pages}
               loading={loading}
@@ -520,13 +599,17 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               pageLimit={pageLimit}
             />
           )}
-          {currentStep === 2 && (
+          {currentStep === 1 && (
             <ReviewInfoStep
               selectedPage={selectedPage}
               knowledgeBase={knowledgeBase}
               onKnowledgeBaseChange={setKnowledgeBase}
               isEditing={isEditingInfo}
               onEditToggle={() => setIsEditingInfo(!isEditingInfo)}
+              chipData={chipData}
+              activeChip={activeChip}
+              onChipToggle={handleChipToggle}
+              onChipContentChange={handleChipContentChange}
               isLandscape={isLandscape}
               t={t}
             />
@@ -542,7 +625,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
 
           {/* Progress dots */}
           <div className="flex gap-2 justify-center mb-3">
-            {[0, 1, 2].map((index) => (
+            {[0, 1].map((index) => (
               <div
                 key={index}
                 className={`h-2 rounded-full transition-all ${
@@ -567,8 +650,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
                 onClick={handlePrev}
                 className="flex-1"
               >
-                <span className="rtl:block ltr:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
-                <span className="ltr:block rtl:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                <span className="rtl:inline ltr:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                <span className="ltr:inline rtl:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
                 {t('onboarding.previous')}
               </Button>
             )}
@@ -582,8 +665,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               {isLastStep ? t('onboarding.letsGo') : t('onboarding.next')}
               {!isLastStep && (
                 <>
-                  <span className="rtl:block ltr:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
-                  <span className="ltr:block rtl:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                  <span className="rtl:inline ltr:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
+                  <span className="ltr:inline rtl:hidden"><ArrowRight className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
                 </>
               )}
             </Button>

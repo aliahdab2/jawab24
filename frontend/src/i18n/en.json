@@ -27,6 +27,7 @@
     "yes": "Yes",
     "no": "No",
     "close": "Close",
+    "dismiss": "Dismiss",
     "confirm": "Confirm",
     "back": "Back",
     "next": "Next",
@@ -114,7 +115,21 @@
     "pageLimitReached": "You can only enable {limit} page(s) on your plan. Disable another page or upgrade.",
     "pageLimitInfo": "Your plan allows up to {limit} active page(s)",
     "stepOf": "Step {step} of {total}",
-    "readySummary": "Auto-reply is ON"
+    "readySummary": "Auto-reply is ON",
+    "addMore": "Add more details",
+    "addMoreDone": "Done",
+    "chipPrices": "Prices",
+    "chipHours": "Hours",
+    "chipLocation": "Location",
+    "chipServices": "Services",
+    "chipDelivery": "Delivery",
+    "chipOther": "Other",
+    "chipPricesPlaceholder": "e.g. Kindergarten: 15,000 SAR/year\nBasic package: 500 SAR/month",
+    "chipHoursPlaceholder": "e.g. Sun–Thu: 7am–3pm\nFri–Sat: Closed",
+    "chipLocationPlaceholder": "e.g. Jeddah, Al-Safa district",
+    "chipServicesPlaceholder": "e.g. Boys & girls education, grades K–12\nEnglish courses, private tutoring",
+    "chipDeliveryPlaceholder": "e.g. Free delivery in Jeddah\n30 SAR for other cities",
+    "chipOtherPlaceholder": "Write anything else Jawab should know..."
   },
   "auth": {
     "login": "Login",
@@ -229,6 +244,9 @@
     "fetchError": "Failed to load dashboard data",
     "syncError": "Failed to sync pages",
     "sectionLoadError": "Failed to load this section",
+    "kbNudgeTitle": "Jawab replied to your first customer!",
+    "kbNudgeDesc": "Add your prices, services, and details so replies are even more accurate.",
+    "kbNudgeCta": "Add Business Info",
     "noMessagesYet": "No messages yet. Messages will appear once your pages receive DMs.",
     "commandCenter": {
       "repliedToday": "Replied Today",
@@ -1426,6 +1444,7 @@
   "kb": {
     "title": "Your Business Info",
     "description": "Tell Jawab about your business so it can reply accurately.",
+    "thinKbTip": "The more details you add, the better Jawab answers your customers. Think about what your customers ask most often.",
     "gaps": {
       "title": "Unanswered Questions",
       "hint": "Customers asked these but your KB couldn't answer. Tap to add an answer.",
@@ -1445,9 +1464,9 @@
       "notesLabel": "Other Notes",
       "productsLabel": "Products & Services",
       "productsDesc": "What do you offer and at what price?",
-      "productsPlaceholder": "e.g.,\n- Classic Bag: 200 SAR\n- English Course (3 months): 1500 SAR\n- Consultation: 300 SAR/hour\n- Free shipping over 500 SAR",
+      "productsPlaceholder": "What do your customers ask about most? Write your products, services, and prices — for example:\n- Basic package: 500 SAR/month\n- Kindergarten: 15,000 SAR/year\n- Consultation: 300 SAR/hour",
       "notesDesc": "Anything else the AI should know",
-      "notesPlaceholder": "e.g., We specialize in handmade leather goods since 2015"
+      "notesPlaceholder": "What else should Jawab know? Working hours, return policy, delivery areas, location — anything customers ask about."
     },
     "charCount": "{count} / {max}",
     "addCustomSection": "Add new section",

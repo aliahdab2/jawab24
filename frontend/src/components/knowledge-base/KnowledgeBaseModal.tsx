@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion } from 'lucide-react';
+import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -8,7 +8,7 @@ import { pagesApi } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import type { KnowledgeSection, SectionId, CustomSectionId, KbGap } from './types';
 import { isCustomSection, MAX_CUSTOM_SECTIONS } from './types';
-import { parseKnowledgeBase, serializeSections } from './knowledgeBaseParser';
+import { parseKnowledgeBase, serializeSections, getTotalCharCount } from './knowledgeBaseParser';
 import { KnowledgeBaseSections } from './KnowledgeBaseSections';
 import { KnowledgeBaseRawEditor } from './KnowledgeBaseRawEditor';
 import { GapCard } from './GapCard';
@@ -216,6 +216,16 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
                   onSkip={() => handleGapSkipped(gap.id)}
                 />
               ))}
+            </div>
+          )}
+
+          {/* Thin-KB tip — show when total content is under 100 chars */}
+          {!rawMode && getTotalCharCount(sections) < 100 && (
+            <div className="flex items-start gap-2.5 p-3 mb-3 rounded-xl alert-warning border">
+              <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <p className="text-xs leading-relaxed">
+                {t('kb.thinKbTip' as TranslationKey)}
+              </p>
             </div>
           )}
 
