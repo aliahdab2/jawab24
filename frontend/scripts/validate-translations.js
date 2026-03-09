@@ -25,8 +25,26 @@ function loadJSON(filePath) {
   return JSON.parse(raw);
 }
 
-const en = loadJSON(path.join(I18N_DIR, 'en.json'));
-const ar = loadJSON(path.join(I18N_DIR, 'ar.json'));
+/** Merge all namespace JSON files in a locale directory into one flat object */
+function loadNamespaceDir(locale) {
+  const dir = path.join(I18N_DIR, locale);
+  const merged = {};
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort();
+  for (const file of files) {
+    const ns = file.replace('.json', '');
+    merged[ns] = loadJSON(path.join(dir, file));
+  }
+  return merged;
+}
+
+const en = loadNamespaceDir('en');
+const ar = loadNamespaceDir('ar');
+
+// ── Check 0: Namespace parity ────────────────────────────────────────────────
+const enNamespaces = new Set(Object.keys(en));
+const arNamespaces = new Set(Object.keys(ar));
+const namespacesOnlyInEN = [...enNamespaces].filter(ns => !arNamespaces.has(ns));
+const namespacesOnlyInAR = [...arNamespaces].filter(ns => !enNamespaces.has(ns));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -166,7 +184,20 @@ let hasErrors = false;
 console.log('');
 console.log('Translation Validation');
 console.log('══════════════════════════════════════════');
-console.log(`EN: ${enKeys.length} keys  |  AR: ${arKeys.length} keys`);
+console.log(`EN: ${enNamespaces.size} namespaces, ${enKeys.length} keys  |  AR: ${arNamespaces.size} namespaces, ${arKeys.length} keys`);
+console.log('');
+
+// Namespace Parity
+console.log('Namespace Parity');
+if (namespacesOnlyInEN.length > 0) {
+  hasErrors = true;
+  console.log(`  ❌ ${namespacesOnlyInEN.length} namespace(s) in EN missing from AR: ${namespacesOnlyInEN.join(', ')}`);
+} else if (namespacesOnlyInAR.length > 0) {
+  hasErrors = true;
+  console.log(`  ❌ ${namespacesOnlyInAR.length} namespace(s) in AR missing from EN: ${namespacesOnlyInAR.join(', ')}`);
+} else {
+  console.log(`  ✅ Both locales have the same ${enNamespaces.size} namespaces`);
+}
 console.log('');
 
 // Key Sync
@@ -239,7 +270,7 @@ console.log('');
 // Result
 console.log('══════════════════════════════════════════');
 if (hasErrors) {
-  const errorCount = missingInAR.length + missingInEN.length + arabicInEN.length;
+  const errorCount = namespacesOnlyInEN.length + namespacesOnlyInAR.length + missingInAR.length + missingInEN.length + arabicInEN.length;
   console.log(`Result: ❌ FAIL (${errorCount} error(s))`);
   console.log('');
   process.exit(1);
