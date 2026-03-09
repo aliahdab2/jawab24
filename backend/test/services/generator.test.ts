@@ -782,6 +782,14 @@ describe('ReplyGenerator - Flagging System', () => {
                 flags: [],
             });
 
+            // Mock resolveKnowledge to avoid calling real retrieval service
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: false,
+            });
+
             await generator.generateForMessage({
                 ...baseContext,
                 kbActiveVersion: 5,
