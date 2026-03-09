@@ -382,12 +382,17 @@ smoke_test_content() {
 
     F_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "frontend-$DEPLOY_ENV")
 
-    # Warm up the frontend (first request after cold start may lack CSS links)
-    docker exec "$F_ID" wget -qO /dev/null http://127.0.0.1:3001/en/dashboard 2>/dev/null || true
-    sleep 3
-
-    # Check that the dashboard page returns HTML with expected content markers
-    DASHBOARD_HTML=$(docker exec "$F_ID" wget -qO- http://127.0.0.1:3001/en/dashboard 2>/dev/null || echo "FETCH_FAILED")
+    # Warm up the frontend — Next.js standalone may need a few requests before CSS is in the response
+    local CSS_FOUND=false
+    for i in 1 2 3 4 5; do
+        DASHBOARD_HTML=$(docker exec "$F_ID" wget -qO- http://127.0.0.1:3001/en/dashboard 2>/dev/null || echo "FETCH_FAILED")
+        if echo "$DASHBOARD_HTML" | grep -q '/_next/static/css/'; then
+            CSS_FOUND=true
+            break
+        fi
+        echo "   ⏳ Warm-up request $i (CSS not yet in response, retrying...)"
+        sleep 3
+    done
 
     if echo "$DASHBOARD_HTML" | grep -q "FETCH_FAILED"; then
         echo "   ❌ Could not fetch /en/dashboard from frontend container"
@@ -412,8 +417,8 @@ smoke_test_content() {
     echo "   ✅ Dashboard page returns valid HTML with Next.js content"
 
     # Verify CSS is loaded (catches missing postcss.config.js / tailwind failures)
-    if ! echo "$DASHBOARD_HTML" | grep -q '/_next/static/css/'; then
-        echo "   ❌ No CSS stylesheet reference found in dashboard HTML!"
+    if [ "$CSS_FOUND" != "true" ]; then
+        echo "   ❌ No CSS stylesheet reference found after 5 warm-up attempts!"
         echo "   This likely means Tailwind CSS was not built correctly."
         echo "   Check that postcss.config.js and tailwind.config.js exist."
         exit 1
