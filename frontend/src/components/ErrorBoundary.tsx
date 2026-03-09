@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, PropsWithChildren } from 'react';
 import * as Sentry from '@sentry/nextjs';
 import { useTranslations, useLocale } from 'next-intl';
+import { isRTLLocale } from '@/utils/locale';
 
 // Props for the error boundary class component
 interface ErrorBoundaryClassProps extends PropsWithChildren {
@@ -66,7 +67,7 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
       }
 
       const { t, language } = this.props;
-      const isRTL = language === 'ar';
+      const isRTL = isRTLLocale(language);
 
       return (
         <div

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { MessageCircle, X } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
+import { isRTLLocale } from '@/utils/locale';
 import clsx from 'clsx';
 import { useLandscape } from '@/hooks/useLandscape';
 
@@ -28,7 +29,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
     return () => { clearTimeout(timer); clearTimeout(stopTimer); };
   }, []);
   const isLandscape = useLandscape();
-  const isRTL = locale === 'ar';
+  const isRTL = isRTLLocale(locale);
 
   // Auto-hide on scroll down, show on scroll up
   useEffect(() => {

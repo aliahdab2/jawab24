@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, X } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
+import { isRTLLocale } from '@/utils/locale';
 
 interface NotificationPrePromptProps {
   onEnable: () => void;
@@ -34,7 +35,7 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
           ? 'opacity-100 translate-y-0 scale-100'
           : 'opacity-0 translate-y-8 scale-95'
       }`}
-      dir={locale === 'ar' ? 'rtl' : 'ltr'}
+      dir={isRTLLocale(locale) ? 'rtl' : 'ltr'}
     >
       <div className="relative bg-card rounded-3xl shadow-2xl border border-theme-border/60 overflow-hidden">
         {/* Decorative gradient top bar */}

@@ -5,6 +5,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { BrandLogo, Button } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { Home, ArrowLeft, ArrowRight, MessageCircle, Search, HelpCircle } from 'lucide-react';
+import { isRTLLocale } from '@/utils/locale';
 
 const WHATSAPP_NUMBER = '46700224720';
 
@@ -12,7 +13,7 @@ export default function Custom404() {
   const t = useTranslations('errors');
   const locale = useLocale();
   const router = useRouter();
-  const isRTL = locale === 'ar';
+  const isRTL = isRTLLocale(locale);
   const attemptedPath = router.asPath;
   const supportMessage = encodeURIComponent('Hi, I need help — I reached a broken page on Jawab24.');
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
@@ -23,10 +24,7 @@ export default function Custom404() {
         <title>404 - {BRAND_ASSETS.meta.appName}</title>
       </Head>
 
-      <div
-        dir={isRTL ? 'rtl' : 'ltr'}
-        className="min-h-dvh bg-background flex flex-col items-center justify-center px-4"
-      >
+      <div className="min-h-dvh bg-background flex flex-col items-center justify-center px-4">
         {/* Brand header */}
         <Link href="/landing" className="flex items-center gap-3 mb-12 group">
           <BrandLogo

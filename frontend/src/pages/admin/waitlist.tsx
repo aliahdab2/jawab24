@@ -4,6 +4,7 @@ import { Search, ChevronLeft, ChevronRight, Mail } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
+import { isRTLLocale } from '@/utils/locale';
 import { Card } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
@@ -27,7 +28,7 @@ export default function AdminWaitlistPage() {
     const t = useTranslations('admin');
     const tc = useTranslations('common');
     const { language, intlLocale } = useLanguage();
-    const isRTL = language === 'ar';
+    const isRTL = isRTLLocale(language);
 
     const [entries, setEntries] = useState<WaitlistEntry[]>([]);
     const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });

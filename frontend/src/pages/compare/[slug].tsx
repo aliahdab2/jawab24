@@ -4,6 +4,7 @@ import type { GetStaticPaths, GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { isRTLLocale } from '@/utils/locale';
 import {
   getAllCompetitorSlugs,
   getCompetitor,
@@ -42,7 +43,7 @@ function FeatureLabel({ value }: { value: boolean | string }) {
 export default function ComparePage({ competitor }: ComparePageProps) {
   const t = useTranslations('compare');
   const locale = useLocale();
-  const isRTL = locale === 'ar';
+  const isRTL = isRTLLocale(locale);
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
   const slug = competitor.slug;
 
@@ -116,7 +117,7 @@ export default function ComparePage({ competitor }: ComparePageProps) {
         />
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="flex-1 overflow-y-auto bg-background text-foreground">
+      <div className="flex-1 overflow-y-auto bg-background text-foreground">
         {/* Fixed top safe area background */}
         <div className="fixed-safe-bg top-safe-bg bg-background" aria-hidden="true" />
 

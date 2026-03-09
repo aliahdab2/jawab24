@@ -141,7 +141,6 @@ export default function AdminPlaygroundPage() {
     const t = useTranslations('admin');
     const tc = useTranslations('common');
     const { language } = useLanguage();
-    const isRTL = language === 'ar';
 
     // Core state
     const [allPages, setAllPages] = useState<PageOption[]>([]);
@@ -401,7 +400,7 @@ export default function AdminPlaygroundPage() {
 
     return (
         <AdminLayout title={t('playground.title')}>
-            <div dir={isRTL ? 'rtl' : 'ltr'} className="flex flex-col h-[calc(100vh-8rem)]">
+            <div className="flex flex-col h-[calc(100vh-8rem)]">
 
                 {/* ── Controls Bar ── */}
                 <div className="border-b border-theme-border bg-card rounded-t-xl flex-shrink-0">

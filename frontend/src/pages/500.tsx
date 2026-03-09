@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useTranslations, useLocale } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { BrandLogo } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { Home, MessageCircle, RefreshCw, AlertTriangle } from 'lucide-react';
@@ -10,9 +10,7 @@ const WHATSAPP_NUMBER = '46700224720';
 
 export default function Custom500() {
   const t = useTranslations('errors');
-  const locale = useLocale();
   const router = useRouter();
-  const isRTL = locale === 'ar';
 
   const supportMessage = encodeURIComponent('Hi, I hit a server error on Jawab24 and need help.');
 
@@ -22,7 +20,7 @@ export default function Custom500() {
         <title>500 - {BRAND_ASSETS.meta.appName}</title>
       </Head>
 
-      <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-dvh bg-background flex flex-col items-center justify-center px-4">
+      <div className="min-h-dvh bg-background flex flex-col items-center justify-center px-4">
         {/* Brand header */}
         <Link href="/landing" className="flex items-center gap-3 mb-10 group">
           <BrandLogo

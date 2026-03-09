@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
+import { isRTLLocale } from '@/utils/locale';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount } from '@/lib/notifications';
 import { SwipeableNotificationItem } from './SwipeableNotificationItem';
@@ -560,7 +561,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         'max-h-[60vh] lg:max-h-[70vh] sm:end-auto sm:start-[272px] sm:w-[420px]',
                     )}
                     style={{ top: 'calc(var(--sai-top) + 4.5rem)' }}
-                    dir={locale === 'ar' ? 'rtl' : 'ltr'}
+                    dir={isRTLLocale(locale) ? 'rtl' : 'ltr'}
                 >
                     {/* Header Row 1: Title + Close */}
                     <div className="flex items-center justify-between px-5 pt-3.5 pb-2 bg-gradient-to-b from-muted to-card">

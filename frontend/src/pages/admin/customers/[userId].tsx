@@ -5,6 +5,7 @@ import { ArrowLeft, Calendar, FileText, Zap, Globe, Mail, Facebook } from 'lucid
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
+import { isRTLLocale } from '@/utils/locale';
 import { Card, Button } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
@@ -61,7 +62,7 @@ export default function AdminCustomerDetailPage() {
     const t = useTranslations('admin');
     const tc = useTranslations('common');
     const { language, intlLocale } = useLanguage();
-    const isRTL = language === 'ar';
+    const isRTL = isRTLLocale(language);
 
     const [customer, setCustomer] = useState<CustomerDetail | null>(null);
     const [plans, setPlans] = useState<Plan[]>([]);
